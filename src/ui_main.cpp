@@ -61,10 +61,10 @@ static const I18n STR_TITLE       = {"Desktop Manager", "桌面管理器"};
 static const I18n STR_STATUS      = {"OpenClaw Status", "OpenClaw 状态"};
 static const I18n STR_CONTROLS    = {"Controls", "操作面板"};
 static const I18n STR_LOG         = {"Log", "日志"};
-static const I18n STR_START       = {"Start", "启动"};
-static const I18n STR_STOP        = {"Stop", "停止"};
-static const I18n STR_REFRESH     = {"Refresh", "刷新状态"};
-static const I18n STR_SETTINGS    = {"Settings", "设置"};
+static const I18n STR_START       = {LV_SYMBOL_PLAY " Start", LV_SYMBOL_PLAY " 启动"};
+static const I18n STR_STOP        = {LV_SYMBOL_STOP " Stop", LV_SYMBOL_STOP " 停止"};
+static const I18n STR_REFRESH     = {LV_SYMBOL_REFRESH " Refresh", LV_SYMBOL_REFRESH " 刷新状态"};
+static const I18n STR_SETTINGS    = {LV_SYMBOL_SETTINGS " Settings", LV_SYMBOL_SETTINGS " 设置"};
 static const I18n STR_VERSION     = {"Version", "版本"};
 static const I18n STR_PATH        = {"Path", "路径"};
 static const I18n STR_PORT        = {"Port", "端口"};
@@ -77,6 +77,10 @@ static const I18n STR_IDLE        = {"Idle", "空闲"};
 static const I18n STR_RUNNING     = {"Running", "运行中"};
 static const I18n STR_ERROR       = {"Error", "错误"};
 static const I18n STR_UNKNOWN     = {"Unknown", "未知"};
+static const I18n STR_TASK_LIST   = {LV_SYMBOL_LIST " Task List", LV_SYMBOL_LIST " 任务列表"};
+static const I18n STR_CHAT        = {LV_SYMBOL_ENVELOPE " Chat", LV_SYMBOL_ENVELOPE " 聊天"};
+static const I18n STR_WIFI        = {LV_SYMBOL_WIFI " Connected", LV_SYMBOL_WIFI " 已连接"};
+static const I18n STR_BATTERY     = {LV_SYMBOL_BATTERY_FULL " Power", LV_SYMBOL_BATTERY_FULL " 电源"};
 
 /* ── UI widgets ── */
 static lv_obj_t* status_label = nullptr;
@@ -421,8 +425,8 @@ void app_ui_init() {
     lv_obj_set_style_pad_all(sep1, 0, 0);
     lv_obj_clear_flag(sep1, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Task list area - placeholder for P1 */
-    lv_obj_t* task_title = create_styled_label(pl, tr({"Task List", "任务列表"}), lv_color_make(130, 170, 240), 15, 200, 200);
+    /* Task list area title with icon */
+    lv_obj_t* task_title = create_styled_label(pl, tr(STR_TASK_LIST), lv_color_make(130, 170, 240), 15, 200, 200);
 
     /* Task placeholder items */
     lv_obj_t* task1 = create_styled_label(pl, tr({"  [Running] Gateway Service", "  [运行中] Gateway 服务"}), lv_color_make(0, 220, 60), 15, 230, LEFT_PANEL_W - 30);
@@ -465,11 +469,11 @@ void app_ui_init() {
     btn_refresh = create_styled_button(pr, tr(STR_REFRESH), 10 + (btn_w + btn_gap) * 2, btn_y, btn_w, btn_h,
         lv_color_make(40, 80, 160), lv_color_make(25, 50, 120), btn_refresh_cb);
 
-    /* Chat bubble area title */
-    lv_obj_t* chat_title = create_styled_label(pr, tr({"Chat", "聊天"}), lv_color_make(130, 170, 240), 8, 95, 200);
+    /* Chat bubble area title with icon */
+    lv_obj_t* chat_title = create_styled_label(pr, tr(STR_CHAT), lv_color_make(130, 170, 240), 8, 95, 200);
 
-    /* Log area title */
-    lv_obj_t* log_title = create_styled_label(pr, tr(STR_LOG), lv_color_make(130, 170, 240), 8, 115, 200);
+    /* Log area title with icon */
+    lv_obj_t* log_title = create_styled_label(pr, tr({LV_SYMBOL_FILE " Log", LV_SYMBOL_FILE " 日志"}), lv_color_make(130, 170, 240), 8, 115, 200);
 
     /* Log panel */
     int log_y = 140;
