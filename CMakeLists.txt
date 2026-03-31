@@ -11,11 +11,19 @@ file(GLOB_RECURSE LVGL_SOURCES
     "${CMAKE_SOURCE_DIR}/thirdparty/lvgl/src/*.c"
     "${CMAKE_SOURCE_DIR}/thirdparty/lvgl/src/*.h"
 )
+# Exclude platform-specific drivers not supported on Windows
+list(FILTER LVGL_SOURCES EXCLUDE REGEX "nema_gfx")
+list(FILTER LVGL_SOURCES EXCLUDE REGEX "display/drm")
+list(FILTER LVGL_SOURCES EXCLUDE REGEX "display/dsi")
+list(FILTER LVGL_SOURCES EXCLUDE REGEX "display/zedboard")
+list(FILTER LVGL_SOURCES EXCLUDE REGEX "linux")
+list(FILTER LVGL_SOURCES EXCLUDE REGEX "sdl/.*/SDL")
 add_library(lvgl_static STATIC ${LVGL_SOURCES})
 target_include_directories(lvgl_static PUBLIC
     "${CMAKE_SOURCE_DIR}/thirdparty/lvgl"
     "${CMAKE_SOURCE_DIR}/thirdparty/lvgl/src"
     "${CMAKE_SOURCE_DIR}/src"
+    "${CMAKE_SOURCE_DIR}/thirdparty/SDL2/include"
 )
 target_compile_definitions(lvgl_static PUBLIC
     LV_CONF_INCLUDE_SIMPLE
@@ -45,6 +53,7 @@ set(SOURCES
     src/openclaw_mgr.cpp
     src/http_client.cpp
     src/ui_main.cpp
+    src/ui_settings.cpp
 )
 
 add_executable(AnyClaw_LVGL WIN32 ${SOURCES})

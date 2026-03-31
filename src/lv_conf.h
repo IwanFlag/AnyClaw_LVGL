@@ -55,7 +55,8 @@
 #define LV_FONT_MSHY_16 1
 typedef struct _lv_font_t lv_font_t;
 extern const lv_font_t lv_font_mshy_16;
-#define LV_FONT_DEFAULT (&lv_font_mshy_16)
+extern const lv_font_t lv_font_source_han_sans_sc_16_cjk;
+#define LV_FONT_DEFAULT (&lv_font_source_han_sans_sc_16_cjk)
 
 /*=================
    WIDGETS
@@ -91,11 +92,29 @@ extern const lv_font_t lv_font_mshy_16;
 #define LV_USE_SPINBOX    0
 #define LV_USE_SPINNER    0
 #define LV_USE_TILEVIEW   0
-#define LV_USE_CANVAS     0
+#define LV_USE_CANVAS     1
+#define LV_USE_SNAPSHOT   0
 
 /*=================
    EXAMPLES
  *=================*/
 #define LV_BUILD_EXAMPLES 0
+
+/*=================
+   IMAGE DECODERS
+ *=================*/
+#define LV_USE_LODEPNG    1
+
+/*=================
+   SDL DRIVER
+ *=================*/
+#define LV_USE_SDL               1
+#define LV_SDL_RENDER_MODE       LV_DISPLAY_RENDER_MODE_DIRECT
+#define LV_SDL_FULLSCREEN        0
+#define LV_SDL_DIRECT_EXIT       1
+#define LV_SDL_ACCELERATED       1
+#define LV_SDL_USE_EGL           0
+#define LV_SDL_MOUSEWHEEL_MODE_ENCODER  0
+#define LV_SDL_INCLUDE_PATH      <SDL.h>
 
 #endif /*LV_CONF_H*/
