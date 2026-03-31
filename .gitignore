@@ -1,0 +1,25 @@
+# Build
+build/
+cmake-build-*/
+
+# IDE
+.vs/
+.vscode/
+*.sln
+*.vcxproj*
+*.user
+CMakeSettings.json
+
+# OS
+Thumbs.db
+*.DS_Store
+
+# LVGL test artifacts
+thirdparty/lvgl/tests/
+
+# Output screenshots (keep project ones)
+final*.png
+running.png
+test_*.png
+current_state.png
+*.zip
