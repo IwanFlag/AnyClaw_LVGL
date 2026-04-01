@@ -983,7 +983,7 @@ void app_ui_init() {
     lv_obj_add_event_cb(btn_lang_cn, lang_cn_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lcn = lv_label_create(btn_lang_cn);
     lv_label_set_text(lcn, "CN");
-    lv_obj_set_style_text_font(lcn, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(lcn, CJK_FONT, 0);
     lv_obj_center(lcn);
 
     /* P2-01: CN/EN language toggle button (replaces bilingual C+E) */
@@ -995,7 +995,7 @@ void app_ui_init() {
     lv_obj_add_event_cb(btn_lang_toggle, lang_toggle_cb, LV_EVENT_CLICKED, nullptr);
     g_lang_toggle_label = lv_label_create(btn_lang_toggle);
     lv_label_set_text(g_lang_toggle_label, (g_lang == Lang::CN) ? "CN" : "EN");
-    lv_obj_set_style_text_font(g_lang_toggle_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(g_lang_toggle_label, CJK_FONT, 0);
     lv_obj_center(g_lang_toggle_label);
 
     lv_obj_t* btn_lang_en = lv_button_create(title_bar);
@@ -1006,7 +1006,7 @@ void app_ui_init() {
     lv_obj_add_event_cb(btn_lang_en, lang_en_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* len = lv_label_create(btn_lang_en);
     lv_label_set_text(len, "EN");
-    lv_obj_set_style_text_font(len, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(len, &CJK_FONT, 0);
     lv_obj_center(len);
 
     /* Settings button */
@@ -1312,14 +1312,14 @@ void app_ui_init() {
     lv_obj_t* log_lbl = lv_label_create(log_panel);
     lv_label_set_text(log_lbl, "");
     lv_obj_set_style_text_color(log_lbl, c->log_text, 0);
-    lv_obj_set_style_text_font(log_lbl, &lv_font_montserrat_10, 0);
+    lv_obj_set_style_text_font(log_lbl, &CJK_FONT, 0);
     lv_label_set_long_mode(log_lbl, LV_LABEL_LONG_WRAP);
 
     /* ═══ FOOTER ═══ */
     lv_obj_t* footer = lv_label_create(scr);
     lv_label_set_text(footer, tr(STR_FOOTER));
     lv_obj_set_style_text_color(footer, c->text_dim, 0);
-    lv_obj_set_style_text_font(footer, &lv_font_montserrat_10, 0);
+    lv_obj_set_style_text_font(footer, &CJK_FONT, 0);
     lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -8);
 
     /* ═══ Settings UI ═══ */
