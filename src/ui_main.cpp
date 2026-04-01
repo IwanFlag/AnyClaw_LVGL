@@ -16,14 +16,14 @@
 extern const lv_font_t lv_font_mshy_16;
 #define CJK_FONT (&lv_font_mshy_16)
 
-/* Layout constants for 1350x740 window (actual SDL window size) */
-#define WIN_W 1350
-#define WIN_H 740
+/* Layout constants - WIN_W/Win_H are dynamically set from actual display size */
+static int WIN_W = 1350;    /* Updated at runtime in app_ui_init() */
+static int WIN_H = 740;     /* Updated at runtime in app_ui_init() */
 #define TITLE_H 48
 #define LEFT_PANEL_W 520
-#define RIGHT_PANEL_W (WIN_W - LEFT_PANEL_W - 30)
+static int RIGHT_PANEL_W = 800;  /* Updated at runtime: WIN_W - LEFT_PANEL_W - 30 */
 #define PANEL_TOP (TITLE_H + 8)
-#define PANEL_H 450
+static int PANEL_H = 450;    /* Updated at runtime: WIN_H - TITLE_H - FOOTER_H - 24 */
 #define FOOTER_H 30
 
 /* ═══ Theme System (P2-4) ═══ */
@@ -40,7 +40,7 @@ static const ThemeColors THEME_DARK = {
     {0x78, 0xFF, 0x78},    /* log_text */
     {0x19, 0x8C, 0x3C},    /* btn_start */
     {0xA0, 0x28, 0x28},    /* btn_stop */
-    {0x28, 0x50, 0xA0},    /* btn_action */
+    {0x40, 0x70, 0xC0},    /* btn_action - brighter for visibility */
 };
 
 static const ThemeColors THEME_LIGHT = {
@@ -55,7 +55,7 @@ static const ThemeColors THEME_LIGHT = {
     {0x22, 0x88, 0x22},    /* log_text */
     {0x1B, 0x8C, 0x3C},    /* btn_start */
     {0xCC, 0x33, 0x33},    /* btn_stop */
-    {0x28, 0x50, 0xA0},    /* btn_action */
+    {0x40, 0x70, 0xC0},    /* btn_action - brighter for visibility */
 };
 
 static const ThemeColors THEME_CLASSIC = {
@@ -70,7 +70,7 @@ static const ThemeColors THEME_CLASSIC = {
     {0x78, 0xFF, 0x78},    /* log_text */
     {0x19, 0x8C, 0x3C},    /* btn_start */
     {0xA0, 0x28, 0x28},    /* btn_stop */
-    {0x28, 0x50, 0xA0},    /* btn_action */
+    {0x40, 0x70, 0xC0},    /* btn_action - brighter for visibility */
 };
 
 const ThemeColors* g_colors = &THEME_DARK;
@@ -1015,6 +1015,17 @@ void app_ui_init() {
     /* Load saved config first (sets g_theme, g_lang, g_colors) */
     load_theme_config();
 
+    /* P2-fix: Get actual display dimensions from LVGL (matches actual SDL window size) */
+    WIN_W = (int)lv_display_get_horizontal_resolution(NULL);
+    WIN_H = (int)lv_display_get_vertical_resolution(NULL);
+    if (WIN_W < 800) WIN_W = 800;   /* Clamp to reasonable minimum */
+    if (WIN_H < 500) WIN_H = 500;
+    RIGHT_PANEL_W = WIN_W - LEFT_PANEL_W - 30;
+    PANEL_H = WIN_H - TITLE_H - FOOTER_H - 24;
+    if (PANEL_H < 300) PANEL_H = 300;
+    printf("[UI] Layout: window=%dx%d, left=%d, right=%d, panel_h=%d\n",
+           WIN_W, WIN_H, LEFT_PANEL_W, RIGHT_PANEL_W, PANEL_H);
+
     const ThemeColors* c = g_colors;
     lv_obj_t* scr = lv_screen_active();
     lv_obj_set_style_bg_color(scr, c->bg, 0);
@@ -1038,99 +1049,87 @@ void app_ui_init() {
     lv_obj_set_style_text_font(title_label, CJK_FONT, 0);
     lv_obj_align(title_label, LV_ALIGN_LEFT_MID, 15, 0);
 
-    /* Language buttons on title bar */
-    lv_obj_t* btn_lang_cn = lv_button_create(title_bar);
-    lv_obj_set_size(btn_lang_cn, 36, 30);
-    lv_obj_align(btn_lang_cn, LV_ALIGN_RIGHT_MID, -180, 0);
-    lv_obj_set_style_bg_color(btn_lang_cn, lv_color_make(50, 60, 90), 0);
-    lv_obj_set_style_radius(btn_lang_cn, 6, 0);
-    lv_obj_add_event_cb(btn_lang_cn, lang_cn_cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* lcn = lv_label_create(btn_lang_cn);
-    lv_label_set_text(lcn, "CN");
-    lv_obj_set_style_text_font(lcn, CJK_FONT, 0);
-    lv_obj_center(lcn);
-
-    /* P2-01: CN/EN language toggle button (replaces bilingual C+E) */
-    lv_obj_t* btn_lang_toggle = lv_button_create(title_bar);
-    lv_obj_set_size(btn_lang_toggle, 46, 30);
-    lv_obj_align(btn_lang_toggle, LV_ALIGN_RIGHT_MID, -138, 0);
-    lv_obj_set_style_bg_color(btn_lang_toggle, lv_color_make(60, 80, 140), 0);
-    lv_obj_set_style_radius(btn_lang_toggle, 6, 0);
-    lv_obj_add_event_cb(btn_lang_toggle, lang_toggle_cb, LV_EVENT_CLICKED, nullptr);
-    g_lang_toggle_label = lv_label_create(btn_lang_toggle);
-    lv_label_set_text(g_lang_toggle_label, (g_lang == Lang::CN) ? "CN" : "EN");
-    lv_obj_set_style_text_font(g_lang_toggle_label, CJK_FONT, 0);
-    lv_obj_center(g_lang_toggle_label);
-
-    lv_obj_t* btn_lang_en = lv_button_create(title_bar);
-    lv_obj_set_size(btn_lang_en, 36, 30);
-    lv_obj_align(btn_lang_en, LV_ALIGN_RIGHT_MID, -96, 0);
-    lv_obj_set_style_bg_color(btn_lang_en, lv_color_make(50, 60, 90), 0);
-    lv_obj_set_style_radius(btn_lang_en, 6, 0);
-    lv_obj_add_event_cb(btn_lang_en, lang_en_cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* len = lv_label_create(btn_lang_en);
-    lv_label_set_text(len, "EN");
-    lv_obj_set_style_text_font(len, CJK_FONT, 0);
-    lv_obj_center(len);
-
-    /* Settings button */
-    btn_settings = lv_button_create(title_bar);
-    lv_obj_set_size(btn_settings, 80, 32);
-    lv_obj_align(btn_settings, LV_ALIGN_RIGHT_MID, -156, 0);
-    lv_obj_set_style_bg_color(btn_settings, lv_color_make(60, 70, 110), 0);
-    lv_obj_set_style_bg_grad_color(btn_settings, lv_color_make(45, 55, 90), 0);
-    lv_obj_set_style_bg_grad_dir(btn_settings, LV_GRAD_DIR_VER, 0);
-    lv_obj_set_style_radius(btn_settings, 8, 0);
-    lv_obj_add_event_cb(btn_settings, btn_settings_cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* lset = lv_label_create(btn_settings);
-    lv_label_set_text(lset, tr(STR_SETTINGS));
-    lv_obj_set_style_text_font(lset, CJK_FONT, 0);
-    lv_obj_center(lset);
-
     /* ═══ Window Control Buttons (Minimize / Maximize / Close) ═══ */
     int wc_btn_size = 36;
     int wc_btn_gap = 8;
     int wc_y_offset = 0;
 
-    /* Minimize button — */
+    /* P2-01: CN/EN language toggle button - LEFT side for visibility test */
+    lv_obj_t* btn_lang_toggle = lv_button_create(title_bar);
+    lv_obj_set_size(btn_lang_toggle, 56, 30);
+    lv_obj_align(btn_lang_toggle, LV_ALIGN_LEFT_MID, 10 + (wc_btn_size + wc_btn_gap) * 3 + 10, 0);
+    lv_obj_set_style_bg_color(btn_lang_toggle, lv_color_make(255, 255, 0), 0);  /* YELLOW */
+    lv_obj_set_style_bg_opa(btn_lang_toggle, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(btn_lang_toggle, 6, 0);
+    lv_obj_set_style_border_width(btn_lang_toggle, 1, 0);
+    lv_obj_set_style_border_color(btn_lang_toggle, lv_color_make(255, 255, 255), 0);
+    lv_obj_add_event_cb(btn_lang_toggle, lang_toggle_cb, LV_EVENT_CLICKED, nullptr);
+    g_lang_toggle_label = lv_label_create(btn_lang_toggle);
+    lv_label_set_text(g_lang_toggle_label, (g_lang == Lang::CN) ? "CN" : "EN");
+    lv_obj_set_style_text_color(g_lang_toggle_label, lv_color_make(0, 0, 0), 0);  /* Black text for contrast */
+    lv_obj_set_style_text_font(g_lang_toggle_label, CJK_FONT, 0);
+    lv_obj_center(g_lang_toggle_label);
+
+    /* Settings button - LEFT side for visibility test */
+    btn_settings = lv_button_create(title_bar);
+    lv_obj_set_size(btn_settings, 80, 32);
+    lv_obj_align(btn_settings, LV_ALIGN_LEFT_MID, 10 + (wc_btn_size + wc_btn_gap) * 3 + 10 + 56 + 10, 0);
+    lv_obj_set_style_bg_color(btn_settings, lv_color_make(0, 255, 255), 0);  /* CYAN */
+    lv_obj_set_style_bg_opa(btn_settings, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(btn_settings, 8, 0);
+    lv_obj_set_style_border_width(btn_settings, 1, 0);
+    lv_obj_set_style_border_color(btn_settings, lv_color_make(255, 255, 255), 0);
+    lv_obj_add_event_cb(btn_settings, btn_settings_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lset = lv_label_create(btn_settings);
+    lv_label_set_text(lset, tr(STR_SETTINGS));
+    lv_obj_set_style_text_color(lset, lv_color_make(0, 0, 0), 0);  /* Black text */
+    lv_obj_set_style_text_font(lset, CJK_FONT, 0);
+    lv_obj_center(lset);
+
+    /* ═══ Window Control Buttons (Minimize / Maximize / Close) ═══ */
+
+    /* Minimize button — (moved to LEFT for visibility test) */
     btn_minimize = lv_button_create(title_bar);
     lv_obj_set_size(btn_minimize, wc_btn_size, 30);
-    lv_obj_align(btn_minimize, LV_ALIGN_RIGHT_MID, -(10 + (wc_btn_size + wc_btn_gap) * 2 + wc_btn_size), wc_y_offset);
-    lv_obj_set_style_bg_color(btn_minimize, lv_color_make(50, 55, 80), 0);
-    lv_obj_set_style_bg_opa(btn_minimize, LV_OPA_60, 0);
+    lv_obj_align(btn_minimize, LV_ALIGN_LEFT_MID, 10, wc_y_offset);
+    lv_obj_set_style_bg_color(btn_minimize, lv_color_make(255, 0, 0), 0);  /* TEST: RED */
+    lv_obj_set_style_bg_opa(btn_minimize, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(btn_minimize, 6, 0);
-    lv_obj_set_style_border_width(btn_minimize, 0, 0);
+    lv_obj_set_style_border_width(btn_minimize, 1, 0);
+    lv_obj_set_style_border_color(btn_minimize, lv_color_make(255, 255, 255), 0);
     lv_obj_add_event_cb(btn_minimize, btn_minimize_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_min = lv_label_create(btn_minimize);
-    lv_label_set_text(lbl_min, "\xE2\x80\x94");  /* — */
+    lv_label_set_text(lbl_min, "-");
     lv_obj_set_style_text_font(lbl_min, CJK_FONT, 0);
     lv_obj_center(lbl_min);
 
-    /* Maximize/Restore button □ / ⧉ */
+    /* Maximize/Restore button □ / ⧉ (LEFT of close) */
     btn_maximize = lv_button_create(title_bar);
     lv_obj_set_size(btn_maximize, wc_btn_size, 30);
-    lv_obj_align(btn_maximize, LV_ALIGN_RIGHT_MID, -(10 + (wc_btn_size + wc_btn_gap) * 2 + 2), wc_y_offset);
-    lv_obj_set_style_bg_color(btn_maximize, lv_color_make(50, 55, 80), 0);
-    lv_obj_set_style_bg_opa(btn_maximize, LV_OPA_60, 0);
+    lv_obj_align(btn_maximize, LV_ALIGN_LEFT_MID, 10 + wc_btn_size + wc_btn_gap, wc_y_offset);
+    lv_obj_set_style_bg_color(btn_maximize, lv_color_make(0, 255, 0), 0);  /* TEST: GREEN */
+    lv_obj_set_style_bg_opa(btn_maximize, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(btn_maximize, 6, 0);
-    lv_obj_set_style_border_width(btn_maximize, 0, 0);
+    lv_obj_set_style_border_width(btn_maximize, 1, 0);
+    lv_obj_set_style_border_color(btn_maximize, lv_color_make(255, 255, 255), 0);
     lv_obj_add_event_cb(btn_maximize, btn_maximize_cb, LV_EVENT_CLICKED, nullptr);
     lbl_maximize = lv_label_create(btn_maximize);
-    lv_label_set_text(lbl_maximize, "\xE2\x96\xA1");  /* □ */
+    lv_label_set_text(lbl_maximize, "[]");
     lv_obj_set_style_text_font(lbl_maximize, CJK_FONT, 0);
     lv_obj_center(lbl_maximize);
 
-    /* Close button (minimize to tray) ✕ */
+    /* Close button (minimize to tray) ✕ (LEFT of close) */
     btn_close = lv_button_create(title_bar);
     lv_obj_set_size(btn_close, wc_btn_size, 30);
-    lv_obj_align(btn_close, LV_ALIGN_RIGHT_MID, -10, wc_y_offset);
-    lv_obj_set_style_bg_color(btn_close, lv_color_make(160, 50, 50), 0);
-    lv_obj_set_style_bg_opa(btn_close, LV_OPA_60, 0);
+    lv_obj_align(btn_close, LV_ALIGN_LEFT_MID, 10 + (wc_btn_size + wc_btn_gap) * 2, wc_y_offset);
+    lv_obj_set_style_bg_color(btn_close, lv_color_make(0, 0, 255), 0);  /* TEST: BLUE */
+    lv_obj_set_style_bg_opa(btn_close, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(btn_close, 6, 0);
-    lv_obj_set_style_border_width(btn_close, 0, 0);
+    lv_obj_set_style_border_width(btn_close, 1, 0);
+    lv_obj_set_style_border_color(btn_close, lv_color_make(255, 255, 255), 0);
     lv_obj_add_event_cb(btn_close, btn_close_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_cls = lv_label_create(btn_close);
-    lv_label_set_text(lbl_cls, "\xC3\x97");  /* × */
+    lv_label_set_text(lbl_cls, "X");
     lv_obj_set_style_text_font(lbl_cls, CJK_FONT, 0);
     lv_obj_center(lbl_cls);
 
@@ -1157,18 +1156,12 @@ void app_ui_init() {
     lv_obj_clear_flag(pl, LV_OBJ_FLAG_SCROLLABLE);
 
     /* Panel title with garlic icon */
+    /* Panel title */
     lv_obj_t* pt = lv_label_create(pl);
     lv_label_set_text(pt, tr({"Garlic Status", "蒜蓉状态"}));
     lv_obj_set_style_text_color(pt, lv_color_make(130, 170, 240), 0);
     lv_obj_set_style_text_font(pt, CJK_FONT, 0);
-    lv_obj_set_pos(pt, 35, 8);
-
-    /* Garlic icon - use Unicode bullet (rendered by CJK font) */
-    lv_obj_t* garlic_icon = lv_label_create(pl);
-    lv_label_set_text(garlic_icon, "\xE2\x97\x87 G");  /* ◇ */
-    lv_obj_set_style_text_color(garlic_icon, lv_color_make(255, 215, 100), 0);
-    lv_obj_set_style_text_font(garlic_icon, CJK_FONT, 0);
-    lv_obj_set_pos(garlic_icon, 8, 8);
+    lv_obj_set_pos(pt, 8, 8);
 
     /* Status row with LEDs */
     lv_obj_t* sr = lv_obj_create(pl);
@@ -1333,8 +1326,11 @@ void app_ui_init() {
     lv_obj_t* btn_send = lv_button_create(pr);
     lv_obj_set_size(btn_send, 60, input_h);
     lv_obj_set_pos(btn_send, RIGHT_PANEL_W - 80, input_y);
-    lv_obj_set_style_bg_color(btn_send, c->btn_action, 0);
+    lv_obj_set_style_bg_color(btn_send, lv_color_make(70, 130, 220), 0);
+    lv_obj_set_style_bg_opa(btn_send, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(btn_send, 6, 0);
+    lv_obj_set_style_border_width(btn_send, 1, 0);
+    lv_obj_set_style_border_color(btn_send, lv_color_make(100, 160, 255), 0);
     lv_obj_add_event_cb(btn_send, chat_send_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lsend = lv_label_create(btn_send);
     lv_label_set_text(lsend, tr(STR_SEND));
@@ -1346,8 +1342,11 @@ void app_ui_init() {
     lv_obj_t* btn_clear = lv_button_create(pr);
     lv_obj_set_size(btn_clear, 36, input_h);
     lv_obj_set_pos(btn_clear, RIGHT_PANEL_W - 40, input_y);
-    lv_obj_set_style_bg_color(btn_clear, lv_color_make(180, 50, 50), 0);
+    lv_obj_set_style_bg_color(btn_clear, lv_color_make(200, 70, 70), 0);
+    lv_obj_set_style_bg_opa(btn_clear, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(btn_clear, 6, 0);
+    lv_obj_set_style_border_width(btn_clear, 1, 0);
+    lv_obj_set_style_border_color(btn_clear, lv_color_make(240, 100, 100), 0);
     lv_obj_add_event_cb(btn_clear, [](lv_event_t* e) {
         (void)e;
         /* Clear chat history buffer and remove all bubbles */
@@ -1382,8 +1381,11 @@ void app_ui_init() {
     lv_obj_t* btn_export = lv_button_create(pr);
     lv_obj_set_size(btn_export, 60, 22);
     lv_obj_set_pos(btn_export, RIGHT_PANEL_W - 76, log_title_y);
-    lv_obj_set_style_bg_color(btn_export, lv_color_make(60, 100, 180), 0);
+    lv_obj_set_style_bg_color(btn_export, lv_color_make(70, 120, 200), 0);
+    lv_obj_set_style_bg_opa(btn_export, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(btn_export, 4, 0);
+    lv_obj_set_style_border_width(btn_export, 1, 0);
+    lv_obj_set_style_border_color(btn_export, lv_color_make(100, 150, 240), 0);
     static I18n STR_EXPORT = {"Export", "导出"};
     lv_obj_add_event_cb(btn_export, [](lv_event_t* e) {
         (void)e;

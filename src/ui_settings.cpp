@@ -16,9 +16,9 @@
 extern const lv_font_t lv_font_mshy_16;
 #define CJK_FONT (&lv_font_mshy_16)
 
-/* Layout constants - match ui_main.cpp */
-#define WIN_W 1350
-#define WIN_H 740
+/* Layout constants - dynamically set from actual display size */
+static int SETTING_WIN_W = 1350;
+static int SETTING_WIN_H = 740;
 
 /* ── Settings panel state ── */
 static lv_obj_t* settings_panel = nullptr;
@@ -906,9 +906,15 @@ bool ui_settings_is_open() {
  *  SETTINGS INIT - sized for 1200x800 window
  * ═══════════════════════════════════════════════════════════════ */
 void ui_settings_init(lv_obj_t* parent) {
-    /* Modal overlay covering entire 1200x800 screen */
+    /* Get actual display dimensions from LVGL */
+    SETTING_WIN_W = (int)lv_display_get_horizontal_resolution(NULL);
+    SETTING_WIN_H = (int)lv_display_get_vertical_resolution(NULL);
+    if (SETTING_WIN_W < 800) SETTING_WIN_W = 800;
+    if (SETTING_WIN_H < 500) SETTING_WIN_H = 500;
+
+    /* Modal overlay covering entire screen */
     settings_panel = lv_obj_create(parent);
-    lv_obj_set_size(settings_panel, WIN_W, WIN_H);
+    lv_obj_set_size(settings_panel, SETTING_WIN_W, SETTING_WIN_H);
     lv_obj_set_pos(settings_panel, 0, 0);
     lv_obj_set_style_bg_color(settings_panel, g_colors->bg, 0);
     lv_obj_set_style_bg_opa(settings_panel, LV_OPA_COVER, 0);
@@ -919,7 +925,7 @@ void ui_settings_init(lv_obj_t* parent) {
 
     /* Settings title bar */
     lv_obj_t* title_bar = lv_obj_create(settings_panel);
-    lv_obj_set_size(title_bar, WIN_W, 48);
+    lv_obj_set_size(title_bar, SETTING_WIN_W, 48);
     lv_obj_set_pos(title_bar, 0, 0);
     lv_obj_set_style_bg_color(title_bar, g_colors->panel, 0);
     lv_obj_set_style_bg_opa(title_bar, LV_OPA_COVER, 0);
@@ -947,9 +953,9 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_set_style_text_color(lbl_x, lv_color_make(255, 255, 255), 0);
     lv_obj_center(lbl_x);
 
-    /* Tabview - larger for 1450x800 */
+    /* Tabview */
     settings_tabs = lv_tabview_create(settings_panel);
-    lv_obj_set_size(settings_tabs, WIN_W - 40, WIN_H - 60);
+    lv_obj_set_size(settings_tabs, SETTING_WIN_W - 40, SETTING_WIN_H - 60);
     lv_obj_set_pos(settings_tabs, 20, 54);
     lv_obj_set_style_bg_color(settings_tabs, g_colors->panel, 0);
     lv_obj_set_style_border_width(settings_tabs, 0, 0);

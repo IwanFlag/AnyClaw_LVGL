@@ -7,12 +7,25 @@
 #include "SDL_syswm.h"
 #include "drivers/sdl/lv_sdl_window.h"
 #include "drivers/sdl/lv_sdl_mouse.h"
+#include "drivers/sdl/lv_sdl_keyboard.h"
 #include <cstdio>
 #include <windows.h>
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
 
 /* Expose for ui_main.cpp window drag */
 static SDL_Window* g_window = nullptr;
 SDL_Window* app_get_window() { return g_window; }
+
+/* Get HWND from SDL_Window */
+static HWND getNativeWindowHandle(SDL_Window* window) {
+    SDL_SysWMinfo info;
+    SDL_VERSION(&info.version);
+    if (SDL_GetWindowWMInfo(window, &info)) {
+        return info.info.win.window;
+    }
+    return nullptr;
+}
 
 /* Intercept SDL window close to minimize to tray */
 static bool g_windowCloseIntercepted = false;
@@ -109,14 +122,24 @@ int main(int argc, char* argv[]) {
     if (g_window) {
         SDL_SetWindowPosition(g_window, (screen_w - win_w) / 2, (screen_h - win_h) / 2 - 20);
         SDL_RaiseWindow(g_window);
+        
+        /* Fix DWM extended frame covering custom title bar */
+        HWND hwnd = getNativeWindowHandle(g_window);
+        if (hwnd) {
+            MARGINS margins = {0, 0, 0, 0};  /* No extended frame */
+            DwmExtendFrameIntoClientArea(hwnd, &margins);
+        }
+        
         int ww, wh;
         SDL_GetWindowSize(g_window, &ww, &wh);
         printf("[DEBUG] SDL window: %dx%d (screen: %dx%d)\n", ww, wh, screen_w, screen_h);
     }
 
-    /* Create input device */
-    lv_indev_t* indev = lv_sdl_mouse_create();
-    (void)indev;
+    /* Create input devices */
+    lv_indev_t* mouse = lv_sdl_mouse_create();
+    lv_indev_t* keyboard = lv_sdl_keyboard_create();
+    (void)mouse;
+    (void)keyboard;
 
     /* Create UI */
     app_ui_init();
