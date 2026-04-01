@@ -48,8 +48,8 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    /* Console hidden in release (WIN32 subsystem) - logs shown in GUI */
-    /* Debug: show console for troubleshooting */
+    /* P2-34: 发布版自动隐藏 Console 窗口，开发版保留 */
+#ifdef _DEBUG
     ::AllocConsole();
     ::freopen("CONOUT$", "w", stdout);
     ::freopen("CONOUT$", "w", stderr);
@@ -61,6 +61,10 @@ int main(int argc, char* argv[]) {
             ::MoveWindow(hCon, 0, 800, 500, 150, TRUE);
         }
     }
+#else
+    /* Release: no console window */
+    FreeConsole();
+#endif
 
     HINSTANCE hInstance = GetModuleHandle(nullptr);
 

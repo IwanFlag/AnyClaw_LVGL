@@ -57,6 +57,7 @@ set(SOURCES
     src/tray.cpp
     src/health.cpp
     src/autostart.cpp
+    src/AnyClaw_LVGL.rc
 )
 
 add_executable(AnyClaw_LVGL WIN32 ${SOURCES})
