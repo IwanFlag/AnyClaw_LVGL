@@ -74,8 +74,8 @@ int main(int argc, char* argv[]) {
     /* Init LVGL first (lv_sdl_window_create calls SDL_Init internally) */
     lv_init();
 
-    /* Create SDL window using LVGL's official driver - 1200x800 */
-    lv_display_t* disp = lv_sdl_window_create(1200, 800);
+    /* Create SDL window using LVGL's official driver - 1450x800 */
+    lv_display_t* disp = lv_sdl_window_create(1450, 800);
 
     /* Set window title and position */
     lv_sdl_window_set_title(disp, "AnyClaw LVGL v2.0 - Desktop Manager");
