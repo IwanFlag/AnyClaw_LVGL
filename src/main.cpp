@@ -17,9 +17,36 @@ SDL_Window* app_get_window() { return g_window; }
 /* Intercept SDL window close to minimize to tray */
 static bool g_windowCloseIntercepted = false;
 
+/* P2: Multi-instance protection via Windows Mutex */
+static HANDLE g_instanceMutex = nullptr;
+
+static bool acquire_instance_mutex() {
+    g_instanceMutex = ::CreateMutexA(nullptr, TRUE, "Global\\AnyClaw_LVGL_v2_SingleInstance");
+    if (::GetLastError() == ERROR_ALREADY_EXISTS) {
+        return false;
+    }
+    return true;
+}
+
+static void release_instance_mutex() {
+    if (g_instanceMutex) {
+        ::ReleaseMutex(g_instanceMutex);
+        ::CloseHandle(g_instanceMutex);
+        g_instanceMutex = nullptr;
+    }
+}
+
 int main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
+
+    /* P2: Prevent multiple instances */
+    if (!acquire_instance_mutex()) {
+        ::MessageBoxA(nullptr, "AnyClaw is already running.\n\n"
+            "An instance of AnyClaw LVGL is already active in the system tray.",
+            "AnyClaw - Already Running", MB_ICONINFORMATION | MB_OK);
+        return 0;
+    }
 
     /* Enable console for debug output */
     ::AllocConsole();
@@ -106,6 +133,9 @@ int main(int argc, char* argv[]) {
     health_stop();
     tray_cleanup();
     lv_sdl_quit();
+
+    /* P2: Release the instance mutex */
+    release_instance_mutex();
 
     return 0;
 }

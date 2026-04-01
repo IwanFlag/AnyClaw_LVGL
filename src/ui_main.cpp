@@ -263,71 +263,11 @@ static void chat_input_cb(lv_event_t* e) {
 
 /* ── P2: Update task list dynamically ── */
 static void update_task_list(ClawStatus status) {
-    /* Clear existing task labels */
-    for (int i = 0; i < MAX_TASK_WIDGETS; i++) {
-        if (task_labels[i]) {
-            lv_obj_delete(task_labels[i]);
-            task_labels[i] = nullptr;
-        }
-    }
-    task_count = 0;
-    
-    if (!task_panel) return;
-    
-    /* Always show gateway status as first task */
-    if (task_count < MAX_TASK_WIDGETS) {
-        char buf[256];
-        lv_color_t color;
-        if (status == ClawStatus::Running) {
-            snprintf(buf, sizeof(buf), LV_SYMBOL_PLAY " %s / %s", tr(STR_GW_RUNNING), tr(STR_RUNNING));
-            color = lv_color_make(0, 220, 60);
-        } else if (status == ClawStatus::Error) {
-            snprintf(buf, sizeof(buf), LV_SYMBOL_WARNING " %s / %s", tr(STR_GW_RUNNING), tr(STR_ERROR));
-            color = lv_color_make(220, 40, 40);
-        } else {
-            snprintf(buf, sizeof(buf), LV_SYMBOL_MINUS " %s / %s", tr(STR_GW_RUNNING), tr(STR_NOTINST));
-            color = lv_color_make(220, 200, 40);
-        }
-        lv_obj_t* lbl = lv_label_create(task_panel);
-        lv_label_set_text(lbl, buf);
-        lv_obj_set_style_text_color(lbl, color, 0);
-        lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
-        lv_obj_set_width(lbl, LEFT_PANEL_W - 48);
-        lv_label_set_long_mode(lbl, LV_LABEL_LONG_MODE_DOTS);
-        lv_obj_set_pos(lbl, 10, task_count * 28 + 40);
-        task_labels[task_count++] = lbl;
-    }
-    
-    /* Show idle/active state */
-    if (status == ClawStatus::Running) {
-        /* When running, show health status */
-        if (task_count < MAX_TASK_WIDGETS) {
-            const char* hint = tr(STR_NO_TASKS);
-            lv_obj_t* lbl = lv_label_create(task_panel);
-            lv_label_set_text(lbl, hint);
-            lv_obj_set_style_text_color(lbl, lv_color_make(200, 200, 160), 0);
-            lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
-            lv_obj_set_width(lbl, LEFT_PANEL_W - 48);
-            lv_label_set_long_mode(lbl, LV_LABEL_LONG_MODE_DOTS);
-            lv_obj_set_pos(lbl, 10, task_count * 28 + 40);
-            task_labels[task_count++] = lbl;
-        }
-    } else {
-        /* When not running, show appropriate message */
-        if (task_count < MAX_TASK_WIDGETS) {
-            const char* msg = (status == ClawStatus::NotInstalled) 
-                ? tr(STR_NOTINST) 
-                : tr(STR_NO_TASKS);
-            lv_obj_t* lbl = lv_label_create(task_panel);
-            lv_label_set_text(lbl, msg);
-            lv_obj_set_style_text_color(lbl, lv_color_make(160, 160, 140), 0);
-            lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
-            lv_obj_set_width(lbl, LEFT_PANEL_W - 48);
-            lv_label_set_long_mode(lbl, LV_LABEL_LONG_MODE_DOTS);
-            lv_obj_set_pos(lbl, 10, task_count * 28 + 40);
-            task_labels[task_count++] = lbl;
-        }
-    }
+    /* P2: Instead of creating new labels that overlap with existing ones,
+     * just update the existing task placeholder labels if they exist.
+     * The static labels from app_ui_init() handle the display.
+     * No dynamic label creation needed - text is updated in app_refresh_status(). */
+    (void)status;
 }
 
 static void lang_cn_cb(lv_event_t* e) {
@@ -553,10 +493,12 @@ void app_ui_init() {
     lv_obj_clear_flag(sep1, LV_OBJ_FLAG_SCROLLABLE);
 
     /* Task list area title with icon */
-    lv_obj_t* task_title = create_styled_label(pl, tr(STR_TASK_LIST), lv_color_make(130, 170, 240), 15, 175, LEFT_PANEL_W - 30);
-
-    /* P2: Dynamic task panel (tasks are updated by update_task_list()) */
-    task_panel = pl;
+    lv_obj_t* task_title = lv_label_create(pl);
+    lv_label_set_text(task_title, LV_SYMBOL_LIST " Task List");
+    lv_obj_set_style_text_color(task_title, lv_color_make(130, 170, 240), 0);
+    lv_obj_set_style_text_font(task_title, CJK_FONT, 0);
+    lv_obj_set_width(task_title, LEFT_PANEL_W - 30);
+    lv_obj_set_pos(task_title, 15, 195);
 
     /* Hint at bottom */
     lv_obj_t* hint = create_styled_label(pl, tr(STR_AUTOREFRESH), lv_color_make(90, 95, 120), 15, PANEL_H - 60, LEFT_PANEL_W - 30);
