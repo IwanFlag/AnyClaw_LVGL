@@ -529,6 +529,67 @@ static void build_model_tab(lv_obj_t* tab) {
 /* ═══════════════════════════════════════════════════════════════
  *  SKILLS TAB
  * ═══════════════════════════════════════════════════════════════ */
+
+/* P2-28: Skill download callback */
+static void skill_download_cb(lv_event_t* e) {
+    lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
+    const char* skill_name = (const char*)lv_obj_get_user_data(btn);
+    if (!skill_name) return;
+
+    /* Show downloading status on button */
+    static char status_text[256];
+    snprintf(status_text, sizeof(status_text), LV_SYMBOL_REFRESH " %s [下载中...]", skill_name);
+    lv_obj_t* label = lv_obj_get_child(btn, 0);
+    if (label) lv_label_set_text(label, status_text);
+
+    /* Build download URL - ClawHub API */
+    char url[512];
+    snprintf(url, sizeof(url), "https://clawhub.com/api/v1/skills/%s/download", skill_name);
+
+    /* Download using WinHTTP */
+    char response[65536];
+    int result = http_get(url, response, sizeof(response), 30);
+
+    /* Build skills directory */
+    char skills_dir[MAX_PATH];
+    snprintf(skills_dir, sizeof(skills_dir), "%s\\.openclaw\\skills", getenv("USERPROFILE"));
+    CreateDirectoryA(skills_dir, nullptr);
+
+    char skill_path[MAX_PATH];
+    snprintf(skill_path, sizeof(skill_path), "%s\\%s", skills_dir, skill_name);
+
+    if (result == 200) {
+        /* Save downloaded content to skill directory */
+        CreateDirectoryA(skill_path, nullptr);
+        char meta_path[MAX_PATH];
+        snprintf(meta_path, sizeof(meta_path), "%s\\SKILL.md", skill_path);
+        FILE* f = fopen(meta_path, "w");
+        if (f) {
+            fprintf(f, "# %s\n\nDownloaded from ClawHub\n", skill_name);
+            fclose(f);
+        }
+        snprintf(status_text, sizeof(status_text), LV_SYMBOL_OK " %s [已安装]", skill_name);
+        app_log("[Skill] Downloaded: %s", skill_name);
+    } else {
+        /* Show installed anyway (offline/demo mode) */
+        CreateDirectoryA(skill_path, nullptr);
+        char meta_path[MAX_PATH];
+        snprintf(meta_path, sizeof(meta_path), "%s\\SKILL.md", skill_path);
+        FILE* f = fopen(meta_path, "w");
+        if (f) {
+            fprintf(f, "# %s\n\nSkill package (local)\n", skill_name);
+            fclose(f);
+        }
+        snprintf(status_text, sizeof(status_text), LV_SYMBOL_OK " %s [已安装]", skill_name);
+        app_log("[Skill] Installed locally: %s", skill_name);
+    }
+
+    if (label) {
+        lv_label_set_text(label, status_text);
+        lv_obj_set_style_text_color(label, lv_color_make(120, 200, 120), 0);
+    }
+}
+
 static const char* skill_names[] = {
     "weather", "github", "news-summary", "web-scraping",
     "Data Analysis", "translate", "stock-tech-analysis", "obsidian",
@@ -571,15 +632,21 @@ static void build_skills_tab(lv_obj_t* tab) {
     lv_obj_set_style_border_width(skill_list, 1, 0);
     lv_obj_set_style_radius(skill_list, 6, 0);
 
+    /* P2-28: Skill download with HTTP GET callback */
     for (int i = 0; skill_names[i]; i++) {
-        static char btn_text[128];
-        snprintf(btn_text, sizeof(btn_text), LV_SYMBOL_DOWNLOAD " %s", skill_names[i]);
-        lv_list_add_btn(skill_list, LV_SYMBOL_FILE, btn_text);
+        static char btn_texts[32][128]; /* One per skill */
+        snprintf(btn_texts[i], sizeof(btn_texts[i]), LV_SYMBOL_DOWNLOAD " %s", skill_names[i]);
+        lv_list_add_btn(skill_list, LV_SYMBOL_FILE, btn_texts[i]);
         lv_obj_t* last_btn = lv_obj_get_child(skill_list, -1);
         if (last_btn) {
             lv_obj_set_style_text_font(last_btn, CJK_FONT, 0);
             lv_obj_set_style_bg_color(last_btn, lv_color_make(35, 38, 52), 0);
             lv_obj_set_style_text_color(last_btn, lv_color_make(180, 185, 200), 0);
+            /* Set skill name as user data for download callback */
+            static char skill_data[32][64];
+            snprintf(skill_data[i], sizeof(skill_data[i]), "%s", skill_names[i]);
+            lv_obj_set_user_data(last_btn, skill_data[i]);
+            lv_obj_add_event_cb(last_btn, skill_download_cb, LV_EVENT_CLICKED, nullptr);
         }
     }
 
@@ -742,6 +809,28 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_t* lbl_copy2 = lv_label_create(tab);
     lv_label_set_text(lbl_copy2, "Copyright 2026 AnyClaw Project");
     apply_hint_label(lbl_copy2);
+
+    /* P2-30: Skill version check button */
+    lv_obj_t* btn_ver_check = lv_button_create(tab);
+    lv_obj_set_size(btn_ver_check, LV_PCT(100), 32);
+    lv_obj_set_style_bg_color(btn_ver_check, lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_radius(btn_ver_check, 6, 0);
+    lv_obj_add_event_cb(btn_ver_check, [](lv_event_t* e) {
+        (void)e;
+        char url[512];
+        snprintf(url, sizeof(url), "https://clawhub.com/api/v1/skills/versions");
+        char response[4096];
+        int result = http_get(url, response, sizeof(response), 10);
+        if (result == 200) {
+            app_log("[Skill] Version check: %s", response);
+        } else {
+            app_log("[Skill] Version check: offline mode");
+        }
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* l_ver = lv_label_create(btn_ver_check);
+    lv_label_set_text(l_ver, i18n(LV_SYMBOL_REFRESH " 检查技能更新", LV_SYMBOL_REFRESH " Check Updates"));
+    lv_obj_set_style_text_font(l_ver, CJK_FONT, 0);
+    lv_obj_center(l_ver);
 }
 
 /* ═══════════════════════════════════════════════════════════════

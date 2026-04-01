@@ -425,6 +425,98 @@ static void chat_add_user_bubble(const char* text) {
     }
 }
 
+/* P2-20: Include markdown renderer */
+#include "markdown.h"
+
+/* P2-19: AI streaming state */
+static lv_obj_t* g_stream_bubble = nullptr;
+static lv_obj_t* g_stream_label = nullptr;
+static char g_stream_buffer[4096] = {0};
+static int g_stream_pos = 0;
+static lv_timer_t* g_stream_timer = nullptr;
+static bool g_streaming = false;
+
+static void stream_timer_cb(lv_timer_t* timer) {
+    (void)timer;
+    if (!g_stream_label || !g_streaming) return;
+
+    /* Simulate incremental text arrival (for demo) */
+    /* In production, this would be fed from HTTP streaming response */
+    static const char* demo_text = "\n正在思考...\n\n这是AI的回复示例。**粗体文字** 和普通文字。\n\n- 项目1\n- 项目2\n\n`代码示例` 在这里。";
+    int demo_len = (int)strlen(demo_text);
+
+    if (g_stream_pos < demo_len) {
+        int chunk = 1; /* One character at a time for typewriter effect */
+        if (g_stream_pos + chunk > demo_len) chunk = demo_len - g_stream_pos;
+
+        strncat(g_stream_buffer, demo_text + g_stream_pos, chunk);
+        g_stream_pos += chunk;
+
+        /* Update label with markdown rendering */
+        render_markdown_to_label(g_stream_label, g_stream_buffer, CJK_FONT);
+
+        /* Auto-scroll */
+        lv_obj_t* chat_cont = lv_obj_get_parent(chat_display);
+        if (chat_cont) {
+            lv_obj_update_layout(chat_cont);
+            int h = (int)lv_obj_get_height(chat_cont);
+            lv_obj_scroll_to_y(chat_cont, h, LV_ANIM_OFF);
+        }
+    } else {
+        /* Streaming complete */
+        g_streaming = false;
+        lv_timer_delete(g_stream_timer);
+        g_stream_timer = nullptr;
+
+        /* Save to chat_history */
+        size_t hlen = strlen(chat_history);
+        size_t slen = strlen(g_stream_buffer);
+        if (hlen + slen < sizeof(chat_history) - 1) {
+            strcat(chat_history, g_stream_buffer);
+            strcat(chat_history, "\n");
+        }
+
+        app_log("[Chat] Streaming complete");
+    }
+}
+
+static void chat_start_stream() {
+    if (g_streaming) return; /* Already streaming */
+
+    lv_obj_t* chat_cont = lv_obj_get_parent(chat_display);
+    if (!chat_cont) return;
+
+    /* Create AI bubble for streaming */
+    g_stream_bubble = lv_obj_create(chat_cont);
+    lv_obj_set_size(g_stream_bubble, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_width(g_stream_bubble, RIGHT_PANEL_W - 60);
+    lv_obj_set_style_bg_color(g_stream_bubble, lv_color_make(55, 65, 81), 0);
+    lv_obj_set_style_bg_opa(g_stream_bubble, LV_OPA_60, 0);
+    lv_obj_set_style_radius(g_stream_bubble, 10, 0);
+    lv_obj_set_style_pad_all(g_stream_bubble, 6, 0);
+    lv_obj_set_style_border_width(g_stream_bubble, 0, 0);
+    lv_obj_set_style_margin_bottom(g_stream_bubble, 4, 0);
+    lv_obj_set_flex_align(chat_cont, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+    g_stream_label = lv_label_create(g_stream_bubble);
+    lv_obj_set_style_text_color(g_stream_label, lv_color_make(230, 230, 230), 0);
+    lv_label_set_long_mode(g_stream_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(g_stream_bubble, RIGHT_PANEL_W - 80);
+
+    /* Initialize stream buffer with header */
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    snprintf(g_stream_buffer, sizeof(g_stream_buffer), "[%02d:%02d:%02d] [AI]",
+             st.wHour, st.wMinute, st.wSecond);
+    g_stream_pos = 0;
+    g_streaming = true;
+
+    /* Start streaming timer (50ms per character for typewriter effect) */
+    g_stream_timer = lv_timer_create(stream_timer_cb, 50, nullptr);
+
+    app_log("[Chat] Streaming started");
+}
+
 static void chat_add_ai_bubble(const char* text) {
     lv_obj_t* chat_cont = lv_obj_get_parent(chat_display);
     if (!chat_cont) return;
@@ -442,21 +534,28 @@ static void chat_add_ai_bubble(const char* text) {
     lv_obj_set_flex_align(chat_cont, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
     lv_obj_t* lbl = lv_label_create(bubble);
-    char entry[512];
+    char entry[2048];
     SYSTEMTIME st;
     GetLocalTime(&st);
-    snprintf(entry, sizeof(entry), "[%02d:%02d:%02d] [AI] %s",
-             st.wHour, st.wMinute, st.wSecond, text);
-    lv_label_set_text(lbl, entry);
+    snprintf(entry, sizeof(entry), "[%02d:%02d:%02d] [AI]\n",
+             st.wHour, st.wMinute, st.wSecond);
+
+    /* P2-20: Render markdown in AI response */
+    size_t elen = strlen(entry);
+    size_t tlen = strlen(text);
+    if (elen + tlen < sizeof(entry) - 1) {
+        strncat(entry, text, sizeof(entry) - elen - 1);
+    }
+
+    render_markdown_to_label(lbl, entry, CJK_FONT);
     lv_obj_set_style_text_color(lbl, lv_color_make(230, 230, 230), 0);
-    lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
     lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(lv_obj_get_parent(lbl), RIGHT_PANEL_W - 80);
+    lv_obj_set_width(bubble, RIGHT_PANEL_W - 80);
 
     /* Save to chat_history */
     size_t hlen = strlen(chat_history);
-    size_t elen = strlen(entry);
-    if (hlen + elen < sizeof(chat_history) - 1) {
+    size_t elen2 = strlen(entry);
+    if (hlen + elen2 < sizeof(chat_history) - 1) {
         strcat(chat_history, entry);
         strcat(chat_history, "\n");
     }
@@ -472,15 +571,10 @@ static void chat_send_cb(lv_event_t* e) {
     chat_add_user_bubble(text);
     lv_textarea_set_text(chat_input, "");
 
-    /* Auto-scroll chat container to bottom */
-    lv_obj_t* chat_cont = lv_obj_get_parent(chat_display);
-    if (chat_cont) {
-        lv_obj_update_layout(chat_cont);
-        int h = (int)lv_obj_get_height(chat_cont);
-        lv_obj_scroll_to_y(chat_cont, h, LV_ANIM_OFF);
-    }
+    /* P2-19: Start AI streaming response */
+    chat_start_stream();
 
-    app_log("[Chat] Message sent");
+    app_log("[Chat] Message sent, streaming response...");
 }
 
 static void chat_input_cb(lv_event_t* e) {
