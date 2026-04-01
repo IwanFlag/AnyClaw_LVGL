@@ -384,7 +384,7 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_set_style_bg_grad_dir(btn_wizard, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_radius(btn_wizard, 8, 0);
     lv_obj_t* btn_wizard_lbl = lv_label_create(btn_wizard);
-    lv_label_set_text(btn_wizard_lbl, i18n(LV_SYMBOL_REFRESH " 重新配置向导", LV_SYMBOL_REFRESH " Reconfigure Wizard"));
+    lv_label_set_text(btn_wizard_lbl, i18n("重新配置向导", "Reconfigure Wizard"));
     lv_obj_set_style_text_font(btn_wizard_lbl, CJK_FONT, 0);
     lv_obj_center(btn_wizard_lbl);
 }
@@ -484,7 +484,7 @@ static void model_search_cb(lv_event_t* e) {
         }
         for (int j = 0; model_list_items[j]; j++) {
             if (text[0] == '\0' || strstr(model_list_items[j], text)) {
-                lv_obj_t* btn = lv_list_add_btn(model_list, LV_SYMBOL_FILE, model_list_items[j]);
+                lv_obj_t* btn = lv_list_add_btn(model_list, NULL, model_list_items[j]);
                 lv_obj_set_style_text_font(btn, CJK_FONT, 0);
                 lv_obj_set_style_bg_color(btn, lv_color_make(35, 38, 52), 0);
                 lv_obj_set_style_text_color(btn, lv_color_make(180, 185, 200), 0);
@@ -543,7 +543,7 @@ static void build_model_tab(lv_obj_t* tab) {
     lv_obj_set_style_radius(model_list, 6, 0);
 
     for (int i = 0; model_list_items[i]; i++) {
-        lv_obj_t* btn = lv_list_add_btn(model_list, LV_SYMBOL_FILE, model_list_items[i]);
+        lv_obj_t* btn = lv_list_add_btn(model_list, NULL, model_list_items[i]);
         lv_obj_set_style_text_font(btn, CJK_FONT, 0);
         lv_obj_set_style_bg_color(btn, lv_color_make(35, 38, 52), 0);
         lv_obj_set_style_text_color(btn, lv_color_make(180, 185, 200), 0);
@@ -563,7 +563,7 @@ static void skill_download_cb(lv_event_t* e) {
 
     /* Show downloading status on button */
     static char status_text[256];
-    snprintf(status_text, sizeof(status_text), LV_SYMBOL_REFRESH " %s [下载中...]", skill_name);
+    snprintf(status_text, sizeof(status_text), "%s [下载中...]", skill_name);
     lv_obj_t* label = lv_obj_get_child(btn, 0);
     if (label) lv_label_set_text(label, status_text);
 
@@ -593,7 +593,7 @@ static void skill_download_cb(lv_event_t* e) {
             fprintf(f, "# %s\n\nDownloaded from ClawHub\n", skill_name);
             fclose(f);
         }
-        snprintf(status_text, sizeof(status_text), LV_SYMBOL_OK " %s [已安装]", skill_name);
+        snprintf(status_text, sizeof(status_text), "%s [已安装]", skill_name);
         app_log("[Skill] Downloaded: %s", skill_name);
     } else {
         /* Show installed anyway (offline/demo mode) */
@@ -605,7 +605,7 @@ static void skill_download_cb(lv_event_t* e) {
             fprintf(f, "# %s\n\nSkill package (local)\n", skill_name);
             fclose(f);
         }
-        snprintf(status_text, sizeof(status_text), LV_SYMBOL_OK " %s [已安装]", skill_name);
+        snprintf(status_text, sizeof(status_text), "%s [已安装]", skill_name);
         app_log("[Skill] Installed locally: %s", skill_name);
     }
 
@@ -660,8 +660,8 @@ static void build_skills_tab(lv_obj_t* tab) {
     /* P2-28: Skill download with HTTP GET callback */
     for (int i = 0; skill_names[i]; i++) {
         static char btn_texts[32][128]; /* One per skill */
-        snprintf(btn_texts[i], sizeof(btn_texts[i]), LV_SYMBOL_DOWNLOAD " %s", skill_names[i]);
-        lv_list_add_btn(skill_list, LV_SYMBOL_FILE, btn_texts[i]);
+        snprintf(btn_texts[i], sizeof(btn_texts[i]), "%s", skill_names[i]);
+        lv_list_add_btn(skill_list, NULL, btn_texts[i]);
         lv_obj_t* last_btn = lv_obj_get_child(skill_list, -1);
         if (last_btn) {
             lv_obj_set_style_text_font(last_btn, CJK_FONT, 0);
@@ -699,11 +699,10 @@ static void build_skills_tab(lv_obj_t* tab) {
                                        "openclaw-web-search", "openclaw-gemini", nullptr};
     for (int i = 0; installed_skills[i]; i++) {
         static char btn_text[256];
-        snprintf(btn_text, sizeof(btn_text), "%s  %s  %s",
-                 skill_enabled[i] ? LV_SYMBOL_PLAY : LV_SYMBOL_STOP,
+        snprintf(btn_text, sizeof(btn_text), "%s  %s",
                  installed_skills[i],
                  skill_enabled[i] ? "[ON]" : "[OFF]");
-        lv_list_add_btn(installed_list, LV_SYMBOL_FILE, btn_text);
+        lv_list_add_btn(installed_list, NULL, btn_text);
         lv_obj_t* last_btn = lv_obj_get_child(installed_list, -1);
         if (last_btn) {
             lv_obj_set_style_text_font(last_btn, CJK_FONT, 0);
@@ -737,7 +736,7 @@ static void build_about_tab(lv_obj_t* tab) {
 
     /* Garlic brand icon */
     lv_obj_t* lbl_garlic = lv_label_create(tab);
-    lv_label_set_text(lbl_garlic, LV_SYMBOL_IMAGE " G");
+    lv_label_set_text(lbl_garlic, "\xE2\x97\x87 G");  /* ◇ */
     lv_obj_set_style_text_color(lbl_garlic, lv_color_make(255, 215, 100), 0);
     lv_obj_set_style_text_font(lbl_garlic, CJK_FONT, 0);
 
@@ -826,7 +825,7 @@ static void build_about_tab(lv_obj_t* tab) {
         }
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* l_exp = lv_label_create(btn_cfg_export);
-    lv_label_set_text(l_exp, i18n(LV_SYMBOL_DOWNLOAD " 导出配置", LV_SYMBOL_DOWNLOAD " Export Config"));
+    lv_label_set_text(l_exp, i18n("导出配置", "Export Config"));
     lv_obj_set_style_text_font(l_exp, CJK_FONT, 0);
     lv_obj_center(l_exp);
 
@@ -853,7 +852,7 @@ static void build_about_tab(lv_obj_t* tab) {
         }
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* l_ver = lv_label_create(btn_ver_check);
-    lv_label_set_text(l_ver, i18n(LV_SYMBOL_REFRESH " 检查技能更新", LV_SYMBOL_REFRESH " Check Updates"));
+    lv_label_set_text(l_ver, i18n("检查技能更新", "Check Updates"));
     lv_obj_set_style_text_font(l_ver, CJK_FONT, 0);
     lv_obj_center(l_ver);
 }

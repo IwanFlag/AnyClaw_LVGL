@@ -79,24 +79,39 @@ int main(int argc, char* argv[]) {
     /* Init LVGL first (lv_sdl_window_create calls SDL_Init internally) */
     lv_init();
 
-    /* Create SDL window using LVGL's official driver - 1350x740
-       (fits 1920x1080 with Windows borders + taskbar) */
-    lv_display_t* disp = lv_sdl_window_create(1350, 740);
+    /* Bug 2: Detect actual screen resolution and calculate 85% window size */
+    int screen_w = 1920, screen_h = 1080;
+    {
+        SDL_DisplayMode dm;
+        if (SDL_GetCurrentDisplayMode(0, &dm) == 0 && dm.w > 0 && dm.h > 0) {
+            screen_w = dm.w;
+            screen_h = dm.h;
+        }
+        printf("[INFO] Screen resolution: %dx%d\n", screen_w, screen_h);
+    }
+    int win_w = (int)(screen_w * 0.85);
+    int win_h = (int)(screen_h * 0.85);
+    /* Clamp to reasonable minimum */
+    if (win_w < 800) win_w = 800;
+    if (win_h < 500) win_h = 500;
+
+    /* Create SDL window using LVGL's official driver */
+    lv_display_t* disp = lv_sdl_window_create(win_w, win_h);
+
+    /* Bug 1: Enable window resizing so maximize/restore works */
+    lv_sdl_window_set_resizeable(disp, true);
 
     /* Set window title and position */
     lv_sdl_window_set_title(disp, "AnyClaw LVGL v2.0 - Desktop Manager");
     g_window = lv_sdl_window_get_window(disp);
 
-    /* Center on 1920x1080 screen */
+    /* Center on screen */
     if (g_window) {
-        SDL_SetWindowPosition(g_window, (1920 - 1350) / 2, (1080 - 740) / 2 - 20);
+        SDL_SetWindowPosition(g_window, (screen_w - win_w) / 2, (screen_h - win_h) / 2 - 20);
         SDL_RaiseWindow(g_window);
         int ww, wh;
         SDL_GetWindowSize(g_window, &ww, &wh);
-        printf("[DEBUG] SDL window: %dx%d\n", ww, wh);
-
-        /* Hook into SDL to intercept close button (minimize to tray) */
-        /* We'll handle this via the Windows message hook */
+        printf("[DEBUG] SDL window: %dx%d (screen: %dx%d)\n", ww, wh, screen_w, screen_h);
     }
 
     /* Create input device */
@@ -129,6 +144,16 @@ int main(int argc, char* argv[]) {
                     /* Minimize to tray instead of quitting */
                     tray_show_window(false);
                     printf("[MAIN] Window minimized to tray\n");
+                }
+                /* Handle window maximize/restore events from OS */
+                if (ev.type == SDL_WINDOWEVENT) {
+                    if (ev.window.event == SDL_WINDOWEVENT_MAXIMIZED) {
+                        extern void ui_on_window_maximized();
+                        ui_on_window_maximized();
+                    } else if (ev.window.event == SDL_WINDOWEVENT_RESTORED) {
+                        extern void ui_on_window_restored();
+                        ui_on_window_restored();
+                    }
                 }
                 /* Keyboard shortcuts */
                 if (ev.type == SDL_KEYDOWN) {

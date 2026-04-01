@@ -10,6 +10,9 @@
 #include <filesystem>
 #include <windows.h>
 
+/* Extern for tray minimize */
+#include "tray.h"
+
 extern const lv_font_t lv_font_mshy_16;
 #define CJK_FONT (&lv_font_mshy_16)
 
@@ -242,10 +245,10 @@ static const I18n STR_TITLE       = {"Desktop Manager", "桌面管理器"};
 static const I18n STR_STATUS      = {"OpenClaw Status", "OpenClaw 状态"};
 static const I18n STR_CONTROLS    = {"Controls", "操作面板"};
 static const I18n STR_LOG         = {"Log", "日志"};
-static const I18n STR_START       = {LV_SYMBOL_PLAY " Start", LV_SYMBOL_PLAY " 启动"};
-static const I18n STR_STOP        = {LV_SYMBOL_STOP " Stop", LV_SYMBOL_STOP " 停止"};
-static const I18n STR_REFRESH     = {LV_SYMBOL_REFRESH " Refresh", LV_SYMBOL_REFRESH " 刷新状态"};
-static const I18n STR_SETTINGS    = {LV_SYMBOL_SETTINGS " Settings", LV_SYMBOL_SETTINGS " 设置"};
+static const I18n STR_START       = {"Start", "启动"};
+static const I18n STR_STOP        = {"Stop", "停止"};
+static const I18n STR_REFRESH     = {"Refresh", "刷新状态"};
+static const I18n STR_SETTINGS    = {"Settings", "设置"};
 static const I18n STR_VERSION     = {"Version", "版本"};
 static const I18n STR_PATH        = {"Path", "路径"};
 static const I18n STR_PORT        = {"Port", "端口"};
@@ -258,14 +261,14 @@ static const I18n STR_IDLE        = {"Idle", "空闲"};
 static const I18n STR_RUNNING     = {"Running", "运行中"};
 static const I18n STR_ERROR       = {"Error", "错误"};
 static const I18n STR_UNKNOWN     = {"Unknown", "未知"};
-static const I18n STR_TASK_LIST   = {LV_SYMBOL_LIST " Task List", LV_SYMBOL_LIST " 任务列表"};
-static const I18n STR_CHAT        = {LV_SYMBOL_ENVELOPE " Chat", LV_SYMBOL_ENVELOPE " 聊天"};
-static const I18n STR_WIFI        = {LV_SYMBOL_WIFI " Connected", LV_SYMBOL_WIFI " 已连接"};
-static const I18n STR_BATTERY     = {LV_SYMBOL_BATTERY_FULL " Power", LV_SYMBOL_BATTERY_FULL " 电源"};
+static const I18n STR_TASK_LIST   = {"Task List", "任务列表"};
+static const I18n STR_CHAT        = {"Chat", "聊天"};
+static const I18n STR_WIFI        = {"Connected", "已连接"};
+static const I18n STR_BATTERY     = {"Power", "电源"};
 static const I18n STR_NO_TASKS    = {"No pending tasks", "暂无待处理任务"};
 static const I18n STR_GW_RUNNING  = {"Gateway Service", "Gateway 服务"};
 static const I18n STR_CHAT_INPUT  = {"Type message...", "输入消息..."};
-static const I18n STR_SEND        = {LV_SYMBOL_UPLOAD " Send", LV_SYMBOL_UPLOAD " 发送"};
+static const I18n STR_SEND        = {"Send", "发送"};
 
 /* ── UI widgets ── */
 static lv_obj_t* status_label = nullptr;
@@ -282,6 +285,13 @@ static lv_obj_t* led_warn = nullptr;
 static lv_obj_t* title_bar = nullptr;
 static lv_obj_t* g_lang_toggle_label = nullptr;  /* P2-01: language toggle button label */
 static lv_obj_t* title_label = nullptr;
+
+/* Window control buttons */
+static lv_obj_t* btn_minimize = nullptr;
+static lv_obj_t* btn_maximize = nullptr;
+static lv_obj_t* btn_close = nullptr;
+static lv_obj_t* lbl_maximize = nullptr;  /* Label inside maximize button, for icon swap */
+static bool g_maximized = false;          /* Track maximize state */
 
 /* P2: Task list dynamic widgets */
 static lv_obj_t* task_panel = nullptr;
@@ -341,12 +351,66 @@ void app_log(const char* fmt, ...) {
 
 static void update_ui_language();
 
+/* ── Window control button callbacks ── */
+static void btn_minimize_cb(lv_event_t* e) {
+    (void)e;
+    SDL_Window* win = app_get_window();
+    if (win) {
+        SDL_MinimizeWindow(win);
+        app_log("[Window] Minimized");
+    }
+}
+
+static void btn_maximize_cb(lv_event_t* e) {
+    (void)e;
+    SDL_Window* win = app_get_window();
+    if (!win) return;
+
+    if (g_maximized) {
+        /* Restore to normal size */
+        SDL_RestoreWindow(win);
+        g_maximized = false;
+        if (lbl_maximize) lv_label_set_text(lbl_maximize, "\xE2\x96\xA1");  /* □ */
+        app_log("[Window] Restored to normal size");
+    } else {
+        /* Maximize */
+        SDL_MaximizeWindow(win);
+        g_maximized = true;
+        if (lbl_maximize) lv_label_set_text(lbl_maximize, "\xE2\xA7\xA9");  /* ⧉ */
+        app_log("[Window] Maximized");
+    }
+}
+
+static void btn_close_cb(lv_event_t* e) {
+    (void)e;
+    /* Save config before minimizing to tray */
+    extern void save_theme_config();
+    save_theme_config();
+    /* Minimize to tray instead of quitting */
+    tray_show_window(false);
+    app_log("[Window] Minimized to tray");
+}
+
+/* Called from main.cpp when OS triggers maximize (double-click title bar, Win+Up, etc.) */
+void ui_on_window_maximized() {
+    g_maximized = true;
+    if (lbl_maximize) lv_label_set_text(lbl_maximize, "\xE2\xA7\xA9");  /* ⧉ */
+}
+
+/* Called from main.cpp when OS triggers restore (double-click title bar, Win+Down, etc.) */
+void ui_on_window_restored() {
+    g_maximized = false;
+    if (lbl_maximize) lv_label_set_text(lbl_maximize, "\xE2\x96\xA1");  /* □ */
+}
+
 /* ── Window drag ── */
 static void title_drag_cb(lv_event_t* e) {
     lv_event_code_t code = lv_event_get_code(e);
     static lv_point_t drag_start = {0, 0};
     static bool dragging = false;
     if (code == LV_EVENT_PRESSING) {
+        /* Don't drag when maximized */
+        if (g_maximized) return;
         lv_indev_t* indev = lv_indev_get_act();
         if (!indev) return;
         lv_point_t p;
@@ -1006,13 +1070,13 @@ void app_ui_init() {
     lv_obj_add_event_cb(btn_lang_en, lang_en_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* len = lv_label_create(btn_lang_en);
     lv_label_set_text(len, "EN");
-    lv_obj_set_style_text_font(len, &CJK_FONT, 0);
+    lv_obj_set_style_text_font(len, CJK_FONT, 0);
     lv_obj_center(len);
 
     /* Settings button */
     btn_settings = lv_button_create(title_bar);
     lv_obj_set_size(btn_settings, 80, 32);
-    lv_obj_align(btn_settings, LV_ALIGN_RIGHT_MID, -10, 0);
+    lv_obj_align(btn_settings, LV_ALIGN_RIGHT_MID, -156, 0);
     lv_obj_set_style_bg_color(btn_settings, lv_color_make(60, 70, 110), 0);
     lv_obj_set_style_bg_grad_color(btn_settings, lv_color_make(45, 55, 90), 0);
     lv_obj_set_style_bg_grad_dir(btn_settings, LV_GRAD_DIR_VER, 0);
@@ -1022,6 +1086,53 @@ void app_ui_init() {
     lv_label_set_text(lset, tr(STR_SETTINGS));
     lv_obj_set_style_text_font(lset, CJK_FONT, 0);
     lv_obj_center(lset);
+
+    /* ═══ Window Control Buttons (Minimize / Maximize / Close) ═══ */
+    int wc_btn_size = 36;
+    int wc_btn_gap = 8;
+    int wc_y_offset = 0;
+
+    /* Minimize button — */
+    btn_minimize = lv_button_create(title_bar);
+    lv_obj_set_size(btn_minimize, wc_btn_size, 30);
+    lv_obj_align(btn_minimize, LV_ALIGN_RIGHT_MID, -(10 + (wc_btn_size + wc_btn_gap) * 2 + wc_btn_size), wc_y_offset);
+    lv_obj_set_style_bg_color(btn_minimize, lv_color_make(50, 55, 80), 0);
+    lv_obj_set_style_bg_opa(btn_minimize, LV_OPA_60, 0);
+    lv_obj_set_style_radius(btn_minimize, 6, 0);
+    lv_obj_set_style_border_width(btn_minimize, 0, 0);
+    lv_obj_add_event_cb(btn_minimize, btn_minimize_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_min = lv_label_create(btn_minimize);
+    lv_label_set_text(lbl_min, "\xE2\x80\x94");  /* — */
+    lv_obj_set_style_text_font(lbl_min, CJK_FONT, 0);
+    lv_obj_center(lbl_min);
+
+    /* Maximize/Restore button □ / ⧉ */
+    btn_maximize = lv_button_create(title_bar);
+    lv_obj_set_size(btn_maximize, wc_btn_size, 30);
+    lv_obj_align(btn_maximize, LV_ALIGN_RIGHT_MID, -(10 + (wc_btn_size + wc_btn_gap) * 2 + 2), wc_y_offset);
+    lv_obj_set_style_bg_color(btn_maximize, lv_color_make(50, 55, 80), 0);
+    lv_obj_set_style_bg_opa(btn_maximize, LV_OPA_60, 0);
+    lv_obj_set_style_radius(btn_maximize, 6, 0);
+    lv_obj_set_style_border_width(btn_maximize, 0, 0);
+    lv_obj_add_event_cb(btn_maximize, btn_maximize_cb, LV_EVENT_CLICKED, nullptr);
+    lbl_maximize = lv_label_create(btn_maximize);
+    lv_label_set_text(lbl_maximize, "\xE2\x96\xA1");  /* □ */
+    lv_obj_set_style_text_font(lbl_maximize, CJK_FONT, 0);
+    lv_obj_center(lbl_maximize);
+
+    /* Close button (minimize to tray) ✕ */
+    btn_close = lv_button_create(title_bar);
+    lv_obj_set_size(btn_close, wc_btn_size, 30);
+    lv_obj_align(btn_close, LV_ALIGN_RIGHT_MID, -10, wc_y_offset);
+    lv_obj_set_style_bg_color(btn_close, lv_color_make(160, 50, 50), 0);
+    lv_obj_set_style_bg_opa(btn_close, LV_OPA_60, 0);
+    lv_obj_set_style_radius(btn_close, 6, 0);
+    lv_obj_set_style_border_width(btn_close, 0, 0);
+    lv_obj_add_event_cb(btn_close, btn_close_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_cls = lv_label_create(btn_close);
+    lv_label_set_text(lbl_cls, "\xC3\x97");  /* × */
+    lv_obj_set_style_text_font(lbl_cls, CJK_FONT, 0);
+    lv_obj_center(lbl_cls);
 
     /* ═══ DIVIDER ═══ */
     lv_obj_t* div1 = lv_obj_create(scr);
@@ -1052,9 +1163,9 @@ void app_ui_init() {
     lv_obj_set_style_text_font(pt, CJK_FONT, 0);
     lv_obj_set_pos(pt, 35, 8);
 
-    /* Garlic icon - use LV_SYMBOL_IMAGE as placeholder since emoji not supported */
+    /* Garlic icon - use Unicode bullet (rendered by CJK font) */
     lv_obj_t* garlic_icon = lv_label_create(pl);
-    lv_label_set_text(garlic_icon, LV_SYMBOL_IMAGE " G");
+    lv_label_set_text(garlic_icon, "\xE2\x97\x87 G");  /* ◇ */
     lv_obj_set_style_text_color(garlic_icon, lv_color_make(255, 215, 100), 0);
     lv_obj_set_style_text_font(garlic_icon, CJK_FONT, 0);
     lv_obj_set_pos(garlic_icon, 8, 8);
@@ -1231,7 +1342,7 @@ void app_ui_init() {
     lv_obj_center(lsend);
 
     /* P2-23: 清除聊天历史按钮 */
-    static const I18n STR_CLEAR = {LV_SYMBOL_TRASH " Clear", LV_SYMBOL_TRASH " 清除"};
+    static const I18n STR_CLEAR = {"Clear", "清除"};
     lv_obj_t* btn_clear = lv_button_create(pr);
     lv_obj_set_size(btn_clear, 36, input_h);
     lv_obj_set_pos(btn_clear, RIGHT_PANEL_W - 40, input_y);
@@ -1265,7 +1376,7 @@ void app_ui_init() {
 
     /* Log area title with icon */
     int log_title_y = input_y + input_h + 8;
-    lv_obj_t* log_title = create_styled_label(pr, tr({LV_SYMBOL_FILE " Log", LV_SYMBOL_FILE " 日志"}), lv_color_make(130, 170, 240), 8, log_title_y, 200);
+    lv_obj_t* log_title = create_styled_label(pr, tr({"Log", "日志"}), lv_color_make(130, 170, 240), 8, log_title_y, 200);
 
     /* P2-36: Log export button */
     lv_obj_t* btn_export = lv_button_create(pr);
@@ -1273,7 +1384,7 @@ void app_ui_init() {
     lv_obj_set_pos(btn_export, RIGHT_PANEL_W - 76, log_title_y);
     lv_obj_set_style_bg_color(btn_export, lv_color_make(60, 100, 180), 0);
     lv_obj_set_style_radius(btn_export, 4, 0);
-    static I18n STR_EXPORT = {LV_SYMBOL_DOWNLOAD " Export", LV_SYMBOL_DOWNLOAD " 导出"};
+    static I18n STR_EXPORT = {"Export", "导出"};
     lv_obj_add_event_cb(btn_export, [](lv_event_t* e) {
         (void)e;
         /* Save log content to file */
@@ -1312,14 +1423,14 @@ void app_ui_init() {
     lv_obj_t* log_lbl = lv_label_create(log_panel);
     lv_label_set_text(log_lbl, "");
     lv_obj_set_style_text_color(log_lbl, c->log_text, 0);
-    lv_obj_set_style_text_font(log_lbl, &CJK_FONT, 0);
+    lv_obj_set_style_text_font(log_lbl, CJK_FONT, 0);
     lv_label_set_long_mode(log_lbl, LV_LABEL_LONG_WRAP);
 
     /* ═══ FOOTER ═══ */
     lv_obj_t* footer = lv_label_create(scr);
     lv_label_set_text(footer, tr(STR_FOOTER));
     lv_obj_set_style_text_color(footer, c->text_dim, 0);
-    lv_obj_set_style_text_font(footer, &CJK_FONT, 0);
+    lv_obj_set_style_text_font(footer, CJK_FONT, 0);
     lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -8);
 
     /* ═══ Settings UI ═══ */
