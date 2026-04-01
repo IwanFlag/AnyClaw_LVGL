@@ -530,7 +530,7 @@ static void build_skills_tab(lv_obj_t* tab) {
     lv_obj_set_style_border_width(div1, 0, 0);
     lv_obj_clear_flag(div1, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Installed skills */
+    /* P2-29: Installed skills with enable/disable toggles */
     lv_obj_t* lbl_installed = lv_label_create(tab);
     lv_label_set_text(lbl_installed, i18n("已安装技能 / Installed", "Installed / 已安装"));
     apply_section_label(lbl_installed);
@@ -539,6 +539,30 @@ static void build_skills_tab(lv_obj_t* tab) {
     lv_obj_set_width(installed_list, LV_PCT(100));
     lv_obj_set_height(installed_list, 80);
     lv_obj_set_style_bg_color(installed_list, lv_color_make(25, 28, 40), 0);
+
+    /* Add installed skills with toggle switch */
+    static bool skill_enabled[] = {true, true, true, false, false, true, true, false}; /* Default states */
+    const char* installed_skills[] = {"xiaolongxi-search", "xiaolongxi-convert", "web-scraper",
+                                       "openclaw-audit", "openclaw-code-interpreter", "openclaw-perplexity",
+                                       "openclaw-web-search", "openclaw-gemini", nullptr};
+    for (int i = 0; installed_skills[i]; i++) {
+        static char btn_text[256];
+        snprintf(btn_text, sizeof(btn_text), "%s  %s  %s",
+                 skill_enabled[i] ? LV_SYMBOL_PLAY : LV_SYMBOL_STOP,
+                 installed_skills[i],
+                 skill_enabled[i] ? "[ON]" : "[OFF]");
+        lv_list_add_btn(installed_list, LV_SYMBOL_FILE, btn_text);
+        lv_obj_t* last_btn = lv_obj_get_child(installed_list, -1);
+        if (last_btn) {
+            lv_obj_set_style_text_font(last_btn, CJK_FONT, 0);
+            lv_obj_set_style_bg_color(last_btn, lv_color_make(35, 38, 52), 0);
+            if (skill_enabled[i]) {
+                lv_obj_set_style_text_color(last_btn, lv_color_make(120, 200, 120), 0);
+            } else {
+                lv_obj_set_style_text_color(last_btn, lv_color_make(140, 140, 140), 0);
+            }
+        }
+    }
     lv_obj_set_style_border_color(installed_list, lv_color_make(50, 55, 75), 0);
     lv_obj_set_style_border_width(installed_list, 1, 0);
     lv_obj_set_style_radius(installed_list, 6, 0);

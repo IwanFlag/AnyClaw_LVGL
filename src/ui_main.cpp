@@ -1122,6 +1122,34 @@ void app_ui_init() {
     int log_title_y = input_y + input_h + 8;
     lv_obj_t* log_title = create_styled_label(pr, tr({LV_SYMBOL_FILE " Log", LV_SYMBOL_FILE " 日志"}), lv_color_make(130, 170, 240), 8, log_title_y, 200);
 
+    /* P2-36: Log export button */
+    lv_obj_t* btn_export = lv_button_create(pr);
+    lv_obj_set_size(btn_export, 60, 22);
+    lv_obj_set_pos(btn_export, RIGHT_PANEL_W - 76, log_title_y);
+    lv_obj_set_style_bg_color(btn_export, lv_color_make(60, 100, 180), 0);
+    lv_obj_set_style_radius(btn_export, 4, 0);
+    static I18n STR_EXPORT = {LV_SYMBOL_DOWNLOAD " Export", LV_SYMBOL_DOWNLOAD " 导出"};
+    lv_obj_add_event_cb(btn_export, [](lv_event_t* e) {
+        (void)e;
+        /* Save log content to file */
+        const char* log_text = log_panel ? lv_label_get_text(lv_obj_get_child(log_panel, 0)) : "";
+        if (!log_text || !log_text[0]) return;
+
+        char path[MAX_PATH];
+        snprintf(path, sizeof(path), "%s\\Documents\\AnyClaw_log_%04d%02d%02d.txt",
+                 getenv("USERPROFILE"), 2026, 4, 1);
+        FILE* f = fopen(path, "w");
+        if (f) {
+            fputs(log_text, f);
+            fclose(f);
+            app_log("[Log] Exported to %s", path);
+        }
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* l_export = lv_label_create(btn_export);
+    lv_label_set_text(l_export, tr(STR_EXPORT));
+    lv_obj_set_style_text_font(l_export, CJK_FONT, 0);
+    lv_obj_center(l_export);
+
     /* Log panel */
     int log_y = log_title_y + 20;
     int log_h = PANEL_H - log_y - 15;
