@@ -75,6 +75,10 @@ const ThemeColors* g_colors = &THEME_DARK;
 enum class Lang { CN, EN, BOTH };
 static Lang g_lang = Lang::BOTH;  /* Default bilingual */
 
+/* Forward declarations for P2-03/P2-04 persistence */
+extern int g_refresh_interval_ms;
+extern lv_timer_t* g_refresh_timer;
+
 static std::string get_config_path() {
     const char* appdata = std::getenv("APPDATA");
     if (appdata) {
@@ -85,14 +89,29 @@ static std::string get_config_path() {
     return "AnyClaw_config.json";
 }
 
-static void save_theme_config() {
+/* P2-03/P2-04: Full data persistence - theme, language, window position, refresh interval */
+void save_theme_config() {
     std::ofstream f(get_config_path());
     if (f.is_open()) {
         int theme_idx = (int)g_theme;
         int lang_idx = (int)g_lang;
+
+        /* Get window position and size */
+        int wx = 0, wy = 0, ww = 1450, wh = 800;
+        SDL_Window* win = app_get_window();
+        if (win) {
+            SDL_GetWindowPosition(win, &wx, &wy);
+            SDL_GetWindowSize(win, &ww, &wh);
+        }
+
         f << "{\n";
         f << "  \"theme\": " << theme_idx << ",\n";
-        f << "  \"language\": " << lang_idx << "\n";
+        f << "  \"language\": " << lang_idx << ",\n";
+        f << "  \"window_x\": " << wx << ",\n";
+        f << "  \"window_y\": " << wy << ",\n";
+        f << "  \"window_w\": " << ww << ",\n";
+        f << "  \"window_h\": " << wh << ",\n";
+        f << "  \"refresh_interval_ms\": " << g_refresh_interval_ms << "\n";
         f << "}\n";
         f.close();
     }
@@ -133,6 +152,26 @@ static void load_theme_config() {
     int lang = extract_int("language");
     if (lang >= 0 && lang <= 2) {
         g_lang = (Lang)lang;
+    }
+
+    /* P2-03: Restore window position */
+    int wx = extract_int("window_x");
+    int wy = extract_int("window_y");
+    if (wx >= 0 && wy >= 0 && wx < 3000 && wy < 2000) {
+        /* Will be applied after SDL window is created */
+        SDL_Window* win = app_get_window();
+        if (win) {
+            SDL_SetWindowPosition(win, wx, wy);
+        }
+    }
+
+    /* P2-07: Restore refresh interval */
+    int ri = extract_int("refresh_interval_ms");
+    if (ri >= 5000 && ri <= 300000) {
+        g_refresh_interval_ms = ri;
+        if (g_refresh_timer) {
+            lv_timer_set_period(g_refresh_timer, ri);
+        }
     }
 }
 

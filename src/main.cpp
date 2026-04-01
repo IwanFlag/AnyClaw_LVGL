@@ -123,6 +123,9 @@ int main(int argc, char* argv[]) {
             SDL_Event ev;
             while (SDL_PollEvent(&ev)) {
                 if (ev.type == SDL_QUIT) {
+                    /* P2-03: Save window position before minimizing */
+                    extern void save_theme_config();
+                    save_theme_config();
                     /* Minimize to tray instead of quitting */
                     tray_show_window(false);
                     printf("[MAIN] Window minimized to tray\n");
@@ -148,6 +151,10 @@ int main(int argc, char* argv[]) {
     }
 
     printf("[MAIN] Shutting down...\n");
+
+    /* P2-03/P2-04: Save all config before exit */
+    extern void save_theme_config();
+    save_theme_config();
 
     /* Cleanup */
     health_stop();
