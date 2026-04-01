@@ -202,6 +202,66 @@ static void build_general_tab(lv_obj_t* tab) {
     extern void ui_settings_add_theme_dropdown(lv_obj_t* tab);
     ui_settings_add_theme_dropdown(tab);
 
+    /* P2-32: Component color preview */
+    lv_obj_t* lbl_color = lv_label_create(tab);
+    lv_label_set_text(lbl_color, i18n("组件颜色 / Colors", "Colors / 组件颜色"));
+    apply_section_label(lbl_color);
+
+    /* Color swatches showing current theme colors */
+    lv_obj_t* color_row1 = lv_obj_create(tab);
+    lv_obj_set_size(color_row1, LV_PCT(100), 28);
+    lv_obj_set_style_bg_opa(color_row1, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(color_row1, 0, 0);
+    lv_obj_set_style_pad_all(color_row1, 0, 0);
+    lv_obj_clear_flag(color_row1, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(color_row1, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(color_row1, 8, 0);
+    lv_obj_set_flex_align(color_row1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* Background color swatch */
+    lv_obj_t* bg_sw = lv_obj_create(color_row1);
+    lv_obj_set_size(bg_sw, 24, 24);
+    lv_obj_set_style_bg_color(bg_sw, g_colors->bg, 0);
+    lv_obj_set_style_border_width(bg_sw, 1, 0);
+    lv_obj_set_style_border_color(bg_sw, lv_color_make(100, 100, 100), 0);
+    lv_obj_set_style_radius(bg_sw, 4, 0);
+    lv_obj_t* bg_lbl = lv_label_create(color_row1);
+    lv_label_set_text(bg_lbl, i18n("背景", "BG"));
+    apply_hint_label(bg_lbl);
+
+    /* Panel color swatch */
+    lv_obj_t* panel_sw = lv_obj_create(color_row1);
+    lv_obj_set_size(panel_sw, 24, 24);
+    lv_obj_set_style_bg_color(panel_sw, g_colors->panel, 0);
+    lv_obj_set_style_border_width(panel_sw, 1, 0);
+    lv_obj_set_style_border_color(panel_sw, lv_color_make(100, 100, 100), 0);
+    lv_obj_set_style_radius(panel_sw, 4, 0);
+    lv_obj_t* panel_lbl = lv_label_create(color_row1);
+    lv_label_set_text(panel_lbl, i18n("面板", "Panel"));
+    apply_hint_label(panel_lbl);
+
+    /* Accent color swatch */
+    lv_obj_t* acc_sw = lv_obj_create(color_row1);
+    lv_obj_set_size(acc_sw, 24, 24);
+    lv_obj_set_style_bg_color(acc_sw, g_colors->accent, 0);
+    lv_obj_set_style_border_width(acc_sw, 1, 0);
+    lv_obj_set_style_border_color(acc_sw, lv_color_make(100, 100, 100), 0);
+    lv_obj_set_style_radius(acc_sw, 4, 0);
+    lv_obj_t* acc_lbl = lv_label_create(color_row1);
+    lv_label_set_text(acc_lbl, i18n("强调", "Accent"));
+    apply_hint_label(acc_lbl);
+
+    /* Text color swatch */
+    lv_obj_t* txt_sw = lv_obj_create(color_row1);
+    lv_obj_set_size(txt_sw, 24, 24);
+    lv_obj_set_style_bg_color(txt_sw, g_colors->text, 0);
+    lv_obj_set_style_border_width(txt_sw, 1, 0);
+    lv_obj_set_style_border_color(txt_sw, lv_color_make(100, 100, 100), 0);
+    lv_obj_set_style_radius(txt_sw, 4, 0);
+    lv_obj_t* txt_lbl = lv_label_create(color_row1);
+    lv_label_set_text(txt_lbl, i18n("文字", "Text"));
+    apply_hint_label(txt_lbl);
+
     /* P2-25: Minimize behavior */
     lv_obj_t* lbl_min = lv_label_create(tab);
     lv_label_set_text(lbl_min, i18n("最小化行为 / Minimize To", "Minimize To"));
