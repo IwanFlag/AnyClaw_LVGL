@@ -698,8 +698,50 @@ static void build_about_tab(lv_obj_t* tab) {
 
     /* Copyright */
     lv_obj_t* lbl_copy = lv_label_create(tab);
-    lv_label_set_text(lbl_copy, "Copyright 2026 AnyClaw Project");
-    apply_hint_label(lbl_copy);
+    /* P2-35: Config import/export */
+    lv_obj_t* lbl_config = lv_label_create(tab);
+    lv_label_set_text(lbl_config, i18n("配置管理 / Config", "Config / 配置管理"));
+    apply_section_label(lbl_config);
+
+    lv_obj_t* row_config = lv_obj_create(tab);
+    lv_obj_set_size(row_config, LV_PCT(100), 44);
+    lv_obj_set_style_bg_opa(row_config, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_config, 0, 0);
+    lv_obj_set_style_pad_all(row_config, 0, 0);
+    lv_obj_clear_flag(row_config, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row_config, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(row_config, 10, 0);
+    lv_obj_set_flex_align(row_config, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t* btn_cfg_export = lv_button_create(row_config);
+    lv_obj_set_size(btn_cfg_export, 130, 32);
+    lv_obj_set_style_bg_color(btn_cfg_export, lv_color_make(60, 100, 180), 0);
+    lv_obj_set_style_radius(btn_cfg_export, 6, 0);
+    lv_obj_add_event_cb(btn_cfg_export, [](lv_event_t* e) {
+        (void)e;
+        char path[MAX_PATH];
+        snprintf(path, sizeof(path), "%s\\Documents\\AnyClaw_config.json",
+                 getenv("USERPROFILE"));
+        FILE* f = fopen(path, "w");
+        if (f) {
+            fprintf(f, "{\n  \"version\": \"2.0\",\n");
+            fprintf(f, "  \"theme\": \"dark\",\n");
+            fprintf(f, "  \"language\": \"en\",\n");
+            fprintf(f, "  \"refresh_interval_ms\": %d\n", g_refresh_interval_ms);
+            fprintf(f, "}\n");
+            fclose(f);
+            app_log("[Config] Exported to %s", path);
+        }
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* l_exp = lv_label_create(btn_cfg_export);
+    lv_label_set_text(l_exp, i18n(LV_SYMBOL_DOWNLOAD " 导出配置", LV_SYMBOL_DOWNLOAD " Export Config"));
+    lv_obj_set_style_text_font(l_exp, CJK_FONT, 0);
+    lv_obj_center(l_exp);
+
+    /* Copyright */
+    lv_obj_t* lbl_copy2 = lv_label_create(tab);
+    lv_label_set_text(lbl_copy2, "Copyright 2026 AnyClaw Project");
+    apply_hint_label(lbl_copy2);
 }
 
 /* ═══════════════════════════════════════════════════════════════
