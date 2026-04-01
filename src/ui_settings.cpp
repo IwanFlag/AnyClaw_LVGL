@@ -5,6 +5,7 @@
 
 #include "app.h"
 #include "theme.h"
+#include "lang.h"
 #include "lvgl.h"
 #include "SDL.h"
 #include <cstdio>
@@ -40,7 +41,7 @@ static lv_obj_t* model_search_ta = nullptr;
 static lv_obj_t* model_current_label = nullptr;
 
 /* ── Current language (0=Chinese, 1=English) ── */
-static int current_lang = 0;
+static int current_lang = (g_lang == Lang::CN) ? 0 : 1;
 
 /* ── Forward declarations ── */
 static void settings_close_cb(lv_event_t* e);
@@ -170,11 +171,35 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_label_set_text(lbl_lang, i18n("语言 / Language", "Language / 语言"));
     apply_section_label(lbl_lang);
 
+    /* P2-01: Language dropdown - PRD 2.1 single language only */
     gen_lang_dropdown = lv_dropdown_create(tab);
-    lv_dropdown_set_options(gen_lang_dropdown, "中文\nEnglish\n双语 / Bilingual");
-    lv_dropdown_set_selected(gen_lang_dropdown, current_lang);
+    extern Lang g_lang;
+    if (g_lang == Lang::CN) {
+        lv_dropdown_set_options(gen_lang_dropdown, "中文\nEnglish");
+    } else {
+        lv_dropdown_set_options(gen_lang_dropdown, "English\n中文");
+    }
+    lv_dropdown_set_selected(gen_lang_dropdown, 0); /* Current language first */
     lv_obj_set_width(gen_lang_dropdown, 160);
     apply_input_style(gen_lang_dropdown);
+
+    /* P2-01: Language change callback */
+    lv_obj_add_event_cb(gen_lang_dropdown, [](lv_event_t* e) {
+        lv_obj_t* dd = (lv_obj_t*)lv_event_get_target(e);
+        uint16_t sel = lv_dropdown_get_selected(dd);
+        extern Lang g_lang;
+        extern void save_theme_config();
+        extern void apply_theme_to_all();
+        /* Swap language based on current language position */
+        if (g_lang == Lang::CN) {
+            g_lang = (sel == 0) ? Lang::CN : Lang::EN;
+        } else {
+            g_lang = (sel == 0) ? Lang::EN : Lang::CN;
+        }
+        save_theme_config();
+        extern void apply_theme_to_all();
+        apply_theme_to_all();
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
 
     /* P2-27: Refresh interval selector */
     lv_obj_t* lbl_refresh = lv_label_create(tab);

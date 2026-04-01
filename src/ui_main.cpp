@@ -1,5 +1,6 @@
 #include "app.h"
 #include "theme.h"
+#include "lang.h"
 #include "SDL.h"
 #include <cstdio>
 #include <cstring>
@@ -71,9 +72,18 @@ static const ThemeColors THEME_CLASSIC = {
 
 const ThemeColors* g_colors = &THEME_DARK;
 
-/* Language mode: 0=CN only, 1=EN only, 2=Bilingual */
-enum class Lang { CN, EN, BOTH };
-static Lang g_lang = Lang::BOTH;  /* Default bilingual */
+/* P2-01: Language mode - PRD 2.1 single language only, auto-detect system */
+static Lang detect_system_lang() {
+    /* P2-01: Auto-detect system language via Windows API */
+    wchar_t buf[LOCALE_NAME_MAX_LENGTH] = {};
+    if (GetSystemDefaultLocaleName(buf, LOCALE_NAME_MAX_LENGTH)) {
+        if (wcsncmp(buf, L"zh", 2) == 0) return Lang::CN;
+    }
+    LANGID lid = GetSystemDefaultUILanguage();
+    if (PRIMARYLANGID(lid) == LANG_CHINESE) return Lang::CN;
+    return Lang::EN;
+}
+Lang g_lang = detect_system_lang();
 
 /* Forward declarations for P2-03/P2-04 persistence */
 extern int g_refresh_interval_ms;
@@ -176,7 +186,7 @@ static void load_theme_config() {
 }
 
 /* Theme change callback - forward declaration */
-static void apply_theme_to_all();
+void apply_theme_to_all();
 
 static void theme_dropdown_cb(lv_event_t* e) {
     lv_obj_t* dropdown = (lv_obj_t*)lv_event_get_target(e);
@@ -210,29 +220,19 @@ struct I18n { const char* en; const char* cn; };
 
 /* Get translated string based on current language */
 static const char* tr(const I18n& s) {
+    /* P2-01: Single language display per PRD 2.1 */
     switch (g_lang) {
         case Lang::CN:  return s.cn;
         case Lang::EN:  return s.en;
-        case Lang::BOTH: {
-            /* Return bilingual string - use static buffer */
-            static char buf[512];
-            snprintf(buf, sizeof(buf), "%s / %s", s.en, s.cn);
-            return buf;
-        }
     }
     return s.en;
 }
 
-/* Title uses special bilingual format */
+/* P2-01: Single language title per PRD 2.1 */
 static const char* tr_title(const I18n& s) {
     switch (g_lang) {
         case Lang::CN:  return s.cn;
         case Lang::EN:  return s.en;
-        case Lang::BOTH: {
-            static char buf[512];
-            snprintf(buf, sizeof(buf), "[AnyClaw] %s / %s", s.en, s.cn);
-            return buf;
-        }
     }
     return s.en;
 }
@@ -280,6 +280,7 @@ static lv_obj_t* log_panel = nullptr;
 static lv_obj_t* led_ok = nullptr;
 static lv_obj_t* led_warn = nullptr;
 static lv_obj_t* title_bar = nullptr;
+static lv_obj_t* g_lang_toggle_label = nullptr;  /* P2-01: language toggle button label */
 static lv_obj_t* title_label = nullptr;
 
 /* P2: Task list dynamic widgets */
@@ -640,9 +641,19 @@ static void lang_en_cb(lv_event_t* e) {
     (void)e;
     if (g_lang != Lang::EN) { g_lang = Lang::EN; update_ui_language(); app_log("[Lang] English mode"); }
 }
-static void lang_both_cb(lv_event_t* e) {
+/* P2-01: CN/EN toggle button - single language per PRD 2.1 */
+static void lang_toggle_cb(lv_event_t* e) {
     (void)e;
-    if (g_lang != Lang::BOTH) { g_lang = Lang::BOTH; update_ui_language(); app_log("[Lang] Bilingual mode"); }
+    g_lang = (g_lang == Lang::CN) ? Lang::EN : Lang::CN;
+    update_ui_language();
+    extern void save_theme_config();
+    save_theme_config();
+    /* Update toggle button label */
+    if (g_lang_toggle_label) {
+        lv_label_set_text(g_lang_toggle_label, (g_lang == Lang::CN) ? "CN" : "EN");
+        lv_obj_center(g_lang_toggle_label);
+    }
+    app_log("[Lang] Switched to %s", (g_lang == Lang::CN) ? "Chinese" : "English");
 }
 
 void app_refresh_status() {
@@ -846,7 +857,7 @@ static void show_disclaimer(lv_obj_t* parent) {
 }
 
 /* ═══ Apply theme colors to all UI elements ═══ */
-static void apply_theme_to_all() {
+void apply_theme_to_all() {
     const ThemeColors* c = g_colors;
     lv_obj_t* scr = lv_screen_active();
 
@@ -975,16 +986,17 @@ void app_ui_init() {
     lv_obj_set_style_text_font(lcn, &lv_font_montserrat_12, 0);
     lv_obj_center(lcn);
 
-    lv_obj_t* btn_lang_both = lv_button_create(title_bar);
-    lv_obj_set_size(btn_lang_both, 46, 30);
-    lv_obj_align(btn_lang_both, LV_ALIGN_RIGHT_MID, -138, 0);
-    lv_obj_set_style_bg_color(btn_lang_both, lv_color_make(60, 80, 140), 0);
-    lv_obj_set_style_radius(btn_lang_both, 6, 0);
-    lv_obj_add_event_cb(btn_lang_both, lang_both_cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* lboth = lv_label_create(btn_lang_both);
-    lv_label_set_text(lboth, "C+E");
-    lv_obj_set_style_text_font(lboth, &lv_font_montserrat_12, 0);
-    lv_obj_center(lboth);
+    /* P2-01: CN/EN language toggle button (replaces bilingual C+E) */
+    lv_obj_t* btn_lang_toggle = lv_button_create(title_bar);
+    lv_obj_set_size(btn_lang_toggle, 46, 30);
+    lv_obj_align(btn_lang_toggle, LV_ALIGN_RIGHT_MID, -138, 0);
+    lv_obj_set_style_bg_color(btn_lang_toggle, lv_color_make(60, 80, 140), 0);
+    lv_obj_set_style_radius(btn_lang_toggle, 6, 0);
+    lv_obj_add_event_cb(btn_lang_toggle, lang_toggle_cb, LV_EVENT_CLICKED, nullptr);
+    g_lang_toggle_label = lv_label_create(btn_lang_toggle);
+    lv_label_set_text(g_lang_toggle_label, (g_lang == Lang::CN) ? "CN" : "EN");
+    lv_obj_set_style_text_font(g_lang_toggle_label, &lv_font_montserrat_12, 0);
+    lv_obj_center(g_lang_toggle_label);
 
     lv_obj_t* btn_lang_en = lv_button_create(title_bar);
     lv_obj_set_size(btn_lang_en, 36, 30);
