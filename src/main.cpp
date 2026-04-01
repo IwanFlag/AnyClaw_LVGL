@@ -48,7 +48,8 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    /* Enable console for debug output */
+    /* Console hidden in release (WIN32 subsystem) - logs shown in GUI */
+    /* Debug: show console for troubleshooting */
     ::AllocConsole();
     ::freopen("CONOUT$", "w", stdout);
     ::freopen("CONOUT$", "w", stderr);
@@ -74,16 +75,17 @@ int main(int argc, char* argv[]) {
     /* Init LVGL first (lv_sdl_window_create calls SDL_Init internally) */
     lv_init();
 
-    /* Create SDL window using LVGL's official driver - 1450x800 */
-    lv_display_t* disp = lv_sdl_window_create(1450, 800);
+    /* Create SDL window using LVGL's official driver - 1350x740
+       (fits 1920x1080 with Windows borders + taskbar) */
+    lv_display_t* disp = lv_sdl_window_create(1350, 740);
 
     /* Set window title and position */
     lv_sdl_window_set_title(disp, "AnyClaw LVGL v2.0 - Desktop Manager");
     g_window = lv_sdl_window_get_window(disp);
 
-    /* Keep windowed with title bar for easier management */
+    /* Center on 1920x1080 screen */
     if (g_window) {
-        SDL_SetWindowPosition(g_window, 100, 50);
+        SDL_SetWindowPosition(g_window, (1920 - 1350) / 2, (1080 - 740) / 2 - 20);
         SDL_RaiseWindow(g_window);
         int ww, wh;
         SDL_GetWindowSize(g_window, &ww, &wh);
@@ -112,7 +114,7 @@ int main(int argc, char* argv[]) {
         lv_timer_handler();
         tray_process_messages();
 
-        /* Intercept SDL close: minimize to tray instead of quitting */
+        /* Process SDL events */
         {
             SDL_Event ev;
             while (SDL_PollEvent(&ev)) {
@@ -120,6 +122,20 @@ int main(int argc, char* argv[]) {
                     /* Minimize to tray instead of quitting */
                     tray_show_window(false);
                     printf("[MAIN] Window minimized to tray\n");
+                }
+                /* Keyboard shortcuts */
+                if (ev.type == SDL_KEYDOWN) {
+                    extern void ui_settings_open();
+                    extern void ui_settings_close();
+                    extern bool ui_settings_is_open();
+                    switch (ev.key.keysym.sym) {
+                        case SDLK_F8:
+                            if (!ui_settings_is_open()) ui_settings_open();
+                            break;
+                        case SDLK_ESCAPE:
+                            if (ui_settings_is_open()) ui_settings_close();
+                            break;
+                    }
                 }
             }
         }

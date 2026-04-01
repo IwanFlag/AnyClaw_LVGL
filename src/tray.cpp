@@ -150,9 +150,16 @@ static LRESULT CALLBACK tray_wndproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 "关于 AnyClaw",
                 MB_ICONINFORMATION | MB_OK);
             break;
-        case IDM_EXIT:
-            g_shouldQuit = true;
+        case IDM_EXIT: {
+            int result = MessageBoxA(hwnd,
+                "确定要退出 AnyClaw 吗？\n\n退出后将同时停止 OpenClaw Gateway 服务。",
+                "退出确认",
+                MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+            if (result == IDYES) {
+                g_shouldQuit = true;
+            }
             return 0;
+        }
         }
         return 0;
 

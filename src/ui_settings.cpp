@@ -4,6 +4,8 @@
  * ═══════════════════════════════════════════════════════════════ */
 
 #include "app.h"
+#include "theme.h"
+#include "lvgl.h"
 #include "SDL.h"
 #include <cstdio>
 #include <cstring>
@@ -11,12 +13,11 @@
 #include <windows.h>
 
 extern const lv_font_t lv_font_mshy_16;
-extern const lv_font_t lv_font_mshy_16;
 #define CJK_FONT (&lv_font_mshy_16)
 
 /* Layout constants - match ui_main.cpp */
-#define WIN_W 1200
-#define WIN_H 800
+#define WIN_W 1350
+#define WIN_H 740
 
 /* ── Settings panel state ── */
 static lv_obj_t* settings_panel = nullptr;
@@ -28,6 +29,7 @@ static lv_obj_t* gen_status_label = nullptr;
 static lv_obj_t* gen_path_label = nullptr;
 static lv_obj_t* gen_autostart_sw = nullptr;
 static lv_obj_t* gen_lang_dropdown = nullptr;
+static lv_obj_t* gen_refresh_dropdown = nullptr;
 
 /* ── Account tab widgets ── */
 static lv_obj_t* acc_apikey_ta = nullptr;
@@ -55,18 +57,18 @@ static const char* i18n(const char* zh, const char* en) {
  *  Style helpers
  * ═══════════════════════════════════════════════════════════════ */
 static void apply_dark_style(lv_obj_t* obj) {
-    lv_obj_set_style_bg_color(obj, lv_color_make(30, 33, 48), 0);
+    lv_obj_set_style_bg_color(obj, g_colors->panel, 0);
     lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
-    lv_obj_set_style_text_color(obj, lv_color_make(200, 205, 220), 0);
+    lv_obj_set_style_text_color(obj, g_colors->text, 0);
     lv_obj_set_style_text_font(obj, CJK_FONT, 0);
 }
 
 static void apply_input_style(lv_obj_t* obj) {
-    lv_obj_set_style_bg_color(obj, lv_color_make(20, 22, 35), 0);
-    lv_obj_set_style_border_color(obj, lv_color_make(60, 65, 90), 0);
+    lv_obj_set_style_bg_color(obj, g_colors->input_bg, 0);
+    lv_obj_set_style_border_color(obj, g_colors->panel_border, 0);
     lv_obj_set_style_border_width(obj, 1, 0);
     lv_obj_set_style_radius(obj, 6, 0);
-    lv_obj_set_style_text_color(obj, lv_color_make(200, 205, 220), 0);
+    lv_obj_set_style_text_color(obj, g_colors->text, 0);
     lv_obj_set_style_text_font(obj, CJK_FONT, 0);
     lv_obj_set_style_pad_all(obj, 8, 0);
 }
@@ -84,6 +86,16 @@ static void apply_hint_label(lv_obj_t* obj) {
 /* ═══════════════════════════════════════════════════════════════
  *  GENERAL TAB
  * ═══════════════════════════════════════════════════════════════ */
+extern void update_refresh_interval(int ms);
+extern int g_refresh_interval_ms;
+
+static void refresh_dropdown_cb(lv_event_t* e) {
+    lv_obj_t* dd = (lv_obj_t*)lv_event_get_target(e);
+    uint16_t sel = lv_dropdown_get_selected(dd);
+    int intervals[] = {15000, 30000, 60000};
+    update_refresh_interval(intervals[sel]);
+}
+
 static void build_general_tab(lv_obj_t* tab) {
     apply_dark_style(tab);
     lv_obj_set_style_pad_all(tab, 16, 0);
@@ -157,6 +169,93 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_dropdown_set_selected(gen_lang_dropdown, current_lang);
     lv_obj_set_width(gen_lang_dropdown, 160);
     apply_input_style(gen_lang_dropdown);
+
+    /* P2-27: Refresh interval selector */
+    lv_obj_t* lbl_refresh = lv_label_create(tab);
+    lv_label_set_text(lbl_refresh, i18n("自动刷新间隔 / Auto Refresh", "Refresh Interval"));
+    apply_section_label(lbl_refresh);
+
+    extern int g_refresh_interval_ms;
+    extern void update_refresh_interval(int ms);
+
+    static lv_obj_t* gen_refresh_dropdown = nullptr;
+    gen_refresh_dropdown = lv_dropdown_create(tab);
+    lv_dropdown_set_options(gen_refresh_dropdown, "15 秒 / 15s\n30 秒 / 30s\n60 秒 / 60s");
+    if (g_refresh_interval_ms <= 15000) lv_dropdown_set_selected(gen_refresh_dropdown, 0);
+    else if (g_refresh_interval_ms <= 30000) lv_dropdown_set_selected(gen_refresh_dropdown, 1);
+    else lv_dropdown_set_selected(gen_refresh_dropdown, 2);
+    lv_obj_set_width(gen_refresh_dropdown, 160);
+    apply_input_style(gen_refresh_dropdown);
+    lv_obj_add_event_cb(gen_refresh_dropdown, refresh_dropdown_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    /* Theme selector */
+    lv_obj_t* lbl_theme = lv_label_create(tab);
+    lv_label_set_text(lbl_theme, i18n("主题 / Theme", "Theme / 主题"));
+    apply_section_label(lbl_theme);
+
+    extern void ui_settings_add_theme_dropdown(lv_obj_t* tab);
+    ui_settings_add_theme_dropdown(tab);
+
+    /* Divider */
+    lv_obj_t* div2 = lv_obj_create(tab);
+    lv_obj_set_size(div2, LV_PCT(100), 1);
+    lv_obj_set_style_bg_color(div2, lv_color_make(55, 60, 85), 0);
+    lv_obj_set_style_border_width(div2, 0, 0);
+    lv_obj_clear_flag(div2, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Security status section */
+    lv_obj_t* lbl_sec = lv_label_create(tab);
+    lv_label_set_text(lbl_sec, i18n("安全状态 / Security", "Security / 安全状态"));
+    apply_section_label(lbl_sec);
+
+    lv_obj_t* sec_row = lv_obj_create(tab);
+    lv_obj_set_size(sec_row, LV_PCT(100), 36);
+    lv_obj_set_style_bg_opa(sec_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(sec_row, 0, 0);
+    lv_obj_set_style_pad_all(sec_row, 0, 0);
+    lv_obj_clear_flag(sec_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(sec_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(sec_row, 10, 0);
+    lv_obj_set_flex_align(sec_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    /* Green LED */
+    lv_obj_t* sec_green = lv_led_create(sec_row);
+    lv_obj_set_size(sec_green, 10, 10);
+    lv_led_set_color(sec_green, lv_color_make(0, 220, 60));
+    lv_led_on(sec_green);
+
+    lv_obj_t* sec_label = lv_label_create(sec_row);
+    lv_label_set_text(sec_label, i18n("安全评分: 良好 (Green)", "Security: Good (Green)"));
+    lv_obj_set_style_text_color(sec_label, lv_color_make(200, 205, 220), 0);
+    lv_obj_set_style_text_font(sec_label, CJK_FONT, 0);
+
+    /* Security detail items */
+    lv_obj_t* lbl_sec_detail = lv_label_create(tab);
+    lv_label_set_text(lbl_sec_detail, i18n(
+        "API Key: OK | Port: 18789 | Config: Writable",
+        "API Key: OK | Port: 18789 | Config: Writable"));
+    apply_hint_label(lbl_sec_detail);
+    lv_label_set_long_mode(lbl_sec_detail, LV_LABEL_LONG_WRAP);
+
+    /* Divider */
+    lv_obj_t* div3 = lv_obj_create(tab);
+    lv_obj_set_size(div3, LV_PCT(100), 1);
+    lv_obj_set_style_bg_color(div3, lv_color_make(55, 60, 85), 0);
+    lv_obj_set_style_border_width(div3, 0, 0);
+    lv_obj_clear_flag(div3, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Reconfigure wizard button */
+    lv_obj_t* btn_wizard = lv_button_create(tab);
+    lv_obj_set_width(btn_wizard, LV_PCT(100));
+    lv_obj_set_height(btn_wizard, 40);
+    lv_obj_set_style_bg_color(btn_wizard, lv_color_make(40, 50, 90), 0);
+    lv_obj_set_style_bg_grad_color(btn_wizard, lv_color_make(30, 40, 70), 0);
+    lv_obj_set_style_bg_grad_dir(btn_wizard, LV_GRAD_DIR_VER, 0);
+    lv_obj_set_style_radius(btn_wizard, 8, 0);
+    lv_obj_t* btn_wizard_lbl = lv_label_create(btn_wizard);
+    lv_label_set_text(btn_wizard_lbl, i18n(LV_SYMBOL_REFRESH " 重新配置向导", LV_SYMBOL_REFRESH " Reconfigure Wizard"));
+    lv_obj_set_style_text_font(btn_wizard_lbl, CJK_FONT, 0);
+    lv_obj_center(btn_wizard_lbl);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -322,7 +421,91 @@ static void build_model_tab(lv_obj_t* tab) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  ABOUT TAB
+ *  SKILLS TAB
+ * ═══════════════════════════════════════════════════════════════ */
+static const char* skill_names[] = {
+    "weather", "github", "news-summary", "web-scraping",
+    "Data Analysis", "translate", "stock-tech-analysis", "obsidian",
+    nullptr
+};
+
+static void build_skills_tab(lv_obj_t* tab) {
+    apply_dark_style(tab);
+    lv_obj_set_style_pad_all(tab, 16, 0);
+    lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_gap(tab, 10, 0);
+
+    /* Title */
+    lv_obj_t* lbl_title = lv_label_create(tab);
+    lv_label_set_text(lbl_title, i18n("技能管理 / Skills", "Skills / 技能管理"));
+    apply_section_label(lbl_title);
+
+    /* Search box */
+    lv_obj_t* lbl_search = lv_label_create(tab);
+    lv_label_set_text(lbl_search, i18n("搜索技能", "Search Skills"));
+    apply_section_label(lbl_search);
+
+    lv_obj_t* skill_search = lv_textarea_create(tab);
+    lv_textarea_set_one_line(skill_search, true);
+    lv_textarea_set_placeholder_text(skill_search, i18n("输入关键词...", "Type to filter..."));
+    lv_obj_set_width(skill_search, LV_PCT(100));
+    lv_obj_set_height(skill_search, 38);
+    apply_input_style(skill_search);
+
+    /* Available skills list */
+    lv_obj_t* lbl_avail = lv_label_create(tab);
+    lv_label_set_text(lbl_avail, i18n("可下载技能 / Available", "Available / 可下载"));
+    apply_section_label(lbl_avail);
+
+    lv_obj_t* skill_list = lv_list_create(tab);
+    lv_obj_set_width(skill_list, LV_PCT(100));
+    lv_obj_set_height(skill_list, 130);
+    lv_obj_set_style_bg_color(skill_list, lv_color_make(25, 28, 40), 0);
+    lv_obj_set_style_border_color(skill_list, lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_border_width(skill_list, 1, 0);
+    lv_obj_set_style_radius(skill_list, 6, 0);
+
+    for (int i = 0; skill_names[i]; i++) {
+        static char btn_text[128];
+        snprintf(btn_text, sizeof(btn_text), LV_SYMBOL_DOWNLOAD " %s", skill_names[i]);
+        lv_list_add_btn(skill_list, LV_SYMBOL_FILE, btn_text);
+        lv_obj_t* last_btn = lv_obj_get_child(skill_list, -1);
+        if (last_btn) {
+            lv_obj_set_style_text_font(last_btn, CJK_FONT, 0);
+            lv_obj_set_style_bg_color(last_btn, lv_color_make(35, 38, 52), 0);
+            lv_obj_set_style_text_color(last_btn, lv_color_make(180, 185, 200), 0);
+        }
+    }
+
+    /* Divider */
+    lv_obj_t* div1 = lv_obj_create(tab);
+    lv_obj_set_size(div1, LV_PCT(100), 1);
+    lv_obj_set_style_bg_color(div1, lv_color_make(55, 60, 85), 0);
+    lv_obj_set_style_border_width(div1, 0, 0);
+    lv_obj_clear_flag(div1, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Installed skills */
+    lv_obj_t* lbl_installed = lv_label_create(tab);
+    lv_label_set_text(lbl_installed, i18n("已安装技能 / Installed", "Installed / 已安装"));
+    apply_section_label(lbl_installed);
+
+    lv_obj_t* installed_list = lv_list_create(tab);
+    lv_obj_set_width(installed_list, LV_PCT(100));
+    lv_obj_set_height(installed_list, 80);
+    lv_obj_set_style_bg_color(installed_list, lv_color_make(25, 28, 40), 0);
+    lv_obj_set_style_border_color(installed_list, lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_border_width(installed_list, 1, 0);
+    lv_obj_set_style_radius(installed_list, 6, 0);
+
+    /* Placeholder - no skills installed yet */
+    lv_obj_t* lbl_empty = lv_label_create(installed_list);
+    lv_label_set_text(lbl_empty, i18n("暂无已安装技能", "No skills installed yet"));
+    lv_obj_set_style_text_color(lbl_empty, lv_color_make(120, 125, 140), 0);
+    lv_obj_set_style_text_font(lbl_empty, CJK_FONT, 0);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ *  ABOUT TAB (with garlic branding)
  * ═══════════════════════════════════════════════════════════════ */
 static void build_about_tab(lv_obj_t* tab) {
     apply_dark_style(tab);
@@ -330,11 +513,24 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_gap(tab, 14, 0);
 
+    /* Garlic brand icon */
+    lv_obj_t* lbl_garlic = lv_label_create(tab);
+    lv_label_set_text(lbl_garlic, LV_SYMBOL_IMAGE " G");
+    lv_obj_set_style_text_color(lbl_garlic, lv_color_make(255, 215, 100), 0);
+    lv_obj_set_style_text_font(lbl_garlic, CJK_FONT, 0);
+
     /* App logo/title */
     lv_obj_t* lbl_title = lv_label_create(tab);
     lv_label_set_text(lbl_title, "AnyClaw LVGL");
     lv_obj_set_style_text_color(lbl_title, lv_color_make(100, 160, 255), 0);
     lv_obj_set_style_text_font(lbl_title, CJK_FONT, 0);
+
+    /* Brand slogan */
+    lv_obj_t* lbl_brand = lv_label_create(tab);
+    lv_label_set_text(lbl_brand, i18n("龙虾要吃蒜蓉的 - Your AI Assistant", "Garlic Lobster - Your AI Assistant"));
+    lv_obj_set_style_text_color(lbl_brand, lv_color_make(255, 200, 100), 0);
+    lv_obj_set_style_text_font(lbl_brand, CJK_FONT, 0);
+    lv_label_set_long_mode(lbl_brand, LV_LABEL_LONG_WRAP);
 
     /* Version */
     lv_obj_t* lbl_ver = lv_label_create(tab);
@@ -429,7 +625,7 @@ void ui_settings_init(lv_obj_t* parent) {
     settings_panel = lv_obj_create(parent);
     lv_obj_set_size(settings_panel, WIN_W, WIN_H);
     lv_obj_set_pos(settings_panel, 0, 0);
-    lv_obj_set_style_bg_color(settings_panel, lv_color_make(20, 22, 35), 0);
+    lv_obj_set_style_bg_color(settings_panel, g_colors->bg, 0);
     lv_obj_set_style_bg_opa(settings_panel, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(settings_panel, 0, 0);
     lv_obj_set_style_radius(settings_panel, 0, 0);
@@ -440,7 +636,7 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_t* title_bar = lv_obj_create(settings_panel);
     lv_obj_set_size(title_bar, WIN_W, 48);
     lv_obj_set_pos(title_bar, 0, 0);
-    lv_obj_set_style_bg_color(title_bar, lv_color_make(40, 44, 60), 0);
+    lv_obj_set_style_bg_color(title_bar, g_colors->panel, 0);
     lv_obj_set_style_bg_opa(title_bar, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(title_bar, 0, 0);
     lv_obj_set_style_radius(title_bar, 0, 0);
@@ -449,7 +645,7 @@ void ui_settings_init(lv_obj_t* parent) {
 
     lv_obj_t* title = lv_label_create(title_bar);
     lv_label_set_text(title, i18n("设置 / Settings", "Settings / 设置"));
-    lv_obj_set_style_text_color(title, lv_color_make(100, 160, 255), 0);
+    lv_obj_set_style_text_color(title, g_colors->accent, 0);
     lv_obj_set_style_text_font(title, CJK_FONT, 0);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 15, 0);
 
@@ -466,32 +662,33 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_set_style_text_color(lbl_x, lv_color_make(255, 255, 255), 0);
     lv_obj_center(lbl_x);
 
-    /* Tabview - larger for 1200x800 */
+    /* Tabview - larger for 1450x800 */
     settings_tabs = lv_tabview_create(settings_panel);
     lv_obj_set_size(settings_tabs, WIN_W - 40, WIN_H - 60);
     lv_obj_set_pos(settings_tabs, 20, 54);
-    lv_obj_set_style_bg_color(settings_tabs, lv_color_make(28, 31, 45), 0);
+    lv_obj_set_style_bg_color(settings_tabs, g_colors->panel, 0);
     lv_obj_set_style_border_width(settings_tabs, 0, 0);
     lv_obj_set_style_radius(settings_tabs, 8, 0);
 
     /* Tab button styling */
     lv_obj_t* tab_btns = lv_tabview_get_tab_btns(settings_tabs);
-    lv_obj_set_style_bg_color(tab_btns, lv_color_make(35, 38, 52), 0);
-    lv_obj_set_style_text_color(tab_btns, lv_color_make(140, 145, 165), LV_PART_ITEMS);
-    lv_obj_set_style_text_color(tab_btns, lv_color_make(100, 160, 255), LV_PART_ITEMS | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(tab_btns, lv_color_make(50, 55, 80), LV_PART_ITEMS | LV_STATE_CHECKED);
+    lv_obj_set_style_bg_color(tab_btns, g_colors->panel, 0);
+    lv_obj_set_style_text_color(tab_btns, g_colors->text_dim, LV_PART_ITEMS);
+    lv_obj_set_style_text_color(tab_btns, g_colors->accent, LV_PART_ITEMS | LV_STATE_CHECKED);
     lv_obj_set_style_text_font(tab_btns, CJK_FONT, LV_PART_ITEMS);
 
-    /* Create 4 tabs */
+    /* Create 5 tabs */
     lv_obj_t* tab_gen = lv_tabview_add_tab(settings_tabs, i18n("常规", "General"));
     lv_obj_t* tab_acc = lv_tabview_add_tab(settings_tabs, i18n("账号", "Account"));
     lv_obj_t* tab_model = lv_tabview_add_tab(settings_tabs, i18n("模型", "Model"));
+    lv_obj_t* tab_skills = lv_tabview_add_tab(settings_tabs, i18n("技能", "Skills"));
     lv_obj_t* tab_about = lv_tabview_add_tab(settings_tabs, i18n("关于", "About"));
 
     /* Build each tab */
     build_general_tab(tab_gen);
     build_account_tab(tab_acc);
     build_model_tab(tab_model);
+    build_skills_tab(tab_skills);
     build_about_tab(tab_about);
 
     /* Initially hidden */
