@@ -11,8 +11,8 @@
 #include <windows.h>
 
 extern const lv_font_t lv_font_mshy_16;
-extern const lv_font_t lv_font_source_han_sans_sc_16_cjk;
-#define CJK_FONT (&lv_font_source_han_sans_sc_16_cjk)
+extern const lv_font_t lv_font_mshy_16;
+#define CJK_FONT (&lv_font_mshy_16)
 
 /* Layout constants - match ui_main.cpp */
 #define WIN_W 1200

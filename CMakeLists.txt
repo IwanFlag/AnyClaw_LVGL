@@ -54,6 +54,9 @@ set(SOURCES
     src/http_client.cpp
     src/ui_main.cpp
     src/ui_settings.cpp
+    src/tray.cpp
+    src/health.cpp
+    src/autostart.cpp
 )
 
 add_executable(AnyClaw_LVGL WIN32 ${SOURCES})

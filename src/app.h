@@ -34,6 +34,10 @@ bool app_stop_gateway();
 /* HTTP helper */
 int http_get(const char* url, char* response, int resp_size, int timeout_sec = 3);
 
+/* Auto-start (registry) */
+bool is_auto_start();
+void set_auto_start(bool enable);
+
 /* SDL window access (for title bar drag) */
 struct SDL_Window;
 SDL_Window* app_get_window();

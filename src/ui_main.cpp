@@ -7,8 +7,7 @@
 #include <windows.h>
 
 extern const lv_font_t lv_font_mshy_16;
-extern const lv_font_t lv_font_source_han_sans_sc_16_cjk;
-#define CJK_FONT (&lv_font_source_han_sans_sc_16_cjk)
+#define CJK_FONT (&lv_font_mshy_16)
 
 /* Layout constants for 1200x800 window */
 #define WIN_W 1200
@@ -81,6 +80,10 @@ static const I18n STR_TASK_LIST   = {LV_SYMBOL_LIST " Task List", LV_SYMBOL_LIST
 static const I18n STR_CHAT        = {LV_SYMBOL_ENVELOPE " Chat", LV_SYMBOL_ENVELOPE " 聊天"};
 static const I18n STR_WIFI        = {LV_SYMBOL_WIFI " Connected", LV_SYMBOL_WIFI " 已连接"};
 static const I18n STR_BATTERY     = {LV_SYMBOL_BATTERY_FULL " Power", LV_SYMBOL_BATTERY_FULL " 电源"};
+static const I18n STR_NO_TASKS    = {"No pending tasks", "暂无待处理任务"};
+static const I18n STR_GW_RUNNING  = {"Gateway Service", "Gateway 服务"};
+static const I18n STR_CHAT_INPUT  = {"Type message...", "输入消息..."};
+static const I18n STR_SEND        = {LV_SYMBOL_UPLOAD " Send", LV_SYMBOL_UPLOAD " 发送"};
 
 /* ── UI widgets ── */
 static lv_obj_t* status_label = nullptr;
@@ -96,6 +99,17 @@ static lv_obj_t* led_ok = nullptr;
 static lv_obj_t* led_warn = nullptr;
 static lv_obj_t* title_bar = nullptr;
 static lv_obj_t* title_label = nullptr;
+
+/* P2: Task list dynamic widgets */
+static lv_obj_t* task_panel = nullptr;
+#define MAX_TASK_WIDGETS 5
+static lv_obj_t* task_labels[MAX_TASK_WIDGETS] = {nullptr};
+static int task_count = 0;
+
+/* P2: Chat area widgets */
+static lv_obj_t* chat_display = nullptr;
+static lv_obj_t* chat_input = nullptr;
+static char chat_history[4096] = {0};
 
 /* ── Log system ── */
 #define LOG_MAX_LINES  50
@@ -206,6 +220,116 @@ static void btn_stop_cb(lv_event_t* e) {
 }
 static void btn_refresh_cb(lv_event_t* e) { (void)e; app_log(tr({"[Refresh] Checking...", "[刷新] 正在检测..."})); app_refresh_status(); }
 
+/* ── P2: Chat area ── */
+static void chat_send_cb(lv_event_t* e) {
+    (void)e;
+    if (!chat_input || !chat_display) return;
+    const char* text = lv_textarea_get_text(chat_input);
+    if (!text || !text[0]) return;
+    
+    char entry[512];
+    snprintf(entry, sizeof(entry), "[You] %s\n", text);
+    /* Append to history */
+    size_t hlen = strlen(chat_history);
+    size_t elen = strlen(entry);
+    if (hlen + elen < sizeof(chat_history) - 1) {
+        strcat(chat_history, entry);
+    } else {
+        /* Shift history to make room */
+        memmove(chat_history, chat_history + elen, hlen - elen + 1);
+        strcat(chat_history, entry);
+    }
+    lv_label_set_text(chat_display, chat_history);
+    lv_textarea_set_text(chat_input, "");
+    
+    /* Auto-scroll chat display to bottom */
+    lv_obj_t* chat_cont = lv_obj_get_parent(chat_display);
+    if (chat_cont) {
+        lv_obj_update_layout(chat_display);
+        int lbl_h = (int)lv_obj_get_height(chat_display);
+        int cont_h = (int)lv_obj_get_height(chat_cont);
+        if (lbl_h > cont_h) lv_obj_scroll_to_y(chat_cont, lbl_h - cont_h, LV_ANIM_OFF);
+    }
+    
+    app_log("[Chat] Message sent");
+}
+
+static void chat_input_cb(lv_event_t* e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_READY) {
+        chat_send_cb(e);
+    }
+}
+
+/* ── P2: Update task list dynamically ── */
+static void update_task_list(ClawStatus status) {
+    /* Clear existing task labels */
+    for (int i = 0; i < MAX_TASK_WIDGETS; i++) {
+        if (task_labels[i]) {
+            lv_obj_delete(task_labels[i]);
+            task_labels[i] = nullptr;
+        }
+    }
+    task_count = 0;
+    
+    if (!task_panel) return;
+    
+    /* Always show gateway status as first task */
+    if (task_count < MAX_TASK_WIDGETS) {
+        char buf[256];
+        lv_color_t color;
+        if (status == ClawStatus::Running) {
+            snprintf(buf, sizeof(buf), LV_SYMBOL_PLAY " %s / %s", tr(STR_GW_RUNNING), tr(STR_RUNNING));
+            color = lv_color_make(0, 220, 60);
+        } else if (status == ClawStatus::Error) {
+            snprintf(buf, sizeof(buf), LV_SYMBOL_WARNING " %s / %s", tr(STR_GW_RUNNING), tr(STR_ERROR));
+            color = lv_color_make(220, 40, 40);
+        } else {
+            snprintf(buf, sizeof(buf), LV_SYMBOL_MINUS " %s / %s", tr(STR_GW_RUNNING), tr(STR_NOTINST));
+            color = lv_color_make(220, 200, 40);
+        }
+        lv_obj_t* lbl = lv_label_create(task_panel);
+        lv_label_set_text(lbl, buf);
+        lv_obj_set_style_text_color(lbl, color, 0);
+        lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
+        lv_obj_set_width(lbl, LEFT_PANEL_W - 48);
+        lv_label_set_long_mode(lbl, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_set_pos(lbl, 10, task_count * 28 + 40);
+        task_labels[task_count++] = lbl;
+    }
+    
+    /* Show idle/active state */
+    if (status == ClawStatus::Running) {
+        /* When running, show health status */
+        if (task_count < MAX_TASK_WIDGETS) {
+            const char* hint = tr(STR_NO_TASKS);
+            lv_obj_t* lbl = lv_label_create(task_panel);
+            lv_label_set_text(lbl, hint);
+            lv_obj_set_style_text_color(lbl, lv_color_make(200, 200, 160), 0);
+            lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
+            lv_obj_set_width(lbl, LEFT_PANEL_W - 48);
+            lv_label_set_long_mode(lbl, LV_LABEL_LONG_MODE_DOTS);
+            lv_obj_set_pos(lbl, 10, task_count * 28 + 40);
+            task_labels[task_count++] = lbl;
+        }
+    } else {
+        /* When not running, show appropriate message */
+        if (task_count < MAX_TASK_WIDGETS) {
+            const char* msg = (status == ClawStatus::NotInstalled) 
+                ? tr(STR_NOTINST) 
+                : tr(STR_NO_TASKS);
+            lv_obj_t* lbl = lv_label_create(task_panel);
+            lv_label_set_text(lbl, msg);
+            lv_obj_set_style_text_color(lbl, lv_color_make(160, 160, 140), 0);
+            lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
+            lv_obj_set_width(lbl, LEFT_PANEL_W - 48);
+            lv_label_set_long_mode(lbl, LV_LABEL_LONG_MODE_DOTS);
+            lv_obj_set_pos(lbl, 10, task_count * 28 + 40);
+            task_labels[task_count++] = lbl;
+        }
+    }
+}
+
 static void lang_cn_cb(lv_event_t* e) {
     (void)e;
     if (g_lang != Lang::CN) { g_lang = Lang::CN; update_ui_language(); app_log("[Lang] Chinese mode"); }
@@ -236,6 +360,9 @@ void app_refresh_status() {
     if (status == ClawStatus::Running) { lv_led_on(led_ok); lv_led_off(led_warn); }
     else if (status == ClawStatus::Error) { lv_led_off(led_ok); lv_led_on(led_warn); }
     else { lv_led_off(led_ok); lv_led_off(led_warn); }
+
+    /* P2: Update dynamic task list */
+    update_task_list(status);
 
     lv_obj_invalidate(lv_screen_active());
 }
@@ -426,11 +553,10 @@ void app_ui_init() {
     lv_obj_clear_flag(sep1, LV_OBJ_FLAG_SCROLLABLE);
 
     /* Task list area title with icon */
-    lv_obj_t* task_title = create_styled_label(pl, tr(STR_TASK_LIST), lv_color_make(130, 170, 240), 15, 200, 200);
+    lv_obj_t* task_title = create_styled_label(pl, tr(STR_TASK_LIST), lv_color_make(130, 170, 240), 15, 175, LEFT_PANEL_W - 30);
 
-    /* Task placeholder items */
-    lv_obj_t* task1 = create_styled_label(pl, tr({"  [Running] Gateway Service", "  [运行中] Gateway 服务"}), lv_color_make(0, 220, 60), 15, 230, LEFT_PANEL_W - 30);
-    lv_obj_t* task2 = create_styled_label(pl, tr({"  [Idle] No tasks pending", "  [空闲] 暂无待处理任务"}), lv_color_make(220, 200, 40), 15, 255, LEFT_PANEL_W - 30);
+    /* P2: Dynamic task panel (tasks are updated by update_task_list()) */
+    task_panel = pl;
 
     /* Hint at bottom */
     lv_obj_t* hint = create_styled_label(pl, tr(STR_AUTOREFRESH), lv_color_make(90, 95, 120), 15, PANEL_H - 60, LEFT_PANEL_W - 30);
@@ -472,11 +598,60 @@ void app_ui_init() {
     /* Chat bubble area title with icon */
     lv_obj_t* chat_title = create_styled_label(pr, tr(STR_CHAT), lv_color_make(130, 170, 240), 8, 95, 200);
 
+    /* P2: Chat display area */
+    int chat_y = 120;
+    int chat_h = 120;
+    lv_obj_t* chat_cont = lv_obj_create(pr);
+    lv_obj_set_size(chat_cont, RIGHT_PANEL_W - 24, chat_h);
+    lv_obj_set_pos(chat_cont, 10, chat_y);
+    lv_obj_set_style_bg_color(chat_cont, lv_color_make(20, 22, 30), 0);
+    lv_obj_set_style_bg_opa(chat_cont, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(chat_cont, 1, 0);
+    lv_obj_set_style_border_color(chat_cont, lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_radius(chat_cont, 6, 0);
+    lv_obj_set_style_pad_all(chat_cont, 6, 0);
+
+    chat_display = lv_label_create(chat_cont);
+    lv_label_set_text(chat_display, "");
+    lv_obj_set_style_text_color(chat_display, lv_color_make(200, 210, 230), 0);
+    lv_obj_set_style_text_font(chat_display, CJK_FONT, 0);
+    lv_label_set_long_mode(chat_display, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(chat_display, RIGHT_PANEL_W - 40);
+
+    /* P2: Chat input area */
+    int input_y = chat_y + chat_h + 4;
+    int input_h = 36;
+
+    chat_input = lv_textarea_create(pr);
+    lv_obj_set_size(chat_input, RIGHT_PANEL_W - 100, input_h);
+    lv_obj_set_pos(chat_input, 10, input_y);
+    lv_textarea_set_placeholder_text(chat_input, tr(STR_CHAT_INPUT));
+    lv_textarea_set_one_line(chat_input, true);
+    lv_obj_set_style_bg_color(chat_input, lv_color_make(25, 28, 38), 0);
+    lv_obj_set_style_text_color(chat_input, lv_color_make(220, 220, 230), 0);
+    lv_obj_set_style_text_font(chat_input, CJK_FONT, 0);
+    lv_obj_set_style_border_color(chat_input, lv_color_make(55, 60, 85), 0);
+    lv_obj_set_style_radius(chat_input, 6, 0);
+    lv_obj_add_event_cb(chat_input, chat_input_cb, LV_EVENT_READY, nullptr);
+
+    /* Send button */
+    lv_obj_t* btn_send = lv_button_create(pr);
+    lv_obj_set_size(btn_send, 60, input_h);
+    lv_obj_set_pos(btn_send, RIGHT_PANEL_W - 80, input_y);
+    lv_obj_set_style_bg_color(btn_send, lv_color_make(40, 80, 160), 0);
+    lv_obj_set_style_radius(btn_send, 6, 0);
+    lv_obj_add_event_cb(btn_send, chat_send_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lsend = lv_label_create(btn_send);
+    lv_label_set_text(lsend, tr(STR_SEND));
+    lv_obj_set_style_text_font(lsend, CJK_FONT, 0);
+    lv_obj_center(lsend);
+
     /* Log area title with icon */
-    lv_obj_t* log_title = create_styled_label(pr, tr({LV_SYMBOL_FILE " Log", LV_SYMBOL_FILE " 日志"}), lv_color_make(130, 170, 240), 8, 115, 200);
+    int log_title_y = input_y + input_h + 8;
+    lv_obj_t* log_title = create_styled_label(pr, tr({LV_SYMBOL_FILE " Log", LV_SYMBOL_FILE " 日志"}), lv_color_make(130, 170, 240), 8, log_title_y, 200);
 
     /* Log panel */
-    int log_y = 140;
+    int log_y = log_title_y + 20;
     int log_h = PANEL_H - log_y - 15;
     log_panel = lv_obj_create(pr);
     lv_obj_set_size(log_panel, RIGHT_PANEL_W - 24, log_h);

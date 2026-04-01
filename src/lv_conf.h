@@ -55,8 +55,7 @@
 #define LV_FONT_MSHY_16 1
 typedef struct _lv_font_t lv_font_t;
 extern const lv_font_t lv_font_mshy_16;
-extern const lv_font_t lv_font_source_han_sans_sc_16_cjk;
-#define LV_FONT_DEFAULT (&lv_font_source_han_sans_sc_16_cjk)
+#define LV_FONT_DEFAULT (&lv_font_mshy_16)
 
 /*=================
    WIDGETS
