@@ -151,13 +151,17 @@ static LRESULT CALLBACK tray_wndproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 MB_ICONINFORMATION | MB_OK);
             break;
         case IDM_EXIT: {
-            int result = MessageBoxA(hwnd,
-                "确定要退出 AnyClaw 吗？\n\n退出后将同时停止 OpenClaw Gateway 服务。",
-                "退出确认",
-                MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
-            if (result == IDYES) {
-                g_shouldQuit = true;
+            /* P2-26: Check exit confirmation toggle */
+            extern bool is_exit_confirmation_enabled();
+            bool need_confirm = is_exit_confirmation_enabled();
+            if (need_confirm) {
+                int result = MessageBoxA(hwnd,
+                    "确定要退出 AnyClaw 吗？\n\n退出后将同时停止 OpenClaw Gateway 服务。",
+                    "退出确认",
+                    MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+                if (result != IDYES) return 0;
             }
+            g_shouldQuit = true;
             return 0;
         }
         }

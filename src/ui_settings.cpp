@@ -96,6 +96,12 @@ static void refresh_dropdown_cb(lv_event_t* e) {
     update_refresh_interval(intervals[sel]);
 }
 
+/* P2-26: Export for tray.cpp */
+static lv_obj_t* g_exit_confirm_sw = nullptr;
+bool is_exit_confirmation_enabled() {
+    return g_exit_confirm_sw ? lv_obj_has_state(g_exit_confirm_sw, LV_STATE_CHECKED) : true;
+}
+
 static void build_general_tab(lv_obj_t* tab) {
     apply_dark_style(tab);
     lv_obj_set_style_pad_all(tab, 16, 0);
@@ -195,6 +201,46 @@ static void build_general_tab(lv_obj_t* tab) {
 
     extern void ui_settings_add_theme_dropdown(lv_obj_t* tab);
     ui_settings_add_theme_dropdown(tab);
+
+    /* P2-25: Minimize behavior */
+    lv_obj_t* lbl_min = lv_label_create(tab);
+    lv_label_set_text(lbl_min, i18n("最小化行为 / Minimize To", "Minimize To"));
+    apply_section_label(lbl_min);
+
+    static lv_obj_t* gen_minimize_dd = nullptr;
+    gen_minimize_dd = lv_dropdown_create(tab);
+    lv_dropdown_set_options(gen_minimize_dd, "系统托盘 / System Tray\n任务栏 / Taskbar");
+    lv_dropdown_set_selected(gen_minimize_dd, 0);
+    lv_obj_set_width(gen_minimize_dd, 200);
+    apply_input_style(gen_minimize_dd);
+
+    /* P2-26: Exit confirmation toggle */
+    lv_obj_t* lbl_exit = lv_label_create(tab);
+    lv_label_set_text(lbl_exit, i18n("退出确认 / Exit Confirmation", "Exit Confirmation"));
+    apply_section_label(lbl_exit);
+
+    lv_obj_t* row_exit = lv_obj_create(tab);
+    lv_obj_set_size(row_exit, LV_PCT(100), 40);
+    lv_obj_set_style_bg_opa(row_exit, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_exit, 0, 0);
+    lv_obj_set_style_pad_all(row_exit, 0, 0);
+    lv_obj_clear_flag(row_exit, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row_exit, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_exit, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row_exit, 12, 0);
+
+    static lv_obj_t* gen_exit_sw = nullptr;
+    gen_exit_sw = lv_switch_create(row_exit);
+    g_exit_confirm_sw = gen_exit_sw;
+    lv_obj_set_size(gen_exit_sw, 50, 26);
+    lv_obj_set_style_bg_color(gen_exit_sw, lv_color_make(60, 65, 90), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(gen_exit_sw, lv_color_make(60, 130, 220), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(gen_exit_sw, lv_color_make(255, 255, 255), LV_PART_KNOB);
+    lv_obj_add_state(gen_exit_sw, LV_STATE_CHECKED);
+
+    lv_obj_t* lbl_exit_hint = lv_label_create(row_exit);
+    lv_label_set_text(lbl_exit_hint, i18n("退出托盘时弹窗确认", "Confirm before exit"));
+    apply_hint_label(lbl_exit_hint);
 
     /* Divider */
     lv_obj_t* div2 = lv_obj_create(tab);
