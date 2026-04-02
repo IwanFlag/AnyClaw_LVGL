@@ -13,8 +13,36 @@
 /* Extern for tray minimize */
 #include "tray.h"
 
-extern const lv_font_t lv_font_mshy_16;
-#define CJK_FONT (&lv_font_mshy_16)
+/* ═══ System Font: Load Windows 微软雅黑 at runtime ═══ */
+#include "libs/tiny_ttf/lv_tiny_ttf.h"
+static lv_font_t* g_cjk_font = nullptr;
+
+static void init_system_font() {
+    /* Try TrueType-outline fonts (stb_truetype doesn't support CFF/Type2 outlines) */
+    const char* font_paths[] = {
+        "C:/Windows/Fonts/simhei.ttf",               /* SimHei - TrueType outlines ✓ */
+        "C:/Windows/Fonts/simsunb.ttf",              /* SimSun (Song) - TrueType */
+        "C:/Windows/Fonts/simfang.ttf",              /* SimFang (FangSong) */
+        "C:/Windows/Fonts/simkai.ttf",               /* SimKai (KaiTi) */
+        "C:/Windows/Fonts/STSONG.TTF",               /* STSong */
+        "C:/Windows/Fonts/STXIHEI.TTF",              /* STXiHei */
+        "C:/Users/thundersoft/.openclaw/workspace/AnyClaw_LVGL/msyh_0.ttf",  /* msyh (may fail: CFF) */
+        nullptr
+    };
+
+    for (int i = 0; font_paths[i]; i++) {
+        g_cjk_font = lv_tiny_ttf_create_file(font_paths[i], 16);
+        if (g_cjk_font) {
+            LV_LOG_USER("[Font] ✓ Loaded: %s", font_paths[i]);
+            return;
+        }
+    }
+
+    LV_LOG_WARN("[Font] No CJK font found!");
+    g_cjk_font = (lv_font_t*)&lv_font_montserrat_16;
+}
+
+#define CJK_FONT (g_cjk_font)
 
 /* Layout constants - WIN_W/Win_H are dynamically set from actual display size */
 static int WIN_W = 1088;    /* Updated at runtime in app_ui_init() */
@@ -1242,6 +1270,9 @@ static void create_title_bar(lv_obj_t* scr) {
 }
 
 void app_ui_init() {
+    /* Load Windows system font (微软雅黑) for CJK text */
+    init_system_font();
+
     /* Load saved config first (sets g_theme, g_lang, g_colors) */
     load_theme_config();
 
@@ -1450,7 +1481,7 @@ void app_ui_init() {
     lv_label_set_text(chat_display, "");
     /* P2-17: 品牌形象 - 欢迎语 */
     snprintf(chat_history, sizeof(chat_history),
-        "[System] 龙虾要吃蒜蓉的 \xF0\x9F\xA7\xA4\xF0\x9F\xA6\x9E — 你的AI助手已就位！\n");
+        "[System] LongXia Yao Chi SuanRong De - Your AI assistant is ready!\n");
     lv_label_set_text(chat_display, chat_history);
     lv_obj_set_style_text_color(chat_display, c->text, 0);
     lv_obj_set_style_text_font(chat_display, CJK_FONT, 0);

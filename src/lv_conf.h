@@ -55,7 +55,9 @@
 #define LV_FONT_MSHY_16 1
 typedef struct _lv_font_t lv_font_t;
 extern const lv_font_t lv_font_mshy_16;
-#define LV_FONT_DEFAULT (&lv_font_mshy_16)
+#define LV_FONT_SOURCE_HAN_SANS_SC_14_CJK 1
+extern const lv_font_t lv_font_source_han_sans_sc_14_cjk;
+#define LV_FONT_DEFAULT (&lv_font_montserrat_16)
 
 /*=================
    WIDGETS
@@ -103,6 +105,13 @@ extern const lv_font_t lv_font_mshy_16;
    IMAGE DECODERS
  *=================*/
 #define LV_USE_LODEPNG    1
+
+/*=================
+   TINY_TTF (runtime font loading)
+ *=================*/
+#define LV_USE_TINY_TTF          1
+#define LV_TINY_TTF_FILE_SUPPORT 1
+#define LV_TINY_TTF_CACHE_GLYPH_CNT 512
 
 /*=================
    SDL DRIVER
