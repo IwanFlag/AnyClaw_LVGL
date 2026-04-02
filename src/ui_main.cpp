@@ -1291,9 +1291,9 @@ void app_ui_init() {
     /* Chat bubble area title with icon */
     lv_obj_t* chat_title = create_styled_label(pr, tr(STR_CHAT), lv_color_make(130, 170, 240), 8, 95, 200);
 
-    /* P2: Chat display area */
-    int chat_y = 120;
-    int chat_h = 120;
+    /* P2: Chat display area — expanded upward to fill more space */
+    int chat_y = 115;
+    int chat_h = 190;
     lv_obj_t* chat_cont = lv_obj_create(pr);
     lv_obj_set_size(chat_cont, RIGHT_PANEL_W - 24, chat_h);
     lv_obj_set_pos(chat_cont, 10, chat_y);
@@ -1363,43 +1363,6 @@ void app_ui_init() {
     lv_obj_set_pos(btn_send, RIGHT_PANEL_W - 108, input_y);
     lv_obj_set_style_text_font(lsend, CJK_FONT, 0);
     lv_obj_center(lsend);
-
-    /* P2-23: 清除聊天历史按钮 */
-    static const I18n STR_CLEAR = {"Clear", "清除"};
-    lv_obj_t* btn_clear = lv_button_create(lv_obj_get_parent(btn_send));
-    lv_obj_set_pos(btn_clear, RIGHT_PANEL_W - 40, input_y);
-    lv_obj_set_size(btn_clear, 32, input_h);
-    lv_obj_set_size(btn_clear, 32, input_h);
-    lv_obj_set_style_bg_color(btn_clear, lv_color_make(200, 70, 70), 0);
-    lv_obj_set_style_bg_opa(btn_clear, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(btn_clear, 6, 0);
-    lv_obj_set_style_border_width(btn_clear, 1, 0);
-    lv_obj_set_style_border_color(btn_clear, lv_color_make(240, 100, 100), 0);
-    lv_obj_add_event_cb(btn_clear, [](lv_event_t* e) {
-        (void)e;
-        /* Clear chat history buffer and remove all bubbles */
-        memset(chat_history, 0, sizeof(chat_history));
-        lv_obj_t* chat_cont = lv_obj_get_parent(chat_display);
-        if (chat_cont) {
-            lv_obj_clean(chat_cont);
-            /* Recreate the welcome message label */
-            chat_display = lv_label_create(chat_cont);
-            lv_label_set_text(chat_display, "");
-            lv_obj_set_style_text_color(chat_display, g_colors->text, 0);
-            lv_obj_set_style_text_font(chat_display, CJK_FONT, 0);
-            lv_label_set_long_mode(chat_display, LV_LABEL_LONG_WRAP);
-            lv_obj_set_width(chat_display, RIGHT_PANEL_W - 40);
-            lv_obj_set_style_bg_color(chat_display, lv_color_make(40, 44, 52), 0);
-            lv_obj_set_style_bg_opa(chat_display, LV_OPA_30, 0);
-            lv_obj_set_style_radius(chat_display, 8, 0);
-            lv_obj_set_style_pad_all(chat_display, 6, 0);
-        }
-        app_log("[Chat] History cleared");
-    }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* lclear = lv_label_create(btn_clear);
-    lv_label_set_text(lclear, tr(STR_CLEAR));
-    lv_obj_set_style_text_font(lclear, CJK_FONT, 0);
-    lv_obj_center(lclear);
 
     /* Log area title with icon */
     int log_title_y = input_y + input_h + 6;  /* input box下方 */
