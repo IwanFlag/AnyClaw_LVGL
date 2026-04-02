@@ -1334,7 +1334,7 @@ void app_ui_init() {
     int input_h = 66;  /* 3行高度: ~22px per line + padding */
 
     chat_input = lv_textarea_create(pr);
-    lv_obj_set_size(chat_input, RIGHT_PANEL_W - 100, input_h);
+    lv_obj_set_size(chat_input, RIGHT_PANEL_W - 112, input_h);  /* room for Send(60)+Clear(36)+gaps(2*8) */
     lv_obj_set_pos(chat_input, 10, input_y);
     lv_textarea_set_placeholder_text(chat_input, tr(STR_CHAT_INPUT));
     /* P2-22: 多行输入 - 3行高度 */
@@ -1352,7 +1352,7 @@ void app_ui_init() {
     /* Send button */
     lv_obj_t* btn_send = lv_button_create(pr);
     lv_obj_set_size(btn_send, 60, input_h);
-    lv_obj_set_pos(btn_send, RIGHT_PANEL_W - 80, input_y);
+    lv_obj_set_pos(btn_send, RIGHT_PANEL_W - 104, input_y);
     lv_obj_set_style_bg_color(btn_send, lv_color_make(70, 130, 220), 0);
     lv_obj_set_style_bg_opa(btn_send, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(btn_send, 6, 0);
@@ -1404,36 +1404,7 @@ void app_ui_init() {
     int log_title_y = input_y + input_h + 6;  /* input box下方 */
     lv_obj_t* log_title = create_styled_label(pr, tr({"Log", "日志"}), lv_color_make(130, 170, 240), 8, log_title_y, 200);
 
-    /* P2-36: Log export button */
-    lv_obj_t* btn_export = lv_button_create(pr);
-    lv_obj_set_size(btn_export, 60, 22);
-    lv_obj_set_pos(btn_export, RIGHT_PANEL_W - 76, log_title_y);
-    lv_obj_set_style_bg_color(btn_export, lv_color_make(70, 120, 200), 0);
-    lv_obj_set_style_bg_opa(btn_export, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(btn_export, 4, 0);
-    lv_obj_set_style_border_width(btn_export, 1, 0);
-    lv_obj_set_style_border_color(btn_export, lv_color_make(100, 150, 240), 0);
-    static I18n STR_EXPORT = {"Export", "导出"};
-    lv_obj_add_event_cb(btn_export, [](lv_event_t* e) {
-        (void)e;
-        /* Save log content to file */
-        const char* log_text = log_panel ? lv_label_get_text(lv_obj_get_child(log_panel, 0)) : "";
-        if (!log_text || !log_text[0]) return;
-
-        char path[MAX_PATH];
-        snprintf(path, sizeof(path), "%s\\Documents\\AnyClaw_log_%04d%02d%02d.txt",
-                 getenv("USERPROFILE"), 2026, 4, 1);
-        FILE* f = fopen(path, "w");
-        if (f) {
-            fputs(log_text, f);
-            fclose(f);
-            app_log("[Log] Exported to %s", path);
-        }
-    }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* l_export = lv_label_create(btn_export);
-    lv_label_set_text(l_export, tr(STR_EXPORT));
-    lv_obj_set_style_text_font(l_export, CJK_FONT, 0);
-    lv_obj_center(l_export);
+    /* P2-36: Log export button - REMOVED (not needed on homepage) */
 
     /* Log panel */
     int log_y = log_title_y + 20;
