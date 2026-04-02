@@ -1415,11 +1415,11 @@ void app_ui_init() {
     lv_obj_set_style_text_font(rt, CJK_FONT, 0);
     lv_obj_set_pos(rt, 8, 8);
 
-    /* Buttons - 3 in a row (BUG-011: adjusted y for better spacing) */
-    int btn_w = 160;
+    /* Buttons - 4 in a row, evenly spaced */
+    int btn_w = (RIGHT_PANEL_W - 50) / 4;  // 4 buttons, 3 gaps ~16px each
     int btn_h = 42;
     int btn_y = 48;
-    int btn_gap = 15;
+    int btn_gap = (RIGHT_PANEL_W - 4 * btn_w) / 3;  // evenly distributed
 
     btn_start = create_styled_button(pr, tr(STR_START), 10, btn_y, btn_w, btn_h,
         c->btn_start, c->panel, btn_start_cb);
@@ -1430,16 +1430,11 @@ void app_ui_init() {
     btn_refresh = create_styled_button(pr, tr(STR_REFRESH), 10 + (btn_w + btn_gap) * 2, btn_y, btn_w, btn_h,
         c->btn_action, c->panel, btn_refresh_cb);
 
-    /* Settings button - 2nd row, centered */
-    int btn_settings_w = 200;
-    int btn_settings_h = 36;
-    btn_settings = create_styled_button(pr, tr(STR_SETTINGS), 
-        (RIGHT_PANEL_W - btn_settings_w) / 2, btn_y + btn_h + 10, 
-        btn_settings_w, btn_settings_h,
+    btn_settings = create_styled_button(pr, tr(STR_SETTINGS), 10 + (btn_w + btn_gap) * 3, btn_y, btn_w, btn_h,
         lv_color_make(240, 160, 60), c->panel, btn_settings_cb);
 
     /* Chat bubble area title with icon */
-    lv_obj_t* chat_title = create_styled_label(pr, tr(STR_CHAT), lv_color_make(130, 170, 240), 8, 145, 200);
+    lv_obj_t* chat_title = create_styled_label(pr, tr(STR_CHAT), lv_color_make(130, 170, 240), 8, 95, 200);
 
     /* Layout: adaptive sizing — chat fills space, log pinned to bottom (3 lines) */
     int input_h = 66;   /* 3行高度输入框 */

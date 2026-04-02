@@ -87,23 +87,51 @@ static HICON create_color_icon(COLORREF color, int size = 16) {
 
 /* ── CJK font for GDI ───────────────────────────────────────────── */
 static HFONT get_cjk_font(int height = -16) {
-    static HFONT hFont = nullptr;
-    if (!hFont) {
-        /* Try multiple font names */
-        const wchar_t* names[] = { L"Microsoft YaHei", L"Arial", L"Segoe UI", nullptr };
-        for (int i = 0; names[i]; i++) {
-            hFont = CreateFontW(height, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS,
-                names[i]);
-            if (hFont) break;
-        }
-        if (!hFont) {
-            hFont = CreateFontW(height, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, nullptr);
+    /* Use height as key to cache multiple sizes */
+    static HFONT hFont16 = nullptr;
+    static HFONT hFont20 = nullptr;
+    HFONT* cached = (height <= -20) ? &hFont20 : &hFont16;
+    if (*cached) return *cached;
+
+    /* List of fonts to try, ordered by preference */
+    const wchar_t* names[] = {
+        L"Microsoft YaHei",
+        L"Microsoft YaHei UI",
+        L"SimHei",
+        L"WenQuanYi Micro Hei",
+        L"Segoe UI",
+        L"Arial",
+        L"Tahoma",
+        nullptr
+    };
+
+    for (int i = 0; names[i]; i++) {
+        HFONT hf = CreateFontW(height, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+            DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS,
+            names[i]);
+        if (hf) {
+            /* Verify the font can actually render CJK by testing it */
+            HDC hdc = GetDC(nullptr);
+            HFONT old = (HFONT)SelectObject(hdc, hf);
+            TEXTMETRICW tm = {};
+            GetTextMetricsW(hdc, &tm);
+            SelectObject(hdc, old);
+            ReleaseDC(nullptr, hdc);
+
+            /* If the font has reasonable char width, it's likely working */
+            if (tm.tmAveCharWidth > 0) {
+                *cached = hf;
+                return hf;
+            }
+            DeleteObject(hf);
         }
     }
-    return hFont;
+
+    /* Last resort: system default */
+    *cached = CreateFontW(height, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, nullptr);
+    return *cached;
 }
 
 /* ── Owner-drawn menu helpers ────────────────────────────────────── */
@@ -302,8 +330,8 @@ static void show_about_dialog(HWND parent) {
         0, 95, W, 20, hDlg, (HMENU)1003, g_hInst, nullptr);
     SendMessage(h, WM_SETFONT, (WPARAM)hf, TRUE);
 
-    /* Separator */
-    CreateWindowW(L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_ETCHEDHORZ,
+    /* Separator - use a simple STATIC with no special style, painted via WM_CTLCOLORSTATIC */
+    HWND hSep = CreateWindowW(L"STATIC", L"", WS_CHILD | WS_VISIBLE | SS_OWNERDRAW,
         40, 122, W - 80, 2, hDlg, (HMENU)1004, g_hInst, nullptr);
 
     /* Copyright */
