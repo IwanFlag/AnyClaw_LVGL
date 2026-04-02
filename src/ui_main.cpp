@@ -86,7 +86,7 @@ static Lang detect_system_lang() {
     if (PRIMARYLANGID(lid) == LANG_CHINESE) return Lang::CN;
     return Lang::EN;
 }
-Lang g_lang = detect_system_lang();
+Lang g_lang = Lang::EN  /* force EN for debugging */;
 
 /* Forward declarations for P2-03/P2-04 persistence */
 extern int g_refresh_interval_ms;
@@ -1494,3 +1494,4 @@ void app_ui_init() {
         }
     }
 }
+
