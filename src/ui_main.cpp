@@ -1067,6 +1067,62 @@ static void create_title_bar(lv_obj_t* scr) {
     lv_obj_set_style_text_font(lset, CJK_FONT, 0);
     lv_obj_center(lset);
 
+    /* ═══ Window control buttons (top-right of title bar) ═══ */
+    {
+        int wc_btn_size = 36;
+        int wc_btn_gap = 8;
+        int wc_btn_right_margin = 10;
+        int wc_btn_y = (TITLE_H - 30) / 2;  /* vertical center in title bar */
+        int wc_base_x = WIN_W - wc_btn_size * 3 - wc_btn_gap * 2 - wc_btn_right_margin;
+
+        /* Minimize button - 灰色 */
+        btn_minimize = lv_button_create(title_bar);
+        lv_obj_set_size(btn_minimize, wc_btn_size, 30);
+        lv_obj_set_pos(btn_minimize, wc_base_x, wc_btn_y);
+        lv_obj_set_style_bg_color(btn_minimize, lv_color_make(120, 120, 140), 0);
+        lv_obj_set_style_bg_opa(btn_minimize, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(btn_minimize, 6, 0);
+        lv_obj_set_style_border_width(btn_minimize, 1, 0);
+        lv_obj_set_style_border_color(btn_minimize, lv_color_make(200, 200, 220), 0);
+        lv_obj_add_event_cb(btn_minimize, btn_minimize_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* lbl_min = lv_label_create(btn_minimize);
+        lv_label_set_text(lbl_min, "-");
+        lv_obj_set_style_text_font(lbl_min, CJK_FONT, 0);
+        lv_obj_center(lbl_min);
+
+        /* Maximize/Restore button - 蓝色 */
+        btn_maximize = lv_button_create(title_bar);
+        lv_obj_set_size(btn_maximize, wc_btn_size, 30);
+        lv_obj_set_pos(btn_maximize, wc_base_x + wc_btn_size + wc_btn_gap, wc_btn_y);
+        lv_obj_set_style_bg_color(btn_maximize, lv_color_make(70, 130, 220), 0);
+        lv_obj_set_style_bg_opa(btn_maximize, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(btn_maximize, 6, 0);
+        lv_obj_set_style_border_width(btn_maximize, 1, 0);
+        lv_obj_set_style_border_color(btn_maximize, lv_color_make(100, 160, 255), 0);
+        lv_obj_add_event_cb(btn_maximize, btn_maximize_cb, LV_EVENT_CLICKED, nullptr);
+        lbl_maximize = lv_label_create(btn_maximize);
+        lv_label_set_text(lbl_maximize, "[]");
+        lv_obj_set_style_text_font(lbl_maximize, CJK_FONT, 0);
+        lv_obj_center(lbl_maximize);
+
+        /* Close button - 红色 */
+        btn_close = lv_button_create(title_bar);
+        lv_obj_set_size(btn_close, wc_btn_size, 30);
+        lv_obj_set_pos(btn_close, wc_base_x + (wc_btn_size + wc_btn_gap) * 2, wc_btn_y);
+        lv_obj_set_style_bg_color(btn_close, lv_color_make(220, 60, 60), 0);
+        lv_obj_set_style_bg_opa(btn_close, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(btn_close, 6, 0);
+        lv_obj_set_style_border_width(btn_close, 1, 0);
+        lv_obj_set_style_border_color(btn_close, lv_color_make(255, 120, 120), 0);
+        lv_obj_add_event_cb(btn_close, btn_close_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* lbl_cls = lv_label_create(btn_close);
+        lv_label_set_text(lbl_cls, "X");
+        lv_obj_set_style_text_font(lbl_cls, CJK_FONT, 0);
+        lv_obj_center(lbl_cls);
+
+        printf("[UI] Window controls at x=%d, y=%d (title bar)\n", wc_base_x, wc_btn_y);
+    }
+
     app_log("[UI] Title bar created (z-order: top, width: %d)", WIN_W - 14);
 }
 
@@ -1337,59 +1393,8 @@ void app_ui_init() {
     lv_obj_set_style_text_font(lclear, CJK_FONT, 0);
     lv_obj_center(lclear);
 
-    /* ═══ 窗口控制按钮 - 移到输入框下方 ═══ */
-    int wc_btn_y = input_y + input_h + 6;  /* 输入框下方6px间距 */
-    int wc_btn_size = 36;
-    int wc_btn_gap = 8;
-    int wc_btn_right = RIGHT_PANEL_W - 16;  /* 右对齐 */
-
-    /* Minimize button - 灰色 */
-    btn_minimize = lv_button_create(pr);
-    lv_obj_set_size(btn_minimize, wc_btn_size, 30);
-    lv_obj_set_pos(btn_minimize, wc_btn_right - wc_btn_size * 3 - wc_btn_gap * 2, wc_btn_y);
-    lv_obj_set_style_bg_color(btn_minimize, lv_color_make(120, 120, 140), 0);
-    lv_obj_set_style_bg_opa(btn_minimize, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(btn_minimize, 6, 0);
-    lv_obj_set_style_border_width(btn_minimize, 1, 0);
-    lv_obj_set_style_border_color(btn_minimize, lv_color_make(200, 200, 220), 0);
-    lv_obj_add_event_cb(btn_minimize, btn_minimize_cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* lbl_min = lv_label_create(btn_minimize);
-    lv_label_set_text(lbl_min, "-");
-    lv_obj_set_style_text_font(lbl_min, CJK_FONT, 0);
-    lv_obj_center(lbl_min);
-
-    /* Maximize/Restore button - 蓝色 */
-    btn_maximize = lv_button_create(pr);
-    lv_obj_set_size(btn_maximize, wc_btn_size, 30);
-    lv_obj_set_pos(btn_maximize, wc_btn_right - wc_btn_size * 2 - wc_btn_gap, wc_btn_y);
-    lv_obj_set_style_bg_color(btn_maximize, lv_color_make(70, 130, 220), 0);
-    lv_obj_set_style_bg_opa(btn_maximize, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(btn_maximize, 6, 0);
-    lv_obj_set_style_border_width(btn_maximize, 1, 0);
-    lv_obj_set_style_border_color(btn_maximize, lv_color_make(100, 160, 255), 0);
-    lv_obj_add_event_cb(btn_maximize, btn_maximize_cb, LV_EVENT_CLICKED, nullptr);
-    lbl_maximize = lv_label_create(btn_maximize);
-    lv_label_set_text(lbl_maximize, "[]");
-    lv_obj_set_style_text_font(lbl_maximize, CJK_FONT, 0);
-    lv_obj_center(lbl_maximize);
-
-    /* Close button - 红色 */
-    btn_close = lv_button_create(pr);
-    lv_obj_set_size(btn_close, wc_btn_size, 30);
-    lv_obj_set_pos(btn_close, wc_btn_right - wc_btn_size, wc_btn_y);
-    lv_obj_set_style_bg_color(btn_close, lv_color_make(220, 60, 60), 0);
-    lv_obj_set_style_bg_opa(btn_close, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(btn_close, 6, 0);
-    lv_obj_set_style_border_width(btn_close, 1, 0);
-    lv_obj_set_style_border_color(btn_close, lv_color_make(255, 120, 120), 0);
-    lv_obj_add_event_cb(btn_close, btn_close_cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* lbl_cls = lv_label_create(btn_close);
-    lv_label_set_text(lbl_cls, "X");
-    lv_obj_set_style_text_font(lbl_cls, CJK_FONT, 0);
-    lv_obj_center(lbl_cls);
-
     /* Log area title with icon */
-    int log_title_y = wc_btn_y + 36;  /* 窗口按钮下方 */
+    int log_title_y = input_y + input_h + 6;  /* input box下方 */
     lv_obj_t* log_title = create_styled_label(pr, tr({"Log", "日志"}), lv_color_make(130, 170, 240), 8, log_title_y, 200);
 
     /* P2-36: Log export button */

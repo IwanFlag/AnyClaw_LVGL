@@ -54,7 +54,8 @@ static void release_instance_mutex() {
 
 /* ═══ Title bar drag via Win32 WM_NCHITTEST ═══ */
 #define TITLE_BAR_HEIGHT 48
-static RECT g_btn_exclude = {200, 0, 390, TITLE_BAR_HEIGHT};
+/* Window control buttons on title bar: right side, exclude from drag */
+static RECT g_btn_exclude = {1200, 0, 1340, TITLE_BAR_HEIGHT};
 
 static LRESULT CALLBACK titlebar_subclass(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
                                           UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
