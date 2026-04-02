@@ -10,8 +10,11 @@
 #include "drivers/sdl/lv_sdl_keyboard.h"
 #include <cstdio>
 #include <windows.h>
+#include <windowsx.h>
+#include <commctrl.h>
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "comctl32.lib")
 
 /* Expose for ui_main.cpp window drag */
 static SDL_Window* g_window = nullptr;
@@ -46,6 +49,47 @@ static void release_instance_mutex() {
         ::ReleaseMutex(g_instanceMutex);
         ::CloseHandle(g_instanceMutex);
         g_instanceMutex = nullptr;
+    }
+}
+
+/* ═══ Title bar drag via Win32 WM_NCHITTEST ═══ */
+#define TITLE_BAR_HEIGHT 48
+static RECT g_btn_exclude = {200, 0, 390, TITLE_BAR_HEIGHT};
+
+static LRESULT CALLBACK titlebar_subclass(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
+                                          UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    (void)uIdSubclass; (void)dwRefData;
+    if (msg == WM_NCHITTEST) {
+        LRESULT hit = DefSubclassProc(hwnd, msg, wParam, lParam);
+        if (hit == HTCLIENT) {
+            POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            ScreenToClient(hwnd, &pt);
+            if (pt.y >= 0 && pt.y < TITLE_BAR_HEIGHT &&
+                !(pt.x >= g_btn_exclude.left && pt.x < g_btn_exclude.right &&
+                  pt.y >= g_btn_exclude.top && pt.y < g_btn_exclude.bottom)) {
+                return HTCAPTION;
+            }
+        }
+        return hit;
+    }
+    if (msg == WM_SETCURSOR) {
+        POINT pt;
+        GetCursorPos(&pt);
+        ScreenToClient(hwnd, &pt);
+        if (pt.y >= 0 && pt.y < TITLE_BAR_HEIGHT &&
+            !(pt.x >= g_btn_exclude.left && pt.x < g_btn_exclude.right &&
+              pt.y >= g_btn_exclude.top && pt.y < g_btn_exclude.bottom)) {
+            SetCursor(LoadCursor(nullptr, IDC_ARROW));
+            return TRUE;
+        }
+    }
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
+}
+
+static void setup_title_drag(HWND hwnd) {
+    if (hwnd) {
+        SetWindowSubclass(hwnd, titlebar_subclass, 1001, 0);
+        printf("[MAIN] Title bar drag subclass installed\n");
     }
 }
 
@@ -143,6 +187,9 @@ int main(int argc, char* argv[]) {
 
     /* Create UI */
     app_ui_init();
+
+    /* Setup Win32 title bar drag after UI is created (buttons exist) */
+    setup_title_drag(getNativeWindowHandle(g_window));
 
     printf("[INFO] GUI initialized. System tray active.\n");
 
