@@ -48,4 +48,7 @@ bool tray_should_quit();
 /* Get the hidden window handle */
 HWND tray_get_hwnd();
 
+/* [Debug] Programmatically show the tray context menu at a given screen position */
+void tray_show_menu_at(int x, int y);
+
 #endif /* TRAY_H */
