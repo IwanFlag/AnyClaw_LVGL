@@ -689,6 +689,13 @@ static void chat_input_cb(lv_event_t* e) {
     if (code == LV_EVENT_READY) {
         chat_send_cb(e);
     }
+    /* 回车键发送消息 */
+    if (code == LV_EVENT_KEY) {
+        uint32_t key = lv_event_get_key(e);
+        if (key == LV_KEY_ENTER) {
+            chat_send_cb(e);
+        }
+    }
 }
 
 /* ── P2: Update task list dynamically ── */
@@ -1291,9 +1298,12 @@ void app_ui_init() {
     /* Chat bubble area title with icon */
     lv_obj_t* chat_title = create_styled_label(pr, tr(STR_CHAT), lv_color_make(130, 170, 240), 8, 95, 200);
 
-    /* P2: Chat display area — expanded upward to fill more space */
+    /* Layout: adaptive sizing — chat fills space, log pinned to bottom (3 lines) */
+    int input_h = 66;   /* 3行高度输入框 */
+    int log_h = 3 * 16 + 14;  /* 3行日志 */
     int chat_y = 115;
-    int chat_h = 190;
+    /* Chat fills from chat_y down to just above input+log at bottom */
+    int chat_h = PANEL_H - chat_y - input_h - log_h - 36;  /* 36 = gaps + titles */
     lv_obj_t* chat_cont = lv_obj_create(pr);
     lv_obj_set_size(chat_cont, RIGHT_PANEL_W - 24, chat_h);
     lv_obj_set_pos(chat_cont, 10, chat_y);
@@ -1329,9 +1339,8 @@ void app_ui_init() {
     lv_obj_set_style_radius(chat_display, 8, 0);
     lv_obj_set_style_pad_all(chat_display, 6, 0);
 
-    /* P2: Chat input area - 3行高度输入框 */
-    int input_y = chat_y + chat_h + 8;  /* BUG-011: 8px gap for breathing room */
-    int input_h = 66;  /* 3行高度: ~22px per line + padding */
+    /* Chat input area — right below chat, just above log */
+    int input_y = PANEL_H - input_h - log_h - 28;  /* above log panel + gap */
 
     chat_input = lv_textarea_create(pr);
     lv_obj_set_size(chat_input, RIGHT_PANEL_W - 124, input_h);
@@ -1348,6 +1357,7 @@ void app_ui_init() {
     lv_obj_set_style_radius(chat_input, 6, 0);
     lv_obj_set_size(chat_input, RIGHT_PANEL_W - 124, input_h);  /* room for Send(60)+Clear(32)+gaps(2*8) */
     lv_obj_add_event_cb(chat_input, chat_input_cb, LV_EVENT_READY, nullptr);
+    lv_obj_add_event_cb(chat_input, chat_input_cb, LV_EVENT_KEY, nullptr);
 
     /* Send button */
     lv_obj_t* btn_send = lv_button_create(pr);
@@ -1364,15 +1374,12 @@ void app_ui_init() {
     lv_obj_set_style_text_font(lsend, CJK_FONT, 0);
     lv_obj_center(lsend);
 
-    /* Log area title with icon */
-    int log_title_y = input_y + input_h + 6;  /* input box下方 */
+    /* Log area — pinned to bottom */
+    int log_title_y = PANEL_H - log_h - 20;
     lv_obj_t* log_title = create_styled_label(pr, tr({"Log", "日志"}), lv_color_make(130, 170, 240), 8, log_title_y, 200);
 
-    /* P2-36: Log export button - REMOVED (not needed on homepage) */
-
-    /* Log panel - 显示3行日志 */
+    /* Log panel - 3行日志, 贴底部 */
     int log_y = log_title_y + 20;
-    int log_h = 3 * 16 + 14;  /* 3行 * 16px字体 + 上下padding */
     log_panel = lv_obj_create(pr);
     lv_obj_set_size(log_panel, RIGHT_PANEL_W - 24, log_h);
     lv_obj_set_pos(log_panel, 10, log_y);
