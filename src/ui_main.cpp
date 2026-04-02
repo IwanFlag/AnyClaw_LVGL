@@ -1358,10 +1358,13 @@ void app_ui_init() {
     lv_obj_set_style_text_font(status_label, CJK_FONT, 0);
     lv_obj_align(status_label, LV_ALIGN_LEFT_MID, 55, 0);
 
-    /* Version, Path, Port labels (BUG-011: 40px spacing to avoid overlap) */
+    /* Version, Path, Port labels - use small 10px font for English-only info */
     version_label = create_styled_label(pl, "Version: --", c->text_dim, 15, 85, LEFT_PANEL_W - 30);
-    path_label = create_styled_label(pl, "Path: --", c->text_dim, 15, 125, LEFT_PANEL_W - 30);
-    port_label = create_styled_label(pl, "Port: --", c->text_dim, 15, 165, LEFT_PANEL_W - 30);
+    path_label = create_styled_label(pl, "Path: --", c->text_dim, 15, 102, LEFT_PANEL_W - 30);
+    port_label = create_styled_label(pl, "Port: --", c->text_dim, 15, 119, LEFT_PANEL_W - 30);
+    lv_obj_set_style_text_font(version_label, &lv_font_montserrat_10, 0);
+    lv_obj_set_style_text_font(path_label, &lv_font_montserrat_10, 0);
+    lv_obj_set_style_text_font(port_label, &lv_font_montserrat_10, 0);
 
     /* Separator (BUG-011: moved down to 200) */
     lv_obj_t* sep1 = lv_obj_create(pl);
