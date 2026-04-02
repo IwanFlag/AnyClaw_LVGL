@@ -55,7 +55,7 @@ static void release_instance_mutex() {
 /* ═══ Title bar drag via Win32 WM_NCHITTEST ═══ */
 #define TITLE_BAR_HEIGHT 48
 /* Window control buttons on title bar: right side, exclude from drag */
-static RECT g_btn_exclude = {1200, 0, 1340, TITLE_BAR_HEIGHT};
+static RECT g_btn_exclude = {954, 0, 1078, TITLE_BAR_HEIGHT};
 
 static LRESULT CALLBACK titlebar_subclass(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
                                           UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
@@ -147,8 +147,8 @@ int main(int argc, char* argv[]) {
         }
         printf("[INFO] Screen resolution: %dx%d\n", screen_w, screen_h);
     }
-    int win_w = (int)(screen_w * 0.60);
-    int win_h = (int)(screen_h * 0.75);
+    int win_w = (int)(screen_w * 0.85);
+    int win_h = (int)(screen_h * 0.85);
     /* Clamp to reasonable minimum */
     if (win_w < 800) win_w = 800;
     if (win_h < 500) win_h = 500;

@@ -17,8 +17,8 @@ extern const lv_font_t lv_font_mshy_16;
 #define CJK_FONT (&lv_font_mshy_16)
 
 /* Layout constants - WIN_W/Win_H are dynamically set from actual display size */
-static int WIN_W = 1350;    /* Updated at runtime in app_ui_init() */
-static int WIN_H = 740;     /* Updated at runtime in app_ui_init() */
+static int WIN_W = 1088;    /* Updated at runtime in app_ui_init() */
+static int WIN_H = 680;     /* Updated at runtime in app_ui_init() */
 #define TITLE_H 48
 #define LEFT_PANEL_W 520
 static int RIGHT_PANEL_W = 800;  /* Updated at runtime: WIN_W - LEFT_PANEL_W - 30 */
