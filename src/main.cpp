@@ -137,16 +137,11 @@ int main(int argc, char* argv[]) {
     /* Init LVGL first (lv_sdl_window_create calls SDL_Init internally) */
     lv_init();
 
-    /* Bug 2: Detect actual screen resolution and calculate 85% window size */
-    int screen_w = 1920, screen_h = 1080;
-    {
-        SDL_DisplayMode dm;
-        if (SDL_GetCurrentDisplayMode(0, &dm) == 0 && dm.w > 0 && dm.h > 0) {
-            screen_w = dm.w;
-            screen_h = dm.h;
-        }
-        printf("[INFO] Screen resolution: %dx%d\n", screen_w, screen_h);
-    }
+    /* Detect actual screen resolution using Win32 (SDL may return wrong value) */
+    int screen_w = GetSystemMetrics(SM_CXSCREEN);
+    int screen_h = GetSystemMetrics(SM_CYSCREEN);
+    if (screen_w <= 0) screen_w = 1280;
+    if (screen_h <= 0) screen_h = 800;
     int win_w = (int)(screen_w * 0.85);
     int win_h = (int)(screen_h * 0.85);
     /* Clamp to reasonable minimum */
@@ -162,6 +157,8 @@ int main(int argc, char* argv[]) {
     /* Set window title and position */
     lv_sdl_window_set_title(disp, "AnyClaw LVGL v2.0 - Desktop Manager");
     g_window = lv_sdl_window_get_window(disp);
+    /* Fix: get actual window size (may differ from requested if screen is smaller) */
+    if (g_window) SDL_GetWindowSize(g_window, &win_w, &win_h);
 
     /* Left-align so right-side buttons are always visible on screen */
     if (g_window) {

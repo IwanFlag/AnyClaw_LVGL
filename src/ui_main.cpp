@@ -1074,6 +1074,13 @@ static void create_title_bar(lv_obj_t* scr) {
         int wc_btn_right_margin = 10;
         int wc_btn_y = (TITLE_H - 30) / 2;  /* vertical center in title bar */
         int wc_base_x = WIN_W - wc_btn_size * 3 - wc_btn_gap * 2 - wc_btn_right_margin;
+        /* Clamp: ensure buttons fit within title bar */
+        {
+            int title_w = (int)lv_display_get_horizontal_resolution(NULL);
+            if (title_w > 0 && wc_base_x + wc_btn_size * 3 + wc_btn_gap * 2 + wc_btn_right_margin > title_w) {
+                wc_base_x = title_w - wc_btn_size * 3 - wc_btn_gap * 2 - wc_btn_right_margin;
+            }
+        }
 
         /* Minimize button - 灰色 */
         btn_minimize = lv_button_create(title_bar);
