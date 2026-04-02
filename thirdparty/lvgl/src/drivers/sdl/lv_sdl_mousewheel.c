@@ -120,7 +120,7 @@ void lv_sdl_mousewheel_handler(SDL_Event * event)
             if(event->wheel.y < 0) dsc->diff++;
             if(event->wheel.y > 0) dsc->diff--;
 #else
-            dsc->diff = -event->wheel.y;
+            dsc->diff = event->wheel.y;
 #endif
             break;
         case SDL_MOUSEBUTTONDOWN:
