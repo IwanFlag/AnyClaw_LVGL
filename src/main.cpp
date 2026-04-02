@@ -102,8 +102,8 @@ int main(int argc, char* argv[]) {
         }
         printf("[INFO] Screen resolution: %dx%d\n", screen_w, screen_h);
     }
-    int win_w = (int)(screen_w * 0.85);
-    int win_h = (int)(screen_h * 0.85);
+    int win_w = (int)(screen_w * 0.60);
+    int win_h = (int)(screen_h * 0.75);
     /* Clamp to reasonable minimum */
     if (win_w < 800) win_w = 800;
     if (win_h < 500) win_h = 500;
@@ -118,9 +118,9 @@ int main(int argc, char* argv[]) {
     lv_sdl_window_set_title(disp, "AnyClaw LVGL v2.0 - Desktop Manager");
     g_window = lv_sdl_window_get_window(disp);
 
-    /* Center on screen */
+    /* Left-align so right-side buttons are always visible on screen */
     if (g_window) {
-        SDL_SetWindowPosition(g_window, (screen_w - win_w) / 2, (screen_h - win_h) / 2 - 20);
+        SDL_SetWindowPosition(g_window, 20, (screen_h - win_h) / 2 - 20);
         SDL_RaiseWindow(g_window);
         
         /* Fix DWM extended frame covering custom title bar */

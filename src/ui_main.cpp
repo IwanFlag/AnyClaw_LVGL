@@ -188,6 +188,9 @@ static void load_theme_config() {
     }
 }
 
+/* Forward declaration for title bar creation (called last for z-order) */
+static void create_title_bar(lv_obj_t* scr);
+
 /* Theme change callback - forward declaration */
 void apply_theme_to_all();
 
@@ -1011,29 +1014,12 @@ void apply_theme_to_all() {
     lv_obj_invalidate(scr);
 }
 
-void app_ui_init() {
-    /* Load saved config first (sets g_theme, g_lang, g_colors) */
-    load_theme_config();
-
-    /* P2-fix: Get actual display dimensions from LVGL (matches actual SDL window size) */
-    WIN_W = (int)lv_display_get_horizontal_resolution(NULL);
-    WIN_H = (int)lv_display_get_vertical_resolution(NULL);
-    if (WIN_W < 800) WIN_W = 800;   /* Clamp to reasonable minimum */
-    if (WIN_H < 500) WIN_H = 500;
-    RIGHT_PANEL_W = WIN_W - LEFT_PANEL_W - 30;
-    PANEL_H = WIN_H - TITLE_H - FOOTER_H - 24;
-    if (PANEL_H < 300) PANEL_H = 300;
-    printf("[UI] Layout: window=%dx%d, left=%d, right=%d, panel_h=%d\n",
-           WIN_W, WIN_H, LEFT_PANEL_W, RIGHT_PANEL_W, PANEL_H);
-
+/* ═══ Create title bar LAST so it's above all panels (z-order fix) ═══ */
+static void create_title_bar(lv_obj_t* scr) {
     const ThemeColors* c = g_colors;
-    lv_obj_t* scr = lv_screen_active();
-    lv_obj_set_style_bg_color(scr, c->bg, 0);
-    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
-    /* ═══ TITLE BAR ═══ */
     title_bar = lv_obj_create(scr);
-    lv_obj_set_size(title_bar, WIN_W, TITLE_H);
+    lv_obj_set_size(title_bar, lv_obj_get_width(scr), TITLE_H);
     lv_obj_set_pos(title_bar, 0, 0);
     lv_obj_set_style_bg_color(title_bar, c->panel, 0);
     lv_obj_set_style_bg_opa(title_bar, LV_OPA_COVER, 0);
@@ -1049,89 +1035,117 @@ void app_ui_init() {
     lv_obj_set_style_text_font(title_label, CJK_FONT, 0);
     lv_obj_align(title_label, LV_ALIGN_LEFT_MID, 15, 0);
 
-    /* ═══ Window Control Buttons (Minimize / Maximize / Close) ═══ */
+    /* ═══ Window Control Buttons - LEFT side for guaranteed visibility ═══ */
     int wc_btn_size = 36;
-    int wc_btn_gap = 8;
-    int wc_y_offset = 0;
+    int wc_btn_gap = 6;
+    int wc_x = 370;  /* Start after Settings button */
 
-    /* P2-01: CN/EN language toggle button - LEFT side for visibility test */
-    lv_obj_t* btn_lang_toggle = lv_button_create(title_bar);
-    lv_obj_set_size(btn_lang_toggle, 56, 30);
-    lv_obj_align(btn_lang_toggle, LV_ALIGN_LEFT_MID, 10 + (wc_btn_size + wc_btn_gap) * 3 + 10, 0);
-    lv_obj_set_style_bg_color(btn_lang_toggle, lv_color_make(255, 255, 0), 0);  /* YELLOW */
-    lv_obj_set_style_bg_opa(btn_lang_toggle, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(btn_lang_toggle, 6, 0);
-    lv_obj_set_style_border_width(btn_lang_toggle, 1, 0);
-    lv_obj_set_style_border_color(btn_lang_toggle, lv_color_make(255, 255, 255), 0);
-    lv_obj_add_event_cb(btn_lang_toggle, lang_toggle_cb, LV_EVENT_CLICKED, nullptr);
-    g_lang_toggle_label = lv_label_create(btn_lang_toggle);
-    lv_label_set_text(g_lang_toggle_label, (g_lang == Lang::CN) ? "CN" : "EN");
-    lv_obj_set_style_text_color(g_lang_toggle_label, lv_color_make(0, 0, 0), 0);  /* Black text for contrast */
-    lv_obj_set_style_text_font(g_lang_toggle_label, CJK_FONT, 0);
-    lv_obj_center(g_lang_toggle_label);
-
-    /* Settings button - LEFT side for visibility test */
-    btn_settings = lv_button_create(title_bar);
-    lv_obj_set_size(btn_settings, 80, 32);
-    lv_obj_align(btn_settings, LV_ALIGN_LEFT_MID, 10 + (wc_btn_size + wc_btn_gap) * 3 + 10 + 56 + 10, 0);
-    lv_obj_set_style_bg_color(btn_settings, lv_color_make(0, 255, 255), 0);  /* CYAN */
-    lv_obj_set_style_bg_opa(btn_settings, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(btn_settings, 8, 0);
-    lv_obj_set_style_border_width(btn_settings, 1, 0);
-    lv_obj_set_style_border_color(btn_settings, lv_color_make(255, 255, 255), 0);
-    lv_obj_add_event_cb(btn_settings, btn_settings_cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* lset = lv_label_create(btn_settings);
-    lv_label_set_text(lset, tr(STR_SETTINGS));
-    lv_obj_set_style_text_color(lset, lv_color_make(0, 0, 0), 0);  /* Black text */
-    lv_obj_set_style_text_font(lset, CJK_FONT, 0);
-    lv_obj_center(lset);
-
-    /* ═══ Window Control Buttons (Minimize / Maximize / Close) ═══ */
-
-    /* Minimize button — (moved to LEFT for visibility test) */
+    /* ═══ Minimize button ═══ */
     btn_minimize = lv_button_create(title_bar);
     lv_obj_set_size(btn_minimize, wc_btn_size, 30);
-    lv_obj_align(btn_minimize, LV_ALIGN_LEFT_MID, 10, wc_y_offset);
-    lv_obj_set_style_bg_color(btn_minimize, lv_color_make(255, 0, 0), 0);  /* TEST: RED */
+    lv_obj_set_pos(btn_minimize, wc_x, 7);
+    lv_obj_set_style_bg_color(btn_minimize, lv_color_make(120, 120, 140), 0);
     lv_obj_set_style_bg_opa(btn_minimize, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(btn_minimize, 6, 0);
     lv_obj_set_style_border_width(btn_minimize, 1, 0);
-    lv_obj_set_style_border_color(btn_minimize, lv_color_make(255, 255, 255), 0);
+    lv_obj_set_style_border_color(btn_minimize, lv_color_make(200, 200, 220), 0);
     lv_obj_add_event_cb(btn_minimize, btn_minimize_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_min = lv_label_create(btn_minimize);
     lv_label_set_text(lbl_min, "-");
     lv_obj_set_style_text_font(lbl_min, CJK_FONT, 0);
     lv_obj_center(lbl_min);
 
-    /* Maximize/Restore button □ / ⧉ (LEFT of close) */
+    /* ═══ Maximize/Restore button ═══ */
     btn_maximize = lv_button_create(title_bar);
     lv_obj_set_size(btn_maximize, wc_btn_size, 30);
-    lv_obj_align(btn_maximize, LV_ALIGN_LEFT_MID, 10 + wc_btn_size + wc_btn_gap, wc_y_offset);
-    lv_obj_set_style_bg_color(btn_maximize, lv_color_make(0, 255, 0), 0);  /* TEST: GREEN */
+    lv_obj_set_pos(btn_maximize, wc_x + wc_btn_size + wc_btn_gap, 7);
+    lv_obj_set_style_bg_color(btn_maximize, lv_color_make(70, 130, 220), 0);
     lv_obj_set_style_bg_opa(btn_maximize, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(btn_maximize, 6, 0);
     lv_obj_set_style_border_width(btn_maximize, 1, 0);
-    lv_obj_set_style_border_color(btn_maximize, lv_color_make(255, 255, 255), 0);
+    lv_obj_set_style_border_color(btn_maximize, lv_color_make(100, 160, 255), 0);
     lv_obj_add_event_cb(btn_maximize, btn_maximize_cb, LV_EVENT_CLICKED, nullptr);
     lbl_maximize = lv_label_create(btn_maximize);
     lv_label_set_text(lbl_maximize, "[]");
     lv_obj_set_style_text_font(lbl_maximize, CJK_FONT, 0);
     lv_obj_center(lbl_maximize);
 
-    /* Close button (minimize to tray) ✕ (LEFT of close) */
+    /* ═══ Close button ═══ */
     btn_close = lv_button_create(title_bar);
     lv_obj_set_size(btn_close, wc_btn_size, 30);
-    lv_obj_align(btn_close, LV_ALIGN_LEFT_MID, 10 + (wc_btn_size + wc_btn_gap) * 2, wc_y_offset);
-    lv_obj_set_style_bg_color(btn_close, lv_color_make(0, 0, 255), 0);  /* TEST: BLUE */
+    lv_obj_set_pos(btn_close, wc_x + (wc_btn_size + wc_btn_gap) * 2, 7);
+    lv_obj_set_style_bg_color(btn_close, lv_color_make(220, 60, 60), 0);
     lv_obj_set_style_bg_opa(btn_close, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(btn_close, 6, 0);
     lv_obj_set_style_border_width(btn_close, 1, 0);
-    lv_obj_set_style_border_color(btn_close, lv_color_make(255, 255, 255), 0);
+    lv_obj_set_style_border_color(btn_close, lv_color_make(255, 120, 120), 0);
     lv_obj_add_event_cb(btn_close, btn_close_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_cls = lv_label_create(btn_close);
     lv_label_set_text(lbl_cls, "X");
     lv_obj_set_style_text_font(lbl_cls, CJK_FONT, 0);
     lv_obj_center(lbl_cls);
+
+    /* ═══ Language toggle button ═══ */
+    lv_obj_t* btn_lang_toggle = lv_button_create(title_bar);
+    lv_obj_set_size(btn_lang_toggle, 56, 30);
+    lv_obj_align(btn_lang_toggle, LV_ALIGN_LEFT_MID, 220, 0);
+    lv_obj_set_style_bg_color(btn_lang_toggle, lv_color_make(80, 200, 120), 0);
+    lv_obj_set_style_bg_opa(btn_lang_toggle, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(btn_lang_toggle, 6, 0);
+    lv_obj_set_style_border_width(btn_lang_toggle, 1, 0);
+    lv_obj_set_style_border_color(btn_lang_toggle, lv_color_make(120, 240, 160), 0);
+    lv_obj_add_event_cb(btn_lang_toggle, lang_toggle_cb, LV_EVENT_CLICKED, nullptr);
+    g_lang_toggle_label = lv_label_create(btn_lang_toggle);
+    lv_label_set_text(g_lang_toggle_label, (g_lang == Lang::CN) ? "CN" : "EN");
+    lv_obj_set_style_text_color(g_lang_toggle_label, lv_color_make(0, 0, 0), 0);
+    lv_obj_set_style_text_font(g_lang_toggle_label, CJK_FONT, 0);
+    lv_obj_center(g_lang_toggle_label);
+
+    /* ═══ Settings button (left side, after lang toggle) ═══ */
+    btn_settings = lv_button_create(title_bar);
+    lv_obj_set_size(btn_settings, 80, 32);
+    lv_obj_align(btn_settings, LV_ALIGN_LEFT_MID, 286, 0);
+    lv_obj_set_style_bg_color(btn_settings, lv_color_make(240, 160, 60), 0);
+    lv_obj_set_style_bg_opa(btn_settings, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(btn_settings, 8, 0);
+    lv_obj_set_style_border_width(btn_settings, 1, 0);
+    lv_obj_set_style_border_color(btn_settings, lv_color_make(255, 200, 100), 0);
+    lv_obj_add_event_cb(btn_settings, btn_settings_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lset = lv_label_create(btn_settings);
+    lv_label_set_text(lset, tr(STR_SETTINGS));
+    lv_obj_set_style_text_color(lset, lv_color_make(0, 0, 0), 0);
+    lv_obj_set_style_text_font(lset, CJK_FONT, 0);
+    lv_obj_center(lset);
+
+    app_log("[UI] Title bar created (z-order: top, width: %d)", WIN_W - 14);
+}
+
+void app_ui_init() {
+    /* Load saved config first (sets g_theme, g_lang, g_colors) */
+    load_theme_config();
+
+    /* P2-fix: Get actual SDL window size (not display resolution) */
+    {
+        SDL_Window* win = app_get_window();
+        if (win) {
+            SDL_GetWindowSize(win, &WIN_W, &WIN_H);
+        } else {
+            WIN_W = (int)lv_display_get_horizontal_resolution(NULL);
+            WIN_H = (int)lv_display_get_vertical_resolution(NULL);
+        }
+    }
+    if (WIN_W < 800) WIN_W = 800;   /* Clamp to reasonable minimum */
+    if (WIN_H < 500) WIN_H = 500;
+    RIGHT_PANEL_W = WIN_W - LEFT_PANEL_W - 30;
+    PANEL_H = WIN_H - TITLE_H - FOOTER_H - 24;
+    if (PANEL_H < 300) PANEL_H = 300;
+    printf("[UI] Layout: window=%dx%d, left=%d, right=%d, panel_h=%d\n",
+           WIN_W, WIN_H, LEFT_PANEL_W, RIGHT_PANEL_W, PANEL_H);
+
+    const ThemeColors* c = g_colors;
+    lv_obj_t* scr = lv_screen_active();
+    lv_obj_set_style_bg_color(scr, c->bg, 0);
+    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
     /* ═══ DIVIDER ═══ */
     lv_obj_t* div1 = lv_obj_create(scr);
@@ -1446,6 +1460,9 @@ void app_ui_init() {
 
     app_log("[Ready] AnyClaw LVGL v2.0 - Bilingual mode");
     app_log("[Garlic] LongXia Yao Chi SuanRong De - Your AI assistant is ready!");
+
+    /* ═══ Create title bar LAST - ensures it's above all panels ═══ */
+    create_title_bar(scr);
 
     /* Show legal disclaimer on first launch */
     show_disclaimer(scr);

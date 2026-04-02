@@ -286,7 +286,7 @@ static lv_result_t window_create(lv_display_t * disp)
     lv_sdl_window_t * dsc = lv_display_get_driver_data(disp);
     dsc->zoom = 1.0;
 
-    int flag = 0;
+    int flag = SDL_WINDOW_BORDERLESS;
 #if LV_SDL_USE_EGL
     flag |= SDL_WINDOW_OPENGL;
 #endif
