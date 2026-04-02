@@ -16,6 +16,7 @@
 /* ═══ System Font: Load Windows 微软雅黑 at runtime ═══ */
 #include "libs/tiny_ttf/lv_tiny_ttf.h"
 static lv_font_t* g_cjk_font = nullptr;
+static lv_font_t* g_cjk_font_small = nullptr;
 
 static void init_system_font() {
     /* Try TrueType-outline fonts (stb_truetype doesn't support CFF/Type2 outlines) */
@@ -34,15 +35,22 @@ static void init_system_font() {
         g_cjk_font = lv_tiny_ttf_create_file(font_paths[i], 16);
         if (g_cjk_font) {
             LV_LOG_USER("[Font] ✓ Loaded: %s", font_paths[i]);
+            /* Also load a smaller version for hint/status text */
+            g_cjk_font_small = lv_tiny_ttf_create_file(font_paths[i], 12);
+            if (g_cjk_font_small) {
+                LV_LOG_USER("[Font] ✓ Loaded small (12px): %s", font_paths[i]);
+            }
             return;
         }
     }
 
     LV_LOG_WARN("[Font] No CJK font found!");
     g_cjk_font = (lv_font_t*)&lv_font_montserrat_16;
+    g_cjk_font_small = (lv_font_t*)&lv_font_montserrat_12;
 }
 
 #define CJK_FONT (g_cjk_font)
+#define CJK_FONT_SMALL (g_cjk_font_small)
 
 /* Layout constants - WIN_W/Win_H are dynamically set from actual display size */
 static int WIN_W = 1088;    /* Updated at runtime in app_ui_init() */
@@ -1396,7 +1404,8 @@ void app_ui_init() {
     lv_obj_center(lbl_add);
 
     /* Hint at bottom */
-    lv_obj_t* hint = create_styled_label(pl, tr(STR_AUTOREFRESH), c->text_dim, 15, PANEL_H - 60, LEFT_PANEL_W - 30);
+    lv_obj_t* hint = create_styled_label(pl, tr(STR_AUTOREFRESH), c->text_dim, 15, PANEL_H - 50, LEFT_PANEL_W - 30);
+    lv_obj_set_style_text_font(hint, CJK_FONT_SMALL, 0);
 
     /* ═══ SPLITTER (draggable divider between panels) ═══ */
     splitter = lv_obj_create(scr);
@@ -1550,7 +1559,7 @@ void app_ui_init() {
     lv_obj_t* log_lbl = lv_label_create(log_panel);
     lv_label_set_text(log_lbl, "");
     lv_obj_set_style_text_color(log_lbl, c->log_text, 0);
-    lv_obj_set_style_text_font(log_lbl, CJK_FONT, 0);
+    lv_obj_set_style_text_font(log_lbl, &lv_font_montserrat_10, 0);
     lv_label_set_long_mode(log_lbl, LV_LABEL_LONG_WRAP);
 
     /* ═══ FOOTER ═══ */
