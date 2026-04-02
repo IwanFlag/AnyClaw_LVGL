@@ -13,8 +13,11 @@
 #include <string>
 #include <windows.h>
 
+extern "C" {
 extern const lv_font_t lv_font_mshy_16;
-#define CJK_FONT (&lv_font_mshy_16)
+extern const lv_font_t lv_font_simhei_16;
+}
+#define CJK_FONT (&lv_font_simhei_16)
 
 /* Layout constants - dynamically set from actual display size */
 static int SETTING_WIN_W = 1350;
@@ -48,10 +51,15 @@ static void settings_close_cb(lv_event_t* e);
 static void settings_tab_change_cb(lv_event_t* e);
 
 /* ═══════════════════════════════════════════════════════════════
- *  i18n helpers
+ *  i18n helpers (single-language display)
+ *  tr(cn, en) -> returns one string based on current language
  * ═══════════════════════════════════════════════════════════════ */
-static const char* i18n(const char* zh, const char* en) {
-    return current_lang == 0 ? zh : en;
+static const char* tr(const char* cn, const char* en) {
+    switch (g_lang) {
+        case Lang::CN:  return cn;
+        case Lang::EN:  return en;
+    }
+    return en;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -112,7 +120,7 @@ static void build_general_tab(lv_obj_t* tab) {
 
     /* Status section title */
     lv_obj_t* lbl_status = lv_label_create(tab);
-    lv_label_set_text(lbl_status, i18n("OpenClaw 状态", "OpenClaw Status"));
+    lv_label_set_text(lbl_status, tr("OpenClaw 状态", "OpenClaw Status"));
     apply_section_label(lbl_status);
 
     /* Status value */
@@ -123,7 +131,7 @@ static void build_general_tab(lv_obj_t* tab) {
 
     /* Path section title */
     lv_obj_t* lbl_path = lv_label_create(tab);
-    lv_label_set_text(lbl_path, i18n("安装路径", "Install Path"));
+    lv_label_set_text(lbl_path, tr("安装路径", "Install Path"));
     apply_section_label(lbl_path);
 
     /* Path value */
@@ -143,7 +151,7 @@ static void build_general_tab(lv_obj_t* tab) {
 
     /* Auto-start toggle */
     lv_obj_t* lbl_auto = lv_label_create(tab);
-    lv_label_set_text(lbl_auto, i18n("开机自启", "Auto Start"));
+    lv_label_set_text(lbl_auto, tr("开机自启", "Auto Start"));
     apply_section_label(lbl_auto);
 
     lv_obj_t* row_auto = lv_obj_create(tab);
@@ -163,12 +171,12 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_set_style_bg_color(gen_autostart_sw, lv_color_make(255, 255, 255), LV_PART_KNOB);
 
     lv_obj_t* lbl_auto_hint = lv_label_create(row_auto);
-    lv_label_set_text(lbl_auto_hint, i18n("启动时自动运行 Gateway", "Start Gateway on boot"));
+    lv_label_set_text(lbl_auto_hint, tr("启动时自动运行 Gateway", "Start Gateway on boot"));
     apply_hint_label(lbl_auto_hint);
 
     /* Language selector */
     lv_obj_t* lbl_lang = lv_label_create(tab);
-    lv_label_set_text(lbl_lang, i18n("语言 / Language", "Language / 语言"));
+    lv_label_set_text(lbl_lang, tr("语言 / Language", "Language / 语言"));
     apply_section_label(lbl_lang);
 
     /* P2-01: Language dropdown - PRD 2.1 single language only */
@@ -203,7 +211,7 @@ static void build_general_tab(lv_obj_t* tab) {
 
     /* P2-27: Refresh interval selector */
     lv_obj_t* lbl_refresh = lv_label_create(tab);
-    lv_label_set_text(lbl_refresh, i18n("自动刷新间隔 / Auto Refresh", "Refresh Interval"));
+    lv_label_set_text(lbl_refresh, tr("自动刷新间隔 / Auto Refresh", "Refresh Interval"));
     apply_section_label(lbl_refresh);
 
     extern int g_refresh_interval_ms;
@@ -221,7 +229,7 @@ static void build_general_tab(lv_obj_t* tab) {
 
     /* Theme selector */
     lv_obj_t* lbl_theme = lv_label_create(tab);
-    lv_label_set_text(lbl_theme, i18n("主题 / Theme", "Theme / 主题"));
+    lv_label_set_text(lbl_theme, tr("主题 / Theme", "Theme / 主题"));
     apply_section_label(lbl_theme);
 
     extern void ui_settings_add_theme_dropdown(lv_obj_t* tab);
@@ -229,7 +237,7 @@ static void build_general_tab(lv_obj_t* tab) {
 
     /* P2-32: Component color preview */
     lv_obj_t* lbl_color = lv_label_create(tab);
-    lv_label_set_text(lbl_color, i18n("组件颜色 / Colors", "Colors / 组件颜色"));
+    lv_label_set_text(lbl_color, tr("组件颜色 / Colors", "Colors / 组件颜色"));
     apply_section_label(lbl_color);
 
     /* Color swatches showing current theme colors */
@@ -251,7 +259,7 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_set_style_border_color(bg_sw, lv_color_make(100, 100, 100), 0);
     lv_obj_set_style_radius(bg_sw, 4, 0);
     lv_obj_t* bg_lbl = lv_label_create(color_row1);
-    lv_label_set_text(bg_lbl, i18n("背景", "BG"));
+    lv_label_set_text(bg_lbl, tr("背景", "BG"));
     apply_hint_label(bg_lbl);
 
     /* Panel color swatch */
@@ -262,7 +270,7 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_set_style_border_color(panel_sw, lv_color_make(100, 100, 100), 0);
     lv_obj_set_style_radius(panel_sw, 4, 0);
     lv_obj_t* panel_lbl = lv_label_create(color_row1);
-    lv_label_set_text(panel_lbl, i18n("面板", "Panel"));
+    lv_label_set_text(panel_lbl, tr("面板", "Panel"));
     apply_hint_label(panel_lbl);
 
     /* Accent color swatch */
@@ -273,7 +281,7 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_set_style_border_color(acc_sw, lv_color_make(100, 100, 100), 0);
     lv_obj_set_style_radius(acc_sw, 4, 0);
     lv_obj_t* acc_lbl = lv_label_create(color_row1);
-    lv_label_set_text(acc_lbl, i18n("强调", "Accent"));
+    lv_label_set_text(acc_lbl, tr("强调", "Accent"));
     apply_hint_label(acc_lbl);
 
     /* Text color swatch */
@@ -284,12 +292,12 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_set_style_border_color(txt_sw, lv_color_make(100, 100, 100), 0);
     lv_obj_set_style_radius(txt_sw, 4, 0);
     lv_obj_t* txt_lbl = lv_label_create(color_row1);
-    lv_label_set_text(txt_lbl, i18n("文字", "Text"));
+    lv_label_set_text(txt_lbl, tr("文字", "Text"));
     apply_hint_label(txt_lbl);
 
     /* P2-25: Minimize behavior */
     lv_obj_t* lbl_min = lv_label_create(tab);
-    lv_label_set_text(lbl_min, i18n("最小化行为 / Minimize To", "Minimize To"));
+    lv_label_set_text(lbl_min, tr("最小化行为 / Minimize To", "Minimize To"));
     apply_section_label(lbl_min);
 
     static lv_obj_t* gen_minimize_dd = nullptr;
@@ -301,7 +309,7 @@ static void build_general_tab(lv_obj_t* tab) {
 
     /* P2-26: Exit confirmation toggle */
     lv_obj_t* lbl_exit = lv_label_create(tab);
-    lv_label_set_text(lbl_exit, i18n("退出确认 / Exit Confirmation", "Exit Confirmation"));
+    lv_label_set_text(lbl_exit, tr("退出确认 / Exit Confirmation", "Exit Confirmation"));
     apply_section_label(lbl_exit);
 
     lv_obj_t* row_exit = lv_obj_create(tab);
@@ -324,7 +332,7 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_add_state(gen_exit_sw, LV_STATE_CHECKED);
 
     lv_obj_t* lbl_exit_hint = lv_label_create(row_exit);
-    lv_label_set_text(lbl_exit_hint, i18n("退出托盘时弹窗确认", "Confirm before exit"));
+    lv_label_set_text(lbl_exit_hint, tr("退出托盘时弹窗确认", "Confirm before exit"));
     apply_hint_label(lbl_exit_hint);
 
     /* Divider */
@@ -336,7 +344,7 @@ static void build_general_tab(lv_obj_t* tab) {
 
     /* Security status section */
     lv_obj_t* lbl_sec = lv_label_create(tab);
-    lv_label_set_text(lbl_sec, i18n("安全状态 / Security", "Security / 安全状态"));
+    lv_label_set_text(lbl_sec, tr("安全状态 / Security", "Security / 安全状态"));
     apply_section_label(lbl_sec);
 
     lv_obj_t* sec_row = lv_obj_create(tab);
@@ -356,15 +364,13 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_led_on(sec_green);
 
     lv_obj_t* sec_label = lv_label_create(sec_row);
-    lv_label_set_text(sec_label, i18n("安全评分: 良好 (Green)", "Security: Good (Green)"));
+    lv_label_set_text(sec_label, tr("安全评分: 良好 (Green)", "Security: Good (Green)"));
     lv_obj_set_style_text_color(sec_label, lv_color_make(200, 205, 220), 0);
     lv_obj_set_style_text_font(sec_label, CJK_FONT, 0);
 
     /* Security detail items */
     lv_obj_t* lbl_sec_detail = lv_label_create(tab);
-    lv_label_set_text(lbl_sec_detail, i18n(
-        "API Key: OK | Port: 18789 | Config: Writable",
-        "API Key: OK | Port: 18789 | Config: Writable"));
+    lv_label_set_text(lbl_sec_detail, tr("API Key: OK | Port: 18789 | Config: Writable", "API Key: OK | Port: 18789 | Config: Writable"));
     apply_hint_label(lbl_sec_detail);
     lv_label_set_long_mode(lbl_sec_detail, LV_LABEL_LONG_WRAP);
 
@@ -384,7 +390,7 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_set_style_bg_grad_dir(btn_wizard, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_radius(btn_wizard, 8, 0);
     lv_obj_t* btn_wizard_lbl = lv_label_create(btn_wizard);
-    lv_label_set_text(btn_wizard_lbl, i18n("重新配置向导", "Reconfigure Wizard"));
+    lv_label_set_text(btn_wizard_lbl, tr("重新配置向导", "Reconfigure Wizard"));
     lv_obj_set_style_text_font(btn_wizard_lbl, CJK_FONT, 0);
     lv_obj_center(btn_wizard_lbl);
 }
@@ -404,7 +410,7 @@ static void build_account_tab(lv_obj_t* tab) {
     apply_section_label(lbl_key);
 
     lv_obj_t* lbl_hint = lv_label_create(tab);
-    lv_label_set_text(lbl_hint, i18n("在 openrouter.ai 获取 API Key", "Get your API key at openrouter.ai"));
+    lv_label_set_text(lbl_hint, tr("在 openrouter.ai 获取 API Key", "Get your API key at openrouter.ai"));
     apply_hint_label(lbl_hint);
 
     /* API Key input */
@@ -430,7 +436,7 @@ static void build_account_tab(lv_obj_t* tab) {
     lv_obj_set_style_bg_color(btn_show, lv_color_make(60, 65, 90), 0);
     lv_obj_set_style_radius(btn_show, 6, 0);
     lv_obj_t* btn_show_lbl = lv_label_create(btn_show);
-    lv_label_set_text(btn_show_lbl, i18n("显示 Key", "Show Key"));
+    lv_label_set_text(btn_show_lbl, tr("显示 Key", "Show Key"));
     lv_obj_set_style_text_font(btn_show_lbl, CJK_FONT, 0);
     lv_obj_center(btn_show_lbl);
 
@@ -439,7 +445,7 @@ static void build_account_tab(lv_obj_t* tab) {
     lv_obj_set_style_bg_color(btn_save, lv_color_make(40, 100, 180), 0);
     lv_obj_set_style_radius(btn_save, 6, 0);
     lv_obj_t* btn_save_lbl = lv_label_create(btn_save);
-    lv_label_set_text(btn_save_lbl, i18n("保存", "Save"));
+    lv_label_set_text(btn_save_lbl, tr("保存", "Save"));
     lv_obj_set_style_text_font(btn_save_lbl, CJK_FONT, 0);
     lv_obj_center(btn_save_lbl);
 
@@ -452,7 +458,7 @@ static void build_account_tab(lv_obj_t* tab) {
 
     /* Account info */
     lv_obj_t* lbl_info = lv_label_create(tab);
-    lv_label_set_text(lbl_info, i18n("账户信息将存储在本地配置文件中", "Account info stored in local config"));
+    lv_label_set_text(lbl_info, tr("账户信息将存储在本地配置文件中", "Account info stored in local config"));
     apply_hint_label(lbl_info);
 }
 
@@ -499,7 +505,7 @@ static void model_select_cb(lv_event_t* e) {
     if (label && model_current_label) {
         const char* text = lv_label_get_text(label);
         static char buf[256];
-        snprintf(buf, sizeof(buf), "%s: %s", i18n("当前模型", "Current Model"), text);
+        snprintf(buf, sizeof(buf), "%s: %s", tr("当前模型", "Current Model"), text);
         lv_label_set_text(model_current_label, buf);
     }
 }
@@ -512,22 +518,22 @@ static void build_model_tab(lv_obj_t* tab) {
 
     /* Current model display */
     lv_obj_t* lbl_current = lv_label_create(tab);
-    lv_label_set_text(lbl_current, i18n("当前选择", "Current Selection"));
+    lv_label_set_text(lbl_current, tr("当前选择", "Current Selection"));
     apply_section_label(lbl_current);
 
     model_current_label = lv_label_create(tab);
-    lv_label_set_text(model_current_label, i18n("当前模型: 未选择", "Current Model: None"));
+    lv_label_set_text(model_current_label, tr("当前模型: 未选择", "Current Model: None"));
     lv_obj_set_style_text_color(model_current_label, lv_color_make(220, 220, 230), 0);
     lv_obj_set_style_text_font(model_current_label, CJK_FONT, 0);
 
     /* Search box */
     lv_obj_t* lbl_search = lv_label_create(tab);
-    lv_label_set_text(lbl_search, i18n("搜索模型", "Search Models"));
+    lv_label_set_text(lbl_search, tr("搜索模型", "Search Models"));
     apply_section_label(lbl_search);
 
     model_search_ta = lv_textarea_create(tab);
     lv_textarea_set_one_line(model_search_ta, true);
-    lv_textarea_set_placeholder_text(model_search_ta, i18n("输入关键词过滤...", "Type to filter..."));
+    lv_textarea_set_placeholder_text(model_search_ta, tr("输入关键词过滤...", "Type to filter..."));
     lv_obj_set_width(model_search_ta, LV_PCT(100));
     lv_obj_set_height(model_search_ta, 38);
     apply_input_style(model_search_ta);
@@ -629,24 +635,24 @@ static void build_skills_tab(lv_obj_t* tab) {
 
     /* Title */
     lv_obj_t* lbl_title = lv_label_create(tab);
-    lv_label_set_text(lbl_title, i18n("技能管理 / Skills", "Skills / 技能管理"));
+    lv_label_set_text(lbl_title, tr("技能管理 / Skills", "Skills / 技能管理"));
     apply_section_label(lbl_title);
 
     /* Search box */
     lv_obj_t* lbl_search = lv_label_create(tab);
-    lv_label_set_text(lbl_search, i18n("搜索技能", "Search Skills"));
+    lv_label_set_text(lbl_search, tr("搜索技能", "Search Skills"));
     apply_section_label(lbl_search);
 
     lv_obj_t* skill_search = lv_textarea_create(tab);
     lv_textarea_set_one_line(skill_search, true);
-    lv_textarea_set_placeholder_text(skill_search, i18n("输入关键词...", "Type to filter..."));
+    lv_textarea_set_placeholder_text(skill_search, tr("输入关键词...", "Type to filter..."));
     lv_obj_set_width(skill_search, LV_PCT(100));
     lv_obj_set_height(skill_search, 38);
     apply_input_style(skill_search);
 
     /* Available skills list */
     lv_obj_t* lbl_avail = lv_label_create(tab);
-    lv_label_set_text(lbl_avail, i18n("可下载技能 / Available", "Available / 可下载"));
+    lv_label_set_text(lbl_avail, tr("可下载技能 / Available", "Available / 可下载"));
     apply_section_label(lbl_avail);
 
     lv_obj_t* skill_list = lv_list_create(tab);
@@ -684,7 +690,7 @@ static void build_skills_tab(lv_obj_t* tab) {
 
     /* P2-29: Installed skills with enable/disable toggles */
     lv_obj_t* lbl_installed = lv_label_create(tab);
-    lv_label_set_text(lbl_installed, i18n("已安装技能 / Installed", "Installed / 已安装"));
+    lv_label_set_text(lbl_installed, tr("已安装技能 / Installed", "Installed / 已安装"));
     apply_section_label(lbl_installed);
 
     lv_obj_t* installed_list = lv_list_create(tab);
@@ -720,7 +726,7 @@ static void build_skills_tab(lv_obj_t* tab) {
 
     /* Placeholder - no skills installed yet */
     lv_obj_t* lbl_empty = lv_label_create(installed_list);
-    lv_label_set_text(lbl_empty, i18n("暂无已安装技能", "No skills installed yet"));
+    lv_label_set_text(lbl_empty, tr("暂无已安装技能", "No skills installed yet"));
     lv_obj_set_style_text_color(lbl_empty, lv_color_make(120, 125, 140), 0);
     lv_obj_set_style_text_font(lbl_empty, CJK_FONT, 0);
 }
@@ -748,7 +754,7 @@ static void build_about_tab(lv_obj_t* tab) {
 
     /* Brand slogan */
     lv_obj_t* lbl_brand = lv_label_create(tab);
-    lv_label_set_text(lbl_brand, i18n("龙虾要吃蒜蓉的 - Your AI Assistant", "Garlic Lobster - Your AI Assistant"));
+    lv_label_set_text(lbl_brand, tr("龙虾要吃蒜蓉的 - Your AI Assistant", "Garlic Lobster - Your AI Assistant"));
     lv_obj_set_style_text_color(lbl_brand, lv_color_make(255, 200, 100), 0);
     lv_obj_set_style_text_font(lbl_brand, CJK_FONT, 0);
     lv_label_set_long_mode(lbl_brand, LV_LABEL_LONG_WRAP);
@@ -768,7 +774,7 @@ static void build_about_tab(lv_obj_t* tab) {
 
     /* Tech stack */
     lv_obj_t* lbl_tech = lv_label_create(tab);
-    lv_label_set_text(lbl_tech, i18n("技术栈", "Tech Stack"));
+    lv_label_set_text(lbl_tech, tr("技术栈", "Tech Stack"));
     apply_section_label(lbl_tech);
 
     lv_obj_t* lbl_stack = lv_label_create(tab);
@@ -791,7 +797,7 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_t* lbl_copy = lv_label_create(tab);
     /* P2-35: Config import/export */
     lv_obj_t* lbl_config = lv_label_create(tab);
-    lv_label_set_text(lbl_config, i18n("配置管理 / Config", "Config / 配置管理"));
+    lv_label_set_text(lbl_config, tr("配置管理 / Config", "Config / 配置管理"));
     apply_section_label(lbl_config);
 
     lv_obj_t* row_config = lv_obj_create(tab);
@@ -825,7 +831,7 @@ static void build_about_tab(lv_obj_t* tab) {
         }
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* l_exp = lv_label_create(btn_cfg_export);
-    lv_label_set_text(l_exp, i18n("导出配置", "Export Config"));
+    lv_label_set_text(l_exp, tr("导出配置", "Export Config"));
     lv_obj_set_style_text_font(l_exp, CJK_FONT, 0);
     lv_obj_center(l_exp);
 
@@ -852,7 +858,7 @@ static void build_about_tab(lv_obj_t* tab) {
         }
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* l_ver = lv_label_create(btn_ver_check);
-    lv_label_set_text(l_ver, i18n("检查技能更新", "Check Updates"));
+    lv_label_set_text(l_ver, tr("检查技能更新", "Check Updates"));
     lv_obj_set_style_text_font(l_ver, CJK_FONT, 0);
     lv_obj_center(l_ver);
 }
@@ -880,10 +886,10 @@ void ui_settings_open() {
         static char status_buf[256];
         const char* sts = "";
         switch (status) {
-            case ClawStatus::Running: sts = i18n("运行中 (绿色)", "Running (Green)"); break;
-            case ClawStatus::Detected: sts = i18n("已安装 (黄色)", "Detected (Yellow)"); break;
-            case ClawStatus::Error: sts = i18n("错误 (红色)", "Error (Red)"); break;
-            default: sts = i18n("未安装 (灰色)", "Not Installed (Gray)"); break;
+            case ClawStatus::Running: sts = tr("运行中 (绿色)", "Running (Green)"); break;
+            case ClawStatus::Detected: sts = tr("已安装 (黄色)", "Detected (Yellow)"); break;
+            case ClawStatus::Error: sts = tr("错误 (红色)", "Error (Red)"); break;
+            default: sts = tr("未安装 (灰色)", "Not Installed (Gray)"); break;
         }
         snprintf(status_buf, sizeof(status_buf), "%s", sts);
         lv_label_set_text(gen_status_label, status_buf);
@@ -935,7 +941,7 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_clear_flag(title_bar, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t* title = lv_label_create(title_bar);
-    lv_label_set_text(title, i18n("设置 / Settings", "Settings / 设置"));
+    lv_label_set_text(title, tr("设置 / Settings", "Settings / 设置"));
     lv_obj_set_style_text_color(title, g_colors->accent, 0);
     lv_obj_set_style_text_font(title, CJK_FONT, 0);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 15, 0);
@@ -969,11 +975,11 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_set_style_text_font(tab_btns, CJK_FONT, LV_PART_ITEMS);
 
     /* Create 5 tabs */
-    lv_obj_t* tab_gen = lv_tabview_add_tab(settings_tabs, i18n("常规", "General"));
-    lv_obj_t* tab_acc = lv_tabview_add_tab(settings_tabs, i18n("账号", "Account"));
-    lv_obj_t* tab_model = lv_tabview_add_tab(settings_tabs, i18n("模型", "Model"));
-    lv_obj_t* tab_skills = lv_tabview_add_tab(settings_tabs, i18n("技能", "Skills"));
-    lv_obj_t* tab_about = lv_tabview_add_tab(settings_tabs, i18n("关于", "About"));
+    lv_obj_t* tab_gen = lv_tabview_add_tab(settings_tabs, tr("常规", "General"));
+    lv_obj_t* tab_acc = lv_tabview_add_tab(settings_tabs, tr("账号", "Account"));
+    lv_obj_t* tab_model = lv_tabview_add_tab(settings_tabs, tr("模型", "Model"));
+    lv_obj_t* tab_skills = lv_tabview_add_tab(settings_tabs, tr("技能", "Skills"));
+    lv_obj_t* tab_about = lv_tabview_add_tab(settings_tabs, tr("关于", "About"));
 
     /* Build each tab */
     build_general_tab(tab_gen);

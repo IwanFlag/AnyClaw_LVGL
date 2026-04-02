@@ -57,6 +57,8 @@ set(SOURCES
     src/tray.cpp
     src/health.cpp
     src/autostart.cpp
+    src/lv_font_simhei_16.c
+    src/lv_font_mshy_16.c
     src/AnyClaw_LVGL.rc
 )
 
@@ -86,6 +88,7 @@ target_link_libraries(AnyClaw_LVGL PRIVATE
 
 target_compile_definitions(AnyClaw_LVGL PRIVATE
     LV_CONF_INCLUDE_SIMPLE
+    LV_LVGL_H_INCLUDE_SIMPLE
     _CRT_SECURE_NO_WARNINGS
     UNICODE
     _UNICODE
