@@ -20,8 +20,10 @@ extern const lv_font_t lv_font_mshy_16;
 static int WIN_W = 1088;    /* Updated at runtime in app_ui_init() */
 static int WIN_H = 680;     /* Updated at runtime in app_ui_init() */
 #define TITLE_H 48
-#define LEFT_PANEL_W 520
-static int RIGHT_PANEL_W = 800;  /* Updated at runtime: WIN_W - LEFT_PANEL_W - 30 */
+#define PANEL_GAP 20        /* Gap between panels */
+#define SPLITTER_W 6        /* Draggable splitter width */
+static int LEFT_PANEL_W = 272;   /* Dynamic: default 1/4 of 1088 (1:3 ratio) */
+static int RIGHT_PANEL_W = 816;  /* Dynamic: WIN_W - LEFT_PANEL_W - PANEL_GAP*2 */
 #define PANEL_TOP (TITLE_H + 8)
 static int PANEL_H = 450;    /* Updated at runtime: WIN_H - TITLE_H - FOOTER_H - 24 */
 #define FOOTER_H 30
@@ -296,6 +298,14 @@ static lv_obj_t* btn_close = nullptr;
 static lv_obj_t* lbl_maximize = nullptr;  /* Label inside maximize button, for icon swap */
 static bool g_maximized = false;          /* Track maximize state */
 
+/* Splitter / Resizable panels */
+static lv_obj_t* splitter = nullptr;
+static lv_obj_t* left_panel = nullptr;
+static lv_obj_t* right_panel = nullptr;
+static lv_obj_t* chat_cont = nullptr;      /* Chat outer container */
+static lv_obj_t* chat_cont2 = nullptr;     /* Chat inner flex container */
+static lv_obj_t* btn_send_widget = nullptr; /* Send button */
+
 /* P2: Task list dynamic widgets */
 static lv_obj_t* task_panel = nullptr;
 #define MAX_TASK_WIDGETS 5
@@ -428,6 +438,97 @@ static void title_drag_cb(lv_event_t* e) {
         }
     } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_LEAVE) {
         dragging = false;
+    }
+}
+
+/* ── Splitter relayout: update all panels and children ── */
+static void relayout_panels() {
+    if (!left_panel || !right_panel || !splitter) return;
+
+    RIGHT_PANEL_W = WIN_W - LEFT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W;
+    if (RIGHT_PANEL_W < 200) { RIGHT_PANEL_W = 200; LEFT_PANEL_W = WIN_W - RIGHT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W; }
+    if (LEFT_PANEL_W < 150) { LEFT_PANEL_W = 150; RIGHT_PANEL_W = WIN_W - LEFT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W; }
+
+    /* Move & resize left panel */
+    lv_obj_set_size(left_panel, LEFT_PANEL_W, PANEL_H);
+    lv_obj_set_pos(left_panel, 10, PANEL_TOP);
+
+    /* Move & resize splitter */
+    int split_x = 10 + LEFT_PANEL_W;
+    lv_obj_set_size(splitter, SPLITTER_W, PANEL_H);
+    lv_obj_set_pos(splitter, split_x, PANEL_TOP);
+
+    /* Move & resize right panel */
+    int right_x = split_x + SPLITTER_W + 10;
+    lv_obj_set_size(right_panel, RIGHT_PANEL_W, PANEL_H);
+    lv_obj_set_pos(right_panel, right_x, PANEL_TOP);
+
+    /* Re-layout right panel children that have explicit sizes */
+    int input_h = 66;
+    int log_h = 3 * 16 + 14;
+    int chat_y = 115;
+    int chat_h = PANEL_H - chat_y - input_h - log_h - 36;
+    int input_y = PANEL_H - input_h - log_h - 28;
+    int log_title_y = PANEL_H - log_h - 20;
+    int log_y = log_title_y + 20;
+
+    /* Use global widget pointers for relayout */
+    if (chat_cont) lv_obj_set_size(chat_cont, RIGHT_PANEL_W - 24, chat_h);
+    if (chat_cont2) lv_obj_set_size(chat_cont2, RIGHT_PANEL_W - 28, chat_h - 4);
+    if (chat_display) lv_obj_set_width(chat_display, RIGHT_PANEL_W - 40);
+    if (chat_input) {
+        lv_obj_set_size(chat_input, RIGHT_PANEL_W - 124, input_h);
+        lv_obj_set_pos(chat_input, 10, input_y);
+    }
+    if (btn_send_widget) {
+        lv_obj_set_size(btn_send_widget, 60, input_h);
+        lv_obj_set_pos(btn_send_widget, RIGHT_PANEL_W - 108, input_y);
+    }
+    if (log_panel) {
+        lv_obj_set_size(log_panel, RIGHT_PANEL_W - 24, log_h);
+        lv_obj_set_pos(log_panel, 10, log_y);
+    }
+
+    /* Update left panel children widths */
+    if (version_label) lv_obj_set_width(version_label, LEFT_PANEL_W - 30);
+    if (path_label) lv_obj_set_width(path_label, LEFT_PANEL_W - 30);
+    if (port_label) lv_obj_set_width(port_label, LEFT_PANEL_W - 30);
+
+    lv_obj_invalidate(lv_screen_active());
+}
+
+/* ── Splitter drag handler ── */
+static void splitter_drag_cb(lv_event_t* e) {
+    lv_event_code_t code = lv_event_get_code(e);
+    static int drag_start_x = 0;
+    static bool is_dragging = false;
+
+    if (code == LV_EVENT_PRESSED) {
+        is_dragging = true;
+        lv_indev_t* indev = lv_indev_get_act();
+        if (indev) {
+            lv_point_t p;
+            lv_indev_get_point(indev, &p);
+            drag_start_x = p.x;
+        }
+        /* Highlight splitter on press */
+        lv_obj_set_style_bg_color(splitter, lv_color_make(130, 170, 255), 0);
+    } else if (code == LV_EVENT_PRESSING && is_dragging) {
+        lv_indev_t* indev = lv_indev_get_act();
+        if (!indev) return;
+        lv_point_t p;
+        lv_indev_get_point(indev, &p);
+        int dx = p.x - drag_start_x;
+        drag_start_x = p.x;
+
+        LEFT_PANEL_W += dx;
+        relayout_panels();
+    } else if (code == LV_EVENT_RELEASED || code == LV_EVENT_LEAVE) {
+        is_dragging = false;
+        /* Reset splitter color */
+        const ThemeColors* c = g_colors;
+        lv_obj_set_style_bg_color(splitter, c->panel_border, 0);
+        app_log("[Splitter] Left panel width: %d, Right: %d", LEFT_PANEL_W, RIGHT_PANEL_W);
     }
 }
 
@@ -1156,7 +1257,8 @@ void app_ui_init() {
     }
     if (WIN_W < 800) WIN_W = 800;   /* Clamp to reasonable minimum */
     if (WIN_H < 500) WIN_H = 500;
-    RIGHT_PANEL_W = WIN_W - LEFT_PANEL_W - 30;
+    LEFT_PANEL_W = WIN_W / 4;   /* Default 1:3 ratio */
+    RIGHT_PANEL_W = WIN_W - LEFT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W;
     PANEL_H = WIN_H - TITLE_H - FOOTER_H - 24;
     if (PANEL_H < 300) PANEL_H = 300;
     printf("[UI] Layout: window=%dx%d, left=%d, right=%d, panel_h=%d\n",
@@ -1179,6 +1281,7 @@ void app_ui_init() {
 
     /* ═══ LEFT PANEL: Status ═══ */
     lv_obj_t* pl = lv_obj_create(scr);
+    left_panel = pl;  /* Store reference for splitter */
     lv_obj_set_size(pl, LEFT_PANEL_W, PANEL_H);
     lv_obj_set_pos(pl, 10, PANEL_TOP);
     lv_obj_set_style_bg_color(pl, c->panel, 0);
@@ -1261,10 +1364,29 @@ void app_ui_init() {
     /* Hint at bottom */
     lv_obj_t* hint = create_styled_label(pl, tr(STR_AUTOREFRESH), c->text_dim, 15, PANEL_H - 60, LEFT_PANEL_W - 30);
 
+    /* ═══ SPLITTER (draggable divider between panels) ═══ */
+    splitter = lv_obj_create(scr);
+    int split_x = 10 + LEFT_PANEL_W;
+    lv_obj_set_size(splitter, SPLITTER_W, PANEL_H);
+    lv_obj_set_pos(splitter, split_x, PANEL_TOP);
+    lv_obj_set_style_bg_color(splitter, c->panel_border, 0);
+    lv_obj_set_style_bg_opa(splitter, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(splitter, 0, 0);
+    lv_obj_set_style_radius(splitter, 3, 0);
+    lv_obj_set_style_pad_all(splitter, 0, 0);
+    lv_obj_clear_flag(splitter, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(splitter, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(splitter, LV_OBJ_FLAG_CHECKABLE);  /* For press visual */
+    lv_obj_add_event_cb(splitter, splitter_drag_cb, LV_EVENT_PRESSED, nullptr);
+    lv_obj_add_event_cb(splitter, splitter_drag_cb, LV_EVENT_PRESSING, nullptr);
+    lv_obj_add_event_cb(splitter, splitter_drag_cb, LV_EVENT_RELEASED, nullptr);
+    lv_obj_add_event_cb(splitter, splitter_drag_cb, LV_EVENT_LEAVE, nullptr);
+
     /* ═══ RIGHT PANEL: Controls ═══ */
     lv_obj_t* pr = lv_obj_create(scr);
+    right_panel = pr;  /* Store reference for splitter */
     lv_obj_set_size(pr, RIGHT_PANEL_W, PANEL_H);
-    lv_obj_set_pos(pr, LEFT_PANEL_W + 20, PANEL_TOP);
+    lv_obj_set_pos(pr, split_x + SPLITTER_W + 10, PANEL_TOP);
     lv_obj_set_style_bg_color(pr, c->panel, 0);
     lv_obj_set_style_bg_opa(pr, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(pr, 1, 0);
@@ -1304,7 +1426,7 @@ void app_ui_init() {
     int chat_y = 115;
     /* Chat fills from chat_y down to just above input+log at bottom */
     int chat_h = PANEL_H - chat_y - input_h - log_h - 36;  /* 36 = gaps + titles */
-    lv_obj_t* chat_cont = lv_obj_create(pr);
+    chat_cont = lv_obj_create(pr);
     lv_obj_set_size(chat_cont, RIGHT_PANEL_W - 24, chat_h);
     lv_obj_set_pos(chat_cont, 10, chat_y);
     lv_obj_set_style_bg_color(chat_cont, c->input_bg, 0);
@@ -1315,7 +1437,7 @@ void app_ui_init() {
     lv_obj_set_style_pad_all(chat_cont, 6, 0);
 
     /* P2-21: 消息气泡 - 使用滚动容器替代单一label */
-    lv_obj_t* chat_cont2 = lv_obj_create(chat_cont);
+    chat_cont2 = lv_obj_create(chat_cont);
     lv_obj_set_size(chat_cont2, RIGHT_PANEL_W - 20, chat_h);
     lv_obj_set_pos(chat_cont2, 10, chat_y);
     lv_obj_set_style_bg_opa(chat_cont2, LV_OPA_TRANSP, 0);
@@ -1360,17 +1482,17 @@ void app_ui_init() {
     lv_obj_add_event_cb(chat_input, chat_input_cb, LV_EVENT_KEY, nullptr);
 
     /* Send button */
-    lv_obj_t* btn_send = lv_button_create(pr);
-    lv_obj_set_size(btn_send, 60, input_h);
-    lv_obj_set_pos(btn_send, RIGHT_PANEL_W - 108, input_y);
-    lv_obj_set_style_bg_color(btn_send, lv_color_make(70, 130, 220), 0);
-    lv_obj_set_style_bg_opa(btn_send, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(btn_send, 6, 0);
-    lv_obj_set_style_border_width(btn_send, 1, 0);
-    lv_obj_set_style_border_color(btn_send, lv_color_make(100, 160, 255), 0);
-    lv_obj_add_event_cb(btn_send, chat_send_cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* lsend = lv_label_create(btn_send);
-    lv_obj_set_pos(btn_send, RIGHT_PANEL_W - 108, input_y);
+    btn_send_widget = lv_button_create(pr);
+    lv_obj_set_size(btn_send_widget, 60, input_h);
+    lv_obj_set_pos(btn_send_widget, RIGHT_PANEL_W - 108, input_y);
+    lv_obj_set_style_bg_color(btn_send_widget, lv_color_make(70, 130, 220), 0);
+    lv_obj_set_style_bg_opa(btn_send_widget, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(btn_send_widget, 6, 0);
+    lv_obj_set_style_border_width(btn_send_widget, 1, 0);
+    lv_obj_set_style_border_color(btn_send_widget, lv_color_make(100, 160, 255), 0);
+    lv_obj_add_event_cb(btn_send_widget, chat_send_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lsend = lv_label_create(btn_send_widget);
+    lv_obj_set_pos(btn_send_widget, RIGHT_PANEL_W - 108, input_y);
     lv_obj_set_style_text_font(lsend, CJK_FONT, 0);
     lv_obj_center(lsend);
 
