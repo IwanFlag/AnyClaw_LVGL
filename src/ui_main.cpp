@@ -526,9 +526,9 @@ static void relayout_panels() {
     }
 
     /* Update left panel children widths */
-    if (version_label) lv_obj_set_width(version_label, LEFT_PANEL_W - 30);
-    if (path_label) lv_obj_set_width(path_label, LEFT_PANEL_W - 30);
-    if (port_label) lv_obj_set_width(port_label, LEFT_PANEL_W - 30);
+    if (version_label) lv_obj_set_width(version_label, LEFT_PANEL_W + 20);
+    if (path_label) lv_obj_set_width(path_label, LEFT_PANEL_W + 20);
+    if (port_label) lv_obj_set_width(port_label, LEFT_PANEL_W + 20);
 
     lv_obj_invalidate(lv_screen_active());
 }
@@ -1179,37 +1179,7 @@ static void create_title_bar(lv_obj_t* scr) {
     lv_obj_set_style_text_font(title_label, CJK_FONT, 0);
     lv_obj_align(title_label, LV_ALIGN_LEFT_MID, 15, 0);
 
-    /* ═══ Language toggle button ═══ */
-    lv_obj_t* btn_lang_toggle = lv_button_create(title_bar);
-    lv_obj_set_size(btn_lang_toggle, 56, 30);
-    lv_obj_align(btn_lang_toggle, LV_ALIGN_LEFT_MID, 220, 0);
-    lv_obj_set_style_bg_color(btn_lang_toggle, lv_color_make(80, 200, 120), 0);
-    lv_obj_set_style_bg_opa(btn_lang_toggle, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(btn_lang_toggle, 6, 0);
-    lv_obj_set_style_border_width(btn_lang_toggle, 1, 0);
-    lv_obj_set_style_border_color(btn_lang_toggle, lv_color_make(120, 240, 160), 0);
-    lv_obj_add_event_cb(btn_lang_toggle, lang_toggle_cb, LV_EVENT_CLICKED, nullptr);
-    g_lang_toggle_label = lv_label_create(btn_lang_toggle);
-    lv_label_set_text(g_lang_toggle_label, (g_lang == Lang::CN) ? "CN" : "EN");
-    lv_obj_set_style_text_color(g_lang_toggle_label, lv_color_make(0, 0, 0), 0);
-    lv_obj_set_style_text_font(g_lang_toggle_label, CJK_FONT, 0);
-    lv_obj_center(g_lang_toggle_label);
-
-    /* ═══ Settings button (left side, after lang toggle) ═══ */
-    btn_settings = lv_button_create(title_bar);
-    lv_obj_set_size(btn_settings, 80, 32);
-    lv_obj_align(btn_settings, LV_ALIGN_LEFT_MID, 286, 0);
-    lv_obj_set_style_bg_color(btn_settings, lv_color_make(240, 160, 60), 0);
-    lv_obj_set_style_bg_opa(btn_settings, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(btn_settings, 8, 0);
-    lv_obj_set_style_border_width(btn_settings, 1, 0);
-    lv_obj_set_style_border_color(btn_settings, lv_color_make(255, 200, 100), 0);
-    lv_obj_add_event_cb(btn_settings, btn_settings_cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* lset = lv_label_create(btn_settings);
-    lv_label_set_text(lset, tr(STR_SETTINGS));
-    lv_obj_set_style_text_color(lset, lv_color_make(0, 0, 0), 0);
-    lv_obj_set_style_text_font(lset, CJK_FONT, 0);
-    lv_obj_center(lset);
+    /* EN language toggle button removed - default language is English */
 
     /* ═══ Window control buttons (top-right of title bar) ═══ */
     {
@@ -1367,9 +1337,9 @@ void app_ui_init() {
     lv_obj_align(status_label, LV_ALIGN_LEFT_MID, 55, 0);
 
     /* Version, Path, Port labels - use small 10px font for English-only info */
-    version_label = create_styled_label(pl, "Version: --", c->text_dim, 15, 85, LEFT_PANEL_W - 30);
-    path_label = create_styled_label(pl, "Path: --", c->text_dim, 15, 102, LEFT_PANEL_W - 30);
-    port_label = create_styled_label(pl, "Port: --", c->text_dim, 15, 119, LEFT_PANEL_W - 30);
+    version_label = create_styled_label(pl, "Version: --", c->text_dim, 15, 80, LEFT_PANEL_W + 20);
+    path_label = create_styled_label(pl, "Path: --", c->text_dim, 15, 100, LEFT_PANEL_W + 20);
+    port_label = create_styled_label(pl, "Port: --", c->text_dim, 15, 120, LEFT_PANEL_W + 20);
     lv_obj_set_style_text_font(version_label, &lv_font_montserrat_10, 0);
     lv_obj_set_style_text_font(path_label, &lv_font_montserrat_10, 0);
     lv_obj_set_style_text_font(port_label, &lv_font_montserrat_10, 0);
@@ -1460,13 +1430,21 @@ void app_ui_init() {
     btn_refresh = create_styled_button(pr, tr(STR_REFRESH), 10 + (btn_w + btn_gap) * 2, btn_y, btn_w, btn_h,
         c->btn_action, c->panel, btn_refresh_cb);
 
+    /* Settings button - 2nd row, centered */
+    int btn_settings_w = 200;
+    int btn_settings_h = 36;
+    btn_settings = create_styled_button(pr, tr(STR_SETTINGS), 
+        (RIGHT_PANEL_W - btn_settings_w) / 2, btn_y + btn_h + 10, 
+        btn_settings_w, btn_settings_h,
+        lv_color_make(240, 160, 60), c->panel, btn_settings_cb);
+
     /* Chat bubble area title with icon */
-    lv_obj_t* chat_title = create_styled_label(pr, tr(STR_CHAT), lv_color_make(130, 170, 240), 8, 95, 200);
+    lv_obj_t* chat_title = create_styled_label(pr, tr(STR_CHAT), lv_color_make(130, 170, 240), 8, 145, 200);
 
     /* Layout: adaptive sizing — chat fills space, log pinned to bottom (3 lines) */
     int input_h = 66;   /* 3行高度输入框 */
     int log_h = 3 * 16 + 14;  /* 3行日志 */
-    int chat_y = 115;
+    int chat_y = 160;
     /* Chat fills from chat_y down to just above input+log at bottom */
     int chat_h = PANEL_H - chat_y - input_h - log_h - 36;  /* 36 = gaps + titles */
     chat_cont = lv_obj_create(pr);
