@@ -1,5 +1,6 @@
 #include "tray.h"
 #include "app.h"
+#include "lang.h"
 #include <shellapi.h>
 #include <cstdio>
 #include <cstring>
@@ -65,30 +66,36 @@ static HICON create_color_icon(COLORREF color, int size = 16) {
 static HMENU create_tray_menu(TrayState state) {
     HMENU hMenu = CreatePopupMenu();
 
-    /* Status display item (disabled) */
-    const char* statusText = "● OpenClaw — 未知";
+    /* Status display item (disabled) — single language per PRD 2.1 */
+    const char* statusText = (g_lang == Lang::CN) ? "● OpenClaw — 未知" : "● OpenClaw — Unknown";
     switch (state) {
-        case TrayState::Green:  statusText = "● OpenClaw — 运行中"; break;
-        case TrayState::Yellow: statusText = "● OpenClaw — 检测中..."; break;
-        case TrayState::Red:    statusText = "● OpenClaw — 异常"; break;
-        case TrayState::Gray:   statusText = "● OpenClaw — 未配置"; break;
+        case TrayState::Green:  statusText = (g_lang == Lang::CN) ? "● OpenClaw — 运行中" : "● OpenClaw — Running"; break;
+        case TrayState::Yellow: statusText = (g_lang == Lang::CN) ? "● OpenClaw — 检测中..." : "● OpenClaw — Checking..."; break;
+        case TrayState::Red:    statusText = (g_lang == Lang::CN) ? "● OpenClaw — 异常" : "● OpenClaw — Error"; break;
+        case TrayState::Gray:   statusText = (g_lang == Lang::CN) ? "● OpenClaw — 未配置" : "● OpenClaw — Not Configured"; break;
     }
     AppendMenuA(hMenu, MF_STRING | MF_GRAYED, IDM_TRAY_BASE, statusText);
     AppendMenuA(hMenu, MF_SEPARATOR, 0, nullptr);
 
-    AppendMenuA(hMenu, MF_STRING, IDM_OPEN_SETTINGS, "打开设置 / Settings");
-    AppendMenuA(hMenu, MF_STRING, IDM_RESTART_OC, "重启 OpenClaw");
-    AppendMenuA(hMenu, MF_STRING, IDM_VIEW_LOGS, "查看日志 / Logs");
+    AppendMenuA(hMenu, MF_STRING, IDM_OPEN_SETTINGS,
+        (g_lang == Lang::CN) ? "打开设置" : "Settings");
+    AppendMenuA(hMenu, MF_STRING, IDM_RESTART_OC,
+        (g_lang == Lang::CN) ? "重启 OpenClaw" : "Restart OpenClaw");
+    AppendMenuA(hMenu, MF_STRING, IDM_VIEW_LOGS,
+        (g_lang == Lang::CN) ? "查看日志" : "Logs");
     AppendMenuA(hMenu, MF_SEPARATOR, 0, nullptr);
 
     /* Auto-start checkbox - read from registry */
     UINT flags = MF_STRING;
     if (g_autoStartChecked) flags |= MF_CHECKED;
-    AppendMenuA(hMenu, flags, IDM_AUTO_START, "开机自启 / Auto Start");
+    AppendMenuA(hMenu, flags, IDM_AUTO_START,
+        (g_lang == Lang::CN) ? "开机自启" : "Auto Start");
     AppendMenuA(hMenu, MF_SEPARATOR, 0, nullptr);
 
-    AppendMenuA(hMenu, MF_STRING, IDM_ABOUT, "关于 / About");
-    AppendMenuA(hMenu, MF_STRING, IDM_EXIT, "退出 / Exit");
+    AppendMenuA(hMenu, MF_STRING, IDM_ABOUT,
+        (g_lang == Lang::CN) ? "关于" : "About");
+    AppendMenuA(hMenu, MF_STRING, IDM_EXIT,
+        (g_lang == Lang::CN) ? "退出" : "Exit");
 
     return hMenu;
 }
@@ -131,7 +138,8 @@ static LRESULT CALLBACK tray_wndproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             app_stop_gateway();
             Sleep(1000);
             app_start_gateway();
-            tray_balloon("OpenClaw", "正在重启 Gateway...", 3000);
+            tray_balloon("OpenClaw",
+                (g_lang == Lang::CN) ? "正在重启 Gateway..." : "Restarting Gateway...", 3000);
             break;
         case IDM_VIEW_LOGS:
             tray_show_window(true);
@@ -142,13 +150,23 @@ static LRESULT CALLBACK tray_wndproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             set_auto_start(g_autoStartChecked);
             break;
         case IDM_ABOUT:
-            MessageBoxA(hwnd,
-                "AnyClaw LVGL v2.0\n\n"
-                "OpenClaw Desktop Manager\n"
-                "基于 LVGL 9.x + SDL2\n\n"
-                "Copyright © 2026",
-                "关于 AnyClaw",
-                MB_ICONINFORMATION | MB_OK);
+            if (g_lang == Lang::CN) {
+                MessageBoxA(hwnd,
+                    "AnyClaw LVGL v2.0\n\n"
+                    "OpenClaw 桌面管理器\n"
+                    "基于 LVGL 9.x + SDL2\n\n"
+                    "Copyright © 2026",
+                    "关于 AnyClaw",
+                    MB_ICONINFORMATION | MB_OK);
+            } else {
+                MessageBoxA(hwnd,
+                    "AnyClaw LVGL v2.0\n\n"
+                    "OpenClaw Desktop Manager\n"
+                    "Built with LVGL 9.x + SDL2\n\n"
+                    "Copyright © 2026",
+                    "About AnyClaw",
+                    MB_ICONINFORMATION | MB_OK);
+            }
             break;
         case IDM_EXIT: {
             /* P2-26: Check exit confirmation toggle */
@@ -156,8 +174,10 @@ static LRESULT CALLBACK tray_wndproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             bool need_confirm = is_exit_confirmation_enabled();
             if (need_confirm) {
                 int result = MessageBoxA(hwnd,
-                    "确定要退出 AnyClaw 吗？\n\n退出后将同时停止 OpenClaw Gateway 服务。",
-                    "退出确认",
+                    (g_lang == Lang::CN)
+                        ? "确定要退出 AnyClaw 吗？\n\n退出后将同时停止 OpenClaw Gateway 服务。"
+                        : "Are you sure you want to exit AnyClaw?\n\nExiting will also stop the OpenClaw Gateway service.",
+                    (g_lang == Lang::CN) ? "退出确认" : "Exit Confirmation",
                     MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
                 if (result != IDYES) return 0;
             }
@@ -231,10 +251,10 @@ void tray_set_state(TrayState state) {
     COLORREF color;
     const wchar_t* tip;
     switch (state) {
-        case TrayState::Green:  color = RGB(0, 200, 0);   tip = L"AnyClaw — 运行中"; break;
-        case TrayState::Yellow: color = RGB(255, 200, 0);  tip = L"AnyClaw — 检测中"; break;
-        case TrayState::Red:    color = RGB(220, 40, 40);  tip = L"AnyClaw — 异常"; break;
-        case TrayState::Gray:   color = RGB(180, 180, 180); tip = L"AnyClaw — 未配置"; break;
+        case TrayState::Green:  color = RGB(0, 200, 0);    tip = (g_lang == Lang::CN) ? L"AnyClaw — 运行中" : L"AnyClaw — Running"; break;
+        case TrayState::Yellow: color = RGB(255, 200, 0);   tip = (g_lang == Lang::CN) ? L"AnyClaw — 检测中" : L"AnyClaw — Checking"; break;
+        case TrayState::Red:    color = RGB(220, 40, 40);   tip = (g_lang == Lang::CN) ? L"AnyClaw — 异常" : L"AnyClaw — Error"; break;
+        case TrayState::Gray:   color = RGB(180, 180, 180); tip = (g_lang == Lang::CN) ? L"AnyClaw — 未配置" : L"AnyClaw — Not Configured"; break;
     }
 
     HICON hNewIcon = create_color_icon(color);
