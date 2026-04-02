@@ -1366,6 +1366,7 @@ void app_ui_init() {
 
     /* P2-23: 清除聊天历史按钮 */
     static const I18n STR_CLEAR = {"Clear", "清除"};
+    lv_obj_t* btn_clear = lv_button_create(lv_obj_get_parent(btn_send));
     lv_obj_set_pos(btn_clear, RIGHT_PANEL_W - 40, input_y);
     lv_obj_set_size(btn_clear, 32, input_h);
     lv_obj_set_size(btn_clear, 32, input_h);
@@ -1406,9 +1407,9 @@ void app_ui_init() {
 
     /* P2-36: Log export button - REMOVED (not needed on homepage) */
 
-    /* Log panel */
+    /* Log panel - 显示3行日志 */
     int log_y = log_title_y + 20;
-    int log_h = PANEL_H - log_y - 15;
+    int log_h = 3 * 16 + 14;  /* 3行 * 16px字体 + 上下padding */
     log_panel = lv_obj_create(pr);
     lv_obj_set_size(log_panel, RIGHT_PANEL_W - 24, log_h);
     lv_obj_set_pos(log_panel, 10, log_y);
