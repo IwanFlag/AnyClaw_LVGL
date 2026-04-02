@@ -1035,10 +1035,10 @@ static void create_title_bar(lv_obj_t* scr) {
     lv_obj_set_style_text_font(title_label, CJK_FONT, 0);
     lv_obj_align(title_label, LV_ALIGN_LEFT_MID, 15, 0);
 
-    /* ═══ Window Control Buttons - LEFT side for guaranteed visibility ═══ */
+    /* ═══ Window Control Buttons - RIGHT corner ═══ */
     int wc_btn_size = 36;
     int wc_btn_gap = 6;
-    int wc_x = 370;  /* Start after Settings button */
+    int wc_x = 830;  /* Right corner: 3 buttons (36*3 + 6*2=120) + 10px margin from right edge (960-120-10=830) */
 
     /* ═══ Minimize button ═══ */
     btn_minimize = lv_button_create(title_bar);
