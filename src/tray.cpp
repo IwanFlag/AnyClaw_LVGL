@@ -8,7 +8,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
-#include <vector>
+#include <list>
 #include <uxtheme.h>
 
 #define TRAY_ICON_UID   1
@@ -33,7 +33,7 @@ struct MenuItemData {
     UINT id;
 };
 
-static std::vector<MenuItemData> g_menuItems;
+static std::list<MenuItemData> g_menuItems;
 
 /* ── Theme colors as GDI COLORREF ────────────────────────────────── */
 static COLORREF theme_bg()       { return RGB(0x1A, 0x1E, 0x2E); }
