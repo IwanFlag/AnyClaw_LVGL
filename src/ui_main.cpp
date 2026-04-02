@@ -1205,6 +1205,8 @@ static void create_title_bar(lv_obj_t* scr) {
         lv_obj_set_style_radius(btn_minimize, 6, 0);
         lv_obj_set_style_border_width(btn_minimize, 1, 0);
         lv_obj_set_style_border_color(btn_minimize, lv_color_make(200, 200, 220), 0);
+        /* Fix: Clear CLICK_FOCUSABLE so first click triggers the callback immediately */
+        lv_obj_clear_flag(btn_minimize, LV_OBJ_FLAG_CLICK_FOCUSABLE);
         lv_obj_add_event_cb(btn_minimize, btn_minimize_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_t* lbl_min = lv_label_create(btn_minimize);
         lv_label_set_text(lbl_min, "-");
@@ -1220,6 +1222,7 @@ static void create_title_bar(lv_obj_t* scr) {
         lv_obj_set_style_radius(btn_maximize, 6, 0);
         lv_obj_set_style_border_width(btn_maximize, 1, 0);
         lv_obj_set_style_border_color(btn_maximize, lv_color_make(100, 160, 255), 0);
+        lv_obj_clear_flag(btn_maximize, LV_OBJ_FLAG_CLICK_FOCUSABLE);
         lv_obj_add_event_cb(btn_maximize, btn_maximize_cb, LV_EVENT_CLICKED, nullptr);
         lbl_maximize = lv_label_create(btn_maximize);
         lv_label_set_text(lbl_maximize, "[]");
@@ -1235,6 +1238,7 @@ static void create_title_bar(lv_obj_t* scr) {
         lv_obj_set_style_radius(btn_close, 6, 0);
         lv_obj_set_style_border_width(btn_close, 1, 0);
         lv_obj_set_style_border_color(btn_close, lv_color_make(255, 120, 120), 0);
+        lv_obj_clear_flag(btn_close, LV_OBJ_FLAG_CLICK_FOCUSABLE);
         lv_obj_add_event_cb(btn_close, btn_close_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_t* lbl_cls = lv_label_create(btn_close);
         lv_label_set_text(lbl_cls, "X");

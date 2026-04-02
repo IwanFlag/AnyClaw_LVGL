@@ -9,6 +9,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <uxtheme.h>
 
 #define TRAY_ICON_UID   1
 #define WINDOW_CLASS    L"AnyClaw_TrayWnd"
@@ -179,21 +180,21 @@ static void on_measure_item(LPMEASUREITEMSTRUCT mis) {
     if (!data) return;
 
     if (data->isSeparator) {
-        mis->itemHeight = 8;
-        mis->itemWidth = 160;
+        mis->itemHeight = 6;
+        mis->itemWidth = 80;
         return;
     }
 
     HDC hdc = GetDC(nullptr);
-    HFONT oldFont = (HFONT)SelectObject(hdc, get_cjk_font());
+    HFONT oldFont = (HFONT)SelectObject(hdc, get_cjk_font(-12));
     SIZE sz = {};
     int len = (int)data->text.size();
     GetTextExtentPoint32W(hdc, data->text.c_str(), len, &sz);
     SelectObject(hdc, oldFont);
     ReleaseDC(nullptr, hdc);
 
-    mis->itemWidth = (UINT)(sz.cx + 48);
-    mis->itemHeight = 30;
+    mis->itemWidth = (UINT)(sz.cx + 24);
+    mis->itemHeight = 24;
 }
 
 /* ── WM_DRAWITEM ─────────────────────────────────────────────────── */
@@ -224,15 +225,15 @@ static void on_draw_item(LPDRAWITEMSTRUCT dis) {
 
     if (data->isChecked) {
         RECT checkRc = rc;
-        checkRc.right = checkRc.left + 24;
+        checkRc.right = checkRc.left + 18;
         DrawTextW(hdc, L"\x2713", 1, &checkRc,
                   DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
 
-    HFONT oldFont = (HFONT)SelectObject(hdc, get_cjk_font());
+    HFONT oldFont = (HFONT)SelectObject(hdc, get_cjk_font(-12));
     RECT textRc = rc;
-    textRc.left += 28;
-    textRc.right -= 8;
+    textRc.left += 20;
+    textRc.right -= 6;
     int tlen = (int)data->text.size();
     DrawTextW(hdc, data->text.c_str(), tlen, &textRc,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
@@ -356,8 +357,9 @@ static void show_about_dialog(HWND parent) {
     h = CreateWindowW(L"BUTTON",
         (g_lang == Lang::CN) ? L"确定" : L"OK",
         WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
-        (W - 90) / 2, H - 65, 90, 34, hDlg, (HMENU)IDOK, g_hInst, nullptr);
+        (W - 90) / 2, H - 80, 90, 34, hDlg, (HMENU)IDOK, g_hInst, nullptr);
     SendMessage(h, WM_SETFONT, (WPARAM)hf, TRUE);
+    SetWindowTheme(h, L"", L"");
 
     ShowWindow(hDlg, SW_SHOW);
     SetForegroundWindow(hDlg);
@@ -472,6 +474,7 @@ static bool show_exit_dialog(HWND parent) {
         WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
         80, 120, 90, 34, hDlg, (HMENU)IDYES, g_hInst, nullptr);
     SendMessage(h, WM_SETFONT, (WPARAM)hf, TRUE);
+    SetWindowTheme(h, L"", L"");
 
     /* Cancel button */
     h = CreateWindowW(L"BUTTON",
@@ -479,6 +482,7 @@ static bool show_exit_dialog(HWND parent) {
         WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
         210, 120, 90, 34, hDlg, (HMENU)IDNO, g_hInst, nullptr);
     SendMessage(h, WM_SETFONT, (WPARAM)hf, TRUE);
+    SetWindowTheme(h, L"", L"");
 
     ShowWindow(hDlg, SW_SHOW);
     SetForegroundWindow(hDlg);
@@ -506,12 +510,22 @@ static HMENU create_tray_menu(TrayState state) {
     g_menuItems.clear();
     HMENU hMenu = CreatePopupMenu();
 
-    const wchar_t* statusText = L"\x25CF OpenClaw \x2014 \x672A\x77E5";
-    switch (state) {
-        case TrayState::Green:  statusText = L"\x25CF OpenClaw \x2014 \x8FD0\x884C\x4E2D"; break;
-        case TrayState::Yellow: statusText = L"\x25CF OpenClaw \x2014 \x68C0\x6D4B\x4E2D..."; break;
-        case TrayState::Red:    statusText = L"\x25CF OpenClaw \x2014 \x5F02\x5E38"; break;
-        case TrayState::Gray:   statusText = L"\x25CF OpenClaw \x2014 \x672A\x914D\x7F6E"; break;
+    const wchar_t* statusText = L"\x25CF Status (Unknown)";
+    if (g_lang == Lang::CN) {
+        statusText = L"\x25CF OpenClaw \x2014 \x672A\x77E5";
+        switch (state) {
+            case TrayState::Green:  statusText = L"\x25CF OpenClaw \x2014 \x8FD0\x884C\x4E2D"; break;
+            case TrayState::Yellow: statusText = L"\x25CF OpenClaw \x2014 \x68C0\x6D4B\x4E2D..."; break;
+            case TrayState::Red:    statusText = L"\x25CF OpenClaw \x2014 \x5F02\x5E38"; break;
+            case TrayState::Gray:   statusText = L"\x25CF OpenClaw \x2014 \x672A\x914D\x7F6E"; break;
+        }
+    } else {
+        switch (state) {
+            case TrayState::Green:  statusText = L"\x25CF Status (Running)"; break;
+            case TrayState::Yellow: statusText = L"\x25CF Status (Checking...)"; break;
+            case TrayState::Red:    statusText = L"\x25CF Status (Error)"; break;
+            case TrayState::Gray:   statusText = L"\x25CF Status (Not Configured)"; break;
+        }
     }
     append_owner_item(hMenu, IDM_TRAY_BASE, statusText, true);
     append_owner_sep(hMenu);

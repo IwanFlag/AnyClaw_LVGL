@@ -81,6 +81,7 @@ target_link_libraries(AnyClaw_LVGL PRIVATE
     version
     setupapi
     kernel32
+    uxtheme
 )
 
 target_compile_definitions(AnyClaw_LVGL PRIVATE
