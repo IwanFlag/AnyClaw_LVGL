@@ -1334,7 +1334,7 @@ void app_ui_init() {
     int input_h = 66;  /* 3行高度: ~22px per line + padding */
 
     chat_input = lv_textarea_create(pr);
-    lv_obj_set_size(chat_input, RIGHT_PANEL_W - 116, input_h);
+    lv_obj_set_size(chat_input, RIGHT_PANEL_W - 124, input_h);
     lv_obj_set_pos(chat_input, 10, input_y);
     lv_textarea_set_placeholder_text(chat_input, tr(STR_CHAT_INPUT));
     /* P2-22: 多行输入 - 3行高度 */
@@ -1346,13 +1346,13 @@ void app_ui_init() {
     lv_obj_set_style_border_color(chat_input, c->panel_border, 0);
     lv_obj_set_style_border_width(chat_input, 1, 0);
     lv_obj_set_style_radius(chat_input, 6, 0);
-    lv_obj_set_style_pad_all(chat_input, 6, 0);
+    lv_obj_set_size(chat_input, RIGHT_PANEL_W - 124, input_h);  /* room for Send(60)+Clear(32)+gaps(2*8) */
     lv_obj_add_event_cb(chat_input, chat_input_cb, LV_EVENT_READY, nullptr);
 
     /* Send button */
     lv_obj_t* btn_send = lv_button_create(pr);
     lv_obj_set_size(btn_send, 60, input_h);
-    lv_obj_set_pos(btn_send, RIGHT_PANEL_W - 100, input_y);
+    lv_obj_set_pos(btn_send, RIGHT_PANEL_W - 108, input_y);
     lv_obj_set_style_bg_color(btn_send, lv_color_make(70, 130, 220), 0);
     lv_obj_set_style_bg_opa(btn_send, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(btn_send, 6, 0);
@@ -1360,15 +1360,15 @@ void app_ui_init() {
     lv_obj_set_style_border_color(btn_send, lv_color_make(100, 160, 255), 0);
     lv_obj_add_event_cb(btn_send, chat_send_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lsend = lv_label_create(btn_send);
-    lv_label_set_text(lsend, tr(STR_SEND));
+    lv_obj_set_pos(btn_send, RIGHT_PANEL_W - 108, input_y);
     lv_obj_set_style_text_font(lsend, CJK_FONT, 0);
     lv_obj_center(lsend);
 
     /* P2-23: 清除聊天历史按钮 */
     static const I18n STR_CLEAR = {"Clear", "清除"};
-    lv_obj_t* btn_clear = lv_button_create(pr);
+    lv_obj_set_pos(btn_clear, RIGHT_PANEL_W - 40, input_y);
     lv_obj_set_size(btn_clear, 32, input_h);
-    lv_obj_set_pos(btn_clear, RIGHT_PANEL_W - 32, input_y);
+    lv_obj_set_size(btn_clear, 32, input_h);
     lv_obj_set_style_bg_color(btn_clear, lv_color_make(200, 70, 70), 0);
     lv_obj_set_style_bg_opa(btn_clear, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(btn_clear, 6, 0);
