@@ -4766,7 +4766,7 @@ static lv_font_fmt_txt_dsc_t font_dsc = {
     .cmap_num = 2,
     .bpp = 4,
     .kern_classes = 0,
-    .bitmap_format = 1,
+    .bitmap_format = 0,
 #if LVGL_VERSION_MAJOR == 8
     .cache = &cache
 #endif

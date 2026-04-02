@@ -145,7 +145,7 @@ def gen():
         f.write("#if LVGL_VERSION_MAJOR >= 8\nstatic const lv_font_fmt_txt_dsc_t font_dsc = {\n#else\nstatic lv_font_fmt_txt_dsc_t font_dsc = {\n#endif\n")
         f.write("    .glyph_bitmap = glyph_bitmap, .glyph_dsc = glyph_dsc, .cmaps = cmaps,\n")
         f.write("    .kern_dsc = NULL, .kern_scale = 0, .cmap_num = %d, .bpp = %d,\n" % (len(cmap_lines), BPP))
-        f.write("    .kern_classes = 0, .bitmap_format = 1,\n")
+        f.write("    .kern_classes = 0, .bitmap_format = 0,\n")
         f.write("#if LVGL_VERSION_MAJOR == 8\n    .cache = &cache\n#endif\n};\n\n")
         
         # Font
