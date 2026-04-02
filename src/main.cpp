@@ -8,6 +8,7 @@
 #include "drivers/sdl/lv_sdl_window.h"
 #include "drivers/sdl/lv_sdl_mouse.h"
 #include "drivers/sdl/lv_sdl_keyboard.h"
+#include "drivers/sdl/lv_sdl_private.h"
 #include <cstdio>
 #include <windows.h>
 #include <windowsx.h>
@@ -19,6 +20,26 @@
 /* Expose for ui_main.cpp window drag */
 static SDL_Window* g_window = nullptr;
 SDL_Window* app_get_window() { return g_window; }
+
+/* Expose runtime CJK font for ui_settings.cpp */
+extern lv_font_t* g_cjk_font;
+extern lv_font_t* g_cjk_font_small;
+lv_font_t* app_get_cjk_font() { 
+    static int printed = 0;
+    if (!printed) {
+        printf("[FONT] app_get_cjk_font() called, g_cjk_font=%p\n", (void*)g_cjk_font); fflush(stdout);
+        printed = 1;
+    }
+    return g_cjk_font; 
+}
+lv_font_t* app_get_cjk_font_small() { 
+    static int printed = 0;
+    if (!printed) {
+        printf("[FONT] app_get_cjk_font_small() called\n"); fflush(stdout);
+        printed = 1;
+    }
+    return g_cjk_font_small; 
+}
 
 /* Get HWND from SDL_Window */
 static HWND getNativeWindowHandle(SDL_Window* window) {
@@ -106,8 +127,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    /* P2-34: 发布版自动隐藏 Console 窗口，开发版保留 */
-#ifdef _DEBUG
+    /* Always show console for debug output */
     ::AllocConsole();
     ::freopen("CONOUT$", "w", stdout);
     ::freopen("CONOUT$", "w", stderr);
@@ -119,10 +139,6 @@ int main(int argc, char* argv[]) {
             ::MoveWindow(hCon, 0, 800, 500, 150, TRUE);
         }
     }
-#else
-    /* Release: no console window */
-    FreeConsole();
-#endif
 
     HINSTANCE hInstance = GetModuleHandle(nullptr);
 
@@ -183,6 +199,11 @@ int main(int argc, char* argv[]) {
     (void)mouse;
     (void)keyboard;
 
+    /* Create input group for keyboard -> textarea focus */
+    lv_group_t* grp = lv_group_create();
+    lv_group_set_default(grp);
+    lv_indev_set_group(keyboard, grp);
+
     /* Create UI */
     app_ui_init();
 
@@ -201,44 +222,7 @@ int main(int argc, char* argv[]) {
         lv_timer_handler();
         tray_process_messages();
 
-        /* Process SDL events */
-        {
-            SDL_Event ev;
-            while (SDL_PollEvent(&ev)) {
-                if (ev.type == SDL_QUIT) {
-                    /* P2-03: Save window position before minimizing */
-                    extern void save_theme_config();
-                    save_theme_config();
-                    /* Minimize to tray instead of quitting */
-                    tray_show_window(false);
-                    printf("[MAIN] Window minimized to tray\n");
-                }
-                /* Handle window maximize/restore events from OS */
-                if (ev.type == SDL_WINDOWEVENT) {
-                    if (ev.window.event == SDL_WINDOWEVENT_MAXIMIZED) {
-                        extern void ui_on_window_maximized();
-                        ui_on_window_maximized();
-                    } else if (ev.window.event == SDL_WINDOWEVENT_RESTORED) {
-                        extern void ui_on_window_restored();
-                        ui_on_window_restored();
-                    }
-                }
-                /* Keyboard shortcuts */
-                if (ev.type == SDL_KEYDOWN) {
-                    extern void ui_settings_open();
-                    extern void ui_settings_close();
-                    extern bool ui_settings_is_open();
-                    switch (ev.key.keysym.sym) {
-                        case SDLK_F8:
-                            if (!ui_settings_is_open()) ui_settings_open();
-                            break;
-                        case SDLK_ESCAPE:
-                            if (ui_settings_is_open()) ui_settings_close();
-                            break;
-                    }
-                }
-            }
-        }
+        /* SDL events handled by LVGL internal timer - no manual poll */
 
         SDL_Delay(5);
     }

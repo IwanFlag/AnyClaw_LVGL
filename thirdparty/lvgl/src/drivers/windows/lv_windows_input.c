@@ -699,9 +699,11 @@ bool lv_windows_keypad_device_window_message_handler(
                         if(object_class == &lv_textarea_class) {
                             textarea_object = focused_object;
                         }
+#if LV_USE_KEYBOARD
                         else if(object_class == &lv_keyboard_class) {
                             textarea_object = lv_keyboard_get_textarea(focused_object);
                         }
+#endif
                     }
 
                     COMPOSITIONFORM composition_form;

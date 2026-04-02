@@ -42,6 +42,10 @@ void set_auto_start(bool enable);
 struct SDL_Window;
 SDL_Window* app_get_window();
 
+/* Runtime font access (for ui_settings.cpp) */
+lv_font_t* app_get_cjk_font();
+lv_font_t* app_get_cjk_font_small();
+
 /* Settings UI functions */
 void ui_settings_init(lv_obj_t* parent);
 void ui_settings_open();

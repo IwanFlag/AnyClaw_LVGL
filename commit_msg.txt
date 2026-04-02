@@ -1,5 +1,0 @@
-Fix: window control buttons require two clicks to trigger
-
-Root cause: LVGL 9.x sets LV_OBJ_FLAG_CLICK_FOCUSABLE on all objects by default.
-First click sets focus, second click triggers LV_EVENT_CLICKED.
-Fix: Clear this flag on btn_minimize, btn_maximize, btn_close.

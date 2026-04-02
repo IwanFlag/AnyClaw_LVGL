@@ -15,36 +15,44 @@
 
 /* ═══ System Font: Load Windows 微软雅黑 at runtime ═══ */
 #include "libs/tiny_ttf/lv_tiny_ttf.h"
-static lv_font_t* g_cjk_font = nullptr;
-static lv_font_t* g_cjk_font_small = nullptr;
+lv_font_t* g_cjk_font = nullptr;
+lv_font_t* g_cjk_font_small = nullptr;
 
 static void init_system_font() {
-    /* Try TrueType-outline fonts (stb_truetype doesn't support CFF/Type2 outlines) */
+    /* Try TrueType fonts from Windows system (stb_truetype: no .ttc support) */
     const char* font_paths[] = {
-        "C:/Windows/Fonts/simhei.ttf",               /* SimHei - TrueType outlines ✓ */
-        "C:/Windows/Fonts/simsunb.ttf",              /* SimSun (Song) - TrueType */
-        "C:/Windows/Fonts/simfang.ttf",              /* SimFang (FangSong) */
-        "C:/Windows/Fonts/simkai.ttf",               /* SimKai (KaiTi) */
-        "C:/Windows/Fonts/STSONG.TTF",               /* STSong */
-        "C:/Windows/Fonts/STXIHEI.TTF",              /* STXiHei */
-        "C:/Users/thundersoft/.openclaw/workspace/AnyClaw_LVGL/msyh_0.ttf",  /* msyh (may fail: CFF) */
+        "C:/Users/thundersoft/.openclaw/workspace/AnyClaw_LVGL/msyh.ttf",  /* Microsoft YaHei (extracted from .ttc) */
+        "C:/Windows/Fonts/simhei.ttf",              /* SimHei - TrueType ✓ full CJK */
         nullptr
     };
 
     for (int i = 0; font_paths[i]; i++) {
         g_cjk_font = lv_tiny_ttf_create_file(font_paths[i], 16);
         if (g_cjk_font) {
-            LV_LOG_USER("[Font] ✓ Loaded: %s", font_paths[i]);
-            /* Also load a smaller version for hint/status text */
+            printf("[Font] Loaded %s, ptr=%p\n", font_paths[i], (void*)g_cjk_font); fflush(stdout);
+            {
+                FILE* f = fopen("font_debug.log", "w");
+                if (f) { fprintf(f, "[Font] Loaded %s, ptr=%p\n", font_paths[i], (void*)g_cjk_font); fclose(f); }
+            }
             g_cjk_font_small = lv_tiny_ttf_create_file(font_paths[i], 12);
             if (g_cjk_font_small) {
-                LV_LOG_USER("[Font] ✓ Loaded small (12px): %s", font_paths[i]);
+                printf("[Font] Loaded small (12px): %s\n", font_paths[i]);
             }
             return;
+        } else {
+            printf("[Font] Failed to load %s\n", font_paths[i]); fflush(stdout);
+            {
+                FILE* f = fopen("font_debug.log", "a");
+                if (f) { fprintf(f, "[Font] Failed to load %s\n", font_paths[i]); fclose(f); }
+            }
         }
     }
 
-    LV_LOG_WARN("[Font] No CJK font found!");
+    printf("[Font] No CJK font found! Using fallback Montserrat\n"); fflush(stdout);
+    {
+        FILE* f = fopen("font_debug.log", "a");
+        if (f) { fprintf(f, "[Font] No CJK font found! Using fallback Montserrat\n"); fclose(f); }
+    }
     g_cjk_font = (lv_font_t*)&lv_font_montserrat_16;
     g_cjk_font_small = (lv_font_t*)&lv_font_montserrat_12;
 }
@@ -250,7 +258,7 @@ static void theme_dropdown_cb(lv_event_t* e) {
 /* Called from settings UI to add theme dropdown */
 void ui_settings_add_theme_dropdown(lv_obj_t* tab) {
     lv_obj_t* dd = lv_dropdown_create(tab);
-    lv_dropdown_set_options(dd, "默认暗色 / Dark\n默认亮色 / Light\n经典暗色 / Classic Dark");
+    lv_dropdown_set_options(dd, "Dark\nLight\nClassic Dark");
     lv_dropdown_set_selected(dd, (uint16_t)g_theme);
     lv_obj_set_width(dd, 200);
     lv_obj_set_style_bg_color(dd, lv_color_make(40, 44, 60), 0);
@@ -265,21 +273,11 @@ struct I18n { const char* en; const char* cn; };
 /* Get translated string based on current language */
 static const char* tr(const I18n& s) {
     /* P2-01: Single language display per PRD 2.1 */
-    switch (g_lang) {
-        case Lang::CN:  return s.cn;
-        case Lang::EN:  return s.en;
-    }
-    return s.en;
-}
+    /* English only */ return s.en; }
 
 /* P2-01: Single language title per PRD 2.1 */
 static const char* tr_title(const I18n& s) {
-    switch (g_lang) {
-        case Lang::CN:  return s.cn;
-        case Lang::EN:  return s.en;
-    }
-    return s.en;
-}
+    /* English only */ return s.en; }
 
 /* ── I18n Strings ── */
 static const I18n STR_TITLE       = {"Desktop Manager", "桌面管理器"};
@@ -855,16 +853,12 @@ static void lang_en_cb(lv_event_t* e) {
 /* P2-01: CN/EN toggle button - single language per PRD 2.1 */
 static void lang_toggle_cb(lv_event_t* e) {
     (void)e;
-    g_lang = (g_lang == Lang::CN) ? Lang::EN : Lang::CN;
-    update_ui_language();
-    extern void save_theme_config();
-    save_theme_config();
-    /* Update toggle button label */
+    /* English only mode - toggle does nothing useful, just show EN */
     if (g_lang_toggle_label) {
-        lv_label_set_text(g_lang_toggle_label, (g_lang == Lang::CN) ? "CN" : "EN");
+        lv_label_set_text(g_lang_toggle_label, "EN");
         lv_obj_center(g_lang_toggle_label);
     }
-    app_log("[Lang] Switched to %s", (g_lang == Lang::CN) ? "Chinese" : "English");
+    app_log("[Lang] English mode (bilingual disabled)");
 }
 
 void app_refresh_status() {
@@ -874,12 +868,12 @@ void app_refresh_status() {
 
     lv_label_set_text(status_label, status_text(status));
     lv_obj_set_style_text_color(status_label, status_color(status), 0);
-    snprintf(ver_buf, sizeof(ver_buf), "%s: %s", tr(STR_VERSION), info.version[0] ? info.version : tr(STR_NOTFOUND));
+    snprintf(ver_buf, sizeof(ver_buf), "%s: %s", STR_VERSION.en, info.version[0] ? info.version : STR_NOTFOUND.en);
     lv_label_set_text(version_label, ver_buf);
-    if (info.executable[0]) snprintf(path_buf, sizeof(path_buf), "%s: %s", tr(STR_PATH), info.executable);
-    else snprintf(path_buf, sizeof(path_buf), "%s: %s", tr(STR_PATH), tr(STR_NOTFOUND));
+    if (info.executable[0]) snprintf(path_buf, sizeof(path_buf), "%s: %s", STR_PATH.en, info.executable);
+    else snprintf(path_buf, sizeof(path_buf), "%s: %s", STR_PATH.en, STR_NOTFOUND.en);
     lv_label_set_text(path_label, path_buf);
-    snprintf(port_buf, sizeof(port_buf), "%s: %d", tr(STR_PORT), info.gateway_port);
+    snprintf(port_buf, sizeof(port_buf), "%s: %d", STR_PORT.en, info.gateway_port);
     lv_label_set_text(port_label, port_buf);
     if (status == ClawStatus::Running) { lv_led_on(led_ok); lv_led_off(led_warn); }
     else if (status == ClawStatus::Error) { lv_led_off(led_ok); lv_led_on(led_warn); }
@@ -892,12 +886,13 @@ void app_refresh_status() {
 }
 
 static void update_ui_language() {
-    lv_label_set_text(title_label, tr_title(STR_TITLE));
+    /* Hardcoded English - no more bilingual mode */
+    lv_label_set_text(title_label, STR_TITLE.en);
     lv_obj_t* lbl;
-    lbl = lv_obj_get_child(btn_start, 0); if (lbl) lv_label_set_text(lbl, tr(STR_START));
-    lbl = lv_obj_get_child(btn_stop, 0); if (lbl) lv_label_set_text(lbl, tr(STR_STOP));
-    lbl = lv_obj_get_child(btn_refresh, 0); if (lbl) lv_label_set_text(lbl, tr(STR_REFRESH));
-    lbl = lv_obj_get_child(btn_settings, 0); if (lbl) lv_label_set_text(lbl, tr(STR_SETTINGS));
+    lbl = lv_obj_get_child(btn_start, 0); if (lbl) lv_label_set_text(lbl, STR_START.en);
+    lbl = lv_obj_get_child(btn_stop, 0); if (lbl) lv_label_set_text(lbl, STR_STOP.en);
+    lbl = lv_obj_get_child(btn_refresh, 0); if (lbl) lv_label_set_text(lbl, STR_REFRESH.en);
+    lbl = lv_obj_get_child(btn_settings, 0); if (lbl) lv_label_set_text(lbl, STR_SETTINGS.en);
     app_refresh_status();
 }
 
@@ -1257,8 +1252,7 @@ void app_ui_init() {
 
     /* Load saved config first (sets g_theme, g_lang, g_colors) */
     load_theme_config();
-
-    /* P2-fix: Get actual SDL window size (not display resolution) */
+    g_lang = Lang::EN;  /* Force English as default */
     {
         SDL_Window* win = app_get_window();
         if (win) {
@@ -1420,21 +1414,22 @@ void app_ui_init() {
     lv_obj_set_pos(rt, 8, 8);
 
     /* Buttons - 4 in a row, evenly spaced */
-    int btn_w = (RIGHT_PANEL_W - 50) / 4;  // 4 buttons, 3 gaps ~16px each
     int btn_h = 42;
     int btn_y = 48;
-    int btn_gap = (RIGHT_PANEL_W - 4 * btn_w) / 3;  // evenly distributed
+    int btn_margin = 10;
+    int btn_w = (RIGHT_PANEL_W - 2 * btn_margin - 3 * 12) / 4;  // 4 buttons + 3 gaps of 12px
+    int btn_gap = 12;
 
-    btn_start = create_styled_button(pr, tr(STR_START), 10, btn_y, btn_w, btn_h,
+    btn_start = create_styled_button(pr, tr(STR_START), btn_margin, btn_y, btn_w, btn_h,
         c->btn_start, c->panel, btn_start_cb);
 
-    btn_stop = create_styled_button(pr, tr(STR_STOP), 10 + btn_w + btn_gap, btn_y, btn_w, btn_h,
+    btn_stop = create_styled_button(pr, tr(STR_STOP), btn_margin + (btn_w + btn_gap), btn_y, btn_w, btn_h,
         c->btn_stop, c->panel, btn_stop_cb);
 
-    btn_refresh = create_styled_button(pr, tr(STR_REFRESH), 10 + (btn_w + btn_gap) * 2, btn_y, btn_w, btn_h,
+    btn_refresh = create_styled_button(pr, tr(STR_REFRESH), btn_margin + (btn_w + btn_gap) * 2, btn_y, btn_w, btn_h,
         c->btn_action, c->panel, btn_refresh_cb);
 
-    btn_settings = create_styled_button(pr, tr(STR_SETTINGS), 10 + (btn_w + btn_gap) * 3, btn_y, btn_w, btn_h,
+    btn_settings = create_styled_button(pr, tr(STR_SETTINGS), btn_margin + (btn_w + btn_gap) * 3, btn_y, btn_w, btn_h,
         lv_color_make(240, 160, 60), c->panel, btn_settings_cb);
 
     /* Chat bubble area title with icon */
@@ -1500,6 +1495,8 @@ void app_ui_init() {
     lv_obj_set_size(chat_input, RIGHT_PANEL_W - 124, input_h);  /* room for Send(60)+Clear(32)+gaps(2*8) */
     lv_obj_add_event_cb(chat_input, chat_input_cb, LV_EVENT_READY, nullptr);
     lv_obj_add_event_cb(chat_input, chat_input_cb, LV_EVENT_KEY, nullptr);
+    /* Add textarea to default group for keyboard input */
+    lv_group_add_obj(lv_group_get_default(), chat_input);
 
     /* Send button */
     btn_send_widget = lv_button_create(pr);
@@ -1512,6 +1509,7 @@ void app_ui_init() {
     lv_obj_set_style_border_color(btn_send_widget, lv_color_make(100, 160, 255), 0);
     lv_obj_add_event_cb(btn_send_widget, chat_send_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lsend = lv_label_create(btn_send_widget);
+    lv_label_set_text(lsend, "Send");
     lv_obj_set_pos(btn_send_widget, RIGHT_PANEL_W - 108, input_y);
     lv_obj_set_style_text_font(lsend, CJK_FONT, 0);
     lv_obj_center(lsend);

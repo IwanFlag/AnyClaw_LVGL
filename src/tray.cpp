@@ -10,6 +10,8 @@
 #include <string>
 #include <list>
 #include <uxtheme.h>
+#include <gdiplus.h>
+#pragma comment(lib, "gdiplus.lib")
 
 #define TRAY_ICON_UID   1
 #define WINDOW_CLASS    L"AnyClaw_TrayWnd"
@@ -52,38 +54,182 @@ static void ensure_brushes() {
     if (!s_panelBrush) s_panelBrush = CreateSolidBrush(theme_panel());
 }
 
-/* ── Icon generation ─────────────────────────────────────────────── */
-static HICON create_color_icon(COLORREF color, int size = 16) {
-    BYTE* mask = new BYTE[size * size / 8];
-    memset(mask, 0xFF, size * size / 8);
-    BYTE* colorBits = new BYTE[size * size * 4];
-    memset(colorBits, 0, size * size * 4);
+/* ── GDI+ initialization ─────────────────────────────────────────── */
+static ULONG_PTR g_gdiplusToken = 0;
+static void ensure_gdiplus() {
+    static bool initialized = false;
+    if (!initialized) {
+        Gdiplus::GdiplusStartupInput si;
+        Gdiplus::GdiplusStartup(&g_gdiplusToken, &si, nullptr);
+        initialized = true;
+    }
+}
 
-    int cx = size / 2, cy = size / 2, r = size / 2 - 1;
-    for (int y = 0; y < size; y++) {
-        for (int x = 0; x < size; x++) {
-            int dx = x - cx, dy = y - cy;
-            if (dx * dx + dy * dy <= r * r) {
-                int idx = (y * size + x) * 4;
-                colorBits[idx + 0] = GetBValue(color);
-                colorBits[idx + 1] = GetGValue(color);
-                colorBits[idx + 2] = GetRValue(color);
-                colorBits[idx + 3] = 255;
-                mask[(y * size + x) / 8] &= ~(1 << ((y * size + x) % 8));
+/* ── PNG → HICON loader (GDI+) ──────────────────────────────────── */
+static HICON load_png_icon(const wchar_t* path, int targetSize = 32) {
+    ensure_gdiplus();
+    Gdiplus::Bitmap* bmp = Gdiplus::Bitmap::FromFile(path);
+    if (!bmp || bmp->GetLastStatus() != Gdiplus::Ok) {
+        delete bmp;
+        return nullptr;
+    }
+
+    /* Create a DC and bitmap to draw into */
+    HDC hdcScreen = GetDC(nullptr);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = targetSize;
+    bmi.bmiHeader.biHeight = -targetSize; /* top-down */
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    BYTE* pixels = nullptr;
+    HBITMAP hBmp = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, (void**)&pixels, nullptr, 0);
+    HGDIOBJ hOld = SelectObject(hdcMem, hBmp);
+
+    /* Fill with black + transparent */
+    memset(pixels, 0, targetSize * targetSize * 4);
+
+    /* Draw PNG onto the bitmap using GDI+ */
+    Gdiplus::Graphics graphics(hdcMem);
+    graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    Gdiplus::Rect destRect(0, 0, targetSize, targetSize);
+    graphics.DrawImage(bmp, destRect);
+
+    /* Fix alpha: GDI+ draws with premultiplied alpha, convert to straight */
+    for (int y = 0; y < targetSize; y++) {
+        for (int x = 0; x < targetSize; x++) {
+            int idx = (y * targetSize + x) * 4;
+            BYTE a = pixels[idx + 3];
+            if (a > 0 && a < 255) {
+                /* Premultiplied → straight alpha */
+                pixels[idx + 0] = (BYTE)min(255, pixels[idx + 0] * 255 / a);
+                pixels[idx + 1] = (BYTE)min(255, pixels[idx + 1] * 255 / a);
+                pixels[idx + 2] = (BYTE)min(255, pixels[idx + 2] * 255 / a);
             }
         }
     }
 
+    SelectObject(hdcMem, hOld);
+    DeleteDC(hdcMem);
+    ReleaseDC(nullptr, hdcScreen);
+    delete bmp;
+
+    /* Create mask: 0 = opaque, 1 = transparent */
+    int maskBytes = (targetSize * targetSize + 7) / 8;
+    BYTE* maskBits = new BYTE[maskBytes];
+    memset(maskBits, 0xFF, maskBytes); /* all transparent by default */
+
+    /* For opaque pixels, clear the mask bit */
+    /* Note: mask bitmap is monochrome, uses AND logic */
+    /* We'll use a simple approach: all transparent (mask=0xFF), color bitmap has alpha */
+
     ICONINFO ii = {};
     ii.fIcon = TRUE;
-    ii.hbmMask = CreateBitmap(size, size, 1, 1, mask);
-    ii.hbmColor = CreateBitmap(size, size, 1, 32, colorBits);
+    ii.hbmMask = CreateBitmap(targetSize, targetSize, 1, 1, maskBits);
+    ii.hbmColor = hBmp;
     HICON hIcon = CreateIconIndirect(&ii);
     DeleteObject(ii.hbmMask);
-    DeleteObject(ii.hbmColor);
-    delete[] mask;
-    delete[] colorBits;
+    /* hBmp is owned by the icon now, don't delete it */
+    delete[] maskBits;
+
     return hIcon;
+}
+
+/* ── Tray icon: garlic PNG + status LED in top-right corner ──────── */
+static HICON create_tray_icon(TrayState state, int size = 16) {
+    /* Status LED colors */
+    COLORREF ledColor;
+    switch (state) {
+        case TrayState::Green:  ledColor = RGB(0, 200, 60);  break;
+        case TrayState::Yellow: ledColor = RGB(240, 200, 0);  break;
+        case TrayState::Red:    ledColor = RGB(220, 50, 50);  break;
+        default:                ledColor = RGB(150, 150, 150); break; /* Gray */
+    }
+
+    /* Load base garlic icon (32px PNG) */
+    wchar_t exePath[MAX_PATH];
+    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+    /* exe is in build/bin/, icons in build/assets/ */
+    wchar_t iconPath[MAX_PATH];
+    wcscpy_s(iconPath, exePath);
+    wchar_t* p = wcsrchr(iconPath, L'\\');
+    if (p) {
+        wcscpy_s(p + 1, MAX_PATH - (p - iconPath + 1), L"..\\assets\\garlic_tray.png");
+    }
+
+    HICON hBase = load_png_icon(iconPath, size);
+    if (!hBase) {
+        /* Fallback: colored circle */
+        BYTE* mask = new BYTE[size * size / 8];
+        memset(mask, 0xFF, size * size / 8);
+        BYTE* bits = new BYTE[size * size * 4];
+        memset(bits, 0, size * size * 4);
+        int cx = size/2, cy = size/2, r = size/2 - 1;
+        for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++) {
+                int dx = x - cx, dy = y - cy;
+                if (dx*dx + dy*dy <= r*r) {
+                    int idx = (y * size + x) * 4;
+                    bits[idx] = 180; bits[idx+1] = 180; bits[idx+2] = 180; bits[idx+3] = 255;
+                    mask[(y*size+x)/8] &= ~(1 << ((y*size+x) % 8));
+                }
+            }
+        ICONINFO ii = {};
+        ii.fIcon = TRUE;
+        ii.hbmMask = CreateBitmap(size, size, 1, 1, mask);
+        ii.hbmColor = CreateBitmap(size, size, 1, 32, bits);
+        hBase = CreateIconIndirect(&ii);
+        DeleteObject(ii.hbmMask);
+        DeleteObject(ii.hbmColor);
+        delete[] mask;
+        delete[] bits;
+    }
+
+    /* Draw LED on the icon using GDI */
+    HDC hdcScreen = GetDC(nullptr);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hBmp;
+    GetObject(hBase, sizeof(HBITMAP), &hBmp);
+    HGDIOBJ hOld = SelectObject(hdcMem, hBmp);
+
+    /* LED: small circle in top-right corner (radius ~size/6) */
+    int ledR = size / 5;
+    int ledCx = size - ledR - 1;
+    int ledCy = ledR + 1;
+
+    /* Draw LED shadow */
+    HBRUSH hShadow = CreateSolidBrush(RGB(0, 0, 0));
+    RECT shadowR = { ledCx - ledR + 1, ledCy - ledR + 2, ledCx + ledR + 1, ledCy + ledR + 2 };
+    FillRect(hdcMem, &shadowR, hShadow);
+    DeleteObject(hShadow);
+
+    /* Draw LED circle */
+    HBRUSH hLed = CreateSolidBrush(ledColor);
+    HGDIOBJ hOldBrush = SelectObject(hdcMem, hLed);
+    HPEN hPen = CreatePen(PS_SOLID, 1, RGB(0, 0, 0));
+    HGDIOBJ hOldPen = SelectObject(hdcMem, hPen);
+    Ellipse(hdcMem, ledCx - ledR, ledCy - ledR, ledCx + ledR, ledCy + ledR);
+    SelectObject(hdcMem, hOldBrush);
+    SelectObject(hdcMem, hOldPen);
+    DeleteObject(hLed);
+    DeleteObject(hPen);
+
+    /* Draw LED highlight */
+    HBRUSH hHi = CreateSolidBrush(RGB(255, 255, 255));
+    HGDIOBJ hOldHi = SelectObject(hdcMem, hHi);
+    int hiR = ledR / 3;
+    Ellipse(hdcMem, ledCx - hiR, ledCy - hiR - 1, ledCx + hiR - 1, ledCy + hiR - 1);
+    SelectObject(hdcMem, hOldHi);
+    DeleteObject(hHi);
+
+    SelectObject(hdcMem, hOld);
+    DeleteDC(hdcMem);
+    ReleaseDC(nullptr, hdcScreen);
+
+    return hBase;
 }
 
 /* ── CJK font for GDI ───────────────────────────────────────────── */
@@ -567,7 +713,7 @@ static LRESULT CALLBACK tray_wndproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             if (cmd > 0) SendMessage(hwnd, WM_COMMAND, cmd, 0);
             return 0;
         }
-        case WM_LBUTTONDBLCLK:
+        case WM_LBUTTONUP:
             tray_show_window(true);
             return 0;
         }
@@ -663,7 +809,7 @@ bool tray_init(HINSTANCE hInstance) {
     g_nid.uID = TRAY_ICON_UID;
     g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     g_nid.uCallbackMessage = WM_TRAYICON;
-    g_nid.hIcon = create_color_icon(RGB(180, 180, 180));
+    g_nid.hIcon = create_tray_icon(TrayState::Gray);
     wcscpy_s(g_nid.szTip, L"AnyClaw LVGL");
 
     if (!Shell_NotifyIconW(NIM_ADD, &g_nid)) {
@@ -690,16 +836,15 @@ void tray_set_state(TrayState state) {
     if (state == g_currentState) return;
     g_currentState = state;
 
-    COLORREF color;
     const wchar_t* tip;
     switch (state) {
-        case TrayState::Green:  color = RGB(0, 200, 0);    tip = (g_lang == Lang::CN) ? L"AnyClaw \x2014 \x8FD0\x884C\x4E2D" : L"AnyClaw \x2014 Running"; break;
-        case TrayState::Yellow: color = RGB(255, 200, 0);   tip = (g_lang == Lang::CN) ? L"AnyClaw \x2014 \x68C0\x6D4B\x4E2D" : L"AnyClaw \x2014 Checking"; break;
-        case TrayState::Red:    color = RGB(220, 40, 40);   tip = (g_lang == Lang::CN) ? L"AnyClaw \x2014 \x5F02\x5E38" : L"AnyClaw \x2014 Error"; break;
-        case TrayState::Gray:   color = RGB(180, 180, 180); tip = (g_lang == Lang::CN) ? L"AnyClaw \x2014 \x672A\x914D\x7F6E" : L"AnyClaw \x2014 Not Configured"; break;
+        case TrayState::Green:  tip = (g_lang == Lang::CN) ? L"AnyClaw \x2014 \x8FD0\x884C\x4E2D" : L"AnyClaw \x2014 Running"; break;
+        case TrayState::Yellow: tip = (g_lang == Lang::CN) ? L"AnyClaw \x2014 \x68C0\x6D4B\x4E2D" : L"AnyClaw \x2014 Checking"; break;
+        case TrayState::Red:    tip = (g_lang == Lang::CN) ? L"AnyClaw \x2014 \x5F02\x5E38" : L"AnyClaw \x2014 Error"; break;
+        case TrayState::Gray:   tip = (g_lang == Lang::CN) ? L"AnyClaw \x2014 \x672A\x914D\x7F6E" : L"AnyClaw \x2014 Not Configured"; break;
     }
 
-    HICON hNewIcon = create_color_icon(color);
+    HICON hNewIcon = create_tray_icon(state);
     if (g_nid.hIcon) DestroyIcon(g_nid.hIcon);
     g_nid.hIcon = hNewIcon;
     wcscpy_s(g_nid.szTip, tip);

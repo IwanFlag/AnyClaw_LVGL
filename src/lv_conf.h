@@ -51,7 +51,8 @@
 #define LV_FONT_MONTSERRAT_20 1
 #define LV_FONT_MONTSERRAT_22 1
 #define LV_FONT_MONTSERRAT_24 1
-#define LV_FONT_SOURCE_HAN_SANS_SC_16_CJK 1
+#define LV_FONT_SOURCE_HAN_SANS_SC_16_CJK 0
+#define LV_FONT_SOURCE_HAN_SANS_SC_14_CJK 1
 #define LV_FONT_MSHY_16 1
 typedef struct _lv_font_t lv_font_t;
 extern const lv_font_t lv_font_mshy_16;
@@ -126,3 +127,6 @@ extern const lv_font_t lv_font_source_han_sans_sc_14_cjk;
 #define LV_SDL_INCLUDE_PATH      <SDL.h>
 
 #endif /*LV_CONF_H*/
+#define LV_USE_WINDOWS 1  
+#define LV_USE_WINDOWS_FS 1 
+#define LV_USE_OS LV_OS_WINDOWS
