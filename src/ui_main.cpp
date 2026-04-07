@@ -311,6 +311,20 @@ struct ChatMessage {
 };
 static std::vector<ChatMessage> g_chat_messages;
 
+/* ═══ Chat Search State ═══ */
+static lv_obj_t* g_search_bar = nullptr;       /* Search bar container (hidden by default) */
+static lv_obj_t* g_search_input = nullptr;      /* Search text input */
+static lv_obj_t* g_search_btn = nullptr;        /* Toggle search button */
+static lv_obj_t* g_search_info = nullptr;       /* "3 of 12" results label */
+static bool g_search_visible = false;
+static std::vector<int> g_search_results;       /* Indices into chat_cont children */
+static int g_search_current = -1;               /* Current result index */
+
+static void search_toggle_cb(lv_event_t* e);    /* Forward */
+static void search_execute_cb(lv_event_t* e);   /* Forward */
+static void search_prev_cb(lv_event_t* e);      /* Forward */
+static void search_next_cb(lv_event_t* e);      /* Forward */
+
 /* Escape a string for JSON (handles \, ", newlines) */
 static std::string json_escape(const char* s) {
     std::string out;
@@ -474,6 +488,121 @@ static void clear_chat_history() {
     }
     chat_history[0] = '\0';
     LOG_I("Chat", "Chat history cleared");
+}
+
+/* ═══ Chat Search Implementation (SF-01) ═══ */
+
+/* Show/hide search bar */
+static void search_toggle_cb(lv_event_t* e) {
+    (void)e;
+    g_search_visible = !g_search_visible;
+    if (g_search_bar) {
+        if (g_search_visible) {
+            lv_obj_clear_flag(g_search_bar, LV_OBJ_FLAG_HIDDEN);
+            if (g_search_input) lv_group_focus_obj(g_search_input);
+        } else {
+            lv_obj_add_flag(g_search_bar, LV_OBJ_FLAG_HIDDEN);
+            /* Clear search highlights */
+            g_search_results.clear();
+            g_search_current = -1;
+        }
+    }
+    /* Reposition chat area */
+    app_refresh_status();
+}
+
+/* Search through chat messages for matching text */
+static void search_execute_cb(lv_event_t* e) {
+    (void)e;
+    if (!g_search_input || !chat_cont) return;
+
+    const char* query = lv_textarea_get_text(g_search_input);
+    if (!query || !query[0]) {
+        g_search_results.clear();
+        g_search_current = -1;
+        if (g_search_info) lv_label_set_text(g_search_info, "");
+        return;
+    }
+
+    g_search_results.clear();
+    g_search_current = -1;
+
+    /* Search through g_chat_messages */
+    std::string q(query);
+    /* Case-insensitive search: convert query to lowercase for comparison */
+    std::string q_lower = q;
+    for (auto& c : q_lower) c = tolower(c);
+
+    for (int i = 0; i < (int)g_chat_messages.size(); i++) {
+        std::string text_lower = g_chat_messages[i].text;
+        for (auto& c : text_lower) c = tolower(c);
+        if (text_lower.find(q_lower) != std::string::npos) {
+            g_search_results.push_back(i);
+        }
+    }
+
+    if (!g_search_results.empty()) {
+        g_search_current = 0;
+        /* Scroll to first result */
+        int msg_idx = g_search_results[0];
+        if (msg_idx >= 0 && msg_idx < (int)lv_obj_get_child_count(chat_cont)) {
+            lv_obj_t* target = lv_obj_get_child(chat_cont, msg_idx);
+            if (target) lv_obj_scroll_to_view(target, LV_ANIM_ON);
+        }
+    }
+
+    /* Update info label */
+    if (g_search_info) {
+        if (g_search_results.empty()) {
+            lv_label_set_text(g_search_info, tr({"No results", "无结果"}));
+        } else {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%d/%d", g_search_current + 1, (int)g_search_results.size());
+            lv_label_set_text(g_search_info, buf);
+        }
+    }
+
+    LOG_D("Chat", "Search '%s': %zu results", query, g_search_results.size());
+}
+
+/* Navigate to previous search result */
+static void search_prev_cb(lv_event_t* e) {
+    (void)e;
+    if (g_search_results.empty()) return;
+    g_search_current--;
+    if (g_search_current < 0) g_search_current = (int)g_search_results.size() - 1;
+
+    int msg_idx = g_search_results[g_search_current];
+    if (msg_idx >= 0 && msg_idx < (int)lv_obj_get_child_count(chat_cont)) {
+        lv_obj_t* target = lv_obj_get_child(chat_cont, msg_idx);
+        if (target) lv_obj_scroll_to_view(target, LV_ANIM_ON);
+    }
+
+    if (g_search_info) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%d/%d", g_search_current + 1, (int)g_search_results.size());
+        lv_label_set_text(g_search_info, buf);
+    }
+}
+
+/* Navigate to next search result */
+static void search_next_cb(lv_event_t* e) {
+    (void)e;
+    if (g_search_results.empty()) return;
+    g_search_current++;
+    if (g_search_current >= (int)g_search_results.size()) g_search_current = 0;
+
+    int msg_idx = g_search_results[g_search_current];
+    if (msg_idx >= 0 && msg_idx < (int)lv_obj_get_child_count(chat_cont)) {
+        lv_obj_t* target = lv_obj_get_child(chat_cont, msg_idx);
+        if (target) lv_obj_scroll_to_view(target, LV_ANIM_ON);
+    }
+
+    if (g_search_info) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%d/%d", g_search_current + 1, (int)g_search_results.size());
+        lv_label_set_text(g_search_info, buf);
+    }
 }
 
 /* ═══ Pre-window-creation config loaders ═══ */
@@ -1284,6 +1413,15 @@ static void relayout_panels() {
         int btn_margin = 6;
         int btn_gap = 6;
         lv_obj_set_pos(btn_upload_widget, RIGHT_PANEL_W - CHAT_GAP - btn_size - btn_margin - btn_size - btn_gap, input_y + input_h - btn_size - btn_margin);
+    }
+    /* Reposition search button: left of upload button */
+    if (g_search_btn) {
+        int btn_size = SCALE(20);
+        int btn_margin = 6;
+        int btn_gap = 6;
+        int base_x = RIGHT_PANEL_W - CHAT_GAP - btn_size - btn_margin;
+        if (btn_upload_widget) base_x -= (btn_size + btn_gap);
+        lv_obj_set_pos(g_search_btn, base_x - btn_size - btn_gap, input_y + input_h - btn_size - btn_margin);
     }
 
     /* Update left panel children widths + x positions */
@@ -4038,6 +4176,15 @@ void apply_theme_to_all() {
     if (btn_upload_widget) {
         lv_obj_set_style_bg_color(btn_upload_widget, lv_color_make(80, 85, 100), 0);
     }
+    /* Search button */
+    if (g_search_btn) {
+        lv_obj_set_style_bg_color(g_search_btn, lv_color_make(80, 85, 100), 0);
+    }
+    /* Search bar */
+    if (g_search_bar) {
+        lv_obj_set_style_bg_color(g_search_bar, lv_color_make(25, 28, 42), 0);
+        lv_obj_set_style_border_color(g_search_bar, lv_color_make(59, 130, 246), 0);
+    }
 
     /* Theme the settings panel if it exists */
     extern void ui_settings_apply_theme();
@@ -5588,9 +5735,98 @@ void app_ui_init() {
     /* chat_display no longer needed - bubbles are added directly to chat_cont */
     chat_display = nullptr;
 
+    /* ═══ Search Bar (SF-01: hidden by default) ═══ */
+    {
+        int search_h = SCALE(36);
+        g_search_bar = lv_obj_create(pr);
+        lv_obj_set_size(g_search_bar, RIGHT_PANEL_W - CHAT_GAP * 2, search_h);
+        lv_obj_set_pos(g_search_bar, CHAT_GAP, PANEL_H - search_h - GAP);
+        lv_obj_set_style_bg_color(g_search_bar, lv_color_make(25, 28, 42), 0);
+        lv_obj_set_style_border_width(g_search_bar, 1, 0);
+        lv_obj_set_style_border_color(g_search_bar, lv_color_make(59, 130, 246), 0);
+        lv_obj_set_style_radius(g_search_bar, 8, 0);
+        lv_obj_set_style_pad_all(g_search_bar, 4, 0);
+        lv_obj_set_flex_flow(g_search_bar, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(g_search_bar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(g_search_bar, 4, 0);
+        lv_obj_clear_flag(g_search_bar, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(g_search_bar, LV_OBJ_FLAG_HIDDEN);  /* Hidden initially */
+
+        /* Search input */
+        g_search_input = lv_textarea_create(g_search_bar);
+        lv_obj_set_flex_grow(g_search_input, 1);
+        lv_obj_set_height(g_search_input, LV_SIZE_CONTENT);
+        lv_textarea_set_one_line(g_search_input, true);
+        lv_textarea_set_placeholder_text(g_search_input, tr({"Search messages...", "搜索消息..."}));
+        lv_obj_set_style_bg_color(g_search_input, lv_color_make(18, 20, 30), 0);
+        lv_obj_set_style_text_color(g_search_input, lv_color_make(200, 205, 220), 0);
+        lv_obj_set_style_text_font(g_search_input, CJK_FONT_SMALL, 0);
+        lv_obj_set_style_border_width(g_search_input, 0, 0);
+        lv_obj_set_style_radius(g_search_input, 4, 0);
+        lv_obj_add_event_cb(g_search_input, search_execute_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+        /* Previous button */
+        lv_obj_t* btn_prev = lv_button_create(g_search_bar);
+        lv_obj_set_size(btn_prev, SCALE(28), SCALE(26));
+        lv_obj_set_style_bg_color(btn_prev, lv_color_make(40, 45, 65), 0);
+        lv_obj_set_style_radius(btn_prev, 4, 0);
+        lv_obj_set_style_border_width(btn_prev, 0, 0);
+        lv_obj_clear_flag(btn_prev, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t* prev_lbl = lv_label_create(btn_prev);
+        lv_label_set_text(prev_lbl, LV_SYMBOL_UP);
+        lv_obj_set_style_text_color(prev_lbl, lv_color_make(200, 205, 220), 0);
+        lv_obj_center(prev_lbl);
+        lv_obj_add_event_cb(btn_prev, search_prev_cb, LV_EVENT_CLICKED, nullptr);
+
+        /* Next button */
+        lv_obj_t* btn_next = lv_button_create(g_search_bar);
+        lv_obj_set_size(btn_next, SCALE(28), SCALE(26));
+        lv_obj_set_style_bg_color(btn_next, lv_color_make(40, 45, 65), 0);
+        lv_obj_set_style_radius(btn_next, 4, 0);
+        lv_obj_set_style_border_width(btn_next, 0, 0);
+        lv_obj_clear_flag(btn_next, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t* next_lbl = lv_label_create(btn_next);
+        lv_label_set_text(next_lbl, LV_SYMBOL_DOWN);
+        lv_obj_set_style_text_color(next_lbl, lv_color_make(200, 205, 220), 0);
+        lv_obj_center(next_lbl);
+        lv_obj_add_event_cb(btn_next, search_next_cb, LV_EVENT_CLICKED, nullptr);
+
+        /* Results count label */
+        g_search_info = lv_label_create(g_search_bar);
+        lv_label_set_text(g_search_info, "");
+        lv_obj_set_style_text_color(g_search_info, lv_color_make(140, 145, 160), 0);
+        lv_obj_set_style_text_font(g_search_info, CJK_FONT_SMALL, 0);
+    }
+
+    /* ═══ Search toggle button (magnifying glass icon) ═══ */
+    {
+        int search_btn_size = SCALE(20);
+        g_search_btn = lv_button_create(pr);
+        lv_obj_set_size(g_search_btn, search_btn_size, search_btn_size);
+        lv_obj_set_style_bg_color(g_search_btn, lv_color_make(80, 85, 100), 0);
+        lv_obj_set_style_bg_opa(g_search_btn, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(g_search_btn, search_btn_size / 2, 0);
+        lv_obj_set_style_border_width(g_search_btn, 0, 0);
+        lv_obj_clear_flag(g_search_btn, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(g_search_btn, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+        lv_obj_t* search_lbl = lv_label_create(g_search_btn);
+        lv_label_set_text(search_lbl, LV_SYMBOL_SEARCH);
+        lv_obj_set_style_text_color(search_lbl, lv_color_make(200, 205, 220), 0);
+        lv_obj_center(search_lbl);
+        lv_obj_add_event_cb(g_search_btn, search_toggle_cb, LV_EVENT_CLICKED, nullptr);
+    }
+
     /* Chat input area — pinned to bottom with GAP spacing */
     input_h = 108;  /* Default 3-line height (28px/line + padding) */
     int input_y = PANEL_H - input_h - GAP;
+
+    /* Adjust for search bar if visible */
+    if (g_search_visible && g_search_bar && !lv_obj_has_flag(g_search_bar, LV_OBJ_FLAG_HIDDEN)) {
+        int search_h = SCALE(36) + GAP;
+        input_y -= search_h;
+        /* Reposition search bar above input */
+        lv_obj_set_pos(g_search_bar, CHAT_GAP, PANEL_H - SCALE(36) - GAP - search_h + SCALE(36));
+    }
 
     /* Fix chat_cont height: recalc with actual input height */
     int real_chat_h = PANEL_H - GAP - input_h - GAP;
