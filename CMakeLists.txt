@@ -43,6 +43,7 @@ set(APP_SOURCES
     src/garlic_dock.cpp
     src/session_manager.cpp
     src/workspace.cpp
+    src/permissions.cpp
 )
 
 set(APP_FONT_SOURCES

@@ -1976,7 +1976,34 @@ chat_cont (消息区域)
 | TASK-026 | 离线授权 | P2 | ⏸️ 暂不实施（开源路线） |
 | TASK-052 | Emoji彩色渲染(FreeType) | P2 | 🔧 需编译环境 |
 | WS-01 | 工作区管理（多工作区/模板/锁/迁移） | P0 | 🔧 核心已实现 |
-| PERM-01 | 权限系统（三层权限/设备管理/审计） | P0 | ❌ 大型功能待实施 |
+| PERM-01 | 权限系统（三层权限/设备管理/审计） | P0 | 🔧 核心已实现 |
+
+---
+
+## TASK-PERM01: 权限系统核心
+
+**优先级：** P0
+**状态：** 🔧 核心已实现
+**创建时间：** 2026-04-07 14:35
+**PRD 编号：** PERM-01 (§2.13)
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | 19个权限键定义（FS/Exec/Net/Device/System） | permissions.h | ✅ |
+| 2 | 默认值配置（白名单模式，高危操作默认deny） | permissions.cpp | ✅ |
+| 3 | permissions.json 加载/保存 | permissions.cpp | ✅ |
+| 4 | 路径边界校验 is_path_allowed() | permissions.cpp | ✅ |
+| 5 | 额外授权路径/禁止路径管理 | permissions.cpp | ✅ |
+| 6 | 资源上限配置（磁盘/超时/频率/并发） | permissions.h | ✅ |
+
+### 待实现（v2.1）
+- Settings Permissions Tab UI
+- 设备信任表管理
+- 审计日志
+- 运行时权限拦截
+- AGENTS.md/TOOLS.md MANAGED 区域同步
 
 ---
 
