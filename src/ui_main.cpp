@@ -169,6 +169,10 @@ static int FOOTER_H = 30;
 /* ═══ Model & API Key globals ═══ */
 char g_selected_model[256] = {0};   /* Currently selected model name */
 char g_api_key[256] = {0};          /* OpenRouter API key */
+enum ControlMode { CONTROL_USER = 0, CONTROL_AI = 1 };
+enum LlmAccessMode { LLM_GATEWAY = 0, LLM_DIRECT_API = 1 };
+static ControlMode g_control_mode = CONTROL_USER;
+static LlmAccessMode g_llm_access_mode = LLM_GATEWAY;
 
 /* ═══ Theme System (P2-4) ═══ */
 Theme g_theme = Theme::Dark;
@@ -687,6 +691,8 @@ void save_theme_config() {
         f << "  \"log_enabled\": " << (g_log_enabled ? 1 : 0) << ",\n";
         f << "  \"log_level\": " << g_log_level << ",\n";
         f << "  \"wizard_completed\": " << (g_wizard_completed ? "true" : "false") << ",\n";
+        f << "  \"control_mode\": " << (int)g_control_mode << ",\n";
+        f << "  \"llm_access_mode\": " << (int)g_llm_access_mode << ",\n";
         f << "  \"model_name\": \"" << (g_selected_model[0] ? g_selected_model : "") << "\",\n";
         f << "  \"api_key\": \"" << (g_api_key[0] ? g_api_key : "") << "\"\n";
         f << "}\n";
@@ -765,6 +771,10 @@ void load_theme_config() {
     if (ll >= 0 && ll <= 3) {
         g_log_level = ll;
     }
+    int cm = json_extract_int(content.c_str(), "control_mode", -1);
+    if (cm >= 0 && cm <= 1) g_control_mode = (ControlMode)cm;
+    int lm = json_extract_int(content.c_str(), "llm_access_mode", -1);
+    if (lm >= 0 && lm <= 1) g_llm_access_mode = (LlmAccessMode)lm;
 
     /* Restore wizard_completed flag */
     g_wizard_completed = is_wizard_completed();
@@ -773,8 +783,10 @@ void load_theme_config() {
     json_extract_string(content.c_str(), "model_name", g_selected_model, sizeof(g_selected_model));
     json_extract_string(content.c_str(), "api_key", g_api_key, sizeof(g_api_key));
 
-    LOG_I("CONFIG", "log_enabled=%d log_level=%d model=%s", g_log_enabled, g_log_level,
-          g_selected_model[0] ? g_selected_model : "(none)");
+    LOG_I("CONFIG", "log_enabled=%d log_level=%d model=%s control=%d llm=%d",
+          g_log_enabled, g_log_level,
+          g_selected_model[0] ? g_selected_model : "(none)",
+          (int)g_control_mode, (int)g_llm_access_mode);
 }
 
 /* Forward declaration for title bar creation (called last for z-order) */
@@ -980,6 +992,9 @@ static lv_obj_t* mode_btn_work = nullptr;
 static lv_obj_t* mode_panel_chat = nullptr;
 static lv_obj_t* mode_panel_voice = nullptr;
 static lv_obj_t* mode_panel_work = nullptr;
+static lv_obj_t* mode_dd_control = nullptr;
+static lv_obj_t* mode_dd_llm = nullptr;
+static lv_obj_t* mode_lbl_work_hint = nullptr;
 static int MODE_BAR_H = 36;
 enum UiMainMode { UI_MODE_CHAT = 0, UI_MODE_VOICE = 1, UI_MODE_WORK = 2 };
 static UiMainMode g_ui_mode = UI_MODE_CHAT;
@@ -1263,6 +1278,32 @@ static void relayout_panels();
 void ui_relayout_all();
 static int mode_content_h() { return std::max(120, PANEL_H - MODE_BAR_H - CHAT_GAP * 3); }
 static int mode_content_w() { return std::max(200, RIGHT_PANEL_W - CHAT_GAP * 2); }
+extern void save_theme_config();
+
+static void update_work_mode_hint() {
+    if (!mode_lbl_work_hint) return;
+    const char* control = (g_control_mode == CONTROL_AI) ? "AI controls AnyClaw" : "User controls AnyClaw";
+    const char* llm = (g_llm_access_mode == LLM_GATEWAY) ? "Gateway mode (OpenClaw)" : "Direct API mode";
+    lv_label_set_text_fmt(mode_lbl_work_hint, "Control: %s\nLLM Access: %s", control, llm);
+}
+
+static void work_control_mode_cb(lv_event_t* e) {
+    lv_obj_t* dd = lv_event_get_target_obj(e);
+    if (!dd) return;
+    g_control_mode = (lv_dropdown_get_selected(dd) == 1) ? CONTROL_AI : CONTROL_USER;
+    update_work_mode_hint();
+    save_theme_config();
+    LOG_I("MODE", "Control mode switched to %s", g_control_mode == CONTROL_AI ? "AI" : "User");
+}
+
+static void work_llm_mode_cb(lv_event_t* e) {
+    lv_obj_t* dd = lv_event_get_target_obj(e);
+    if (!dd) return;
+    g_llm_access_mode = (lv_dropdown_get_selected(dd) == 1) ? LLM_DIRECT_API : LLM_GATEWAY;
+    update_work_mode_hint();
+    save_theme_config();
+    LOG_I("MODE", "LLM access switched to %s", g_llm_access_mode == LLM_DIRECT_API ? "DirectAPI" : "Gateway");
+}
 
 static void apply_mode_switch_visuals() {
     if (!mode_panel_chat || !mode_panel_voice || !mode_panel_work) return;
@@ -1450,6 +1491,9 @@ static void relayout_panels() {
         lv_obj_set_size(mode_panel_work, content_w, content_h);
         lv_obj_set_pos(mode_panel_work, CHAT_GAP, MODE_BAR_H + CHAT_GAP * 2);
     }
+    if (mode_dd_control) lv_obj_set_width(mode_dd_control, std::min(content_w - 16, SCALE(360)));
+    if (mode_dd_llm) lv_obj_set_width(mode_dd_llm, std::min(content_w - 16, SCALE(360)));
+    if (mode_lbl_work_hint) lv_obj_set_width(mode_lbl_work_hint, content_w - 16);
 
     /* Re-layout chat mode children */
     int input_h = chat_input ? (int)lv_obj_get_height(chat_input) : 36;
@@ -5902,11 +5946,40 @@ void app_ui_init() {
     lv_obj_set_style_pad_all(mode_panel_work, 0, 0);
     lv_obj_clear_flag(mode_panel_work, LV_OBJ_FLAG_SCROLLABLE);
     {
-        lv_obj_t* w = lv_label_create(mode_panel_work);
-        lv_label_set_text(w, "Work mode (V1): tasks/workflow board entry is reserved");
-        lv_obj_set_style_text_color(w, c->text_dim, 0);
-        lv_obj_set_style_text_font(w, CJK_FONT_SMALL, 0);
-        lv_obj_align(w, LV_ALIGN_TOP_LEFT, 8, 8);
+        lv_obj_t* t1 = lv_label_create(mode_panel_work);
+        lv_label_set_text(t1, "Control mode");
+        lv_obj_set_style_text_color(t1, c->text_dim, 0);
+        lv_obj_set_style_text_font(t1, CJK_FONT_SMALL, 0);
+        lv_obj_align(t1, LV_ALIGN_TOP_LEFT, 8, 8);
+
+        mode_dd_control = lv_dropdown_create(mode_panel_work);
+        lv_dropdown_set_options(mode_dd_control, "User controls AnyClaw\nAI controls AnyClaw");
+        lv_dropdown_set_selected(mode_dd_control, (uint16_t)g_control_mode);
+        lv_obj_set_width(mode_dd_control, std::min(content_w - 16, SCALE(360)));
+        lv_obj_set_pos(mode_dd_control, 8, 28);
+        lv_obj_set_style_text_font(mode_dd_control, CJK_FONT_SMALL, 0);
+        lv_obj_add_event_cb(mode_dd_control, work_control_mode_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+        lv_obj_t* t2 = lv_label_create(mode_panel_work);
+        lv_label_set_text(t2, "LLM access");
+        lv_obj_set_style_text_color(t2, c->text_dim, 0);
+        lv_obj_set_style_text_font(t2, CJK_FONT_SMALL, 0);
+        lv_obj_set_pos(t2, 8, 70);
+
+        mode_dd_llm = lv_dropdown_create(mode_panel_work);
+        lv_dropdown_set_options(mode_dd_llm, "Gateway mode (OpenClaw)\nDirect API mode");
+        lv_dropdown_set_selected(mode_dd_llm, (uint16_t)g_llm_access_mode);
+        lv_obj_set_width(mode_dd_llm, std::min(content_w - 16, SCALE(360)));
+        lv_obj_set_pos(mode_dd_llm, 8, 90);
+        lv_obj_set_style_text_font(mode_dd_llm, CJK_FONT_SMALL, 0);
+        lv_obj_add_event_cb(mode_dd_llm, work_llm_mode_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+        mode_lbl_work_hint = lv_label_create(mode_panel_work);
+        lv_obj_set_style_text_color(mode_lbl_work_hint, c->text_dim, 0);
+        lv_obj_set_style_text_font(mode_lbl_work_hint, CJK_FONT_SMALL, 0);
+        lv_obj_set_width(mode_lbl_work_hint, LV_PCT(100));
+        lv_obj_set_pos(mode_lbl_work_hint, 8, 134);
+        update_work_mode_hint();
     }
 
     /* Layout: chat fills space, input pinned to bottom; GAP spacing everywhere */
