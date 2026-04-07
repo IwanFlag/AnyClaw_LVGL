@@ -173,6 +173,13 @@ enum ControlMode { CONTROL_USER = 0, CONTROL_AI = 1 };
 enum LlmAccessMode { LLM_GATEWAY = 0, LLM_DIRECT_API = 1 };
 static ControlMode g_control_mode = CONTROL_USER;
 static LlmAccessMode g_llm_access_mode = LLM_GATEWAY;
+static char g_profile_user_name[64] = "User";
+static char g_profile_user_role[64] = "Owner";
+static char g_profile_user_persona[128] = "";
+static char g_profile_ai_name[64] = "AI";
+static char g_profile_ai_role[64] = "Assistant";
+static char g_profile_ai_persona[128] = "";
+static char g_profile_ai_skills[192] = "";
 
 /* ═══ Theme System (P2-4) ═══ */
 Theme g_theme = Theme::Dark;
@@ -693,6 +700,13 @@ void save_theme_config() {
         f << "  \"wizard_completed\": " << (g_wizard_completed ? "true" : "false") << ",\n";
         f << "  \"control_mode\": " << (int)g_control_mode << ",\n";
         f << "  \"llm_access_mode\": " << (int)g_llm_access_mode << ",\n";
+        f << "  \"profile_user_name\": \"" << g_profile_user_name << "\",\n";
+        f << "  \"profile_user_role\": \"" << g_profile_user_role << "\",\n";
+        f << "  \"profile_user_persona\": \"" << g_profile_user_persona << "\",\n";
+        f << "  \"profile_ai_name\": \"" << g_profile_ai_name << "\",\n";
+        f << "  \"profile_ai_role\": \"" << g_profile_ai_role << "\",\n";
+        f << "  \"profile_ai_persona\": \"" << g_profile_ai_persona << "\",\n";
+        f << "  \"profile_ai_skills\": \"" << g_profile_ai_skills << "\",\n";
         f << "  \"model_name\": \"" << (g_selected_model[0] ? g_selected_model : "") << "\",\n";
         f << "  \"api_key\": \"" << (g_api_key[0] ? g_api_key : "") << "\"\n";
         f << "}\n";
@@ -775,6 +789,13 @@ void load_theme_config() {
     if (cm >= 0 && cm <= 1) g_control_mode = (ControlMode)cm;
     int lm = json_extract_int(content.c_str(), "llm_access_mode", -1);
     if (lm >= 0 && lm <= 1) g_llm_access_mode = (LlmAccessMode)lm;
+    json_extract_string(content.c_str(), "profile_user_name", g_profile_user_name, sizeof(g_profile_user_name));
+    json_extract_string(content.c_str(), "profile_user_role", g_profile_user_role, sizeof(g_profile_user_role));
+    json_extract_string(content.c_str(), "profile_user_persona", g_profile_user_persona, sizeof(g_profile_user_persona));
+    json_extract_string(content.c_str(), "profile_ai_name", g_profile_ai_name, sizeof(g_profile_ai_name));
+    json_extract_string(content.c_str(), "profile_ai_role", g_profile_ai_role, sizeof(g_profile_ai_role));
+    json_extract_string(content.c_str(), "profile_ai_persona", g_profile_ai_persona, sizeof(g_profile_ai_persona));
+    json_extract_string(content.c_str(), "profile_ai_skills", g_profile_ai_skills, sizeof(g_profile_ai_skills));
 
     /* Restore wizard_completed flag */
     g_wizard_completed = is_wizard_completed();
@@ -995,6 +1016,12 @@ static lv_obj_t* mode_panel_work = nullptr;
 static lv_obj_t* mode_dd_control = nullptr;
 static lv_obj_t* mode_dd_llm = nullptr;
 static lv_obj_t* mode_lbl_work_hint = nullptr;
+static lv_obj_t* mode_ta_user_name = nullptr;
+static lv_obj_t* mode_ta_user_role = nullptr;
+static lv_obj_t* mode_ta_ai_name = nullptr;
+static lv_obj_t* mode_ta_ai_role = nullptr;
+static lv_obj_t* mode_ta_ai_persona = nullptr;
+static lv_obj_t* mode_ta_ai_skills = nullptr;
 static int MODE_BAR_H = 36;
 enum UiMainMode { UI_MODE_CHAT = 0, UI_MODE_VOICE = 1, UI_MODE_WORK = 2 };
 static UiMainMode g_ui_mode = UI_MODE_CHAT;
@@ -1279,12 +1306,17 @@ void ui_relayout_all();
 static int mode_content_h() { return std::max(120, PANEL_H - MODE_BAR_H - CHAT_GAP * 3); }
 static int mode_content_w() { return std::max(200, RIGHT_PANEL_W - CHAT_GAP * 2); }
 extern void save_theme_config();
+static const char* profile_user_name() { return g_profile_user_name[0] ? g_profile_user_name : "User"; }
+static const char* profile_ai_name() { return g_profile_ai_name[0] ? g_profile_ai_name : "AI"; }
 
 static void update_work_mode_hint() {
     if (!mode_lbl_work_hint) return;
     const char* control = (g_control_mode == CONTROL_AI) ? "AI controls AnyClaw" : "User controls AnyClaw";
     const char* llm = (g_llm_access_mode == LLM_GATEWAY) ? "Gateway mode (OpenClaw)" : "Direct API mode";
-    lv_label_set_text_fmt(mode_lbl_work_hint, "Control: %s\nLLM Access: %s", control, llm);
+    lv_label_set_text_fmt(mode_lbl_work_hint, "Control: %s\nLLM Access: %s\nUser: %s (%s)\nAI: %s (%s)",
+                          control, llm,
+                          profile_user_name(), g_profile_user_role[0] ? g_profile_user_role : "Owner",
+                          profile_ai_name(), g_profile_ai_role[0] ? g_profile_ai_role : "Assistant");
 }
 
 static void work_control_mode_cb(lv_event_t* e) {
@@ -1303,6 +1335,25 @@ static void work_llm_mode_cb(lv_event_t* e) {
     update_work_mode_hint();
     save_theme_config();
     LOG_I("MODE", "LLM access switched to %s", g_llm_access_mode == LLM_DIRECT_API ? "DirectAPI" : "Gateway");
+}
+
+static void work_profile_save_cb(lv_event_t* e) {
+    (void)e;
+    auto cp = [](lv_obj_t* ta, char* dst, size_t cap) {
+        if (!ta || !dst || cap == 0) return;
+        const char* t = lv_textarea_get_text(ta);
+        if (!t) t = "";
+        snprintf(dst, cap, "%s", t);
+    };
+    cp(mode_ta_user_name, g_profile_user_name, sizeof(g_profile_user_name));
+    cp(mode_ta_user_role, g_profile_user_role, sizeof(g_profile_user_role));
+    cp(mode_ta_ai_name, g_profile_ai_name, sizeof(g_profile_ai_name));
+    cp(mode_ta_ai_role, g_profile_ai_role, sizeof(g_profile_ai_role));
+    cp(mode_ta_ai_persona, g_profile_ai_persona, sizeof(g_profile_ai_persona));
+    cp(mode_ta_ai_skills, g_profile_ai_skills, sizeof(g_profile_ai_skills));
+    update_work_mode_hint();
+    save_theme_config();
+    LOG_I("PROFILE", "Profile saved user=%s ai=%s", profile_user_name(), profile_ai_name());
 }
 
 static void apply_mode_switch_visuals() {
@@ -1494,6 +1545,13 @@ static void relayout_panels() {
     if (mode_dd_control) lv_obj_set_width(mode_dd_control, std::min(content_w - 16, SCALE(360)));
     if (mode_dd_llm) lv_obj_set_width(mode_dd_llm, std::min(content_w - 16, SCALE(360)));
     if (mode_lbl_work_hint) lv_obj_set_width(mode_lbl_work_hint, content_w - 16);
+    int profile_w = std::min(content_w - 16, SCALE(520));
+    if (mode_ta_user_name) lv_obj_set_width(mode_ta_user_name, profile_w);
+    if (mode_ta_user_role) lv_obj_set_width(mode_ta_user_role, profile_w);
+    if (mode_ta_ai_name) lv_obj_set_width(mode_ta_ai_name, profile_w);
+    if (mode_ta_ai_role) lv_obj_set_width(mode_ta_ai_role, profile_w);
+    if (mode_ta_ai_persona) lv_obj_set_width(mode_ta_ai_persona, profile_w);
+    if (mode_ta_ai_skills) lv_obj_set_width(mode_ta_ai_skills, profile_w);
 
     /* Re-layout chat mode children */
     int input_h = chat_input ? (int)lv_obj_get_height(chat_input) : 36;
@@ -2257,6 +2315,11 @@ static void chat_add_user_bubble(const char* text) {
     lv_obj_set_style_text_color(ts_lbl, lv_color_make(130, 135, 150), 0);
     lv_obj_set_style_text_font(ts_lbl, FONT(10), 0);
 
+    lv_obj_t* user_lbl = lv_label_create(meta);
+    lv_label_set_text(user_lbl, profile_user_name());
+    lv_obj_set_style_text_color(user_lbl, lv_color_make(130, 135, 150), 0);
+    lv_obj_set_style_text_font(user_lbl, FONT(10), 0);
+
     lv_obj_t* avatar = lv_image_create(meta);
     lv_image_set_src(avatar, "A:assets/garlic_32.png");
     lv_obj_set_size(avatar, SCALE(AVATAR_USER_SIZE), SCALE(AVATAR_USER_SIZE));
@@ -2848,7 +2911,8 @@ static void chat_start_stream(const char* user_message) {
     SYSTEMTIME st;
     GetLocalTime(&st);
     char meta_ts[64];
-    snprintf(meta_ts, sizeof(meta_ts), "[AI] [%04d-%02d-%02d %02d:%02d:%02d]",
+    snprintf(meta_ts, sizeof(meta_ts), "[%s] [%04d-%02d-%02d %02d:%02d:%02d]",
+             profile_ai_name(),
              st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 
     lv_obj_t* ts_lbl = lv_label_create(meta);
@@ -2943,7 +3007,7 @@ static void chat_add_ai_bubble(const char* text) {
     lv_obj_clear_flag(avatar, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t* ai_lbl = lv_label_create(meta);
-    lv_label_set_text(ai_lbl, "AI");
+    lv_label_set_text(ai_lbl, profile_ai_name());
     lv_obj_set_style_text_color(ai_lbl, lv_color_make(130, 135, 150), 0);
     lv_obj_set_style_text_font(ai_lbl, FONT(10), 0);
 
@@ -4438,6 +4502,11 @@ static void open_local_path_cb(lv_event_t* e) {
     ShellExecuteA(nullptr, "open", path, nullptr, nullptr, SW_SHOWNORMAL);
 }
 
+static void free_path_userdata_cb(lv_event_t* e) {
+    char* path = (char*)lv_event_get_user_data(e);
+    if (path) free(path);
+}
+
 static void chat_add_attachment_card(const char* path, bool is_dir) {
     if (!chat_cont || !path || !path[0]) return;
 
@@ -4490,6 +4559,7 @@ static void chat_add_attachment_card(const char* path, bool is_dir) {
 
     char* path_copy = _strdup(path);
     lv_obj_add_event_cb(card, open_local_path_cb, LV_EVENT_CLICKED, path_copy);
+    lv_obj_add_event_cb(card, free_path_userdata_cb, LV_EVENT_DELETE, path_copy);
 }
 
 /* Upload menu click callbacks */
@@ -5980,6 +6050,43 @@ void app_ui_init() {
         lv_obj_set_width(mode_lbl_work_hint, LV_PCT(100));
         lv_obj_set_pos(mode_lbl_work_hint, 8, 134);
         update_work_mode_hint();
+
+        int px = 8;
+        int py = 208;
+        int cw = std::min(content_w - 16, SCALE(520));
+        auto mk_title = [&](const char* txt, int y) {
+            lv_obj_t* l = lv_label_create(mode_panel_work);
+            lv_label_set_text(l, txt);
+            lv_obj_set_style_text_color(l, c->text_dim, 0);
+            lv_obj_set_style_text_font(l, CJK_FONT_SMALL, 0);
+            lv_obj_set_pos(l, px, y);
+        };
+        auto mk_ta = [&](lv_obj_t** out, const char* text, int y, int h = 30) {
+            lv_obj_t* ta = lv_textarea_create(mode_panel_work);
+            lv_obj_set_size(ta, cw, h);
+            lv_obj_set_pos(ta, px, y);
+            lv_textarea_set_one_line(ta, h <= 36);
+            lv_textarea_set_text(ta, text ? text : "");
+            lv_obj_set_style_text_font(ta, CJK_FONT_SMALL, 0);
+            *out = ta;
+        };
+        mk_title("User profile", py);
+        mk_ta(&mode_ta_user_name, g_profile_user_name, py + 18);
+        mk_ta(&mode_ta_user_role, g_profile_user_role, py + 54);
+        mk_title("AI profile", py + 92);
+        mk_ta(&mode_ta_ai_name, g_profile_ai_name, py + 110);
+        mk_ta(&mode_ta_ai_role, g_profile_ai_role, py + 146);
+        mk_ta(&mode_ta_ai_persona, g_profile_ai_persona, py + 182, 44);
+        mk_ta(&mode_ta_ai_skills, g_profile_ai_skills, py + 230, 44);
+
+        lv_obj_t* btn_save_profile = lv_button_create(mode_panel_work);
+        lv_obj_set_size(btn_save_profile, SCALE(128), SCALE(32));
+        lv_obj_set_pos(btn_save_profile, px, py + 280);
+        lv_obj_add_event_cb(btn_save_profile, work_profile_save_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* btn_save_lbl = lv_label_create(btn_save_profile);
+        lv_label_set_text(btn_save_lbl, "Save Profile");
+        lv_obj_set_style_text_font(btn_save_lbl, CJK_FONT_SMALL, 0);
+        lv_obj_center(btn_save_lbl);
     }
 
     /* Layout: chat fills space, input pinned to bottom; GAP spacing everywhere */
