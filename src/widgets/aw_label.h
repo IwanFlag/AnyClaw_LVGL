@@ -23,22 +23,24 @@ inline lv_obj_t* aw_label_create(lv_obj_t* parent, const char* text,
     lv_label_set_text(lbl, text);
     lv_obj_clear_flag(lbl, LV_OBJ_FLAG_SCROLLABLE);
 
+    const lv_font_t* cjk = AW_CJK_FONT;
+    const lv_font_t* fnt = cjk ? cjk : aw_font(16);
     switch (style) {
         case LABEL_TITLE:
             lv_obj_set_style_text_color(lbl, aw::dark_accent(), 0);
-            lv_obj_set_style_text_font(lbl, &lv_font_mshy_16, 0);
+            lv_obj_set_style_text_font(lbl, fnt, 0);
             break;
         case LABEL_BODY:
             lv_obj_set_style_text_color(lbl, aw::dark_text(), 0);
-            lv_obj_set_style_text_font(lbl, &lv_font_mshy_16, 0);
+            lv_obj_set_style_text_font(lbl, fnt, 0);
             break;
         case LABEL_HINT:
             lv_obj_set_style_text_color(lbl, aw::dark_text_dim(), 0);
-            lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, 0);
+            lv_obj_set_style_text_font(lbl, aw_font(12), 0);
             break;
         case LABEL_MONO:
             lv_obj_set_style_text_color(lbl, lv_color_make(180, 220, 180), 0);
-            lv_obj_set_style_text_font(lbl, &lv_font_montserrat_12, 0);
+            lv_obj_set_style_text_font(lbl, aw_font(12), 0);
             break;
     }
 

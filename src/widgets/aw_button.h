@@ -13,6 +13,7 @@ enum AwBtnStyle {
     BTN_PRIMARY,    /* Blue accent button */
     BTN_SECONDARY,  /* Gray/neutral button */
     BTN_DANGER,     /* Red/warning button */
+    BTN_SUCCESS,    /* Green/action button */
     BTN_GHOST,      /* Transparent with border */
 };
 
@@ -40,6 +41,10 @@ inline lv_obj_t* aw_btn_create(lv_obj_t* parent, const char* text,
             lv_obj_set_style_bg_color(btn, aw::color_danger(), 0);
             lv_obj_set_style_bg_color(btn, lv_color_make(240, 100, 100), LV_STATE_PRESSED);
             break;
+        case BTN_SUCCESS:
+            lv_obj_set_style_bg_color(btn, lv_color_make(40, 100, 60), 0);
+            lv_obj_set_style_bg_color(btn, lv_color_make(50, 130, 80), LV_STATE_PRESSED);
+            break;
         case BTN_GHOST:
             lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, 0);
             lv_obj_set_style_border_color(btn, aw::dark_border(), 0);
@@ -50,7 +55,8 @@ inline lv_obj_t* aw_btn_create(lv_obj_t* parent, const char* text,
     lv_obj_t* lbl = lv_label_create(btn);
     lv_label_set_text(lbl, text);
     lv_obj_set_style_text_color(lbl, aw::color_white(), 0);
-    lv_obj_set_style_text_font(lbl, &lv_font_mshy_16, 0);  /* CJK_FONT fallback */
+    if (AW_CJK_FONT) lv_obj_set_style_text_font(lbl, AW_CJK_FONT, 0);
+    else lv_obj_set_style_text_font(lbl, aw_font(16), 0);
     lv_obj_center(lbl);
 
     return btn;

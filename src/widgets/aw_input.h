@@ -22,13 +22,14 @@ inline lv_obj_t* aw_textarea_create(lv_obj_t* parent,
     if (password_mode) lv_textarea_set_password_mode(ta, true);
 
     /* Style */
+    const lv_font_t* fnt = AW_CJK_FONT ? AW_CJK_FONT : aw_font(16);
     lv_obj_set_style_bg_color(ta, aw::dark_input(), 0);
     lv_obj_set_style_border_color(ta, aw::dark_border(), 0);
     lv_obj_set_style_border_width(ta, 1, 0);
     lv_obj_set_style_radius(ta, AW_RADIUS_MEDIUM, 0);
     lv_obj_set_style_pad_all(ta, AW_PAD_SMALL, 0);
     lv_obj_set_style_text_color(ta, aw::dark_text(), 0);
-    lv_obj_set_style_text_font(ta, &lv_font_mshy_16, 0);
+    lv_obj_set_style_text_font(ta, fnt, 0);
 
     /* Cursor color */
     lv_obj_set_style_border_color(ta, aw::color_primary(), LV_PART_CURSOR | LV_STATE_FOCUSED);
@@ -47,16 +48,17 @@ inline lv_obj_t* aw_dropdown_create(lv_obj_t* parent, const char* options, int w
     if (options) lv_dropdown_set_options(dd, options);
 
     /* Style */
+    const lv_font_t* fnt = AW_CJK_FONT ? AW_CJK_FONT : aw_font(16);
     lv_obj_set_style_bg_color(dd, aw::dark_input(), 0);
     lv_obj_set_style_border_color(dd, aw::dark_border(), 0);
     lv_obj_set_style_border_width(dd, 1, 0);
     lv_obj_set_style_radius(dd, AW_RADIUS_MEDIUM, 0);
     lv_obj_set_style_text_color(dd, aw::dark_text(), 0);
-    lv_obj_set_style_text_font(dd, &lv_font_mshy_16, 0);
+    lv_obj_set_style_text_font(dd, fnt, 0);
 
     /* Indicator (dropdown arrow) */
     lv_obj_set_style_text_font(dd, &lv_font_montserrat_12, LV_PART_INDICATOR);
-    lv_obj_set_style_text_font(dd, &lv_font_mshy_16, LV_PART_ITEMS | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(dd, fnt, LV_PART_ITEMS | LV_STATE_DEFAULT);
 
     return dd;
 }

@@ -46,7 +46,8 @@ inline lv_obj_t* aw_setting_row(lv_obj_t* parent, const char* label_text,
     lv_obj_t* lbl = lv_label_create(row);
     lv_label_set_text(lbl, label_text);
     lv_obj_set_style_text_color(lbl, aw::dark_text(), 0);
-    lv_obj_set_style_text_font(lbl, &lv_font_mshy_16, 0);
+    const lv_font_t* fnt = AW_CJK_FONT ? AW_CJK_FONT : aw_font(16);
+    lv_obj_set_style_text_font(lbl, fnt, 0);
 
     if (out_label) *out_label = lbl;
     return row;

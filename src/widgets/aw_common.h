@@ -8,24 +8,50 @@
  */
 
 #include "lvgl.h"
+#include "app.h"
 #include "app_config.h"
+#include "theme.h"
 
-/* ── Color Palette ──────────────────────────────────────────── */
+/* ── Font helpers ───────────────────────────────────────────── */
+/* CJK font from app (may be NULL if not loaded) */
+#define AW_CJK_FONT (app_get_cjk_font() ? app_get_cjk_font() : NULL)
+
+/* DPI-scaled font lookup */
+inline const lv_font_t* aw_font(int base_px) {
+    int sz = base_px * app_get_dpi_scale() / 100;
+    if (sz <= 12) return &lv_font_montserrat_10;
+    if (sz <= 14) return &lv_font_montserrat_12;
+    if (sz <= 16) return &lv_font_montserrat_14;
+    if (sz <= 18) return &lv_font_montserrat_16;
+    if (sz <= 20) return &lv_font_montserrat_18;
+    if (sz <= 22) return &lv_font_montserrat_20;
+    if (sz <= 24) return &lv_font_montserrat_22;
+    if (sz <= 26) return &lv_font_montserrat_24;
+    if (sz <= 28) return &lv_font_montserrat_26;
+    if (sz <= 30) return &lv_font_montserrat_28;
+    if (sz <= 32) return &lv_font_montserrat_30;
+    if (sz <= 36) return &lv_font_montserrat_32;
+    if (sz <= 40) return &lv_font_montserrat_36;
+    if (sz <= 48) return &lv_font_montserrat_40;
+    return &lv_font_montserrat_48;
+}
+
+/* ── Color Palette (uses global theme g_colors when available) ── */
 namespace aw {
-    /* Dark theme */
-    inline lv_color_t dark_bg()       { return lv_color_make(26, 30, 46); }
-    inline lv_color_t dark_panel()    { return lv_color_make(35, 40, 56); }
-    inline lv_color_t dark_text()     { return lv_color_make(224, 224, 224); }
-    inline lv_color_t dark_text_dim() { return lv_color_make(130, 135, 150); }
-    inline lv_color_t dark_accent()   { return lv_color_make(100, 160, 255); }
-    inline lv_color_t dark_border()   { return lv_color_make(42, 46, 62); }
-    inline lv_color_t dark_input()    { return lv_color_make(30, 37, 48); }
+    /* Theme-aware: delegates to g_colors->* */
+    inline lv_color_t dark_bg()       { return g_colors ? g_colors->bg : lv_color_make(26, 30, 46); }
+    inline lv_color_t dark_panel()    { return g_colors ? g_colors->panel : lv_color_make(35, 40, 56); }
+    inline lv_color_t dark_text()     { return g_colors ? g_colors->text : lv_color_make(224, 224, 224); }
+    inline lv_color_t dark_text_dim() { return g_colors ? g_colors->text_dim : lv_color_make(130, 135, 150); }
+    inline lv_color_t dark_accent()   { return g_colors ? g_colors->accent : lv_color_make(100, 160, 255); }
+    inline lv_color_t dark_border()   { return g_colors ? g_colors->panel_border : lv_color_make(42, 46, 62); }
+    inline lv_color_t dark_input()    { return g_colors ? g_colors->input_bg : lv_color_make(30, 37, 48); }
 
     /* Functional colors */
-    inline lv_color_t color_primary()  { return lv_color_make(59, 130, 246); }
-    inline lv_color_t color_success()  { return lv_color_make(0, 220, 60); }
-    inline lv_color_t color_warning()  { return lv_color_make(220, 200, 40); }
-    inline lv_color_t color_danger()   { return lv_color_make(220, 80, 80); }
+    inline lv_color_t color_primary()  { return g_colors ? g_colors->accent : lv_color_make(59, 130, 246); }
+    inline lv_color_t color_success()  { return g_colors ? g_colors->status_ok : lv_color_make(0, 220, 60); }
+    inline lv_color_t color_warning()  { return g_colors ? g_colors->status_warn : lv_color_make(220, 200, 40); }
+    inline lv_color_t color_danger()   { return g_colors ? g_colors->status_err : lv_color_make(220, 80, 80); }
     inline lv_color_t color_white()    { return lv_color_make(255, 255, 255); }
 
     /* Selection */
