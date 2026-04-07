@@ -799,6 +799,10 @@ void load_theme_config() {
     if (cm >= 0 && cm <= 1) g_control_mode = (ControlMode)cm;
     int lm = json_extract_int(content.c_str(), "llm_access_mode", -1);
     if (lm >= 0 && lm <= 1) g_llm_access_mode = (LlmAccessMode)lm;
+    if (g_llm_access_mode == LLM_DIRECT_API) {
+        /* User requested Direct API mode to be paused for now. */
+        g_llm_access_mode = LLM_GATEWAY;
+    }
     json_extract_string(content.c_str(), "profile_user_name", g_profile_user_name, sizeof(g_profile_user_name));
     json_extract_string(content.c_str(), "profile_user_role", g_profile_user_role, sizeof(g_profile_user_role));
     json_extract_string(content.c_str(), "profile_user_persona", g_profile_user_persona, sizeof(g_profile_user_persona));
@@ -1042,6 +1046,11 @@ static lv_obj_t* mode_ta_voice_input = nullptr;
 static lv_obj_t* mode_remote_warning_bar = nullptr;
 static lv_obj_t* mode_sw_remote_guard = nullptr;
 static lv_obj_t* mode_lbl_remote_state = nullptr;
+static lv_obj_t* mode_lbl_remote_session_state = nullptr;
+static lv_obj_t* mode_btn_remote_request = nullptr;
+static lv_obj_t* mode_btn_remote_accept = nullptr;
+static lv_obj_t* mode_btn_remote_reject = nullptr;
+static lv_obj_t* mode_btn_remote_disconnect = nullptr;
 static lv_obj_t* mode_profile_user_avatar_preview = nullptr;
 static lv_obj_t* mode_profile_user_text_preview = nullptr;
 static lv_obj_t* mode_profile_ai_avatar_preview = nullptr;
@@ -1051,6 +1060,10 @@ static lv_obj_t* g_remote_arm_confirm_btn = nullptr;
 static lv_obj_t* g_remote_arm_count_label = nullptr;
 static lv_timer_t* g_remote_arm_timer = nullptr;
 static int g_remote_arm_countdown = 0;
+enum RemoteSessionState { REMOTE_IDLE = 0, REMOTE_REQUESTING = 1, REMOTE_PENDING_ACCEPT = 2, REMOTE_CONNECTED = 3 };
+static RemoteSessionState g_remote_state = REMOTE_IDLE;
+static lv_timer_t* g_remote_session_timer = nullptr;
+static int g_remote_session_left = 0;
 static int MODE_BAR_H = 36;
 enum UiMainMode { UI_MODE_CHAT = 0, UI_MODE_VOICE = 1, UI_MODE_WORK = 2 };
 static UiMainMode g_ui_mode = UI_MODE_CHAT;
@@ -1347,6 +1360,7 @@ static void btn_close_cb(lv_event_t* e) {
 static void relayout_panels();
 static void apply_mode_switch_visuals();
 static void update_work_mode_hint();
+static void update_remote_session_visuals();
 void ui_relayout_all();
 static int mode_content_h() { return std::max(120, PANEL_H - MODE_BAR_H - CHAT_GAP * 3); }
 static int mode_content_w() { return std::max(200, RIGHT_PANEL_W - CHAT_GAP * 2); }
@@ -1509,10 +1523,106 @@ static void open_remote_arm_modal() {
     g_remote_arm_timer = lv_timer_create(remote_arm_countdown_cb, 1000, nullptr);
 }
 
+static void remote_session_timer_cb(lv_timer_t* t) {
+    (void)t;
+    if (g_remote_state != REMOTE_PENDING_ACCEPT) return;
+    g_remote_session_left--;
+    if (g_remote_session_left <= 0) {
+        g_remote_state = REMOTE_IDLE;
+        if (g_remote_session_timer) {
+            lv_timer_del(g_remote_session_timer);
+            g_remote_session_timer = nullptr;
+        }
+        ui_log("[Remote] Request timed out");
+    }
+    update_remote_session_visuals();
+}
+
+static void stop_remote_session_timer() {
+    if (g_remote_session_timer) {
+        lv_timer_del(g_remote_session_timer);
+        g_remote_session_timer = nullptr;
+    }
+}
+
+static void update_remote_session_visuals() {
+    if (mode_lbl_remote_session_state) {
+        const char* text = "Remote session: idle";
+        if (g_remote_state == REMOTE_REQUESTING) text = "Remote session: requesting...";
+        else if (g_remote_state == REMOTE_PENDING_ACCEPT) {
+            static char buf[96] = {0};
+            snprintf(buf, sizeof(buf), "Remote session: awaiting acceptance (%ds)", g_remote_session_left);
+            text = buf;
+        } else if (g_remote_state == REMOTE_CONNECTED) {
+            text = "Remote session: CONNECTED (desktop+voice+control)";
+        }
+        lv_label_set_text(mode_lbl_remote_session_state, text);
+    }
+    if (mode_btn_remote_request) {
+        if (g_remote_state == REMOTE_IDLE) lv_obj_clear_state(mode_btn_remote_request, LV_STATE_DISABLED);
+        else lv_obj_add_state(mode_btn_remote_request, LV_STATE_DISABLED);
+    }
+    if (mode_btn_remote_accept) {
+        if (g_remote_state == REMOTE_PENDING_ACCEPT) lv_obj_clear_state(mode_btn_remote_accept, LV_STATE_DISABLED);
+        else lv_obj_add_state(mode_btn_remote_accept, LV_STATE_DISABLED);
+    }
+    if (mode_btn_remote_reject) {
+        if (g_remote_state == REMOTE_PENDING_ACCEPT) lv_obj_clear_state(mode_btn_remote_reject, LV_STATE_DISABLED);
+        else lv_obj_add_state(mode_btn_remote_reject, LV_STATE_DISABLED);
+    }
+    if (mode_btn_remote_disconnect) {
+        if (g_remote_state == REMOTE_CONNECTED) lv_obj_clear_state(mode_btn_remote_disconnect, LV_STATE_DISABLED);
+        else lv_obj_add_state(mode_btn_remote_disconnect, LV_STATE_DISABLED);
+    }
+}
+
+static void remote_request_cb(lv_event_t* e) {
+    (void)e;
+    if (!g_remote_guard_armed) {
+        ui_log("[Remote] Cannot request session: guard is disarmed");
+        return;
+    }
+    if (g_remote_state != REMOTE_IDLE) return;
+    g_remote_state = REMOTE_REQUESTING;
+    update_remote_session_visuals();
+    ui_log("[Remote] Session request sent");
+    g_remote_state = REMOTE_PENDING_ACCEPT;
+    g_remote_session_left = 15;
+    stop_remote_session_timer();
+    g_remote_session_timer = lv_timer_create(remote_session_timer_cb, 1000, nullptr);
+    update_remote_session_visuals();
+}
+
+static void remote_accept_cb(lv_event_t* e) {
+    (void)e;
+    if (g_remote_state != REMOTE_PENDING_ACCEPT) return;
+    stop_remote_session_timer();
+    g_remote_state = REMOTE_CONNECTED;
+    ui_log("[Remote] Session accepted and connected");
+    update_remote_session_visuals();
+}
+
+static void remote_reject_cb(lv_event_t* e) {
+    (void)e;
+    if (g_remote_state != REMOTE_PENDING_ACCEPT) return;
+    stop_remote_session_timer();
+    g_remote_state = REMOTE_IDLE;
+    ui_log("[Remote] Session rejected");
+    update_remote_session_visuals();
+}
+
+static void remote_disconnect_cb(lv_event_t* e) {
+    (void)e;
+    stop_remote_session_timer();
+    g_remote_state = REMOTE_IDLE;
+    ui_log("[Remote] Session disconnected");
+    update_remote_session_visuals();
+}
+
 static void update_work_mode_hint() {
     if (!mode_lbl_work_hint) return;
     const char* control = (g_control_mode == CONTROL_AI) ? "AI controls AnyClaw" : "User controls AnyClaw";
-    const char* llm = (g_llm_access_mode == LLM_GATEWAY) ? "Gateway mode (OpenClaw)" : "Direct API mode";
+    const char* llm = "Gateway mode (OpenClaw, Direct API paused)";
     lv_label_set_text_fmt(mode_lbl_work_hint, "Control: %s\nLLM Access: %s\nRemote Guard: %s\nUser: %s (%s)\nAI: %s (%s)",
                           control, llm,
                           g_remote_guard_armed ? "Armed" : "Disarmed",
@@ -1532,10 +1642,18 @@ static void work_control_mode_cb(lv_event_t* e) {
 static void work_llm_mode_cb(lv_event_t* e) {
     lv_obj_t* dd = lv_event_get_target_obj(e);
     if (!dd) return;
-    g_llm_access_mode = (lv_dropdown_get_selected(dd) == 1) ? LLM_DIRECT_API : LLM_GATEWAY;
+    uint16_t selected = lv_dropdown_get_selected(dd);
+    if (selected == 1) {
+        /* Direct API is temporarily paused by product decision. */
+        g_llm_access_mode = LLM_GATEWAY;
+        lv_dropdown_set_selected(dd, 0);
+        ui_log("[Mode] Direct API paused, fallback to Gateway");
+    } else {
+        g_llm_access_mode = LLM_GATEWAY;
+    }
     update_work_mode_hint();
     save_theme_config();
-    LOG_I("MODE", "LLM access switched to %s", g_llm_access_mode == LLM_DIRECT_API ? "DirectAPI" : "Gateway");
+    LOG_I("MODE", "LLM access switched to Gateway (Direct API paused)");
 }
 
 static void work_profile_save_cb(lv_event_t* e) {
@@ -1586,9 +1704,12 @@ static void work_remote_guard_sw_cb(lv_event_t* e) {
 static void work_remote_disconnect_cb(lv_event_t* e) {
     (void)e;
     close_remote_arm_modal();
+    stop_remote_session_timer();
+    g_remote_state = REMOTE_IDLE;
     g_remote_guard_armed = false;
     if (mode_sw_remote_guard) lv_obj_clear_state(mode_sw_remote_guard, LV_STATE_CHECKED);
     update_remote_guard_visuals();
+    update_remote_session_visuals();
     update_work_mode_hint();
     save_theme_config();
     ui_log("[Remote] Emergency disconnect triggered by user");
@@ -2968,7 +3089,7 @@ static unsigned __stdcall chat_api_thread(void* arg) {
                 ui_log("[Chat] Failover: switching to %s", backup);
                 LOG_I("Chat", "Failover: switching from %s to %s", cur_model, backup);
                 if (app_update_model_config(nullptr, backup)) {
-                    Sleep(500); /* hot-reload, no gateway restart needed */
+                    Sleep(3000); /* wait for gateway restart */
                     g_stream_buffer[0] = '\0';
                     InterlockedExchange(&g_stream_new_data, 0);
                     snprintf(json_body, sizeof(json_body),
@@ -3021,21 +3142,11 @@ static void stream_timer_cb(lv_timer_t* timer) {
     (void)timer;
     if (!g_stream_label || !g_streaming) return;
 
-    /* Watchdog: dynamic timeout — free models are often slower (cold start, queue).
-     *   Free models: 60s idle / 90s total
-     *   Paid models: 30s idle / 45s total (default) */
+    /* Watchdog: if no data for 30s or total elapsed > 45s, force-finish */
     DWORD now = GetTickCount();
     DWORD idle_ms = now - g_stream_last_data_tick;
     DWORD total_ms = now - g_stream_start_tick;
-    bool is_free = false;
-    {
-        char cur_model[256] = {0};
-        app_get_current_model(cur_model, sizeof(cur_model));
-        is_free = model_is_free_by_name(cur_model);
-    }
-    DWORD idle_limit = is_free ? 60000 : 30000;
-    DWORD total_limit = is_free ? 90000 : 45000;
-    if ((idle_ms > idle_limit || total_ms > total_limit) && !g_stream_done) {
+    if ((idle_ms > 30000 || total_ms > 45000) && !g_stream_done) {
         LOG_W("Chat", "Stream timeout: idle=%lums total=%lums, force-finish", idle_ms, total_ms);
         ui_log("[Chat] Stream timeout (%.0fs), finishing...", total_ms / 1000.0);
         if (g_stream_buffer[0] == '\0') {
@@ -6444,8 +6555,8 @@ void app_ui_init() {
                                (uint16_t)g_control_mode, &mode_dd_control, card_w - 24);
         lv_obj_add_event_cb(mode_dd_control, work_control_mode_cb, LV_EVENT_VALUE_CHANGED, nullptr);
         aw_form_field_dropdown(sec_runtime, "LLM access",
-                               "Gateway mode (OpenClaw)\nDirect API mode",
-                               (uint16_t)g_llm_access_mode, &mode_dd_llm, card_w - 24);
+                               "Gateway mode (OpenClaw)\nDirect API mode (paused)",
+                               0, &mode_dd_llm, card_w - 24);
         lv_obj_add_event_cb(mode_dd_llm, work_llm_mode_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
         mode_lbl_work_hint = aw_label_wrap_create(sec_runtime, "", LABEL_HINT, 100);
@@ -6546,6 +6657,43 @@ void app_ui_init() {
         lv_obj_t* btn_remote_cut = aw_btn_create(sec_remote, "Emergency Disconnect", BTN_DANGER, SCALE(220), SCALE(34));
         lv_obj_add_event_cb(btn_remote_cut, work_remote_disconnect_cb, LV_EVENT_CLICKED, nullptr);
         update_remote_guard_visuals();
+
+        lv_obj_t* sec_remote_flow = aw_form_section_create(mode_panel_work, "Remote Collaboration", card_w);
+        mode_lbl_remote_session_state = aw_label_wrap_create(sec_remote_flow, "", LABEL_HINT, 100);
+        lv_obj_set_style_text_color(mode_lbl_remote_session_state, c->text_dim, 0);
+
+        lv_obj_t* remote_btn_row1 = lv_obj_create(sec_remote_flow);
+        lv_obj_set_width(remote_btn_row1, card_w - 24);
+        lv_obj_set_height(remote_btn_row1, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(remote_btn_row1, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(remote_btn_row1, 0, 0);
+        lv_obj_set_style_pad_all(remote_btn_row1, 0, 0);
+        lv_obj_set_style_pad_gap(remote_btn_row1, 8, 0);
+        lv_obj_set_flex_flow(remote_btn_row1, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(remote_btn_row1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(remote_btn_row1, LV_OBJ_FLAG_SCROLLABLE);
+
+        mode_btn_remote_request = aw_btn_create(remote_btn_row1, "Send Request", BTN_PRIMARY, SCALE(140), SCALE(34));
+        lv_obj_add_event_cb(mode_btn_remote_request, remote_request_cb, LV_EVENT_CLICKED, nullptr);
+        mode_btn_remote_disconnect = aw_btn_create(remote_btn_row1, "Disconnect", BTN_DANGER, SCALE(130), SCALE(34));
+        lv_obj_add_event_cb(mode_btn_remote_disconnect, remote_disconnect_cb, LV_EVENT_CLICKED, nullptr);
+
+        lv_obj_t* remote_btn_row2 = lv_obj_create(sec_remote_flow);
+        lv_obj_set_width(remote_btn_row2, card_w - 24);
+        lv_obj_set_height(remote_btn_row2, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(remote_btn_row2, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(remote_btn_row2, 0, 0);
+        lv_obj_set_style_pad_all(remote_btn_row2, 0, 0);
+        lv_obj_set_style_pad_gap(remote_btn_row2, 8, 0);
+        lv_obj_set_flex_flow(remote_btn_row2, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(remote_btn_row2, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(remote_btn_row2, LV_OBJ_FLAG_SCROLLABLE);
+
+        mode_btn_remote_accept = aw_btn_create(remote_btn_row2, "Accept", BTN_SUCCESS, SCALE(120), SCALE(34));
+        lv_obj_add_event_cb(mode_btn_remote_accept, remote_accept_cb, LV_EVENT_CLICKED, nullptr);
+        mode_btn_remote_reject = aw_btn_create(remote_btn_row2, "Reject", BTN_SECONDARY, SCALE(120), SCALE(34));
+        lv_obj_add_event_cb(mode_btn_remote_reject, remote_reject_cb, LV_EVENT_CLICKED, nullptr);
+        update_remote_session_visuals();
     }
 
     /* Layout: chat fills space, input pinned to bottom; GAP spacing everywhere */
