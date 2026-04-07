@@ -1,0 +1,69 @@
+# Build directories
+build/
+build-mingw/
+build_mingw/
+cmake-build-*/
+
+# IDE
+.vs/
+.vscode/
+*.sln
+*.vcxproj*
+*.user
+CMakeSettings.json
+
+# OS
+Thumbs.db
+*.DS_Store
+
+# Release zips
+*.zip
+
+# Compiled objects
+*.exe
+*.dll
+*.o
+*.a
+*.obj
+
+# Screenshots and debug images
+*.png
+*.bmp
+*.jpg
+*.jpeg
+!docs/*.png
+!docs/*.svg
+!assets/**/*.png
+!assets/**/*.ico
+
+# Temp/debug files
+*.log
+*.txt
+*.bak
+*.orig
+*.tmp
+!docs/*.md
+!thirdparty/**/*.txt
+!tools/README.md
+!LICENSE*
+
+# Scripts (dev-only, not part of build)
+*.ps1
+*.cs
+*.js
+!package.json
+
+# Python dev scripts
+*.py
+!setup.py
+
+# Font source files
+*.ttf
+*.ttc
+!thirdparty/lvgl/**
+
+# LVGL test artifacts
+thirdparty/lvgl/tests/
+
+# Misc
+.clawhub/

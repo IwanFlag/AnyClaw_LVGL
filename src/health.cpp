@@ -1,0 +1,316 @@
+#include "health.h"
+#include "app.h"
+#include "app_config.h"
+#include "app_log.h"
+#include <windows.h>
+#include <tlhelp32.h>
+#include <process.h>
+#include <cstdio>
+#include <cstring>
+#include <string>
+#include <vector>
+
+static HANDLE g_hThread = nullptr;
+static volatile bool g_running = false;
+static HealthStatusCallback g_callback = nullptr;
+static int g_httpFailCount = 0;
+static bool g_autoRestarted = false;
+static bool g_firstPoll = true;  /* First poll → Checking state */
+extern int g_refresh_interval_ms;  /* Configurable check interval from ui_main.cpp */
+
+/* Check if node.exe process exists */
+static bool is_node_running() {
+    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnap == INVALID_HANDLE_VALUE) return false;
+
+    PROCESSENTRY32W pe = {};
+    pe.dwSize = sizeof(pe);
+    bool found = false;
+
+    if (Process32FirstW(hSnap, &pe)) {
+        do {
+            if (_wcsicmp(pe.szExeFile, L"node.exe") == 0) {
+                found = true;
+                break;
+            }
+        } while (Process32NextW(hSnap, &pe));
+    }
+
+    CloseHandle(hSnap);
+    return found;
+}
+
+/* Check HTTP health endpoint */
+static bool check_http_health() {
+    char response[256] = {0};
+    int code = http_get(GATEWAY_HEALTH_URL, response, sizeof(response), HEALTH_HTTP_TIMEOUT);
+    return (code == 200);
+}
+
+/*
+ * Execute a CLI command and capture stdout.
+ * Returns true if exit code == 0.
+ */
+static bool exec_cmd_local(const char* cmd, char* output, int out_size, DWORD timeout_ms = 8000) {
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+
+    HANDLE hRead = nullptr, hWrite = nullptr;
+    if (!CreatePipe(&hRead, &hWrite, &sa, 0)) return false;
+    SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOA si{};
+    si.cb = sizeof(si);
+    si.hStdOutput = hWrite;
+    si.hStdError  = hWrite;
+    si.dwFlags |= STARTF_USESTDHANDLES;
+
+    PROCESS_INFORMATION pi{};
+
+    std::string full = std::string("cmd /C \"") + cmd + "\"";
+    std::vector<char> buf(full.begin(), full.end());
+    buf.push_back('\0');
+
+    if (!CreateProcessA(nullptr, buf.data(), nullptr, nullptr, TRUE,
+                        CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+        CloseHandle(hRead);
+        CloseHandle(hWrite);
+        return false;
+    }
+
+    CloseHandle(hWrite);
+
+    std::string result;
+    char readBuf[4096];
+    DWORD bytesRead = 0;
+    while (ReadFile(hRead, readBuf, sizeof(readBuf), &bytesRead, nullptr) && bytesRead > 0) {
+        result.append(readBuf, bytesRead);
+    }
+
+    WaitForSingleObject(pi.hProcess, timeout_ms);
+    DWORD exitCode = 1;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    CloseHandle(hRead);
+
+    /* Trim trailing whitespace */
+    while (!result.empty() && (result.back() == '\r' || result.back() == '\n' || result.back() == ' '))
+        result.pop_back();
+
+    strncpy(output, result.c_str(), out_size - 1);
+    output[out_size - 1] = '\0';
+    return exitCode == 0;
+}
+
+static int g_active_session_count = 0;  /* number of active sessions */
+static char g_active_session_info[256] = {0};  /* formatted session summary for UI */
+
+/*
+ * Count active sessions and collect summary info.
+ * Calls: openclaw gateway call sessions.list --json
+ * Updates g_active_session_count and g_active_session_info.
+ */
+static int count_active_sessions() {
+    char output[8192] = {0};
+    bool ok = exec_cmd_local(
+        "openclaw gateway call sessions.list --json",
+        output, sizeof(output), 8000
+    );
+
+    if (!ok || output[0] == '\0') {
+        LOG_W("HEALTH", "sessions.list returned empty or failed");
+        return 0;
+    }
+
+    int count = 0;
+    g_active_session_info[0] = '\0';
+    int info_pos = 0;
+
+    /* Parse each session: look for "lastChannel" and "ageMs" pairs */
+    const char* p = output;
+    while ((p = strstr(p, "\"lastChannel\"")) != nullptr) {
+        /* Extract channel name */
+        p += 13;  /* skip "lastChannel" */
+        while (*p == ' ' || *p == ':' || *p == '"') p++;
+        char channel[32] = {0};
+        int ci = 0;
+        while (*p && *p != '"' && ci < 30) {
+            channel[ci++] = *p++;
+        }
+        channel[ci] = '\0';
+
+        /* Look for ageMs near this session */
+        const char* next_ch = strstr(p, "\"lastChannel\"");
+        const char* age_p = strstr(p, "\"ageMs\"");
+        if (!age_p || (next_ch && age_p > next_ch)) {
+            /* No ageMs found for this session, skip */
+            continue;
+        }
+        age_p += 7;
+        while (*age_p == ' ' || *age_p == ':') age_p++;
+        long long ageMs = 0;
+        while (*age_p >= '0' && *age_p <= '9') {
+            ageMs = ageMs * 10 + (*age_p - '0');
+            age_p++;
+        }
+
+        if (ageMs > 0 && ageMs < SESSION_ACTIVE_AGE_MS) {
+            count++;
+            /* Append to summary: "channel:age_s" */
+            int age_s = (int)(ageMs / 1000);
+            int written = snprintf(g_active_session_info + info_pos,
+                sizeof(g_active_session_info) - info_pos,
+                "%s%s:%ds", info_pos > 0 ? ", " : "", channel[0] ? channel : "?", age_s);
+            if (written > 0) info_pos += written;
+        }
+
+        p = age_p;
+    }
+
+    LOG_D("HEALTH", "Active sessions: %d (%s)", count, g_active_session_info);
+    return count;
+}
+
+/* Backward-compatible wrapper */
+static bool has_active_sessions() {
+    return count_active_sessions() > 0;
+}
+
+int health_get_session_count() {
+    return g_active_session_count;
+}
+
+const char* health_get_session_info() {
+    return g_active_session_info;
+}
+
+/* Health monitoring thread */
+static unsigned __stdcall health_thread(void* arg) {
+    (void)arg;
+    LOG_I("HEALTH", "Monitoring thread started (interval=%dms)", g_refresh_interval_ms);
+
+    while (g_running) {
+        Sleep(g_refresh_interval_ms);
+        if (!g_running) break;
+
+        DWORD tick_start = GetTickCount();
+        bool nodeRunning = is_node_running();
+        bool httpOk = check_http_health();
+        DWORD check_ms = GetTickCount() - tick_start;
+
+        LOG_D("HEALTH", "Check: node=%d http=%d elapsed=%lums", nodeRunning, httpOk, check_ms);
+
+        ClawStatus newStatus;
+        std::string reason;
+
+        if (!nodeRunning && !httpOk) {
+            /* Gateway process not found + HTTP down */
+            if (!g_autoRestarted) {
+                /* Try auto-restart once */
+                g_autoRestarted = true;
+                LOG_W("HEALTH", "Node not found, attempting auto-restart...");
+                reason = "Gateway 未运行";
+                if (app_start_gateway()) {
+                    LOG_I("HEALTH", "Auto-restart initiated");
+                    newStatus = ClawStatus::Checking;
+                } else {
+                    LOG_E("HEALTH", "Auto-restart failed");
+                    newStatus = ClawStatus::Error;
+                    reason = "Gateway 启动失败";
+                }
+            } else {
+                newStatus = ClawStatus::Error;
+                reason = "Gateway 未运行";
+            }
+        } else if (nodeRunning && !httpOk) {
+            /* Process exists but HTTP not responding */
+            g_httpFailCount++;
+            LOG_W("HEALTH", "HTTP check failed (%d/3)", g_httpFailCount);
+            if (g_httpFailCount >= HEALTH_FAIL_THRESHOLD) {
+                newStatus = ClawStatus::Error;
+                reason = "端口无响应";
+                g_autoRestarted = false;  /* Allow retry next time process dies */
+            } else {
+                newStatus = ClawStatus::Checking;  /* Give it time */
+                reason = "等待 Gateway 响应...";
+            }
+        } else if (httpOk) {
+            /* Gateway process + HTTP both OK → check sessions for busy/idle */
+            g_httpFailCount = 0;
+            g_autoRestarted = false;
+
+            /* Count active sessions for task display */
+            g_active_session_count = count_active_sessions();
+
+            if (g_firstPoll) {
+                newStatus = ClawStatus::Checking;
+                g_firstPoll = false;
+            } else if (g_active_session_count > 0) {
+                newStatus = ClawStatus::Busy;
+            } else {
+                newStatus = ClawStatus::Ready;
+            }
+        } else {
+            /* HTTP works but process not found (unlikely) */
+            newStatus = ClawStatus::Ready;
+            g_httpFailCount = 0;
+        }
+
+        /* Update global failure reason */
+        g_status_reason = reason;
+
+        /* Update tray state based on status */
+        switch (newStatus) {
+            case ClawStatus::Ready:
+                tray_set_state(TrayState::Green);
+                break;
+            case ClawStatus::Busy:
+            case ClawStatus::Checking:
+                tray_set_state(TrayState::Yellow);
+                break;
+            case ClawStatus::Error:
+                tray_set_state(TrayState::Red);
+                break;
+            default:
+                tray_set_state(TrayState::White);
+                break;
+        }
+
+        /* Fire callback */
+        if (g_callback) {
+            g_callback(newStatus);
+        }
+    }
+
+    LOG_I("HEALTH", "Monitoring thread stopped");
+    return 0;
+}
+
+void health_start() {
+    if (g_hThread) return;
+    g_running = true;
+    g_httpFailCount = 0;
+    g_autoRestarted = false;
+    g_firstPoll = true;
+
+    g_hThread = (HANDLE)_beginthreadex(nullptr, 0, health_thread, nullptr, 0, nullptr);
+    if (!g_hThread) {
+        LOG_E("HEALTH", "Failed to create thread");
+    }
+}
+
+void health_stop() {
+    if (!g_hThread) return;
+    g_running = false;
+    WaitForSingleObject(g_hThread, 5000);
+    CloseHandle(g_hThread);
+    g_hThread = nullptr;
+    LOG_I("HEALTH", "Monitoring stopped");
+}
+
+void health_set_callback(HealthStatusCallback cb) {
+    g_callback = cb;
+}
