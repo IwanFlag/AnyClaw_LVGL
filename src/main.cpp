@@ -3,6 +3,7 @@
 #define KEYBOARD_BUFFER_SIZE 256
 #include "lvgl.h"
 #include "app.h"
+#include "resource.h"
 #include "app_config.h"
 #include "paths.h"
 #include "model_manager.h"
@@ -520,9 +521,9 @@ int main(int argc, char* argv[]) {
         HWND hwndEarly = getNativeWindowHandle(g_window);
         if (hwndEarly) {
             HINSTANCE hInst = GetModuleHandle(nullptr);
-            HICON hIcon96 = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(1), IMAGE_ICON, 96, 96, LR_DEFAULTCOLOR);
-            HICON hIcon64 = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(1), IMAGE_ICON, 64, 64, LR_DEFAULTCOLOR);
-            HICON hIcon32 = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(1), IMAGE_ICON, 32, 32, LR_DEFAULTCOLOR);
+            HICON hIcon96 = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(IDI_ICON1), IMAGE_ICON, 96, 96, LR_DEFAULTCOLOR);
+            HICON hIcon64 = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(IDI_ICON1), IMAGE_ICON, 64, 64, LR_DEFAULTCOLOR);
+            HICON hIcon32 = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(IDI_ICON1), IMAGE_ICON, 32, 32, LR_DEFAULTCOLOR);
             if (hIcon96) SendMessage(hwndEarly, WM_SETICON, ICON_BIG, (LPARAM)hIcon96);
             else if (hIcon64) SendMessage(hwndEarly, WM_SETICON, ICON_BIG, (LPARAM)hIcon64);
             if (hIcon64) SendMessage(hwndEarly, WM_SETICON, ICON_SMALL, (LPARAM)hIcon64);

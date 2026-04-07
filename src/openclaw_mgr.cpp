@@ -533,21 +533,15 @@ bool app_update_model_config(const char* api_key, const char* model_name) {
         }
     }
 
+    /* 3. Apply — Gateway watches openclaw.json and hot-reloads model changes.
+     *    Model/agent config does NOT require a restart (docs: "Agent & models → No").
+     *    Wait briefly for file watcher debounce (~300ms default) to pick up changes. */
     if (all_ok) {
-        LOG_I("Config", "Config synced to Gateway, restarting...");
+        LOG_I("Config", "Config written, Gateway will hot-apply (no restart needed)");
+        Sleep(500); /* allow file watcher debounce */
     }
 
-    /* 3. Restart gateway */
-    snprintf(cmd, sizeof(cmd), "openclaw gateway restart");
-    if (exec_cmd(cmd, output, sizeof(output), 15000)) {
-        LOG_I("Config", "Gateway restarted OK");
-        LOG_I("Config", "Gateway restarted");
-    } else {
-        LOG_E("Config", "Gateway restart failed");
-        LOG_E("Config", "Gateway restart failed");
-    }
-
-    /* ── Step N: Rollback on failure ── */
+    /* ── Rollback on failure ── */
     if (!all_ok) {
         LOG_W("Config", "Config update failed, rolling back from %s", bak_path.c_str());
         std::ifstream src(bak_path, std::ios::binary);
@@ -556,9 +550,8 @@ bool app_update_model_config(const char* api_key, const char* model_name) {
             dst << src.rdbuf();
             src.close();
             dst.close();
-            LOG_I("Config", "Rollback complete, restarting Gateway...");
-            snprintf(cmd, sizeof(cmd), "openclaw gateway restart");
-            exec_cmd(cmd, output, sizeof(output), 15000);
+            LOG_I("Config", "Rollback complete, Gateway will hot-apply restored config");
+            Sleep(500);
         } else {
             LOG_E("Config", "Rollback FAILED — cannot restore %s", bak_path.c_str());
         }

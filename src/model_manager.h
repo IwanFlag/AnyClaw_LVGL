@@ -71,7 +71,8 @@ bool model_is_custom(int index);
  * ═══════════════════════════════════════════════════════════════ */
 
 #define FAILOVER_MAX_MODELS  16
-#define FAILOVER_CHECK_INTERVAL_MS 300000  /* 5 minutes */
+#define FAILOVER_CHECK_INTERVAL_MS 300000  /* 5 minutes between probe rounds */
+#define FAILOVER_PROBE_TIMEOUT_SEC 12      /* per-model probe timeout */
 #define FAILOVER_DECAY_INTERVAL 20         /* Reset counters every 20 checks */
 #define FAILOVER_CONSEC_FAIL_THRESHOLD 3   /* 3 consecutive fails → cooldown */
 #define FAILOVER_COOLDOWN_MS 600000        /* 10 min cooldown after consecutive fails */
@@ -136,5 +137,20 @@ void failover_start_health_thread();
 
 /* Stop background health check thread */
 void failover_stop_health_thread();
+
+/* ── Model Probing (active health check) ── */
+
+/* Probe a single model via direct OpenRouter API call.
+ * Sends a minimal request (1 token) to check if the model responds.
+ * Returns true if model is reachable and responds with HTTP 200.
+ * Updates the model's health record on success/failure. */
+bool failover_probe_model(const char* model_name);
+
+/* Run a full probe round on all enabled models (blocking, call from background thread).
+ * Uses direct OpenRouter API — no Gateway restart, no config change. */
+void failover_probe_all();
+
+/* Force an immediate probe round (can be called from UI or startup) */
+void failover_probe_now();
 
 #endif /* MODEL_MANAGER_H */

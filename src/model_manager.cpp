@@ -731,20 +731,96 @@ void failover_record_result(const char* model_name, bool success, DWORD latency_
     }
 }
 
+/* ── Direct Model Probing (active health check) ────────────── */
+/* Probes models directly via OpenRouter API, bypassing Gateway entirely.
+ * No config change, no restart, no Gateway dependency. */
+
+/* Probe a single model: send minimal request to OpenRouter.
+ * Returns true on HTTP 200 with valid response. */
+bool failover_probe_model(const char* model_name) {
+    if (!model_name || !model_name[0]) return false;
+
+    /* Get API key */
+    char api_key[256] = {0};
+    app_get_provider_api_key("openrouter", api_key, sizeof(api_key));
+    if (!api_key[0]) {
+        LOG_W("FAILOVER", "Probe %s: no OpenRouter API key, skipping", model_name);
+        return false;
+    }
+
+    /* Build minimal request body — 1 token, no stream */
+    char body[512];
+    snprintf(body, sizeof(body),
+        "{\"model\":\"%s\",\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}],"
+        "\"max_tokens\":1,\"stream\":false}",
+        model_name);
+
+    /* Direct POST to OpenRouter (bypass Gateway) */
+    DWORD tick_start = GetTickCount();
+    char response[1024] = {0};
+    int status = http_post("https://openrouter.ai/api/v1/chat/completions",
+                           body, api_key, response, sizeof(response),
+                           FAILOVER_PROBE_TIMEOUT_SEC);
+    DWORD elapsed = GetTickCount() - tick_start;
+
+    bool ok = (status == 200 && response[0] != '\0' &&
+               strstr(response, "\"choices\"") != nullptr);
+
+    /* Update health record */
+    failover_record_result(model_name, ok, elapsed);
+
+    LOG_I("FAILOVER", "Probe %s: HTTP %d %s (%lums)",
+          model_name, status, ok ? "OK" : "FAIL", elapsed);
+    return ok;
+}
+
+/* Probe all enabled models sequentially */
+void failover_probe_all() {
+    if (!g_failover_enabled || g_failover_count == 0) return;
+
+    LOG_I("FAILOVER", "Starting probe round (%d models)...", g_failover_count);
+    DWORD round_start = GetTickCount();
+
+    for (int i = 0; i < g_failover_count; i++) {
+        if (!g_failover_models[i].enabled) continue;
+        /* Skip models in cooldown — no point probing them yet */
+        if (is_in_cooldown(&g_failover_models[i])) continue;
+
+        failover_probe_model(g_failover_models[i].model_name);
+
+        /* Small delay between probes to avoid rate limiting */
+        if (i < g_failover_count - 1) Sleep(300);
+    }
+
+    DWORD round_elapsed = GetTickCount() - round_start;
+    LOG_I("FAILOVER", "Probe round complete (%lums)", round_elapsed);
+}
+
+void failover_probe_now() {
+    LOG_I("FAILOVER", "Immediate probe requested");
+    failover_probe_all();
+}
+
 /* ── Background health check thread ────────────────────────── */
-/* Periodically logs health status and does counter decay.
- * Actual health data comes from chat flow (failover_record_result). */
+/* Actively probes models via direct API + does counter decay. */
 
 static unsigned __stdcall health_check_thread(void* arg) {
     (void)arg;
     LOG_I("FAILOVER", "Health check thread started (interval=%dms)", FAILOVER_CHECK_INTERVAL_MS);
+
+    /* Initial probe round on startup — build health map immediately */
+    Sleep(2000); /* brief delay to let Gateway/api_key settle */
+    failover_probe_all();
 
     while (InterlockedCompareExchange(&g_health_thread_running, 0, 0)) {
         Sleep(FAILOVER_CHECK_INTERVAL_MS);
         if (!InterlockedCompareExchange(&g_health_thread_running, 0, 0)) break;
         if (!g_failover_enabled) continue;
 
-        /* Log periodic health summary */
+        /* Active probe round */
+        failover_probe_all();
+
+        /* Log health summary after probe */
         int healthy = 0, unhealthy = 0, cooldown = 0;
         for (int i = 0; i < g_failover_count; i++) {
             if (!g_failover_models[i].enabled) continue;
@@ -756,28 +832,8 @@ static unsigned __stdcall health_check_thread(void* arg) {
                 unhealthy++;
             }
         }
-        LOG_I("FAILOVER", "Health: %d healthy, %d unhealthy, %d cooldown, %d total enabled",
-              healthy, unhealthy, cooldown, healthy + unhealthy + cooldown);
-
-        /* Force decay on all models that have stale data */
-        for (int i = 0; i < g_failover_count; i++) {
-            ModelHealth& h = g_failover_models[i];
-            if (!h.enabled) continue;
-            int total = h.success_count + h.fail_count;
-            if (total > FAILOVER_DECAY_INTERVAL) {
-                LOG_D("FAILOVER", "Periodic decay %s: succ %d→%d, fail %d→%d",
-                      h.model_name, h.success_count, h.success_count / 2,
-                      h.fail_count, h.fail_count / 2);
-                h.success_count = h.success_count / 2;
-                h.fail_count = h.fail_count / 2;
-                h.check_count = 0;
-                /* Re-evaluate health */
-                total = h.success_count + h.fail_count;
-                if (total > 0 && h.fail_count * 2 <= total) {
-                    h.is_healthy = true;
-                }
-            }
-        }
+        LOG_I("FAILOVER", "Health summary: %d healthy, %d unhealthy, %d cooldown",
+              healthy, unhealthy, cooldown);
     }
 
     LOG_I("FAILOVER", "Health check thread stopped");

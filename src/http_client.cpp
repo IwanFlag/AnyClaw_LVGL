@@ -88,7 +88,7 @@ static int http_request(const char* method, const char* url,
             WINHTTP_NO_HEADER_INDEX);
         status = static_cast<int>(statusCode);
 
-        /* Log response headers for debugging */
+        /* Log response headers for debugging (verbose only) */
         wchar_t resp_headers[4096] = {};
         DWORD hs = sizeof(resp_headers);
         if (WinHttpQueryHeaders(hRequest,
@@ -97,10 +97,9 @@ static int http_request(const char* method, const char* url,
             WINHTTP_NO_HEADER_INDEX)) {
             char resp_utf8[4096] = {};
             WideCharToMultiByte(CP_UTF8, 0, resp_headers, -1, resp_utf8, sizeof(resp_utf8), nullptr, nullptr);
-            LOG_I("HTTP", "Response %d, headers: %.200s", status, resp_utf8);
-        } else {
-            LOG_I("HTTP", "Response %d (no headers)", status);
+            LOG_D("HTTP", "Response %d headers: %.200s", status, resp_utf8);
         }
+        LOG_D("HTTP", "Response %d", status);
 
         /* Read response — with SSE line buffering for stream_cb */
         std::vector<char> full_body;

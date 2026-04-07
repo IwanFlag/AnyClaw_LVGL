@@ -3,6 +3,7 @@
 #include "theme.h"
 #include "lang.h"
 #include "app_log.h"
+#include "resource.h"
 #include "SDL.h"
 #include "SDL_syswm.h"
 #include <shellapi.h>
@@ -11,7 +12,7 @@
 #include <cstring>
 #include <algorithm>
 
-/* Icon resource IDIDI_ICON1 = 1 (defined in .rc as ICON resource) */
+/* Icon resource IDI_ICON1 = 1 (defined in resource.h, used by .rc and C++) */
 #include <string>
 #include <list>
 #include <uxtheme.h>
@@ -82,17 +83,17 @@ static HICON load_icon_from_resource(int size = 32) {
     HICON hIcon = nullptr;
 
     /* Try loading from resource using MAKEINTRESOURCE(1) — the standard ID */
-    hIcon = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(1), IMAGE_ICON, size, size, LR_DEFAULTCOLOR);
+    hIcon = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(IDI_ICON1), IMAGE_ICON, size, size, LR_DEFAULTCOLOR);
     if (hIcon) {
-        LOG_I("ICON", "load_icon_from_resource: OK size=%d handle=%p (id=1)", size, hIcon);
+        LOG_I("ICON", "load_icon_from_resource: OK size=%d handle=%p (IDI_ICON1)", size, hIcon);
         return hIcon;
     }
 
     DWORD err = GetLastError();
-    LOG_W("ICON", "load_icon_from_resource: LoadImageW(id=1) FAILED size=%d err=%lu", size, err);
+    LOG_W("ICON", "load_icon_from_resource: LoadImageW(IDI_ICON1) FAILED size=%d err=%lu", size, err);
 
-    /* Try loading from resource using RT_GROUP_ICON with string name */
-    HRSRC hRes = FindResourceW(hInst, L"IDI_ICON1", (LPCWSTR)RT_GROUP_ICON);
+    /* Try loading from resource using RT_GROUP_ICON */
+    HRSRC hRes = FindResourceW(hInst, MAKEINTRESOURCEW(IDI_ICON1), (LPCWSTR)RT_GROUP_ICON);
     if (hRes) {
         HGLOBAL hGlobal = LoadResource(hInst, hRes);
         if (hGlobal) {
@@ -110,7 +111,7 @@ static HICON load_icon_from_resource(int size = 32) {
     }
 
     /* Try numeric ID 1 with RT_GROUP_ICON */
-    hRes = FindResourceW(hInst, MAKEINTRESOURCEW(1), (LPCWSTR)RT_GROUP_ICON);
+    hRes = FindResourceW(hInst, MAKEINTRESOURCEW(IDI_ICON1), (LPCWSTR)RT_GROUP_ICON);
     if (hRes) {
         HGLOBAL hGlobal = LoadResource(hInst, hRes);
         if (hGlobal) {
@@ -119,7 +120,7 @@ static HICON load_icon_from_resource(int size = 32) {
             HICON hFromRes = CreateIconFromResourceEx(
                 (PBYTE)pResData, resSize, TRUE, 0x00030000, size, size, LR_DEFAULTCOLOR);
             if (hFromRes) {
-                LOG_I("ICON", "load_icon_from_resource: OK via numeric GROUP_ICON id=1 size=%d", size);
+                LOG_I("ICON", "load_icon_from_resource: OK via numeric GROUP_ICON IDI_ICON1 size=%d", size);
                 return hFromRes;
             }
         }

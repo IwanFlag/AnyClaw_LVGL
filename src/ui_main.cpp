@@ -2536,7 +2536,7 @@ static unsigned __stdcall chat_api_thread(void* arg) {
                 ui_log("[Chat] Failover: switching to %s", backup);
                 LOG_I("Chat", "Failover: switching from %s to %s", cur_model, backup);
                 if (app_update_model_config(nullptr, backup)) {
-                    Sleep(3000); /* wait for gateway restart */
+                    Sleep(500); /* hot-reload, no gateway restart needed */
                     g_stream_buffer[0] = '\0';
                     InterlockedExchange(&g_stream_new_data, 0);
                     snprintf(json_body, sizeof(json_body),
@@ -2589,11 +2589,21 @@ static void stream_timer_cb(lv_timer_t* timer) {
     (void)timer;
     if (!g_stream_label || !g_streaming) return;
 
-    /* Watchdog: if no data for 30s or total elapsed > 45s, force-finish */
+    /* Watchdog: dynamic timeout — free models are often slower (cold start, queue).
+     *   Free models: 60s idle / 90s total
+     *   Paid models: 30s idle / 45s total (default) */
     DWORD now = GetTickCount();
     DWORD idle_ms = now - g_stream_last_data_tick;
     DWORD total_ms = now - g_stream_start_tick;
-    if ((idle_ms > 30000 || total_ms > 45000) && !g_stream_done) {
+    bool is_free = false;
+    {
+        char cur_model[256] = {0};
+        app_get_current_model(cur_model, sizeof(cur_model));
+        is_free = model_is_free_by_name(cur_model);
+    }
+    DWORD idle_limit = is_free ? 60000 : 30000;
+    DWORD total_limit = is_free ? 90000 : 45000;
+    if ((idle_ms > idle_limit || total_ms > total_limit) && !g_stream_done) {
         LOG_W("Chat", "Stream timeout: idle=%lums total=%lums, force-finish", idle_ms, total_ms);
         ui_log("[Chat] Stream timeout (%.0fs), finishing...", total_ms / 1000.0);
         if (g_stream_buffer[0] == '\0') {
