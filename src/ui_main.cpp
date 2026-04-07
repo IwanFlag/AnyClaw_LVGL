@@ -11,6 +11,7 @@
 #include <cstring>
 #include <cstdarg>
 #include <string>
+#include <vector>
 #include <fstream>
 #include <filesystem>
 #include <windows.h>
@@ -1037,6 +1038,15 @@ static UiMainMode g_ui_mode = UI_MODE_CHAT;
 /* chat_cont is declared above for early chat-history restore helpers */
 static lv_obj_t* btn_send_widget = nullptr; /* Send button */
 static lv_obj_t* btn_upload_widget = nullptr; /* Upload button */
+
+struct AttachmentQueueItem {
+    std::string path;
+    bool is_dir = false;
+    lv_obj_t* status_lbl = nullptr;
+    bool done = false;
+};
+static std::vector<AttachmentQueueItem> g_attachment_queue;
+static lv_timer_t* g_attachment_queue_timer = nullptr;
 
 /* Left panel children that need resize on splitter drag */
 static lv_obj_t* lp_panel_title = nullptr;   /* "Gateway Status" label */
@@ -4573,8 +4583,8 @@ static void free_path_userdata_cb(lv_event_t* e) {
     if (path) free(path);
 }
 
-static void chat_add_attachment_card(const char* path, bool is_dir) {
-    if (!chat_cont || !path || !path[0]) return;
+static lv_obj_t* chat_add_attachment_card(const char* path, bool is_dir) {
+    if (!chat_cont || !path || !path[0]) return nullptr;
 
     lv_obj_t* row = lv_obj_create(chat_cont);
     lv_obj_set_width(row, LV_PCT(100));
@@ -4640,9 +4650,59 @@ static void chat_add_attachment_card(const char* path, bool is_dir) {
     lv_obj_set_style_text_color(open_tip, lv_color_make(180, 210, 255), 0);
     lv_obj_set_style_text_font(open_tip, CJK_FONT_SMALL, 0);
 
+    lv_obj_t* status_tip = lv_label_create(card);
+    lv_label_set_text(status_tip, "Queue: pending");
+    lv_obj_set_style_text_color(status_tip, lv_color_make(255, 210, 120), 0);
+    lv_obj_set_style_text_font(status_tip, CJK_FONT_SMALL, 0);
+
     char* path_copy = _strdup(path);
     lv_obj_add_event_cb(card, open_local_path_cb, LV_EVENT_CLICKED, path_copy);
     lv_obj_add_event_cb(card, free_path_userdata_cb, LV_EVENT_DELETE, path_copy);
+    return status_tip;
+}
+
+static void attachment_queue_timer_cb(lv_timer_t* t) {
+    (void)t;
+    bool has_pending = false;
+    for (auto& it : g_attachment_queue) {
+        if (it.done) continue;
+        has_pending = true;
+        bool ok = false;
+        std::error_code ec;
+        if (it.is_dir) ok = std::filesystem::is_directory(it.path, ec);
+        else ok = std::filesystem::is_regular_file(it.path, ec);
+        if (it.status_lbl) {
+            if (ok) {
+                lv_label_set_text(it.status_lbl, "Queue: sent");
+                lv_obj_set_style_text_color(it.status_lbl, lv_color_make(140, 235, 170), 0);
+            } else {
+                lv_label_set_text(it.status_lbl, "Queue: failed");
+                lv_obj_set_style_text_color(it.status_lbl, lv_color_make(255, 150, 150), 0);
+            }
+        }
+        it.done = true;
+        break; /* process one item per tick */
+    }
+    if (!has_pending) {
+        if (g_attachment_queue_timer) {
+            lv_timer_del(g_attachment_queue_timer);
+            g_attachment_queue_timer = nullptr;
+        }
+        g_attachment_queue.clear();
+    }
+}
+
+static void enqueue_attachment_card(const char* path, bool is_dir) {
+    lv_obj_t* status_lbl = chat_add_attachment_card(path, is_dir);
+    AttachmentQueueItem item;
+    item.path = path ? path : "";
+    item.is_dir = is_dir;
+    item.status_lbl = status_lbl;
+    item.done = false;
+    g_attachment_queue.push_back(item);
+    if (!g_attachment_queue_timer) {
+        g_attachment_queue_timer = lv_timer_create(attachment_queue_timer_cb, 280, nullptr);
+    }
 }
 
 /* Upload menu click callbacks */
@@ -4659,7 +4719,7 @@ static void upload_file_click_cb(lv_event_t* e) {
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
     if (GetOpenFileNameA(&ofn)) {
         ui_log("[Upload] Selected file: %s", file_buf);
-        chat_add_attachment_card(file_buf, false);
+        enqueue_attachment_card(file_buf, false);
         chat_force_scroll_bottom();
     }
 }
@@ -4674,7 +4734,7 @@ static void upload_dir_click_cb(lv_event_t* e) {
         char dir_buf[MAX_PATH];
         if (SHGetPathFromIDListA(pidl, dir_buf)) {
             ui_log("[Upload] Selected dir: %s", dir_buf);
-            chat_add_attachment_card(dir_buf, true);
+            enqueue_attachment_card(dir_buf, true);
             chat_force_scroll_bottom();
         }
         CoTaskMemFree(pidl);
