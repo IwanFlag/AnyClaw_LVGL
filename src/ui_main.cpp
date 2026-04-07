@@ -4496,10 +4496,51 @@ static bool is_image_path(const char* path) {
     return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".gif" || ext == ".webp";
 }
 
+static const char* path_basename(const char* path) {
+    if (!path) return "";
+    const char* p1 = strrchr(path, '\\');
+    const char* p2 = strrchr(path, '/');
+    const char* p = p1 ? p1 : p2;
+    if (p1 && p2) p = (p1 > p2) ? p1 : p2;
+    return p ? (p + 1) : path;
+}
+
+static std::string format_bytes_u64(uint64_t n) {
+    char buf[64] = {0};
+    if (n < 1024ULL) { snprintf(buf, sizeof(buf), "%llu B", (unsigned long long)n); return buf; }
+    if (n < 1024ULL * 1024ULL) { snprintf(buf, sizeof(buf), "%.1f KB", (double)n / 1024.0); return buf; }
+    if (n < 1024ULL * 1024ULL * 1024ULL) { snprintf(buf, sizeof(buf), "%.1f MB", (double)n / 1024.0 / 1024.0); return buf; }
+    snprintf(buf, sizeof(buf), "%.2f GB", (double)n / 1024.0 / 1024.0 / 1024.0);
+    return buf;
+}
+
+static std::string attachment_detail_text(const char* path, bool is_dir) {
+    if (!path || !path[0]) return "";
+    std::error_code ec;
+    if (is_dir) {
+        size_t child_count = 0;
+        for (const auto& entry : std::filesystem::directory_iterator(path, ec)) {
+            (void)entry;
+            if (!ec) child_count++;
+            if (child_count >= 9999) break;
+        }
+        if (ec) return "Directory (unreadable)";
+        char buf[64] = {0};
+        snprintf(buf, sizeof(buf), "Directory, %zu entries", child_count);
+        return buf;
+    }
+    auto sz = std::filesystem::file_size(path, ec);
+    if (ec) return "File (size unavailable)";
+    return std::string("File, ") + format_bytes_u64((uint64_t)sz);
+}
+
 static void open_local_path_cb(lv_event_t* e) {
     const char* path = (const char*)lv_event_get_user_data(e);
     if (!path || !path[0]) return;
-    ShellExecuteA(nullptr, "open", path, nullptr, nullptr, SW_SHOWNORMAL);
+    HINSTANCE r = ShellExecuteA(nullptr, "open", path, nullptr, nullptr, SW_SHOWNORMAL);
+    if ((INT_PTR)r <= 32) {
+        LOG_W("SHARE", "Open path failed: %s (code=%Id)", path, (INT_PTR)r);
+    }
 }
 
 static void free_path_userdata_cb(lv_event_t* e) {
@@ -4534,22 +4575,39 @@ static void chat_add_attachment_card(const char* path, bool is_dir) {
 
     const bool image_file = (!is_dir && is_image_path(path));
     const char* tag = is_dir ? "[DIR]" : (image_file ? "[IMG]" : "[FILE]");
+    const char* base = path_basename(path);
     lv_obj_t* title = lv_label_create(card);
-    lv_label_set_text_fmt(title, "%s %s", tag, path);
+    lv_label_set_text_fmt(title, "%s %s", tag, (base && base[0]) ? base : path);
     lv_label_set_long_mode(title, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(title, LV_PCT(100));
     lv_obj_set_style_text_color(title, lv_color_make(235, 242, 255), 0);
     lv_obj_set_style_text_font(title, CJK_FONT_SMALL, 0);
 
+    lv_obj_t* subtitle = lv_label_create(card);
+    std::string detail = attachment_detail_text(path, is_dir);
+    lv_label_set_text_fmt(subtitle, "%s\n%s", detail.c_str(), path);
+    lv_label_set_long_mode(subtitle, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(subtitle, LV_PCT(100));
+    lv_obj_set_style_text_color(subtitle, lv_color_make(200, 220, 245), 0);
+    lv_obj_set_style_text_font(subtitle, FONT(10), 0);
+
     if (image_file) {
         lv_obj_t* preview = lv_image_create(card);
-        lv_image_set_src(preview, path);
-        lv_obj_set_size(preview, SCALE(96), SCALE(96));
-        lv_obj_set_style_radius(preview, 6, 0);
-        lv_obj_t* preview_hint = lv_label_create(card);
-        lv_label_set_text(preview_hint, "Image preview (click to open original)");
-        lv_obj_set_style_text_color(preview_hint, lv_color_make(200, 220, 255), 0);
-        lv_obj_set_style_text_font(preview_hint, CJK_FONT_SMALL, 0);
+        if (std::filesystem::exists(path)) {
+            lv_image_set_src(preview, path);
+            lv_obj_set_size(preview, SCALE(96), SCALE(96));
+            lv_obj_set_style_radius(preview, 6, 0);
+            lv_obj_t* preview_hint = lv_label_create(card);
+            lv_label_set_text(preview_hint, "Image preview (click to open original)");
+            lv_obj_set_style_text_color(preview_hint, lv_color_make(200, 220, 255), 0);
+            lv_obj_set_style_text_font(preview_hint, CJK_FONT_SMALL, 0);
+        } else {
+            lv_obj_delete(preview);
+            lv_obj_t* preview_hint = lv_label_create(card);
+            lv_label_set_text(preview_hint, "Image preview unavailable");
+            lv_obj_set_style_text_color(preview_hint, lv_color_make(255, 195, 120), 0);
+            lv_obj_set_style_text_font(preview_hint, CJK_FONT_SMALL, 0);
+        }
     }
 
     lv_obj_t* open_tip = lv_label_create(card);
