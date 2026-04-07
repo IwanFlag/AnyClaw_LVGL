@@ -7,6 +7,9 @@
 #include <cstring>
 #include <vector>
 
+/* Global flag: set by UI watchdog to abort streaming (atomic) */
+extern volatile LONG g_stream_done;
+
 /* ── Internal: perform HTTP request and return status code ── */
 static int http_request(const char* method, const char* url,
                         const char* body, int body_len,
@@ -43,7 +46,8 @@ static int http_request(const char* method, const char* url,
     if (!hSession) return -1;
 
     WinHttpSetTimeouts(hSession, timeout_sec * 1000, timeout_sec * 1000,
-                       timeout_sec * 1000, timeout_sec * 1000);
+                       timeout_sec * 1000,
+                       stream_cb ? 10000 : timeout_sec * 1000);  /* Shorter receive timeout for SSE */
 
     /* Enable decompression for all content types */
     DWORD decompress_flag = WINHTTP_DECOMPRESSION_FLAG_ALL;
@@ -104,10 +108,18 @@ static int http_request(const char* method, const char* url,
         DWORD avail = 0;
         DWORD total_bytes = 0;
         int chunk_count = 0;
-        while (WinHttpQueryDataAvailable(hRequest, &avail) && avail > 0) {
+        while (true) {
+            /* FIX: Check abort flag — allows watchdog to kill stuck streams */
+            if (g_stream_done) {
+                LOG_W("HTTP", "Stream abort: g_stream_done set, exiting read loop");
+                break;
+            }
+
+            if (!WinHttpQueryDataAvailable(hRequest, &avail) || avail == 0) break;
             std::vector<char> buf(avail + 1);
             DWORD read = 0;
             WinHttpReadData(hRequest, buf.data(), avail, &read);
+            if (read == 0) break;
             buf[read] = '\0';
             total_bytes += read;
             chunk_count++;

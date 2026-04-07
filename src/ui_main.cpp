@@ -2632,8 +2632,28 @@ static void stream_timer_cb(lv_timer_t* timer) {
 
 static void chat_start_stream(const char* user_message) {
     if (g_streaming) {
-        LOG_W("Chat", "Already streaming, ignoring new request");
-        return;
+        /* FIX: If g_stream_done is set but timer hasn't consumed it yet, force cleanup */
+        if (g_stream_done) {
+            LOG_W("Chat", "Stale streaming state detected, forcing cleanup");
+            g_streaming = false;
+            if (g_stream_timer) {
+                lv_timer_del(g_stream_timer);
+                g_stream_timer = nullptr;
+            }
+            if (g_stream_thread) {
+                /* Thread should have exited since g_stream_done=1 */
+                DWORD wait = WaitForSingleObject(g_stream_thread, 1000);
+                if (wait == WAIT_TIMEOUT) {
+                    LOG_W("Chat", "Stream thread still alive after done flag, force closing");
+                }
+                CloseHandle(g_stream_thread);
+                g_stream_thread = nullptr;
+            }
+            /* Fall through to start new stream */
+        } else {
+            LOG_W("Chat", "Already streaming, ignoring new request");
+            return;
+        }
     }
     if (!chat_cont) {
         LOG_W("Chat", "chat_cont is null, cannot start stream");
