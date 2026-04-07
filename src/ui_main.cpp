@@ -297,6 +297,12 @@ static std::string get_chat_history_path() {
     return get_userdata_dir() + "\\chat_history.json";
 }
 
+/* Forward declarations used by early chat-history helpers */
+static lv_obj_t* chat_cont = nullptr;              /* Chat container */
+static char chat_history[CHAT_HISTORY_MAX] = {0};  /* Buffered plain-text history */
+static void chat_add_user_bubble(const char* text);
+static void chat_add_ai_bubble(const char* text);
+
 /* ═══ Chat History Persistence ═══ */
 
 /* Simple JSON array writer for chat messages.
@@ -473,7 +479,7 @@ static void load_chat_history() {
 }
 
 /* Clear chat history (file + memory + UI) */
-static void clear_chat_history() {
+void clear_chat_history() {
     g_chat_messages.clear();
     std::string path = get_chat_history_path();
     std::remove(path.c_str());
@@ -554,7 +560,7 @@ static void search_execute_cb(lv_event_t* e) {
     /* Update info label */
     if (g_search_info) {
         if (g_search_results.empty()) {
-            lv_label_set_text(g_search_info, tr({"No results", "无结果"}));
+            lv_label_set_text(g_search_info, (g_lang == Lang::CN) ? "无结果" : "No results");
         } else {
             char buf[32];
             snprintf(buf, sizeof(buf), "%d/%d", g_search_current + 1, (int)g_search_results.size());
@@ -965,7 +971,7 @@ static void loading_show() {
 static lv_obj_t* splitter = nullptr;
 static lv_obj_t* left_panel = nullptr;
 static lv_obj_t* right_panel = nullptr;
-static lv_obj_t* chat_cont = nullptr;      /* Chat container */
+/* chat_cont is declared above for early chat-history restore helpers */
 static lv_obj_t* btn_send_widget = nullptr; /* Send button */
 static lv_obj_t* btn_upload_widget = nullptr; /* Upload button */
 
@@ -1099,7 +1105,7 @@ static void task_destroy_all_tooltips() {
 /* P2: Chat area widgets */
 static lv_obj_t* chat_display = nullptr;
 lv_obj_t* chat_input = nullptr;
-static char chat_history[CHAT_HISTORY_MAX] = {0};
+/* chat_history is declared above for early clear/load helpers */
 
 /* ── Log system (buffered with level) ── */
 /* LOG_MAX_LINES defined in app_config.h */
@@ -2222,7 +2228,7 @@ static lv_obj_t* g_stream_bubble = nullptr;
 static lv_obj_t* g_stream_label = nullptr;
 static char g_stream_buffer[16384] = {0};  /* 16KB — doubled for long AI responses */
 static volatile LONG g_stream_new_data = 0;   /* atomic flag: new data available */
-static volatile LONG g_stream_done = 0;        /* atomic flag: stream finished */
+volatile LONG g_stream_done = 0;        /* atomic flag: stream finished */
 static lv_timer_t* g_stream_timer = nullptr;
 static bool g_streaming = false;
 static HANDLE g_stream_thread = nullptr;
@@ -4039,7 +4045,7 @@ void ui_show_license_dialog() {
     lv_textarea_set_placeholder_text(g_license_input, "XXXXX-XXXXX-XXXXX");
     lv_obj_set_width(g_license_input, LV_PCT(100));
     lv_obj_set_style_bg_color(g_license_input, c->input_bg, 0);
-    lv_obj_set_style_border_color(g_license_input, c->input_border, 0);
+    lv_obj_set_style_border_color(g_license_input, c->panel_border, 0);
     lv_obj_set_style_text_font(g_license_input, FONT(14), 0);
     lv_obj_set_style_radius(g_license_input, SCALE(8), 0);
 
@@ -4074,7 +4080,7 @@ void ui_show_license_dialog() {
     /* Close button */
     lv_obj_t* btn_close = lv_button_create(btn_row);
     lv_obj_set_size(btn_close, LV_PCT(40), SCALE(36));
-    lv_obj_set_style_bg_color(btn_close, c->btn, 0);
+    lv_obj_set_style_bg_color(btn_close, c->btn_secondary, 0);
     lv_obj_set_style_radius(btn_close, SCALE(8), 0);
     lv_obj_add_event_cb(btn_close, license_dialog_close_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_close = lv_label_create(btn_close);
@@ -5830,7 +5836,7 @@ void app_ui_init() {
         lv_obj_clear_flag(g_search_btn, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_clear_flag(g_search_btn, LV_OBJ_FLAG_CLICK_FOCUSABLE);
         lv_obj_t* search_lbl = lv_label_create(g_search_btn);
-        lv_label_set_text(search_lbl, LV_SYMBOL_SEARCH);
+        lv_label_set_text(search_lbl, LV_SYMBOL_EDIT);
         lv_obj_set_style_text_color(search_lbl, lv_color_make(200, 205, 220), 0);
         lv_obj_center(search_lbl);
         lv_obj_add_event_cb(g_search_btn, search_toggle_cb, LV_EVENT_CLICKED, nullptr);

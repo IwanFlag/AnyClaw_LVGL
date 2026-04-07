@@ -7,7 +7,7 @@
 
 #include "license.h"
 #include "app_log.h"
-#include "json_util.cpp"  /* For json_extract_int/string */
+#include "app.h"  /* For json_extract_int/string declarations */
 
 #include <windows.h>
 #include <bcrypt.h>

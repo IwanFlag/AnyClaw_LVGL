@@ -13,6 +13,8 @@
 #include "SDL.h"
 #include "lang.h"
 #include "lvgl.h"
+#include <windows.h>
+#include <commdlg.h>
 
 /* Font helper — DPI-scaled font selection (same as ui_main.cpp) */
 static const lv_font_t* FONT(int base_px) {

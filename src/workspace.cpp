@@ -130,7 +130,7 @@ WorkspaceHealth workspace_check_health() {
 
     /* Check free disk space */
     try {
-        auto space = std::space(root);
+        auto space = std::filesystem::space(root);
         h.free_mb = (long long)(space.available / (1024 * 1024));
     } catch (...) {
         h.free_mb = -1;

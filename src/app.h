@@ -151,6 +151,6 @@ bool app_abort_all_sessions();                     /* Reset all sessions */
 std::string workspace_get_root();
 bool workspace_set_root(const char* path);
 struct WorkspaceHealth;
-bool workspace_init(const char* root_path = nullptr);
+bool workspace_init(const char* root_path);
 
 #endif /* APP_H */

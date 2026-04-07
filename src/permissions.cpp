@@ -1,4 +1,5 @@
 #include "permissions.h"
+#include "app.h"
 #include "app_log.h"
 #include <windows.h>
 #include <cstdio>

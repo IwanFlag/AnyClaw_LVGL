@@ -2,6 +2,7 @@
 #define PERMISSIONS_H
 
 #include <string>
+#include <vector>
 
 /* Permission values */
 enum class PermValue {

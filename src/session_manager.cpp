@@ -127,7 +127,7 @@ static bool exec_cmd_local(const char* cmd, char* output, int out_size, DWORD ti
             if (WaitForSingleObject(pi.hProcess, 100) == WAIT_OBJECT_0) {
                 /* Process ended, drain remaining */
                 while (ReadFile(hRead, tmp, sizeof(tmp), &avail, nullptr) && avail > 0) {
-                    DWORD copy = min(avail, (DWORD)out_size - 1 - total);
+                    DWORD copy = std::min(avail, (DWORD)out_size - 1 - total);
                     if (copy > 0 && output) {
                         memcpy(output + total, tmp, copy);
                         total += copy;
@@ -140,7 +140,7 @@ static bool exec_cmd_local(const char* cmd, char* output, int out_size, DWORD ti
 
         DWORD bytes;
         if (!ReadFile(hRead, tmp, sizeof(tmp), &bytes, nullptr) || bytes == 0) break;
-        DWORD copy = min(bytes, (DWORD)out_size - 1 - total);
+        DWORD copy = std::min(bytes, (DWORD)out_size - 1 - total);
         if (copy > 0 && output) {
             memcpy(output + total, tmp, copy);
             total += copy;
