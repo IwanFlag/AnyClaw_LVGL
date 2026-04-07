@@ -12,6 +12,7 @@
 #include "garlic_dock.h"
 #include "license.h"
 #include "workspace.h"
+#include "permissions.h"
 #include "app_log.h"
 #include "SDL.h"
 #include "SDL_syswm.h"
@@ -654,6 +655,19 @@ int main(int argc, char* argv[]) {
         if (!ws_root.empty()) {
             workspace_init(ws_root.c_str());
             LOG_I("MAIN", "Workspace: %s", ws_root.c_str());
+
+            if (!workspace_lock_acquire()) {
+                LOG_W("MAIN", "Workspace lock acquire failed, continuing in read-mostly mode");
+            }
+
+            /* PERM-01: initialize permission boundary with workspace root */
+            permissions().set_workspace_root(ws_root.c_str());
+            bool loaded = permissions().load();
+            if (!loaded) {
+                permissions().save(); /* write defaults on first run */
+            }
+            workspace_sync_managed_sections();
+            workspace_sync_runtime_config_from_permissions();
         }
     }
     if (!license_is_valid()) {
@@ -999,6 +1013,7 @@ int main(int argc, char* argv[]) {
     secure_zero(g_selected_model, sizeof(g_selected_model));
 
     /* Cleanup */
+    workspace_lock_release();
     garlic_dock_cleanup();
     failover_stop_health_thread();
     health_stop();

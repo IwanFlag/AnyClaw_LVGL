@@ -3,6 +3,7 @@
 #include "app_config.h"
 #include "app_log.h"
 #include "session_manager.h"
+#include "permissions.h"
 #include <windows.h>
 #include <tlhelp32.h>
 #include <process.h>
@@ -53,6 +54,11 @@ static bool check_http_health() {
  * Returns true if exit code == 0.
  */
 static bool exec_cmd_local(const char* cmd, char* output, int out_size, DWORD timeout_ms = 8000) {
+    if (!perm_check_exec(PermKey::EXEC_SHELL, cmd)) {
+        if (output && out_size > 0) snprintf(output, out_size, "DENY: exec_shell blocked or rejected");
+        return false;
+    }
+
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = TRUE;

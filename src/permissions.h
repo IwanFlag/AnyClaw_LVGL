@@ -108,4 +108,10 @@ private:
 /* Global singleton */
 Permissions& permissions();
 
+/* Runtime exec permission check with interactive ask flow */
+bool perm_check_exec(PermKey key, const char* target);
+
+/* Audit log (APPDATA\\AnyClaw_LVGL\\audit.log) */
+void perm_audit_log(const char* action, const char* target, const char* decision);
+
 #endif /* PERMISSIONS_H */

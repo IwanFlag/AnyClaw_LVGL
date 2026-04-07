@@ -1,12 +1,14 @@
 #include "permissions.h"
 #include "app.h"
 #include "app_log.h"
+#include "workspace.h"
 #include <windows.h>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <filesystem>
 #include <algorithm>
+#include <ctime>
 
 /* ═══ Default values ═══ */
 
@@ -87,10 +89,84 @@ static std::string get_permissions_path() {
     return std::string(appdata) + "\\AnyClaw_LVGL\\permissions.json";
 }
 
+static std::string get_audit_path() {
+    const char* appdata = std::getenv("APPDATA");
+    if (!appdata) return "";
+    return std::string(appdata) + "\\AnyClaw_LVGL\\audit.log";
+}
+
+void perm_audit_log(const char* action, const char* target, const char* decision) {
+    std::string path = get_audit_path();
+    if (path.empty()) return;
+
+    size_t last_sep = path.find_last_of("\\/");
+    if (last_sep != std::string::npos) {
+        std::string dir = path.substr(0, last_sep);
+        if (!std::filesystem::exists(dir)) {
+            try { std::filesystem::create_directories(dir); } catch (...) { return; }
+        }
+    }
+
+    char ts[64] = {0};
+    std::time_t now = std::time(nullptr);
+    std::tm* lt = std::localtime(&now);
+    if (lt) std::strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", lt);
+
+    std::ofstream f(path, std::ios::app);
+    if (!f.is_open()) return;
+    f << "[" << ts << "]"
+      << " action=" << (action ? action : "-")
+      << " target=" << (target ? target : "-")
+      << " decision=" << (decision ? decision : "-")
+      << "\n";
+}
+
 /* ═══ Permissions singleton ═══ */
 
 static Permissions g_perms;
 Permissions& permissions() { return g_perms; }
+
+bool perm_check_exec(PermKey key, const char* target) {
+    PermValue v = permissions().get(key);
+    if (v == PermValue::Allow) {
+        perm_audit_log("exec_check", target, "allow");
+        return true;
+    }
+    if (v == PermValue::Deny || v == PermValue::ReadOnly) {
+        perm_audit_log("exec_check", target, "deny");
+        return false;
+    }
+
+    const char* key_name = perm_key_name(key);
+    char msg[1024] = {0};
+    snprintf(
+        msg, sizeof(msg),
+        "Agent 请求执行命令：\n\n%s\n\n权限项: %s\n\n是: 仅本次允许\n取消: 永久允许\n否: 拒绝",
+        target ? target : "(unknown)", key_name ? key_name : "exec_shell"
+    );
+
+    int r = MessageBoxA(
+        nullptr,
+        msg,
+        "AnyClaw 权限确认",
+        MB_ICONWARNING | MB_YESNOCANCEL | MB_TOPMOST | MB_SETFOREGROUND
+    );
+
+    if (r == IDYES) {
+        perm_audit_log("exec_check", target, "allow_once");
+        return true;
+    }
+    if (r == IDCANCEL) {
+        permissions().set(key, PermValue::Allow);
+        permissions().save();
+        workspace_sync_managed_sections();
+        perm_audit_log("exec_check", target, "allow_persist");
+        return true;
+    }
+
+    perm_audit_log("exec_check", target, "deny_by_user");
+    return false;
+}
 
 /* ═══ Permissions implementation ═══ */
 
@@ -104,6 +180,7 @@ bool Permissions::load() {
     std::ifstream f(path);
     if (!f.is_open()) {
         LOG_I("PERM", "No permissions.json, using defaults");
+        perm_audit_log("perm_load", "permissions.json", "defaults");
         return false;
     }
 
@@ -125,6 +202,7 @@ bool Permissions::load() {
     }
 
     LOG_I("PERM", "Loaded permissions from %s", path.c_str());
+    perm_audit_log("perm_load", "permissions.json", "ok");
     return true;
 }
 
@@ -170,6 +248,7 @@ bool Permissions::save() const {
 
     f.close();
     LOG_I("PERM", "Saved permissions to %s", path.c_str());
+    perm_audit_log("perm_save", "permissions.json", "ok");
     return true;
 }
 
@@ -183,6 +262,7 @@ void Permissions::set(PermKey key, PermValue value) {
     int idx = (int)key;
     if (idx >= 0 && idx < (int)PermKey::COUNT) {
         values_[idx] = value;
+        perm_audit_log("perm_set", perm_key_name(key), perm_value_str(value));
     }
 }
 
@@ -195,23 +275,32 @@ bool Permissions::is_path_allowed(const char* path, bool write) const {
 
     /* Check denied paths first */
     for (const auto& d : denied_paths_) {
-        if (p.find(d) == 0) return false;
+        if (p.find(d) == 0) {
+            perm_audit_log("path_check", p.c_str(), "deny:denied_path");
+            return false;
+        }
     }
 
     /* Check workspace root */
     if (!workspace_root_.empty() && p.find(workspace_root_) == 0) {
-        return !write || get(PermKey::FS_WRITE_WORKSPACE) == PermValue::Allow;
+        bool ok = !write || get(PermKey::FS_WRITE_WORKSPACE) == PermValue::Allow;
+        if (!ok) perm_audit_log("path_check", p.c_str(), "deny:workspace_write");
+        return ok;
     }
 
     /* Check extra allowed paths */
     for (const auto& ea : extra_allowed_) {
         if (p.find(ea.path) == 0) {
-            if (write && !ea.writable) return false;
+            if (write && !ea.writable) {
+                perm_audit_log("path_check", p.c_str(), "deny:read_only_extra_path");
+                return false;
+            }
             return true;
         }
     }
 
     /* Default: deny external access */
+    perm_audit_log("path_check", p.c_str(), "deny:external_default");
     return false;
 }
 

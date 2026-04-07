@@ -2,12 +2,19 @@
 #include "app.h"
 #include "app_log.h"
 #include "paths.h"
+#include "permissions.h"
 #include <windows.h>
 #include <shlobj.h>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <filesystem>
+#include <cstdlib>
+#include <sstream>
+#include <ctime>
+#include <vector>
+#include <algorithm>
+#include <cstdint>
 
 /* ═══ Config helpers ═══ */
 
@@ -22,6 +29,14 @@ static std::string get_default_workspace_root() {
     if (!userprofile) return "";
     return std::string(userprofile) + "\\.openclaw\\workspace";
 }
+
+static std::string get_lock_path() {
+    std::string root = workspace_get_root();
+    if (root.empty()) return "";
+    return root + "\\.openclaw.lock";
+}
+
+static bool g_workspace_lock_held = false;
 
 /* ═══ Workspace API ═══ */
 
@@ -339,4 +354,265 @@ std::string workspace_get_name() {
         return root.substr(last_sep + 1);
     }
     return "Default";
+}
+
+bool workspace_lock_acquire() {
+    std::string lock_path = get_lock_path();
+    if (lock_path.empty()) return false;
+
+    DWORD cur_pid = GetCurrentProcessId();
+
+    /* If lock exists, check whether holder process is still alive */
+    if (std::filesystem::exists(lock_path)) {
+        std::ifstream in(lock_path);
+        unsigned long old_pid = 0;
+        if (in.is_open()) {
+            in >> old_pid;
+            in.close();
+        }
+
+        if (old_pid > 0 && old_pid != (unsigned long)cur_pid) {
+            HANDLE h = OpenProcess(SYNCHRONIZE, FALSE, (DWORD)old_pid);
+            if (h) {
+                DWORD w = WaitForSingleObject(h, 0);
+                CloseHandle(h);
+                if (w == WAIT_TIMEOUT) {
+                    LOG_W("WORKSPACE", "Workspace lock held by pid=%lu", old_pid);
+                    return false;
+                }
+            }
+            /* stale lock file: process no longer exists */
+        }
+    }
+
+    std::ofstream out(lock_path, std::ios::trunc);
+    if (!out.is_open()) {
+        LOG_E("WORKSPACE", "Failed to create lock file: %s", lock_path.c_str());
+        return false;
+    }
+    out << cur_pid << "\n";
+    out.close();
+
+    g_workspace_lock_held = true;
+    LOG_I("WORKSPACE", "Lock acquired: %s (pid=%lu)", lock_path.c_str(), (unsigned long)cur_pid);
+    return true;
+}
+
+void workspace_lock_release() {
+    if (!g_workspace_lock_held) return;
+
+    std::string lock_path = get_lock_path();
+    if (lock_path.empty()) return;
+
+    try {
+        if (std::filesystem::exists(lock_path)) {
+            std::filesystem::remove(lock_path);
+        }
+    } catch (...) {
+        /* best effort */
+    }
+    g_workspace_lock_held = false;
+    LOG_I("WORKSPACE", "Lock released: %s", lock_path.c_str());
+}
+
+bool workspace_lock_is_held() {
+    return g_workspace_lock_held;
+}
+
+static const char* perm_value_name(PermValue v) {
+    switch (v) {
+        case PermValue::Allow: return "allow";
+        case PermValue::Deny: return "deny";
+        case PermValue::Ask: return "ask";
+        case PermValue::ReadOnly: return "read_only";
+        default: return "deny";
+    }
+}
+
+static bool replace_or_append_managed(const std::string& path, const std::string& managed_body) {
+    const std::string start_marker = "<!-- ANYCLAW_MANAGED_START -->";
+    const std::string end_marker = "<!-- ANYCLAW_MANAGED_END -->";
+    const std::string managed_block =
+        start_marker + "\n" + managed_body + "\n" + end_marker + "\n";
+
+    std::string content;
+    {
+        std::ifstream in(path, std::ios::binary);
+        if (in.is_open()) {
+            content.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            in.close();
+        }
+    }
+
+    if (content.empty()) {
+        content = "# Managed by AnyClaw\n\n";
+    }
+
+    size_t s = content.find(start_marker);
+    size_t e = content.find(end_marker);
+    if (s != std::string::npos && e != std::string::npos && e > s) {
+        e += end_marker.size();
+        content.replace(s, e - s, managed_block);
+    } else {
+        if (!content.empty() && content.back() != '\n') content.push_back('\n');
+        content += "\n" + managed_block;
+    }
+
+    /* Backup before overwrite: keep latest 10 backups */
+    if (std::filesystem::exists(path)) {
+        std::string root = workspace_get_root();
+        std::string bak_dir = root + "\\.backups";
+        try { std::filesystem::create_directories(bak_dir); } catch (...) {}
+
+        char ts[32] = {0};
+        std::time_t now = std::time(nullptr);
+        std::tm* lt = std::localtime(&now);
+        if (lt) std::strftime(ts, sizeof(ts), "%Y%m%d_%H%M%S", lt);
+
+        std::string base = std::filesystem::path(path).filename().string();
+        std::string bak_path = bak_dir + "\\" + base + "." + ts + ".bak";
+        try {
+            std::filesystem::copy_file(path, bak_path, std::filesystem::copy_options::overwrite_existing);
+        } catch (...) {
+            /* best effort */
+        }
+
+        std::vector<std::filesystem::path> backups;
+        std::string prefix = base + ".";
+        for (const auto& entry : std::filesystem::directory_iterator(bak_dir)) {
+            if (!entry.is_regular_file()) continue;
+            std::string fn = entry.path().filename().string();
+            if (fn.find(prefix) == 0 && fn.rfind(".bak") == fn.size() - 4) {
+                backups.push_back(entry.path());
+            }
+        }
+        std::sort(backups.begin(), backups.end());
+        while (backups.size() > 10) {
+            try { std::filesystem::remove(backups.front()); } catch (...) {}
+            backups.erase(backups.begin());
+        }
+    }
+
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) return false;
+    out << content;
+    return out.good();
+}
+
+bool workspace_sync_managed_sections() {
+    std::string root = workspace_get_root();
+    if (root.empty()) return false;
+
+    char ts[64] = {0};
+    std::time_t now = std::time(nullptr);
+    std::tm* lt = std::localtime(&now);
+    if (lt) std::strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", lt);
+
+    std::ostringstream oss;
+    oss << "## AnyClaw Managed Policy\n"
+        << "- generated_at: " << ts << "\n"
+        << "- workspace_root: " << root << "\n"
+        << "- denied_paths: C:\\\\Windows\\\\, C:\\\\Program Files\\\\\n\n"
+        << "## Permission Snapshot\n"
+        << "- exec_shell: " << perm_value_name(permissions().get(PermKey::EXEC_SHELL)) << "\n"
+        << "- exec_install: " << perm_value_name(permissions().get(PermKey::EXEC_INSTALL)) << "\n"
+        << "- exec_delete: " << perm_value_name(permissions().get(PermKey::EXEC_DELETE)) << "\n"
+        << "- fs_read_workspace: " << perm_value_name(permissions().get(PermKey::FS_READ_WORKSPACE)) << "\n"
+        << "- fs_write_workspace: " << perm_value_name(permissions().get(PermKey::FS_WRITE_WORKSPACE)) << "\n"
+        << "- net_outbound: " << perm_value_name(permissions().get(PermKey::NET_OUTBOUND)) << "\n";
+
+    bool ok_agents = replace_or_append_managed(root + "\\AGENTS.md", oss.str());
+    bool ok_tools = replace_or_append_managed(root + "\\TOOLS.md", oss.str());
+
+    if (ok_agents && ok_tools) {
+        LOG_I("WORKSPACE", "Synced managed sections to AGENTS.md and TOOLS.md");
+        return true;
+    }
+    LOG_W("WORKSPACE", "Managed section sync partial/fail: agents=%d tools=%d", ok_agents ? 1 : 0, ok_tools ? 1 : 0);
+    return false;
+}
+
+static const char* runtime_perm_value(PermValue v) {
+    switch (v) {
+        case PermValue::Allow: return "allow";
+        case PermValue::Ask: return "ask";
+        default: return "deny";
+    }
+}
+
+static const char* runtime_device_value() {
+    PermValue vals[] = {
+        permissions().get(PermKey::DEVICE_CAMERA),
+        permissions().get(PermKey::DEVICE_MIC),
+        permissions().get(PermKey::DEVICE_SCREEN),
+        permissions().get(PermKey::DEVICE_USB_STORAGE),
+        permissions().get(PermKey::DEVICE_REMOTE_NODE),
+        permissions().get(PermKey::DEVICE_NEW_DEVICE),
+    };
+    bool has_allow = false;
+    bool has_ask = false;
+    for (PermValue v : vals) {
+        if (v == PermValue::Allow) has_allow = true;
+        if (v == PermValue::Ask) has_ask = true;
+    }
+    if (has_allow) return "allow";
+    if (has_ask) return "ask";
+    return "deny";
+}
+
+static std::string build_runtime_workspace_json(const std::string& root) {
+    std::ostringstream oss;
+    oss << "{\n"
+        << "  \"version\": 2,\n"
+        << "  \"source\": \"permissions.json\",\n"
+        << "  \"workspace_root\": \"" << root << "\",\n"
+        << "  \"denied_paths\": [\"C:\\\\Windows\\\\\", \"C:\\\\Program Files\\\\\"],\n"
+        << "  \"permissions\": {\n"
+        << "    \"fs_read\": \"" << runtime_perm_value(permissions().get(PermKey::FS_READ_WORKSPACE)) << "\",\n"
+        << "    \"fs_write\": \"" << runtime_perm_value(permissions().get(PermKey::FS_WRITE_WORKSPACE)) << "\",\n"
+        << "    \"exec\": \"" << runtime_perm_value(permissions().get(PermKey::EXEC_SHELL)) << "\",\n"
+        << "    \"net_outbound\": \"" << runtime_perm_value(permissions().get(PermKey::NET_OUTBOUND)) << "\",\n"
+        << "    \"device\": \"" << runtime_device_value() << "\"\n"
+        << "  },\n"
+        << "  \"limits\": {\n"
+        << "    \"cmd_timeout_sec\": " << permissions().limits().cmd_timeout_sec << ",\n"
+        << "    \"max_subagents\": " << permissions().limits().max_subagents << ",\n"
+        << "    \"net_rpm\": " << permissions().limits().net_rpm << "\n"
+        << "  }\n"
+        << "}\n";
+    return oss.str();
+}
+
+bool workspace_sync_runtime_config_from_permissions() {
+    std::string root = workspace_get_root();
+    if (root.empty()) return false;
+
+    std::string path = root + "\\workspace.json";
+    std::string next = build_runtime_workspace_json(root);
+
+    std::string current;
+    {
+        std::ifstream in(path, std::ios::binary);
+        if (in.is_open()) {
+            current.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            in.close();
+        }
+    }
+
+    if (current == next) {
+        perm_audit_log("config_sync", "workspace.json", "up_to_date");
+        return true;
+    }
+
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out.is_open()) {
+        perm_audit_log("config_sync", "workspace.json", "write_failed");
+        return false;
+    }
+    out << next;
+    out.close();
+
+    perm_audit_log("config_sync", "workspace.json", current.empty() ? "created" : "rebuilt");
+    LOG_I("WORKSPACE", "Synced runtime config from permissions: %s", path.c_str());
+    return true;
 }

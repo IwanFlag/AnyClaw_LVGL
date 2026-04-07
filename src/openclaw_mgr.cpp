@@ -1,5 +1,7 @@
 #include "app.h"
 #include "app_log.h"
+#include "permissions.h"
+#include "workspace.h"
 #include <windows.h>
 #include <shellapi.h>
 #include <tlhelp32.h>
@@ -16,7 +18,45 @@ namespace fs = std::filesystem;
 
 /* ── Helpers ──────────────────────────────────────────────── */
 
+static PermKey classify_exec_command(const char* cmd) {
+    PermKey key = PermKey::EXEC_SHELL;
+    if (!cmd) return key;
+    if (strstr(cmd, "npm install") || strstr(cmd, "apt install") || strstr(cmd, "pip install")) {
+        key = PermKey::EXEC_INSTALL;
+    } else if (strstr(cmd, " rm ") || strstr(cmd, " del ") || strstr(cmd, " rmdir ")
+               || strstr(cmd, "taskkill ")) {
+        key = PermKey::EXEC_DELETE;
+    }
+    return key;
+}
+
+static bool is_sandbox_required(PermKey key) {
+    return key == PermKey::EXEC_INSTALL || key == PermKey::EXEC_DELETE;
+}
+
+static bool check_exec_permission(const char* cmd, char* output, int out_size, PermKey* out_key) {
+    if (!cmd) return false;
+    PermKey key = classify_exec_command(cmd);
+    if (out_key) *out_key = key;
+
+    const char* decision_name = "exec_shell";
+    if (key == PermKey::EXEC_INSTALL) decision_name = "exec_install";
+    else if (key == PermKey::EXEC_DELETE) decision_name = "exec_delete";
+
+    if (perm_check_exec(key, cmd)) return true;
+    if (output && out_size > 0) {
+        snprintf(output, out_size, "DENY: %s permission blocked or rejected by user", decision_name);
+    }
+    return false;
+}
+
 static bool exec_cmd(const char* cmd, char* output, int out_size, DWORD timeout_ms = 5000) {
+    PermKey exec_key = PermKey::EXEC_SHELL;
+    if (!check_exec_permission(cmd, output, out_size, &exec_key)) {
+        LOG_W("PERM", "Blocked command: %s", cmd ? cmd : "(null)");
+        return false;
+    }
+
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(sa);
     sa.bInheritHandle = TRUE;
@@ -37,12 +77,41 @@ static bool exec_cmd(const char* cmd, char* output, int out_size, DWORD timeout_
     std::vector<char> buf(full.begin(), full.end());
     buf.push_back('\0');
 
+    std::string sandbox_dir;
+    const char* work_dir = nullptr;
+    if (is_sandbox_required(exec_key)) {
+        sandbox_dir = workspace_get_root() + "\\.sandbox_exec";
+        try { fs::create_directories(sandbox_dir); } catch (...) {}
+        if (!sandbox_dir.empty()) {
+            work_dir = sandbox_dir.c_str();
+            perm_audit_log("sandbox_exec", cmd, "enabled");
+        }
+    }
+
     if (!CreateProcessA(nullptr, buf.data(), nullptr, nullptr, TRUE,
-                        CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+                        CREATE_NO_WINDOW, nullptr, work_dir, &si, &pi)) {
         CloseHandle(hRead);
         CloseHandle(hWrite);
         if (output && out_size > 0) snprintf(output, out_size, "ERROR: command not found");
         return false;
+    }
+
+    HANDLE hJob = nullptr;
+    if (is_sandbox_required(exec_key)) {
+        hJob = CreateJobObjectA(nullptr, nullptr);
+        if (hJob) {
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION jeli{};
+            jeli.BasicLimitInformation.LimitFlags =
+                JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE |
+                JOB_OBJECT_LIMIT_ACTIVE_PROCESS |
+                JOB_OBJECT_LIMIT_PROCESS_MEMORY;
+            jeli.BasicLimitInformation.ActiveProcessLimit = 1;
+            jeli.ProcessMemoryLimit = 512ull * 1024ull * 1024ull; /* 512MB */
+            SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &jeli, sizeof(jeli));
+            if (!AssignProcessToJobObject(hJob, pi.hProcess)) {
+                perm_audit_log("sandbox_exec", cmd, "assign_failed");
+            }
+        }
     }
 
     CloseHandle(hWrite);
@@ -90,6 +159,7 @@ static bool exec_cmd(const char* cmd, char* output, int out_size, DWORD timeout_
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
     CloseHandle(hRead);
+    if (hJob) CloseHandle(hJob);
 
     /* Trim */
     while (!result.empty() && (result.back() == '\r' || result.back() == '\n' || result.back() == ' '))

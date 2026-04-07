@@ -1,6 +1,7 @@
 #include "session_manager.h"
 #include "app.h"
 #include "app_log.h"
+#include "permissions.h"
 #include <windows.h>
 #include <cstdio>
 #include <cstring>
@@ -87,6 +88,10 @@ static bool json_ll(const char* json, const char* key, long long& out) {
 
 static bool exec_cmd_local(const char* cmd, char* output, int out_size, DWORD timeout_ms = 8000) {
     if (output && out_size > 0) output[0] = '\0';
+    if (!perm_check_exec(PermKey::EXEC_SHELL, cmd)) {
+        if (output && out_size > 0) snprintf(output, out_size, "DENY: exec_shell blocked or rejected");
+        return false;
+    }
 
     SECURITY_ATTRIBUTES sa = {};
     sa.nLength = sizeof(sa);

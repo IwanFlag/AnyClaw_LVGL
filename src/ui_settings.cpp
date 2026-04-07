@@ -8,6 +8,7 @@
 #include "model_manager.h"
 #include "migration.h"
 #include "workspace.h"
+#include "permissions.h"
 #include "app_log.h"
 #include "theme.h"
 #include "SDL.h"
@@ -15,11 +16,6 @@
 #include "lvgl.h"
 #include <windows.h>
 #include <commdlg.h>
-#include "widgets/aw_common.h"
-#include "widgets/aw_button.h"
-#include "widgets/aw_label.h"
-#include "widgets/aw_input.h"
-#include "widgets/aw_panel.h"
 
 /* Font helper — DPI-scaled font selection (same as ui_main.cpp) */
 static const lv_font_t* FONT(int base_px) {
@@ -77,6 +73,7 @@ static lv_obj_t* gen_auto_start_sw = nullptr; /* Auto-restart on crash */
 static lv_obj_t* gen_close_gateway_sw = nullptr; /* Close Gateway on exit */
 static lv_obj_t* gen_lang_dropdown = nullptr;
 static lv_obj_t* gen_refresh_dropdown = nullptr;
+static lv_obj_t* perm_status_label = nullptr;
 
 /* ── Account tab widgets ── */
 static lv_obj_t* acc_apikey_ta = nullptr;
@@ -95,6 +92,7 @@ static int current_lang = (g_lang == Lang::CN) ? 0 : 1;
 /* ── Forward declarations ── */
 static void settings_close_cb(lv_event_t* e);
 static void settings_tab_change_cb(lv_event_t* e);
+static void build_permissions_tab(lv_obj_t* tab);
 
 /* ═══════════════════════════════════════════════════════════════
  *  i18n helpers (single-language display)
@@ -180,9 +178,23 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_set_flex_align(tab, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_gap(tab, 8, 0);
 
-    /* Helper: create a horizontal Key: Value row using aw widgets */
+    /* Helper: create a horizontal Key: Value row */
     auto make_kv_row = [&](const char* key_text, lv_obj_t* value_obj) -> lv_obj_t* {
-        lv_obj_t* row = aw_setting_row(tab, key_text);
+        lv_obj_t* row = lv_obj_create(tab);
+        lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_pad_all(row, 0, 0);
+        lv_obj_set_style_pad_ver(row, 4, 0);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+        lv_obj_t* lbl = lv_label_create(row);
+        lv_label_set_text(lbl, key_text);
+        lv_obj_set_style_text_color(lbl, lv_color_make(180, 185, 200), 0);
+        lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
+
         if (value_obj) {
             lv_obj_set_parent(value_obj, row);
         }
@@ -190,85 +202,150 @@ static void build_general_tab(lv_obj_t* tab) {
     };
 
     /* ── Gateway Status ── */
-    gen_status_label = aw_label_create(tab, "--", LABEL_BODY);
-    lv_obj_set_style_text_color(gen_status_label, aw::color_success(), 0);
+    gen_status_label = lv_label_create(tab);
+    lv_label_set_text(gen_status_label, "--");
+    lv_obj_set_style_text_color(gen_status_label, lv_color_make(100, 200, 100), 0);
+    lv_obj_set_style_text_font(gen_status_label, CJK_FONT, 0);
     make_kv_row("Gateway Status", gen_status_label);
 
     /* ── Install Path ── */
-    gen_path_label = aw_label_create(tab, "--", LABEL_HINT);
+    gen_path_label = lv_label_create(tab);
+    lv_label_set_text(gen_path_label, "--");
     lv_label_set_long_mode(gen_path_label, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_width(gen_path_label, LV_SIZE_CONTENT);
+    lv_obj_set_style_text_color(gen_path_label, lv_color_make(160, 165, 185), 0);
+    lv_obj_set_style_text_font(gen_path_label, CJK_FONT, 0);
     make_kv_row("Install Path", gen_path_label);
 
     /* ── Workspace Path (WS-01) ── */
     {
         std::string ws_root = workspace_get_root();
-        lv_obj_t* ws_label = aw_label_create(tab, ws_root.empty() ? "Not configured" : ws_root.c_str(), LABEL_HINT);
+        lv_obj_t* ws_label = lv_label_create(tab);
+        lv_label_set_text(ws_label, ws_root.empty() ? "Not configured" : ws_root.c_str());
         lv_label_set_long_mode(ws_label, LV_LABEL_LONG_MODE_DOTS);
         lv_obj_set_width(ws_label, LV_SIZE_CONTENT);
+        lv_obj_set_style_text_color(ws_label, lv_color_make(160, 165, 185), 0);
+        lv_obj_set_style_text_font(ws_label, CJK_FONT, 0);
         make_kv_row("Workspace", ws_label);
     }
 
     add_divider(tab);
 
     /* ── Boot Start ── */
-    lv_obj_t* row_boot = aw_setting_row(tab, "Boot Start");
+    lv_obj_t* row_boot = lv_obj_create(tab);
+    lv_obj_set_size(row_boot, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_boot, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_boot, 0, 0);
+    lv_obj_set_style_pad_all(row_boot, 0, 0);
+    lv_obj_set_style_pad_ver(row_boot, 4, 0);
+    lv_obj_clear_flag(row_boot, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row_boot, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_boot, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t* lbl_boot = lv_label_create(row_boot);
+    lv_label_set_text(lbl_boot, "Boot Start");
+    lv_obj_set_style_text_color(lbl_boot, lv_color_make(180, 185, 200), 0);
+    lv_obj_set_style_text_font(lbl_boot, CJK_FONT, 0);
 
     lv_obj_t* boot_right = lv_obj_create(row_boot);
-    aw_make_container(boot_right);
+    lv_obj_set_style_bg_opa(boot_right, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(boot_right, 0, 0);
+    lv_obj_set_style_pad_all(boot_right, 0, 0);
+    lv_obj_clear_flag(boot_right, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(boot_right, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(boot_right, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(boot_right, 8, 0);
     lv_obj_set_size(boot_right, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
 
-    gen_autostart_sw = aw_switch_create(boot_right, is_auto_start());
+    gen_autostart_sw = lv_switch_create(boot_right);
     lv_obj_set_size(gen_autostart_sw, SCALE(50), SCALE(26));
+    if (is_auto_start()) lv_obj_add_state(gen_autostart_sw, LV_STATE_CHECKED);
+    lv_obj_set_style_bg_color(gen_autostart_sw, lv_color_make(60, 65, 90), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(gen_autostart_sw, lv_color_make(60, 130, 220), LV_PART_INDICATOR | LV_STATE_CHECKED);
     lv_obj_set_style_bg_color(gen_autostart_sw, lv_color_make(255, 255, 255), LV_PART_KNOB);
     lv_obj_add_event_cb(gen_autostart_sw, [](lv_event_t* e) {
         lv_obj_t* sw = (lv_obj_t*)lv_event_get_target(e);
         set_auto_start(lv_obj_has_state(sw, LV_STATE_CHECKED));
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 
-    lv_obj_t* lbl_boot_hint = aw_label_create(boot_right, "Start on boot", LABEL_HINT);
+    lv_obj_t* lbl_boot_hint = lv_label_create(boot_right);
+    lv_label_set_text(lbl_boot_hint, "Start on boot");
+    apply_hint_label(lbl_boot_hint);
 
     /* ── Auto Start ── */
     lv_obj_t* row_auto = lv_obj_create(tab);
     lv_obj_set_size(row_auto, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(row_auto, LV_OPA_TRANSP, 0);
-    lv_obj_t* row_auto = aw_setting_row(tab, "Auto Start");
+    lv_obj_set_style_border_width(row_auto, 0, 0);
+    lv_obj_set_style_pad_all(row_auto, 0, 0);
+    lv_obj_set_style_pad_ver(row_auto, 4, 0);
+    lv_obj_clear_flag(row_auto, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row_auto, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_auto, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t* lbl_auto = lv_label_create(row_auto);
+    lv_label_set_text(lbl_auto, "Auto Start");
+    lv_obj_set_style_text_color(lbl_auto, lv_color_make(180, 185, 200), 0);
+    lv_obj_set_style_text_font(lbl_auto, CJK_FONT, 0);
 
     lv_obj_t* auto_right = lv_obj_create(row_auto);
-    aw_make_container(auto_right);
+    lv_obj_set_style_bg_opa(auto_right, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(auto_right, 0, 0);
+    lv_obj_set_style_pad_all(auto_right, 0, 0);
+    lv_obj_clear_flag(auto_right, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(auto_right, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(auto_right, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(auto_right, 8, 0);
     lv_obj_set_size(auto_right, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
 
-    gen_auto_start_sw = aw_switch_create(auto_right, false);
+    gen_auto_start_sw = lv_switch_create(auto_right);
     lv_obj_set_size(gen_auto_start_sw, SCALE(50), SCALE(26));
+    lv_obj_set_style_bg_color(gen_auto_start_sw, lv_color_make(60, 65, 90), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(gen_auto_start_sw, lv_color_make(60, 130, 220), LV_PART_INDICATOR | LV_STATE_CHECKED);
+    lv_obj_set_style_bg_color(gen_auto_start_sw, lv_color_make(255, 255, 255), LV_PART_KNOB);
     lv_obj_add_event_cb(gen_auto_start_sw, [](lv_event_t* e) {
         lv_obj_t* sw = (lv_obj_t*)lv_event_get_target(e);
         bool enabled = lv_obj_has_state(sw, LV_STATE_CHECKED);
         /* TODO: persist auto_start_on_crash config */
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 
-    lv_obj_t* lbl_auto_hint = aw_label_create(auto_right, "Restart on crash", LABEL_HINT);
+    lv_obj_t* lbl_auto_hint = lv_label_create(auto_right);
+    lv_label_set_text(lbl_auto_hint, "Restart on crash");
+    apply_hint_label(lbl_auto_hint);
 
     add_divider(tab);
 
     /* ── Close Gateway on exit ── */
     {
-        lv_obj_t* close_row = aw_setting_row(tab, tr("退出时关闭 OpenClaw", "Close OpenClaw on exit"));
+        lv_obj_t* close_row = lv_obj_create(tab);
+        lv_obj_set_size(close_row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(close_row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(close_row, 0, 0);
+        lv_obj_set_style_pad_all(close_row, 0, 0);
+        lv_obj_clear_flag(close_row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(close_row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(close_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+        lv_obj_t* lbl_close = lv_label_create(close_row);
+        lv_label_set_text(lbl_close, tr("退出时关闭 OpenClaw", "Close OpenClaw on exit"));
+        lv_obj_set_style_text_color(lbl_close, g_colors->text, 0);
+        lv_obj_set_style_text_font(lbl_close, CJK_FONT, 0);
 
         lv_obj_t* close_right = lv_obj_create(close_row);
-        aw_make_container(close_right);
         lv_obj_set_size(close_right, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(close_right, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(close_right, 0, 0);
+        lv_obj_set_style_pad_all(close_right, 0, 0);
+        lv_obj_clear_flag(close_right, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_flex_flow(close_right, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(close_right, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_gap(close_right, 8, 0);
 
-        gen_close_gateway_sw = aw_switch_create(close_right, false);
+        gen_close_gateway_sw = lv_switch_create(close_right);
         lv_obj_set_size(gen_close_gateway_sw, SCALE(50), SCALE(26));
+        lv_obj_set_style_bg_color(gen_close_gateway_sw, lv_color_make(60, 65, 90), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(gen_close_gateway_sw, lv_color_make(60, 130, 220), LV_PART_INDICATOR | LV_STATE_CHECKED);
+        lv_obj_set_style_bg_color(gen_close_gateway_sw, lv_color_make(255, 255, 255), LV_PART_KNOB);
 
         /* Read from config: default ON */
         bool close_on_exit = true; /* default */
@@ -391,10 +468,26 @@ static void build_general_tab(lv_obj_t* tab) {
     add_divider(tab);
 
     /* ── Security ── */
-    lv_obj_t* sec_row = aw_setting_row(tab, "Security");
+    lv_obj_t* sec_row = lv_obj_create(tab);
+    lv_obj_set_size(sec_row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(sec_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(sec_row, 0, 0);
+    lv_obj_set_style_pad_all(sec_row, 0, 0);
+    lv_obj_set_style_pad_ver(sec_row, 4, 0);
+    lv_obj_clear_flag(sec_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(sec_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(sec_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    lv_obj_t* lbl_sec = lv_label_create(sec_row);
+    lv_label_set_text(lbl_sec, "Security");
+    lv_obj_set_style_text_color(lbl_sec, lv_color_make(180, 185, 200), 0);
+    lv_obj_set_style_text_font(lbl_sec, CJK_FONT, 0);
 
     lv_obj_t* sec_right = lv_obj_create(sec_row);
-    aw_make_container(sec_right);
+    lv_obj_set_style_bg_opa(sec_right, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(sec_right, 0, 0);
+    lv_obj_set_style_pad_all(sec_right, 0, 0);
+    lv_obj_clear_flag(sec_right, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(sec_right, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(sec_right, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(sec_right, 8, 0);
@@ -402,23 +495,46 @@ static void build_general_tab(lv_obj_t* tab) {
 
     lv_obj_t* sec_green = lv_led_create(sec_right);
     lv_obj_set_size(sec_green, 10, 10);
-    lv_led_set_color(sec_green, aw::color_success());
+    lv_led_set_color(sec_green, lv_color_make(0, 220, 60));
     lv_led_on(sec_green);
 
-    lv_obj_t* sec_label = aw_label_create(sec_right, "Good", LABEL_BODY);
+    lv_obj_t* sec_label = lv_label_create(sec_right);
+    lv_label_set_text(sec_label, "Good");
+    lv_obj_set_style_text_color(sec_label, lv_color_make(100, 200, 100), 0);
+    lv_obj_set_style_text_font(sec_label, CJK_FONT, 0);
+    lv_obj_set_style_text_color(sec_label, lv_color_make(200, 205, 220), 0);
+    lv_obj_set_style_text_font(sec_label, CJK_FONT, 0);
 
     /* Security detail items */
-    lv_obj_t* lbl_sec_detail = aw_label_create(tab, "API Key: OK | Port: 18789 | Config: Writable", LABEL_HINT);
+    lv_obj_t* lbl_sec_detail = lv_label_create(tab);
+    lv_label_set_text(lbl_sec_detail, "API Key: OK | Port: 18789 | Config: Writable");
+    apply_hint_label(lbl_sec_detail);
     lv_label_set_long_mode(lbl_sec_detail, LV_LABEL_LONG_WRAP);
 
-    aw_divider_create(tab, aw::dark_border());
+    /* Divider */
+    lv_obj_t* div3 = lv_obj_create(tab);
+    lv_obj_set_size(div3, LV_PCT(100), 1);
+    lv_obj_set_style_bg_color(div3, lv_color_make(55, 60, 85), 0);
+    lv_obj_set_style_border_width(div3, 0, 0);
+    lv_obj_clear_flag(div3, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Log settings moved to Log tab */
 
     /* Divider */
-    aw_divider_create(tab, aw::dark_border());
+    lv_obj_t* div4 = lv_obj_create(tab);
+    lv_obj_set_size(div4, LV_PCT(100), 1);
+    lv_obj_set_style_bg_color(div4, lv_color_make(55, 60, 85), 0);
+    lv_obj_set_style_border_width(div4, 0, 0);
+    lv_obj_clear_flag(div4, LV_OBJ_FLAG_SCROLLABLE);
 
     /* Reconfigure wizard button */
-    lv_obj_t* btn_wizard = aw_btn_create(tab, "", BTN_SECONDARY, 0, 40);
+    lv_obj_t* btn_wizard = lv_button_create(tab);
     lv_obj_set_width(btn_wizard, LV_PCT(100));
+    lv_obj_set_height(btn_wizard, 40);
+    lv_obj_set_style_bg_color(btn_wizard, lv_color_make(40, 50, 90), 0);
+    lv_obj_set_style_bg_grad_color(btn_wizard, lv_color_make(30, 40, 70), 0);
+    lv_obj_set_style_bg_grad_dir(btn_wizard, LV_GRAD_DIR_VER, 0);
+    lv_obj_set_style_radius(btn_wizard, 8, 0);
     lv_obj_add_event_cb(btn_wizard, [](lv_event_t* e) {
         (void)e;
         ui_settings_close();
@@ -428,6 +544,138 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_label_set_text(btn_wizard_lbl, "Reconfigure Wizard");
     lv_obj_set_style_text_font(btn_wizard_lbl, CJK_FONT, 0);
     lv_obj_center(btn_wizard_lbl);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ *  PERMISSIONS TAB (PERM-01)
+ * ═══════════════════════════════════════════════════════════════ */
+struct PermUiBinding {
+    PermKey key;
+    lv_obj_t* dd;
+};
+static std::vector<PermUiBinding> g_perm_bindings;
+
+static uint16_t perm_to_sel(PermValue v) {
+    switch (v) {
+        case PermValue::Allow:    return 0;
+        case PermValue::Deny:     return 1;
+        case PermValue::Ask:      return 2;
+        case PermValue::ReadOnly: return 3;
+        default:                  return 1;
+    }
+}
+
+static PermValue sel_to_perm(uint16_t s) {
+    switch (s) {
+        case 0: return PermValue::Allow;
+        case 1: return PermValue::Deny;
+        case 2: return PermValue::Ask;
+        case 3: return PermValue::ReadOnly;
+        default: return PermValue::Deny;
+    }
+}
+
+static void build_permissions_tab(lv_obj_t* tab) {
+    apply_dark_style(tab);
+    lv_obj_set_style_pad_all(tab, 16, 0);
+    lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(tab, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_gap(tab, 10, 0);
+
+    /* Sync workspace root to permission boundary and load config */
+    std::string ws_root = workspace_get_root();
+    permissions().set_workspace_root(ws_root.c_str());
+    permissions().load();
+    g_perm_bindings.clear();
+
+    lv_obj_t* title = lv_label_create(tab);
+    lv_label_set_text(title, tr("权限策略", "Permissions Policy"));
+    apply_section_label(title);
+
+    lv_obj_t* hint = lv_label_create(tab);
+    lv_label_set_text(hint, tr("可修改核心权限，保存后写入 APPDATA/AnyClaw_LVGL/permissions.json",
+                               "Edit core permissions and save to APPDATA/AnyClaw_LVGL/permissions.json"));
+    apply_hint_label(hint);
+
+    struct Item { const char* name; PermKey key; };
+    const Item items[] = {
+        {"FS Read Workspace",  PermKey::FS_READ_WORKSPACE},
+        {"FS Write Workspace", PermKey::FS_WRITE_WORKSPACE},
+        {"FS Read External",   PermKey::FS_READ_EXTERNAL},
+        {"FS Write External",  PermKey::FS_WRITE_EXTERNAL},
+        {"Exec Shell",         PermKey::EXEC_SHELL},
+        {"Exec Install",       PermKey::EXEC_INSTALL},
+        {"Net Outbound",       PermKey::NET_OUTBOUND},
+        {"Net Intranet",       PermKey::NET_INTRANET},
+        {"System Modify",      PermKey::SYSTEM_MODIFY},
+    };
+
+    for (const auto& it : items) {
+        lv_obj_t* row = lv_obj_create(tab);
+        lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_pad_all(row, 0, 0);
+        lv_obj_set_style_pad_ver(row, 2, 0);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+        lv_obj_t* lbl = lv_label_create(row);
+        lv_label_set_text(lbl, it.name);
+        lv_obj_set_style_text_color(lbl, g_colors->text, 0);
+        lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
+
+        lv_obj_t* dd = lv_dropdown_create(row);
+        lv_dropdown_set_options(dd, "allow\ndeny\nask\nread_only");
+        lv_obj_set_width(dd, SCALE(170));
+        apply_input_style(dd);
+        lv_dropdown_set_selected(dd, perm_to_sel(permissions().get(it.key)));
+
+        g_perm_bindings.push_back({it.key, dd});
+    }
+
+    lv_obj_t* row_btn = lv_obj_create(tab);
+    lv_obj_set_size(row_btn, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_btn, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_btn, 0, 0);
+    lv_obj_set_style_pad_all(row_btn, 0, 0);
+    lv_obj_clear_flag(row_btn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row_btn, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_btn, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row_btn, 8, 0);
+
+    lv_obj_t* btn_save = lv_button_create(row_btn);
+    lv_obj_set_size(btn_save, SCALE(180), SCALE(34));
+    lv_obj_set_style_bg_color(btn_save, lv_color_make(59, 130, 246), 0);
+    lv_obj_set_style_radius(btn_save, 6, 0);
+    lv_obj_add_event_cb(btn_save, [](lv_event_t* e) {
+        (void)e;
+        for (const auto& b : g_perm_bindings) {
+            uint16_t sel = lv_dropdown_get_selected(b.dd);
+            permissions().set(b.key, sel_to_perm(sel));
+        }
+        bool ok = permissions().save();
+        if (ok) {
+            workspace_sync_managed_sections();
+            workspace_sync_runtime_config_from_permissions();
+        }
+        if (perm_status_label) {
+            lv_label_set_text(perm_status_label, ok ? "Saved" : "Save failed");
+            lv_obj_set_style_text_color(perm_status_label,
+                                        ok ? lv_color_make(100, 200, 100) : lv_color_make(220, 100, 100), 0);
+        }
+        ui_log("[PERM] %s", ok ? "Saved permissions config" : "Save failed");
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_save = lv_label_create(btn_save);
+    lv_label_set_text(lbl_save, tr("保存权限配置", "Save Permissions"));
+    lv_obj_set_style_text_font(lbl_save, CJK_FONT, 0);
+    lv_obj_set_style_text_color(lbl_save, lv_color_make(255, 255, 255), 0);
+    lv_obj_center(lbl_save);
+
+    perm_status_label = lv_label_create(row_btn);
+    lv_label_set_text(perm_status_label, tr("未保存", "Not saved"));
+    apply_hint_label(perm_status_label);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -713,15 +961,34 @@ static void build_model_tab(lv_obj_t* tab) {
     }
 
     /* Row: [Dropdown ←——→ [+ Add] ] */
-    lv_obj_t* dd_row = aw_row_create(tab);
+    lv_obj_t* dd_row = lv_obj_create(tab);
+    lv_obj_set_size(dd_row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(dd_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(dd_row, 0, 0);
+    lv_obj_set_style_pad_all(dd_row, 0, 0);
+    lv_obj_clear_flag(dd_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(dd_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(dd_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(dd_row, 8, 0);
 
-    model_dropdown = aw_dropdown_create(dd_row, dd_options);
+    model_dropdown = lv_dropdown_create(dd_row);
+    lv_dropdown_set_options(model_dropdown, dd_options);
     lv_dropdown_set_selected(model_dropdown, selected_idx);
     lv_obj_set_width(model_dropdown, LV_PCT(70));
+    apply_input_style(model_dropdown);
     lv_obj_add_event_cb(model_dropdown, model_dropdown_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     /* Add model button */
-    lv_obj_t* btn_add = aw_btn_create(dd_row, "+", BTN_SUCCESS, 40, 36);
+    lv_obj_t* btn_add = lv_button_create(dd_row);
+    lv_obj_set_size(btn_add, 40, 36);
+    lv_obj_set_style_bg_color(btn_add, lv_color_make(40, 100, 60), 0);
+    lv_obj_set_style_bg_color(btn_add, lv_color_make(50, 130, 80), LV_STATE_PRESSED);
+    lv_obj_set_style_radius(btn_add, 6, 0);
+    lv_obj_t* lbl_add = lv_label_create(btn_add);
+    lv_label_set_text(lbl_add, "+");
+    lv_obj_set_style_text_font(lbl_add, FONT(16), 0);
+    lv_obj_set_style_text_color(lbl_add, lv_color_make(255, 255, 255), 0);
+    lv_obj_center(lbl_add);
     lv_obj_add_event_cb(btn_add, [](lv_event_t* ev) {
         (void)ev;
         /* Modal overlay */
@@ -748,25 +1015,65 @@ static void build_model_tab(lv_obj_t* tab) {
         lv_obj_clear_flag(dlg, LV_OBJ_FLAG_SCROLLABLE);
 
         /* Title */
-        lv_obj_t* title = aw_label_create(dlg, tr("添加自定义模型", "Add Custom Model"), LABEL_TITLE);
+        lv_obj_t* title = lv_label_create(dlg);
+        lv_label_set_text(title, tr("添加自定义模型", "Add Custom Model"));
+        lv_obj_set_style_text_color(title, lv_color_make(220, 225, 240), 0);
+        lv_obj_set_style_text_font(title, CJK_FONT, 0);
 
         /* Hint */
-        lv_obj_t* hint = aw_label_create(dlg, tr("输入模型名称", "Enter model name"), LABEL_HINT);
+        lv_obj_t* hint = lv_label_create(dlg);
+        lv_label_set_text(hint, tr("输入模型名称", "Enter model name"));
+        lv_obj_set_style_text_color(hint, lv_color_make(140, 150, 170), 0);
+        lv_obj_set_style_text_font(hint, CJK_FONT, 0);
 
         /* Textarea — single line for model name */
-        lv_obj_t* ta = aw_textarea_create(dlg, "google/gemini-2.5-pro");
+        lv_obj_t* ta = lv_textarea_create(dlg);
         lv_obj_set_size(ta, LV_PCT(100), LV_SIZE_CONTENT);
         lv_textarea_set_one_line(ta, true);
         lv_textarea_set_max_length(ta, 128);
+        lv_textarea_set_placeholder_text(ta, "google/gemini-2.5-pro");
+        lv_obj_set_style_bg_color(ta, lv_color_make(20, 22, 32), 0);
+        lv_obj_set_style_text_color(ta, lv_color_make(220, 225, 240), 0);
+        lv_obj_set_style_text_font(ta, CJK_FONT, 0);
+        lv_obj_set_style_border_color(ta, lv_color_make(60, 65, 90), 0);
+        lv_obj_set_style_border_width(ta, 1, 0);
+        lv_obj_set_style_radius(ta, 6, 0);
+        lv_obj_set_style_pad_all(ta, 6, 0);
+        lv_obj_set_style_pad_ver(ta, 8, 0);
+        lv_obj_set_style_border_color(ta, lv_color_make(60, 65, 90), LV_STATE_FOCUSED);
+        lv_obj_set_style_border_width(ta, 1, LV_STATE_FOCUSED);
+        lv_obj_set_style_outline_width(ta, 0, LV_STATE_FOCUSED);
+        lv_obj_set_style_text_color(ta, lv_color_make(180, 215, 255), LV_PART_SELECTED);
+        lv_obj_clear_flag(ta, LV_OBJ_FLAG_SCROLLABLE);
 
         /* Button row — [OK] ←spacer→ [Cancel] */
-        lv_obj_t* btn_row = aw_row_create(dlg);
+        lv_obj_t* btn_row = lv_obj_create(dlg);
+        lv_obj_set_size(btn_row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(btn_row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(btn_row, 0, 0);
+        lv_obj_set_style_pad_all(btn_row, 0, 0);
+        lv_obj_set_flex_flow(btn_row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(btn_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(btn_row, LV_OBJ_FLAG_SCROLLABLE);
 
         /* OK button (left) */
-        lv_obj_t* btn_ok = aw_btn_create(btn_row, tr("确定", "OK"), BTN_PRIMARY, 80, 36);
+        lv_obj_t* btn_ok = lv_button_create(btn_row);
+        lv_obj_set_size(btn_ok, 80, 36);
+        lv_obj_set_style_bg_color(btn_ok, lv_color_make(40, 100, 180), 0);
+        lv_obj_set_style_bg_color(btn_ok, lv_color_make(50, 120, 200), LV_STATE_PRESSED);
+        lv_obj_set_style_radius(btn_ok, 6, 0);
+        lv_obj_t* lbl_ok = lv_label_create(btn_ok);
+        lv_label_set_text(lbl_ok, tr("确定", "OK"));
+        lv_obj_set_style_text_font(lbl_ok, CJK_FONT, 0);
+        lv_obj_set_style_text_color(lbl_ok, lv_color_make(255, 255, 255), 0);
+        lv_obj_center(lbl_ok);
 
         /* Cancel button (right) */
-        lv_obj_t* btn_cancel = aw_btn_create(btn_row, tr("取消", "Cancel"), BTN_SECONDARY, 80, 36);
+        lv_obj_t* btn_cancel = lv_button_create(btn_row);
+        lv_obj_set_size(btn_cancel, 80, 36);
+        lv_obj_set_style_bg_color(btn_cancel, lv_color_make(80, 85, 100), 0);
+        lv_obj_set_style_bg_color(btn_cancel, lv_color_make(100, 105, 120), LV_STATE_PRESSED);
+        lv_obj_set_style_radius(btn_cancel, 6, 0);
         lv_obj_t* lbl_cancel = lv_label_create(btn_cancel);
         lv_label_set_text(lbl_cancel, tr("取消", "Cancel"));
         lv_obj_set_style_text_font(lbl_cancel, CJK_FONT, 0);
@@ -861,10 +1168,13 @@ static void build_model_tab(lv_obj_t* tab) {
     }
 
     /* ═══ API Key input — show real key from file ═══ */
-    acc_apikey_ta = aw_textarea_create(tab, "sk-or-...", true, 0, 56);
+    acc_apikey_ta = lv_textarea_create(tab);
     lv_textarea_set_one_line(acc_apikey_ta, true);
-    lv_textarea_set_max_length(acc_apikey_ta, 256);
+    lv_textarea_set_password_mode(acc_apikey_ta, true);
+    lv_textarea_set_placeholder_text(acc_apikey_ta, "sk-or-...");
     lv_obj_set_width(acc_apikey_ta, LV_PCT(80));
+    lv_obj_set_height(acc_apikey_ta, 56);
+    apply_input_style(acc_apikey_ta);
     lv_textarea_set_text_selection(acc_apikey_ta, true);
     lv_group_add_obj(lv_group_get_default(), acc_apikey_ta);
 
@@ -880,20 +1190,49 @@ static void build_model_tab(lv_obj_t* tab) {
     make_kv_row("API Key", acc_apikey_ta);
 
     /* ═══ Action buttons — right-aligned row ═══ */
-    lv_obj_t* row_btns = aw_row_create(tab);
+    lv_obj_t* row_btns = lv_obj_create(tab);
+    lv_obj_set_size(row_btns, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_btns, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_btns, 0, 0);
+    lv_obj_set_style_pad_all(row_btns, 0, 0);
+    lv_obj_set_style_pad_ver(row_btns, 4, 0);
+    lv_obj_clear_flag(row_btns, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row_btns, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_btns, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row_btns, 8, 0);
 
     /* Show/Hide Key toggle */
-    lv_obj_t* btn_show = aw_btn_create(row_btns, "Hide Key", BTN_SECONDARY, SCALE(100), SCALE(32));
+    lv_obj_t* btn_show = lv_button_create(row_btns);
+    lv_obj_set_size(btn_show, SCALE(100), SCALE(32));
+    lv_obj_set_style_bg_color(btn_show, lv_color_make(60, 65, 90), 0);
+    lv_obj_set_style_radius(btn_show, 6, 0);
     lv_obj_add_event_cb(btn_show, apikey_show_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_show = lv_label_create(btn_show);
+    lv_label_set_text(lbl_show, "Hide Key");
+    lv_obj_set_style_text_font(lbl_show, CJK_FONT, 0);
+    lv_obj_center(lbl_show);
 
     /* Verify button — test API key validity */
-    lv_obj_t* btn_verify = aw_btn_create(row_btns, "Verify", BTN_SUCCESS, SCALE(100), SCALE(32));
+    lv_obj_t* btn_verify = lv_button_create(row_btns);
+    lv_obj_set_size(btn_verify, SCALE(100), SCALE(32));
+    lv_obj_set_style_bg_color(btn_verify, lv_color_make(40, 140, 80), 0);
+    lv_obj_set_style_radius(btn_verify, 6, 0);
     lv_obj_add_event_cb(btn_verify, apikey_verify_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_verify = lv_label_create(btn_verify);
+    lv_label_set_text(lbl_verify, "Verify");
+    lv_obj_set_style_text_font(lbl_verify, CJK_FONT, 0);
+    lv_obj_center(lbl_verify);
+
     /* Save button */
-    lv_obj_t* btn_save = aw_btn_create(row_btns, "Save", BTN_PRIMARY, SCALE(100), SCALE(32));
+    lv_obj_t* btn_save = lv_button_create(row_btns);
+    lv_obj_set_size(btn_save, SCALE(100), SCALE(32));
+    lv_obj_set_style_bg_color(btn_save, lv_color_make(40, 100, 180), 0);
+    lv_obj_set_style_radius(btn_save, 6, 0);
     lv_obj_add_event_cb(btn_save, apikey_save_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_save = lv_label_create(btn_save);
+    lv_label_set_text(lbl_save, "Save");
+    lv_obj_set_style_text_font(lbl_save, CJK_FONT, 0);
+    lv_obj_center(lbl_save);
 
     /* Update current model display */
     if (g_selected_model[0] && model_current_label) {
@@ -906,7 +1245,9 @@ static void build_model_tab(lv_obj_t* tab) {
     add_divider(tab);
 
     /* Title row */
-    lv_obj_t* lbl_failover = aw_label_create(tab, tr("弹性通道", "Failover Channel"), LABEL_TITLE);
+    lv_obj_t* lbl_failover = lv_label_create(tab);
+    lv_label_set_text(lbl_failover, tr("弹性通道", "Failover Channel"));
+    apply_section_label(lbl_failover);
 
     /* Description */
     lv_obj_t* lbl_fo_desc = lv_label_create(tab);
@@ -920,9 +1261,22 @@ static void build_model_tab(lv_obj_t* tab) {
 
     /* Enable/Disable switch */
     lv_obj_t* fo_switch_row = lv_obj_create(tab);
-    lv_obj_t* fo_switch_row = aw_setting_row(tab, tr("启用弹性通道", "Enable Failover"));
+    lv_obj_set_size(fo_switch_row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(fo_switch_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(fo_switch_row, 0, 0);
+    lv_obj_set_style_pad_all(fo_switch_row, 0, 0);
+    lv_obj_clear_flag(fo_switch_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(fo_switch_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(fo_switch_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    lv_obj_t* fo_switch = aw_switch_create(fo_switch_row, failover_is_enabled());
+    lv_obj_t* lbl_fo_sw = lv_label_create(fo_switch_row);
+    lv_label_set_text(lbl_fo_sw, tr("启用弹性通道", "Enable Failover"));
+    lv_obj_set_style_text_color(lbl_fo_sw, lv_color_make(180, 185, 200), 0);
+    lv_obj_set_style_text_font(lbl_fo_sw, CJK_FONT, 0);
+
+    lv_obj_t* fo_switch = lv_switch_create(fo_switch_row);
+    lv_obj_set_width(fo_switch, 50);
+    if (failover_is_enabled()) lv_obj_add_state(fo_switch, LV_STATE_CHECKED);
     lv_obj_add_event_cb(fo_switch, [](lv_event_t* e) {
         lv_obj_t* sw = lv_event_get_target_obj(e);
         bool on = lv_obj_has_state(sw, LV_STATE_CHECKED);
@@ -936,7 +1290,10 @@ static void build_model_tab(lv_obj_t* tab) {
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 
     /* Model checkbox list */
-    lv_obj_t* lbl_fo_models = aw_label_create(tab, tr("备选模型（勾选参与切换）", "Backup models (check to include)"), LABEL_HINT);
+    lv_obj_t* lbl_fo_models = lv_label_create(tab);
+    lv_label_set_text(lbl_fo_models, tr("备选模型（勾选参与切换）", "Backup models (check to include)"));
+    lv_obj_set_style_text_color(lbl_fo_models, lv_color_make(160, 165, 180), 0);
+    lv_obj_set_style_text_font(lbl_fo_models, CJK_FONT, 0);
     lv_obj_set_style_pad_top(lbl_fo_models, 8, 0);
 
     /* Container for checkboxes */
@@ -1337,11 +1694,15 @@ static void build_log_tab(lv_obj_t* tab) {
     lv_obj_set_flex_align(row_lv, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(row_lv, 12, 0);
 
-    lv_obj_t* lbl_log_lv = aw_label_create(row_lv, tr("日志级别", "Log Level"), LABEL_TITLE);
+    lv_obj_t* lbl_log_lv = lv_label_create(row_lv);
+    lv_label_set_text(lbl_log_lv, tr("日志级别", "Log Level"));
+    apply_section_label(lbl_log_lv);
 
-    lv_obj_t* log_lv_dd = aw_dropdown_create(row_lv, "Debug\nInfo\nWarn\nError");
+    lv_obj_t* log_lv_dd = lv_dropdown_create(row_lv);
+    lv_dropdown_set_options(log_lv_dd, "Debug\nInfo\nWarn\nError");
     lv_dropdown_set_selected(log_lv_dd, g_log_level);
     lv_obj_set_width(log_lv_dd, SCALE(160));
+    apply_input_style(log_lv_dd);
     lv_obj_add_event_cb(log_lv_dd, [](lv_event_t* e) {
         lv_obj_t* dd = (lv_obj_t*)lv_event_get_target(e);
         uint16_t sel = lv_dropdown_get_selected(dd);
@@ -1357,34 +1718,79 @@ static void build_log_tab(lv_obj_t* tab) {
     add_divider(tab);
 
     /* ── Filter row ── */
-    lv_obj_t* row_filter = aw_row_create(tab, 40);
+    lv_obj_t* row_filter = lv_obj_create(tab);
+    lv_obj_set_size(row_filter, LV_PCT(100), 40);
+    lv_obj_set_style_bg_opa(row_filter, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_filter, 0, 0);
+    lv_obj_set_style_pad_all(row_filter, 0, 0);
+    lv_obj_clear_flag(row_filter, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row_filter, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_filter, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row_filter, 10, 0);
 
-    lv_obj_t* lbl_filter = aw_label_create(row_filter, tr("级别过滤", "Filter"), LABEL_TITLE);
+    lv_obj_t* lbl_filter = lv_label_create(row_filter);
+    lv_label_set_text(lbl_filter, tr("级别过滤", "Filter"));
+    apply_section_label(lbl_filter);
 
-    lv_obj_t* filter_dd = aw_dropdown_create(row_filter, "All\nInfo+\nWarn+\nError Only");
+    lv_obj_t* filter_dd = lv_dropdown_create(row_filter);
+    lv_dropdown_set_options(filter_dd, "All\nInfo+\nWarn+\nError Only");
     lv_dropdown_set_selected(filter_dd, ui_log_get_filter());
     lv_obj_set_width(filter_dd, SCALE(150));
+    apply_input_style(filter_dd);
     lv_obj_add_event_cb(filter_dd, log_filter_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     /* Refresh button */
-    lv_obj_t* btn_refresh = aw_btn_create(row_filter, LV_SYMBOL_REFRESH, BTN_SECONDARY, SCALE(80), SCALE(32));
+    lv_obj_t* btn_refresh = lv_button_create(row_filter);
+    lv_obj_set_size(btn_refresh, SCALE(80), SCALE(32));
+    lv_obj_set_style_bg_color(btn_refresh, lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_radius(btn_refresh, 6, 0);
     lv_obj_add_event_cb(btn_refresh, log_refresh_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_ref = lv_label_create(btn_refresh);
+    lv_label_set_text(lbl_ref, LV_SYMBOL_REFRESH);
+    lv_obj_set_style_text_font(lbl_ref, FONT(14), 0);  /* Symbol font for 🔄 */
+    lv_obj_center(lbl_ref);
 
     /* ── Action buttons row ── */
-    lv_obj_t* row_actions = aw_row_create(tab, 40);
+    lv_obj_t* row_actions = lv_obj_create(tab);
+    lv_obj_set_size(row_actions, LV_PCT(100), 40);
+    lv_obj_set_style_bg_opa(row_actions, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_actions, 0, 0);
+    lv_obj_set_style_pad_all(row_actions, 0, 0);
+    lv_obj_clear_flag(row_actions, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row_actions, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_actions, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(row_actions, 10, 0);
 
     /* Export button */
-    lv_obj_t* btn_export = aw_btn_create(row_actions, tr("导出日志", "Export Log"), BTN_PRIMARY, SCALE(120), SCALE(32));
+    lv_obj_t* btn_export = lv_button_create(row_actions);
+    lv_obj_set_size(btn_export, SCALE(120), SCALE(32));
+    lv_obj_set_style_bg_color(btn_export, lv_color_make(40, 100, 180), 0);
+    lv_obj_set_style_radius(btn_export, 6, 0);
     lv_obj_add_event_cb(btn_export, log_export_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_exp = lv_label_create(btn_export);
+    lv_label_set_text(lbl_exp, tr("导出日志", "Export Log"));
+    lv_obj_set_style_text_font(lbl_exp, CJK_FONT, 0);
+    lv_obj_center(lbl_exp);
 
     /* Clear button */
-    lv_obj_t* btn_clear = aw_btn_create(row_actions, tr("清除日志", "Clear Log"), BTN_DANGER, SCALE(120), SCALE(32));
+    lv_obj_t* btn_clear = lv_button_create(row_actions);
+    lv_obj_set_size(btn_clear, SCALE(120), SCALE(32));
+    lv_obj_set_style_bg_color(btn_clear, lv_color_make(180, 60, 60), 0);
+    lv_obj_set_style_radius(btn_clear, 6, 0);
     lv_obj_add_event_cb(btn_clear, log_clear_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_clr = lv_label_create(btn_clear);
+    lv_label_set_text(lbl_clr, tr("清除日志", "Clear Log"));
+    lv_obj_set_style_text_font(lbl_clr, CJK_FONT, 0);
+    lv_obj_center(lbl_clr);
 
     /* Log level color legend */
-    lv_obj_t* row_legend = aw_row_create(tab, 24);
+    lv_obj_t* row_legend = lv_obj_create(tab);
+    lv_obj_set_size(row_legend, LV_PCT(100), 24);
+    lv_obj_set_style_bg_opa(row_legend, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_legend, 0, 0);
+    lv_obj_set_style_pad_all(row_legend, 0, 0);
+    lv_obj_clear_flag(row_legend, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row_legend, LV_FLEX_FLOW_ROW);
     lv_obj_set_style_pad_gap(row_legend, 16, 0);
     lv_obj_set_flex_align(row_legend, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
@@ -1435,40 +1841,63 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_image_set_scale(img_garlic, 256); /* 100% scale (256 = 1x) */
 
     /* App logo/title */
-    lv_obj_t* lbl_title = aw_label_create(tab, "AnyClaw LVGL", LABEL_TITLE);
+    lv_obj_t* lbl_title = lv_label_create(tab);
+    lv_label_set_text(lbl_title, "AnyClaw LVGL");
+    lv_obj_set_style_text_color(lbl_title, lv_color_make(100, 160, 255), 0);
+    lv_obj_set_style_text_font(lbl_title, CJK_FONT, 0);
 
     /* Brand slogan */
     lv_obj_t* lbl_brand = lv_label_create(tab);
     lv_label_set_text(lbl_brand, "Garlic Lobster - Your AI Assistant");
     lv_obj_set_style_text_color(lbl_brand, lv_color_make(255, 200, 100), 0);
-    if (AW_CJK_FONT) lv_obj_set_style_text_font(lbl_brand, AW_CJK_FONT, 0);
+    lv_obj_set_style_text_font(lbl_brand, CJK_FONT, 0);
     lv_label_set_long_mode(lbl_brand, LV_LABEL_LONG_WRAP);
 
     /* Version */
-    lv_obj_t* lbl_ver = aw_label_create(tab, "Version: 2.0.1", LABEL_HINT);
+    lv_obj_t* lbl_ver = lv_label_create(tab);
+    lv_label_set_text(lbl_ver, "Version: 2.0.1");
+    lv_obj_set_style_text_color(lbl_ver, lv_color_make(160, 165, 185), 0);
+    lv_obj_set_style_text_font(lbl_ver, CJK_FONT, 0);
 
     /* Divider */
     add_divider(tab);
 
     /* Tech stack */
-    lv_obj_t* lbl_tech = aw_label_create(tab, "Tech Stack", LABEL_TITLE);
+    lv_obj_t* lbl_tech = lv_label_create(tab);
+    lv_label_set_text(lbl_tech, "Tech Stack");
+    apply_section_label(lbl_tech);
 
-    lv_obj_t* lbl_stack = aw_label_create(tab,
+    lv_obj_t* lbl_stack = lv_label_create(tab);
+    lv_label_set_text(lbl_stack,
         "LVGL 9.6 + SDL2\n"
         "C++17 / Win32 API\n"
-        "Windows 10/11 x64", LABEL_HINT);
+        "Windows 10/11 x64");
+    lv_obj_set_style_text_color(lbl_stack, lv_color_make(160, 165, 185), 0);
+    lv_obj_set_style_text_font(lbl_stack, CJK_FONT, 0);
     lv_label_set_long_mode(lbl_stack, LV_LABEL_LONG_WRAP);
 
     /* Divider */
     add_divider(tab);
 
     /* P2-35: Config import/export */
-    lv_obj_t* lbl_config = aw_label_create(tab, "Configuration", LABEL_TITLE);
+    lv_obj_t* lbl_config = lv_label_create(tab);
+    lv_label_set_text(lbl_config, "Configuration");
+    apply_section_label(lbl_config);
 
-    lv_obj_t* row_config = aw_row_create(tab, 44);
+    lv_obj_t* row_config = lv_obj_create(tab);
+    lv_obj_set_size(row_config, LV_PCT(100), 44);
+    lv_obj_set_style_bg_opa(row_config, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_config, 0, 0);
+    lv_obj_set_style_pad_all(row_config, 0, 0);
+    lv_obj_clear_flag(row_config, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row_config, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(row_config, 10, 0);
     lv_obj_set_flex_align(row_config, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    lv_obj_t* btn_cfg_export = aw_btn_create(row_config, "Export Config", BTN_PRIMARY, 160, 36);
+    lv_obj_t* btn_cfg_export = lv_button_create(row_config);
+    lv_obj_set_size(btn_cfg_export, 160, 36);
+    lv_obj_set_style_bg_color(btn_cfg_export, lv_color_make(60, 100, 180), 0);
+    lv_obj_set_style_radius(btn_cfg_export, 6, 0);
     lv_obj_add_event_cb(btn_cfg_export, [](lv_event_t* e) {
         (void)e;
         char path[MAX_PATH];
@@ -1485,22 +1914,43 @@ static void build_about_tab(lv_obj_t* tab) {
             ui_log("[Config] Exported to %s", path);
         }
     }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* l_exp = lv_label_create(btn_cfg_export);
+    lv_label_set_text(l_exp, "Export Config");
+    lv_obj_set_style_text_font(l_exp, CJK_FONT, 0);
+    lv_obj_center(l_exp);
 
     /* Clear Chat History button */
-    lv_obj_t* btn_clear_chat = aw_btn_create(row_config, tr("清除聊天", "Clear Chat"), BTN_DANGER, 160, 36);
+    lv_obj_t* btn_clear_chat = lv_button_create(row_config);
+    lv_obj_set_size(btn_clear_chat, 160, 36);
+    lv_obj_set_style_bg_color(btn_clear_chat, lv_color_make(180, 60, 60), 0);
+    lv_obj_set_style_radius(btn_clear_chat, 6, 0);
     lv_obj_add_event_cb(btn_clear_chat, [](lv_event_t* e) {
         (void)e;
         extern void clear_chat_history();
         clear_chat_history();
         ui_log("[Chat] Chat history cleared");
     }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* l_clr = lv_label_create(btn_clear_chat);
+    lv_label_set_text(l_clr, tr("清除聊天", "Clear Chat"));
+    lv_obj_set_style_text_font(l_clr, CJK_FONT, 0);
+    lv_obj_center(l_clr);
 
     /* Migration row */
-    lv_obj_t* row_mig = aw_row_create(tab);
+    lv_obj_t* row_mig = lv_obj_create(tab);
+    lv_obj_set_size(row_mig, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_mig, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_mig, 0, 0);
+    lv_obj_set_style_pad_all(row_mig, 0, 0);
+    lv_obj_clear_flag(row_mig, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row_mig, LV_FLEX_FLOW_ROW);
+    lv_obj_set_style_pad_gap(row_mig, 10, 0);
     lv_obj_set_flex_align(row_mig, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     /* Export Migration */
-    lv_obj_t* btn_mig_export = aw_btn_create(row_mig, tr("导出迁移", "Export Migration"), BTN_SUCCESS, 160, 36);
+    lv_obj_t* btn_mig_export = lv_button_create(row_mig);
+    lv_obj_set_size(btn_mig_export, 160, 36);
+    lv_obj_set_style_bg_color(btn_mig_export, lv_color_make(50, 130, 80), 0);
+    lv_obj_set_style_radius(btn_mig_export, 6, 0);
     lv_obj_add_event_cb(btn_mig_export, [](lv_event_t* e) {
         (void)e;
         /* Save dialog using Win32 */
@@ -1526,9 +1976,16 @@ static void build_about_tab(lv_obj_t* tab) {
             }
         }
     }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* l_mig_exp = lv_label_create(btn_mig_export);
+    lv_label_set_text(l_mig_exp, tr("导出迁移", "Export Migration"));
+    lv_obj_set_style_text_font(l_mig_exp, &lv_font_mshy_16, 0);
+    lv_obj_center(l_mig_exp);
 
     /* Import Migration */
-    lv_obj_t* btn_mig_import = aw_btn_create(row_mig, tr("导入迁移", "Import Migration"), BTN_SECONDARY, 160, 36);
+    lv_obj_t* btn_mig_import = lv_button_create(row_mig);
+    lv_obj_set_size(btn_mig_import, 160, 36);
+    lv_obj_set_style_bg_color(btn_mig_import, lv_color_make(180, 120, 40), 0);
+    lv_obj_set_style_radius(btn_mig_import, 6, 0);
     lv_obj_add_event_cb(btn_mig_import, [](lv_event_t* e) {
         (void)e;
         OPENFILENAMEA ofn;
@@ -1548,13 +2005,21 @@ static void build_about_tab(lv_obj_t* tab) {
             }
         }
     }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* l_mig_imp = lv_label_create(btn_mig_import);
+    lv_label_set_text(l_mig_imp, tr("导入迁移", "Import Migration"));
+    lv_obj_set_style_text_font(l_mig_imp, &lv_font_mshy_16, 0);
+    lv_obj_center(l_mig_imp);
 
     /* Copyright */
-    lv_obj_t* lbl_copy2 = aw_label_create(tab, "Copyright 2026 AnyClaw Project", LABEL_HINT);
+    lv_obj_t* lbl_copy2 = lv_label_create(tab);
+    lv_label_set_text(lbl_copy2, "Copyright 2026 AnyClaw Project");
+    apply_hint_label(lbl_copy2);
 
     /* P2-30: Skill version check button */
-    lv_obj_t* btn_ver_check = aw_btn_create(tab, "Check Updates", BTN_SECONDARY, 0, 36);
-    lv_obj_set_width(btn_ver_check, LV_PCT(100));
+    lv_obj_t* btn_ver_check = lv_button_create(tab);
+    lv_obj_set_size(btn_ver_check, LV_PCT(100), 36);
+    lv_obj_set_style_bg_color(btn_ver_check, lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_radius(btn_ver_check, 6, 0);
     lv_obj_add_event_cb(btn_ver_check, [](lv_event_t* e) {
         (void)e;
         char url[512];
@@ -1567,6 +2032,10 @@ static void build_about_tab(lv_obj_t* tab) {
             ui_log("[Skill] Version check: offline mode");
         }
     }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* l_ver = lv_label_create(btn_ver_check);
+    lv_label_set_text(l_ver, "Check Updates");
+    lv_obj_set_style_text_font(l_ver, CJK_FONT, 0);
+    lv_obj_center(l_ver);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1917,14 +2386,16 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_set_style_border_width(tab_btns, 2, LV_PART_ITEMS);
     lv_obj_set_style_pad_ver(tab_btns, 8, LV_PART_ITEMS); /* Short divider, not full height */
 
-    /* Create 6 tabs */
+    /* Create tabs */
     lv_obj_t* tab_gen = lv_tabview_add_tab(settings_tabs, "General");
+    lv_obj_t* tab_perm = lv_tabview_add_tab(settings_tabs, "Permissions");
     lv_obj_t* tab_model = lv_tabview_add_tab(settings_tabs, "Model");
     lv_obj_t* tab_log = lv_tabview_add_tab(settings_tabs, tr("日志", "Log"));
     lv_obj_t* tab_about = lv_tabview_add_tab(settings_tabs, "About");
 
     /* Build each tab */
     build_general_tab(tab_gen);
+    build_permissions_tab(tab_perm);
     build_model_tab(tab_model);
     build_log_tab(tab_log);
     build_about_tab(tab_about);

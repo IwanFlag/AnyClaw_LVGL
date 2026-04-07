@@ -32,4 +32,15 @@ bool workspace_generate_meta(const char* name = nullptr);
 /* Get workspace name (from WORKSPACE.md or directory name) */
 std::string workspace_get_name();
 
+/* Workspace lock (.openclaw.lock) */
+bool workspace_lock_acquire();
+void workspace_lock_release();
+bool workspace_lock_is_held();
+
+/* Sync managed policy section to AGENTS.md / TOOLS.md */
+bool workspace_sync_managed_sections();
+
+/* Sync runtime workspace.json projection from permissions.json */
+bool workspace_sync_runtime_config_from_permissions();
+
 #endif /* WORKSPACE_H */

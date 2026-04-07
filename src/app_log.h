@@ -28,6 +28,18 @@
 /* Log levels */
 enum AppLogLevel { LOG_DEBUG = 0, LOG_INFO = 1, LOG_WARN = 2, LOG_ERROR = 3 };
 
+/* Compile-time logging switches
+ * ANYCLAW_LOG_ENABLED: 1 enable / 0 disable all logs
+ * ANYCLAW_LOG_COMPILE_LEVEL: compile-in minimum level (default: LOG_DEBUG = highest verbosity)
+ */
+#ifndef ANYCLAW_LOG_ENABLED
+#define ANYCLAW_LOG_ENABLED 1
+#endif
+
+#ifndef ANYCLAW_LOG_COMPILE_LEVEL
+#define ANYCLAW_LOG_COMPILE_LEVEL LOG_DEBUG
+#endif
+
 /* Runtime config — set from config.json */
 extern bool g_log_enabled;
 extern int  g_log_level;
@@ -193,6 +205,10 @@ static inline bool log_level_is_enabled(AppLogLevel level) {
  *  Core log function
  * ═══════════════════════════════════════════════════════════════ */
 static inline void app_log(AppLogLevel level, const char* module, const char* fmt, ...) {
+#if !ANYCLAW_LOG_ENABLED
+    (void)level; (void)module; (void)fmt;
+    return;
+#else
     if (!g_log_enabled || level < g_log_level) return;
 
     /* Check rotation on each write */
@@ -238,6 +254,7 @@ static inline void app_log(AppLogLevel level, const char* module, const char* fm
 
     /* Also write to stdout */
     fprintf(stdout, "[%s] [%-5s] %s\n", level_str[level], module, msg_buf);
+#endif
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -289,10 +306,29 @@ static inline const char* app_log_level_name(AppLogLevel level) {
     return "???";
 }
 
-/* Convenience macros */
+/* Convenience macros (compile-time filtered) */
+#if ANYCLAW_LOG_ENABLED && (ANYCLAW_LOG_COMPILE_LEVEL <= LOG_DEBUG)
 #define LOG_D(module, fmt, ...) app_log(LOG_DEBUG, module, fmt, ##__VA_ARGS__)
-#define LOG_I(module, fmt, ...) app_log(LOG_INFO,  module, fmt, ##__VA_ARGS__)
-#define LOG_W(module, fmt, ...) app_log(LOG_WARN,  module, fmt, ##__VA_ARGS__)
+#else
+#define LOG_D(module, fmt, ...) ((void)0)
+#endif
+
+#if ANYCLAW_LOG_ENABLED && (ANYCLAW_LOG_COMPILE_LEVEL <= LOG_INFO)
+#define LOG_I(module, fmt, ...) app_log(LOG_INFO, module, fmt, ##__VA_ARGS__)
+#else
+#define LOG_I(module, fmt, ...) ((void)0)
+#endif
+
+#if ANYCLAW_LOG_ENABLED && (ANYCLAW_LOG_COMPILE_LEVEL <= LOG_WARN)
+#define LOG_W(module, fmt, ...) app_log(LOG_WARN, module, fmt, ##__VA_ARGS__)
+#else
+#define LOG_W(module, fmt, ...) ((void)0)
+#endif
+
+#if ANYCLAW_LOG_ENABLED && (ANYCLAW_LOG_COMPILE_LEVEL <= LOG_ERROR)
 #define LOG_E(module, fmt, ...) app_log(LOG_ERROR, module, fmt, ##__VA_ARGS__)
+#else
+#define LOG_E(module, fmt, ...) ((void)0)
+#endif
 
 #endif /* APP_LOG_H */

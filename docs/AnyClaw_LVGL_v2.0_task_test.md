@@ -1988,7 +1988,12 @@ chat_cont (消息区域)
 | TASK-026 | 离线授权 | P2 | ⏸️ 暂不实施（开源路线） |
 | TASK-052 | Emoji彩色渲染(FreeType) | P2 | 🔧 需编译环境 |
 | WS-01 | 工作区管理（多工作区/模板/锁/迁移） | P0 | 🔧 核心已实现 |
-| PERM-01 | 权限系统（三层权限/设备管理/审计） | P0 | 🔧 核心已实现 |
+| PERM-01 | 权限系统（三层权限/设备管理/审计） | P0 | 🔧 核心已实现（含 Settings 权限页、审计、exec 拦截v1） |
+| SBX-01 | 沙箱执行模式（高危命令隔离） | P0 | 🆕 待实施 |
+| OBS-01 | 可观测性追踪（链路/耗时/错误） | P1 | 🆕 待实施 |
+| BOOT-01 | 一键体检与自修复 | P1 | 🆕 待实施 |
+| FLAG-01 | Feature Flag 开关体系 | P1 | 🆕 待实施 |
+| MEM-01 | 长记忆整理任务 | P2 | 🆕 待实施 |
 
 ---
 
@@ -2011,11 +2016,166 @@ chat_cont (消息区域)
 | 6 | 资源上限配置（磁盘/超时/频率/并发） | permissions.h | ✅ |
 
 ### 待实现（v2.1）
-- Settings Permissions Tab UI
 - 设备信任表管理
-- 审计日志
-- 运行时权限拦截
-- AGENTS.md/TOOLS.md MANAGED 区域同步
+- 运行时权限拦截全入口覆盖（剩余 `selfcheck.cpp` 等）
+- AGENTS.md/TOOLS.md MANAGED 区域双向同步（当前已支持 json -> md 单向投影）
+
+---
+
+## TASK-PERM04: 运行时权限拦截（exec v1）
+
+**优先级：** P0
+**状态：** ✅ 已完成（v1）
+**完成时间：** 2026-04-07
+**PRD 编号：** PERM-01 (§2.13.7)
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | 在 `openclaw_mgr.cpp` 的 `exec_cmd()` 增加前置权限校验 | openclaw_mgr.cpp | ✅ |
+| 2 | 按命令类型映射 `exec_shell/exec_install/exec_delete` | openclaw_mgr.cpp | ✅ |
+| 3 | `deny` 直接拦截并返回错误 | openclaw_mgr.cpp | ✅ |
+| 4 | `allow/ask` 记录审计日志（ask 已接入交互式决策） | openclaw_mgr.cpp, permissions.cpp | ✅ |
+| 5 | `session_manager.cpp` 的命令执行入口接入 `exec_shell` 校验 | session_manager.cpp | ✅ |
+| 6 | `health.cpp` 的命令执行入口接入 `exec_shell` 校验 | health.cpp | ✅ |
+
+### 待补强（v2.1）
+- 拦截扩展到其他命令入口（`selfcheck.cpp` 等）
+
+### 验证
+- Windows 原生构建通过（`tools\\windows\\build.bat`）。
+
+---
+
+## TASK-PERM05: ask 交互闭环（仅本次/永久/拒绝）
+
+**优先级：** P0
+**状态：** ✅ 已完成
+**完成时间：** 2026-04-07
+**PRD 编号：** PERM-01 (§2.21)
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | 新增 `perm_check_exec()` 统一 ask 交互入口 | permissions.h/cpp | ✅ |
+| 2 | ask 决策三分支：仅本次允许 / 永久允许 / 拒绝 | permissions.cpp | ✅ |
+| 3 | “永久允许”自动 `save()` 并同步 MANAGED 区域 | permissions.cpp, workspace.cpp | ✅ |
+| 4 | `openclaw_mgr/session_manager/health` 全部改为调用统一入口 | openclaw_mgr.cpp, session_manager.cpp, health.cpp | ✅ |
+
+### 验证
+- Windows 原生构建通过（`tools\\windows\\build.bat`）。
+
+---
+
+## TASK-CONF01: permissions/workspace 配置一致性自动重建
+
+**优先级：** P0
+**状态：** ✅ 已完成
+**完成时间：** 2026-04-07
+**PRD 编号：** 2.21.3 / 2.21.4
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | 新增 `workspace_sync_runtime_config_from_permissions()` | workspace.h/cpp | ✅ |
+| 2 | 启动阶段自动执行一致性同步（不一致自动重建） | main.cpp, workspace.cpp | ✅ |
+| 3 | 权限保存后触发 runtime 配置同步 | ui_settings.cpp | ✅ |
+| 4 | 写入审计记录 `config_sync=up_to_date/created/rebuilt` | workspace.cpp, permissions.cpp | ✅ |
+
+### 验证
+- Windows 原生构建通过（`tools\\windows\\build.bat`）。
+
+---
+
+## TASK-SBX01: 沙箱执行最小可用（v1）
+
+**优先级：** P0
+**状态：** ✅ 已完成（v1）
+**完成时间：** 2026-04-07
+**PRD 编号：** 2.22 / SBX-01
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | 高危命令（`exec_install` / `exec_delete`）切换到 sandbox 工作目录执行 | openclaw_mgr.cpp | ✅ |
+| 2 | sandbox 目录自动创建：`<workspace>\\.sandbox_exec` | openclaw_mgr.cpp | ✅ |
+| 3 | Job Object 约束：`KILL_ON_JOB_CLOSE` + `ActiveProcess=1` + `ProcessMemoryLimit=512MB` | openclaw_mgr.cpp | ✅ |
+| 4 | 保留超时终止逻辑并写入 sandbox 审计事件 | openclaw_mgr.cpp, permissions.cpp | ✅ |
+
+### 待补强（v2.1）
+- CPU 限速（Job Object CPU rate control）
+- 网络隔离（当前仅执行层约束，未做系统级网络沙箱）
+
+### 验证
+- Windows 原生构建通过（`tools\\windows\\build.bat`）。
+
+---
+
+## 新增任务（来自 PRD 复核 2.21 / 2.22）
+
+| 任务 | 描述 | 优先级 | 状态 |
+|------|------|--------|------|
+| TASK-PERM05 | ask 交互闭环（仅本次/永久/拒绝）+ 永久授权落盘同步 | P0 | ✅ 已完成 |
+| TASK-PERM06 | 统一命令拦截层（覆盖 selfcheck 等剩余入口） | P1 | 🆕 待实施 |
+| TASK-CONF01 | permissions/workspace 配置一致性校验与自动重建 | P0 | ✅ 已完成 |
+| TASK-AUDIT01 | 审计日志链式校验字段（防篡改） | P1 | 🆕 待实施 |
+| TASK-SBX01 | 沙箱执行最小可用版本（隔离+超时+资源上限） | P0 | ✅ 已完成（v1） |
+| TASK-OBS01 | 追踪埋点（action/latency/outcome/trace_id） | P1 | 🆕 待实施 |
+| TASK-BOOT01 | 一键体检与修复向导 | P1 | 🆕 待实施 |
+| TASK-FLAG01 | Feature Flag 体系与灰度开关 | P1 | 🆕 待实施 |
+| TASK-KB01 | 本地知识库（来源管理/索引/检索） | P1 | 🆕 待实施 |
+| TASK-MODE01 | 界面模式（聊天/语音/工作）与状态保持 | P1 | 🔧 实施中（V1 框架已落地） |
+| TASK-SHARE01 | 文件/图片/目录发送与聊天内可点击打开 | P0 | 🔧 实施中（V1 附件卡片 + 点击打开已落地） |
+| TASK-PROFILE01 | AI/用户头像与角色画像配置 | P1 | 🆕 待实施 |
+| TASK-REMOTE01 | 双端远程协作（桌面/语音/控制） | P0 | 🆕 待实施（高风险） |
+
+---
+
+## TASK-PERM03: 权限审计日志
+
+**优先级：** P0
+**状态：** ✅ 已完成
+**完成时间：** 2026-04-07
+**PRD 编号：** PERM-01 (§2.13)
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | 新增统一审计接口 `perm_audit_log()` | permissions.h/cpp | ✅ |
+| 2 | 审计文件写入 `%APPDATA%\\AnyClaw_LVGL\\audit.log` | permissions.cpp | ✅ |
+| 3 | 记录权限加载/保存/变更事件 | permissions.cpp | ✅ |
+| 4 | 记录路径校验拒绝原因（外部路径、只读路径、工作区写入受限） | permissions.cpp | ✅ |
+
+### 验证
+- Windows 原生构建通过（`tools\\windows\\build.bat`）。
+
+---
+
+## TASK-PERM02: Permissions Tab UI + 启动初始化
+
+**优先级：** P0
+**状态：** ✅ 已完成
+**完成时间：** 2026-04-07
+**PRD 编号：** PERM-01 (§2.13)
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | Settings 新增 `Permissions` 标签页 | ui_settings.cpp | ✅ |
+| 2 | 9 个核心权限项下拉编辑（allow/deny/ask/read_only） | ui_settings.cpp | ✅ |
+| 3 | 保存按钮写入 `permissions.json` | ui_settings.cpp | ✅ |
+| 4 | 打开设置时自动加载权限配置并绑定工作区根目录 | ui_settings.cpp | ✅ |
+| 5 | 启动时自动初始化权限（首次写默认配置） | main.cpp | ✅ |
+
+### 验证
+- Windows 原生构建通过（`tools\\windows\\build.bat`）。
+- 产物生成：`build-windows\\bin\\Release\\AnyClaw_LVGL.exe`。
 
 ---
 
@@ -2043,6 +2203,51 @@ chat_cont (消息区域)
 - 多工作区支持（创建/切换/删除）
 - 工作区模板选择（通用助手/开发者/写作者/数据分析）
 - 安装向导（首次启动）
-- 工作区锁（.openclaw.lock）
-- AGENTS.md/TOOLS.md MANAGED 区域双向同步
+- AGENTS.md/TOOLS.md MANAGED 区域双向同步（当前已支持 json -> md 单向投影）
+
+---
+
+## TASK-WS02: 工作区锁（.openclaw.lock）
+
+**优先级：** P0
+**状态：** ✅ 已完成
+**完成时间：** 2026-04-07
+**PRD 编号：** WS-01 (§2.12)
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | 新增工作区锁 API：acquire/release/is_held | workspace.h/cpp | ✅ |
+| 2 | 启动时尝试获取 `.openclaw.lock`（含 stale lock 检测） | workspace.cpp, main.cpp | ✅ |
+| 3 | 退出时释放工作区锁文件 | main.cpp | ✅ |
+
+### 验证
+- Windows 原生构建通过（`tools\\windows\\build.bat`）。
+
+---
+
+## TASK-WS03: AGENTS/TOOLS MANAGED 区域同步（单向 v1）
+
+**优先级：** P0
+**状态：** ✅ 已完成（v1）
+**完成时间：** 2026-04-07
+**PRD 编号：** WS-01 (§2.12) / PERM-01 (§2.13.9)
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | 新增 `workspace_sync_managed_sections()` 同步入口 | workspace.h/cpp | ✅ |
+| 2 | 自动维护 `<!-- ANYCLAW_MANAGED_START/END -->` 区块（存在则替换，不存在则插入） | workspace.cpp | ✅ |
+| 3 | 将权限快照与工作区边界投影到 `AGENTS.md` 与 `TOOLS.md` | workspace.cpp | ✅ |
+| 4 | 启动加载权限后自动同步一次 | main.cpp | ✅ |
+| 5 | Settings 权限保存后自动同步一次 | ui_settings.cpp | ✅ |
+
+### 待补强（v2.1）
+- 双向同步（md -> json 冲突检测与选择）
+- 备份策略可配置（当前固定保留最近 10 份）
+
+### 验证
+- Windows 原生构建通过（`tools\\windows\\build.bat`）。
 

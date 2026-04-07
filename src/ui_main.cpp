@@ -16,6 +16,7 @@
 #include <windows.h>
 #include <commdlg.h>
 #include <shlobj.h>
+#include <shellapi.h>
 
 /* Extern for tray minimize */
 #include "tray.h"
@@ -330,6 +331,7 @@ static void search_toggle_cb(lv_event_t* e);    /* Forward */
 static void search_execute_cb(lv_event_t* e);   /* Forward */
 static void search_prev_cb(lv_event_t* e);      /* Forward */
 static void search_next_cb(lv_event_t* e);      /* Forward */
+static void relayout_panels();                  /* Forward */
 
 /* Escape a string for JSON (handles \, ", newlines) */
 static std::string json_escape(const char* s) {
@@ -514,7 +516,7 @@ static void search_toggle_cb(lv_event_t* e) {
         }
     }
     /* Reposition chat area */
-    app_refresh_status();
+    relayout_panels();
 }
 
 /* Search through chat messages for matching text */
@@ -971,6 +973,16 @@ static void loading_show() {
 static lv_obj_t* splitter = nullptr;
 static lv_obj_t* left_panel = nullptr;
 static lv_obj_t* right_panel = nullptr;
+static lv_obj_t* mode_bar = nullptr;
+static lv_obj_t* mode_btn_chat = nullptr;
+static lv_obj_t* mode_btn_voice = nullptr;
+static lv_obj_t* mode_btn_work = nullptr;
+static lv_obj_t* mode_panel_chat = nullptr;
+static lv_obj_t* mode_panel_voice = nullptr;
+static lv_obj_t* mode_panel_work = nullptr;
+static int MODE_BAR_H = 36;
+enum UiMainMode { UI_MODE_CHAT = 0, UI_MODE_VOICE = 1, UI_MODE_WORK = 2 };
+static UiMainMode g_ui_mode = UI_MODE_CHAT;
 /* chat_cont is declared above for early chat-history restore helpers */
 static lv_obj_t* btn_send_widget = nullptr; /* Send button */
 static lv_obj_t* btn_upload_widget = nullptr; /* Upload button */
@@ -1249,6 +1261,39 @@ static void btn_close_cb(lv_event_t* e) {
 /* Forward declarations */
 static void relayout_panels();
 void ui_relayout_all();
+static int mode_content_h() { return std::max(120, PANEL_H - MODE_BAR_H - CHAT_GAP * 3); }
+static int mode_content_w() { return std::max(200, RIGHT_PANEL_W - CHAT_GAP * 2); }
+
+static void apply_mode_switch_visuals() {
+    if (!mode_panel_chat || !mode_panel_voice || !mode_panel_work) return;
+    if (g_ui_mode == UI_MODE_CHAT) {
+        lv_obj_clear_flag(mode_panel_chat, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(mode_panel_voice, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(mode_panel_work, LV_OBJ_FLAG_HIDDEN);
+    } else if (g_ui_mode == UI_MODE_VOICE) {
+        lv_obj_add_flag(mode_panel_chat, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(mode_panel_voice, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(mode_panel_work, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(mode_panel_chat, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(mode_panel_voice, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(mode_panel_work, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    auto paint_btn = [](lv_obj_t* btn, bool selected) {
+        if (!btn) return;
+        lv_obj_set_style_bg_color(btn, selected ? lv_color_make(59, 130, 246) : lv_color_make(45, 50, 70), 0);
+        lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
+    };
+    paint_btn(mode_btn_chat, g_ui_mode == UI_MODE_CHAT);
+    paint_btn(mode_btn_voice, g_ui_mode == UI_MODE_VOICE);
+    paint_btn(mode_btn_work, g_ui_mode == UI_MODE_WORK);
+}
+
+static void mode_chat_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_CHAT; apply_mode_switch_visuals(); relayout_panels(); }
+static void mode_voice_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_VOICE; apply_mode_switch_visuals(); relayout_panels(); }
+static void mode_work_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_WORK; apply_mode_switch_visuals(); relayout_panels(); }
+
 static lv_obj_t* g_disclaimer_modal = nullptr;
 static lv_obj_t* g_exit_dialog_modal = nullptr;
 static lv_obj_t* g_about_dialog = nullptr;
@@ -1386,46 +1431,66 @@ static void relayout_panels() {
     lv_obj_set_size(right_panel, RIGHT_PANEL_W, PANEL_H);
     lv_obj_set_pos(right_panel, right_x, PANEL_TOP);
 
-    /* Re-layout right panel children that have explicit sizes */
+    int content_w = mode_content_w();
+    int content_h = mode_content_h();
+
+    if (mode_bar) {
+        lv_obj_set_size(mode_bar, content_w, MODE_BAR_H);
+        lv_obj_set_pos(mode_bar, CHAT_GAP, CHAT_GAP);
+    }
+    if (mode_panel_chat) {
+        lv_obj_set_size(mode_panel_chat, content_w, content_h);
+        lv_obj_set_pos(mode_panel_chat, CHAT_GAP, MODE_BAR_H + CHAT_GAP * 2);
+    }
+    if (mode_panel_voice) {
+        lv_obj_set_size(mode_panel_voice, content_w, content_h);
+        lv_obj_set_pos(mode_panel_voice, CHAT_GAP, MODE_BAR_H + CHAT_GAP * 2);
+    }
+    if (mode_panel_work) {
+        lv_obj_set_size(mode_panel_work, content_w, content_h);
+        lv_obj_set_pos(mode_panel_work, CHAT_GAP, MODE_BAR_H + CHAT_GAP * 2);
+    }
+
+    /* Re-layout chat mode children */
     int input_h = chat_input ? (int)lv_obj_get_height(chat_input) : 36;
     int chat_y = CHAT_GAP;
-    int chat_h = PANEL_H - chat_y - input_h - CHAT_GAP;
-    int input_y = PANEL_H - input_h - CHAT_GAP;
+    int chat_h = content_h - chat_y - input_h - CHAT_GAP;
+    int input_y = content_h - input_h - CHAT_GAP;
 
     /* Use global widget pointers for relayout */
     if (chat_cont) {
         int32_t saved_scroll = lv_obj_get_scroll_y(chat_cont);
-        lv_obj_set_size(chat_cont, RIGHT_PANEL_W - CHAT_GAP * 2, chat_h);
+        lv_obj_set_size(chat_cont, content_w - CHAT_GAP * 2, chat_h);
         lv_obj_update_layout(chat_cont);
         int32_t max_s = lv_obj_get_scroll_bottom(chat_cont);
         int32_t restore = saved_scroll;
         if (restore > max_s) restore = max_s;
         if (max_s > 0) lv_obj_scroll_to_y(chat_cont, restore, LV_ANIM_OFF);
     }
-    if (chat_display) lv_obj_set_width(chat_display, RIGHT_PANEL_W - CHAT_GAP * 3);
+    if (chat_display) lv_obj_set_width(chat_display, content_w - CHAT_GAP * 3);
     if (chat_input) {
-        lv_obj_set_size(chat_input, RIGHT_PANEL_W - CHAT_GAP * 2, input_h);
+        lv_obj_set_size(chat_input, content_w - CHAT_GAP * 2, input_h);
         lv_obj_set_pos(chat_input, CHAT_GAP, input_y);
     }
     /* Reposition send button: bottom-right corner of input area */
     if (btn_send_widget) {
         int btn_size = SCALE(20);
         int btn_margin = 6;
-        lv_obj_set_pos(btn_send_widget, RIGHT_PANEL_W - CHAT_GAP - btn_size - btn_margin, input_y + input_h - btn_size - btn_margin);
+        lv_obj_set_pos(btn_send_widget, content_w - CHAT_GAP - btn_size - btn_margin, input_y + input_h - btn_size - btn_margin);
     }
     /* Reposition upload button: left of send button */
     if (btn_upload_widget) {
         int btn_size = SCALE(20);
         int btn_margin = 6;
         int btn_gap = 6;
-        lv_obj_set_pos(btn_upload_widget, RIGHT_PANEL_W - CHAT_GAP - btn_size - btn_margin - btn_size - btn_gap, input_y + input_h - btn_size - btn_margin);
+        lv_obj_set_pos(btn_upload_widget, content_w - CHAT_GAP - btn_size - btn_margin - btn_size - btn_gap, input_y + input_h - btn_size - btn_margin);
     }
     /* Reposition search button: left of upload button */
     if (g_search_btn) {
         int btn_size = SCALE(20);
         int btn_margin = 6;
         int btn_gap = 6;
-        int base_x = RIGHT_PANEL_W - CHAT_GAP - btn_size - btn_margin;
+        int base_x = content_w - CHAT_GAP - btn_size - btn_margin;
         if (btn_upload_widget) base_x -= (btn_size + btn_gap);
         lv_obj_set_pos(g_search_btn, base_x - btn_size - btn_gap, input_y + input_h - btn_size - btn_margin);
     }
@@ -1956,7 +2021,7 @@ static void chat_input_resize_cb(lv_event_t* e) {
     g_resize_in_progress = true;
 
     lv_obj_t* ta = (lv_obj_t*)lv_event_get_target(e);
-    if (!ta || !chat_input || !chat_cont || !right_panel) { g_resize_in_progress = false; return; }
+    if (!ta || !chat_input || !chat_cont || !right_panel || !mode_panel_chat) { g_resize_in_progress = false; return; }
 
     const char* text = lv_textarea_get_text(ta);
     if (!text) { g_resize_in_progress = false; return; }
@@ -1987,17 +2052,19 @@ static void chat_input_resize_cb(lv_event_t* e) {
             lv_obj_set_scrollbar_mode(chat_input, LV_SCROLLBAR_MODE_OFF);
         }
 
-        int new_input_y = PANEL_H - new_h - GAP;
+        int content_h = mode_content_h();
+        int content_w = mode_content_w();
+        int new_input_y = content_h - new_h - GAP;
         lv_obj_set_pos(chat_input, CHAT_GAP, new_input_y);
 
         if (btn_send_widget) {
-            lv_obj_set_pos(btn_send_widget, RIGHT_PANEL_W - CHAT_GAP - 20 - 6, new_input_y + new_h - 20 - 6);
+            lv_obj_set_pos(btn_send_widget, content_w - CHAT_GAP - 20 - 6, new_input_y + new_h - 20 - 6);
         }
         if (btn_upload_widget) {
-            lv_obj_set_pos(btn_upload_widget, RIGHT_PANEL_W - CHAT_GAP - 20 - 6 - 20 - 6, new_input_y + new_h - 20 - 6);
+            lv_obj_set_pos(btn_upload_widget, content_w - CHAT_GAP - 20 - 6 - 20 - 6, new_input_y + new_h - 20 - 6);
         }
 
-        int panel_h = PANEL_H;
+        int panel_h = content_h;
         int chat_y = GAP;
         int new_chat_h = panel_h - chat_y - new_h - GAP;
         if (new_chat_h < 50) new_chat_h = 50;
@@ -2905,20 +2972,22 @@ static void update_send_button_state();
 static void chat_input_reset_height() {
     if (!chat_input) return;
     const int min_h = 108;  /* 默认3行 */
+    int content_h = mode_content_h();
+    int content_w = mode_content_w();
     int cur_h = (int)lv_obj_get_height(chat_input);
     if (cur_h > min_h) {
         lv_obj_set_height(chat_input, min_h);
         lv_obj_clear_flag(chat_input, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_scrollbar_mode(chat_input, LV_SCROLLBAR_MODE_OFF);
-        int new_input_y = PANEL_H - min_h - GAP;
+        int new_input_y = content_h - min_h - GAP;
         lv_obj_set_pos(chat_input, CHAT_GAP, new_input_y);
         if (btn_send_widget) {
-            lv_obj_set_pos(btn_send_widget, RIGHT_PANEL_W - CHAT_GAP - 20 - 6, new_input_y + min_h - 20 - 6);
+            lv_obj_set_pos(btn_send_widget, content_w - CHAT_GAP - 20 - 6, new_input_y + min_h - 20 - 6);
         }
         if (btn_upload_widget) {
-            lv_obj_set_pos(btn_upload_widget, RIGHT_PANEL_W - CHAT_GAP - 20 - 6 - 20 - 6, new_input_y + min_h - 20 - 6);
+            lv_obj_set_pos(btn_upload_widget, content_w - CHAT_GAP - 20 - 6 - 20 - 6, new_input_y + min_h - 20 - 6);
         }
-        int new_chat_h = PANEL_H - GAP - min_h - GAP;
+        int new_chat_h = content_h - GAP - min_h - GAP;
         if (new_chat_h > 0) lv_obj_set_height(chat_cont, new_chat_h);
     }
 }
@@ -4310,6 +4379,75 @@ static void upload_menu_show_cb(lv_event_t* e) {
     ctx->hover_timer = lv_timer_create(upload_hover_check_cb, 80, ctx);
 }
 
+static bool is_image_path(const char* path) {
+    if (!path || !path[0]) return false;
+    const char* dot = strrchr(path, '.');
+    if (!dot) return false;
+    std::string ext(dot);
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp" || ext == ".gif" || ext == ".webp";
+}
+
+static void open_local_path_cb(lv_event_t* e) {
+    const char* path = (const char*)lv_event_get_user_data(e);
+    if (!path || !path[0]) return;
+    ShellExecuteA(nullptr, "open", path, nullptr, nullptr, SW_SHOWNORMAL);
+}
+
+static void chat_add_attachment_card(const char* path, bool is_dir) {
+    if (!chat_cont || !path || !path[0]) return;
+
+    lv_obj_t* row = lv_obj_create(chat_cont);
+    lv_obj_set_width(row, LV_PCT(100));
+    lv_obj_set_height(row, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW_REVERSE);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+    lv_obj_t* card = lv_button_create(row);
+    lv_obj_set_style_bg_color(card, lv_color_make(40, 72, 140), 0);
+    lv_obj_set_style_bg_color(card, lv_color_make(55, 92, 170), LV_STATE_PRESSED);
+    lv_obj_set_style_radius(card, 10, 0);
+    lv_obj_set_style_border_width(card, 0, 0);
+    lv_obj_set_style_pad_all(card, 8, 0);
+    lv_obj_set_style_pad_gap(card, 6, 0);
+    lv_obj_set_size(card, LV_PCT(82), LV_SIZE_CONTENT);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+    const bool image_file = (!is_dir && is_image_path(path));
+    const char* tag = is_dir ? "[DIR]" : (image_file ? "[IMG]" : "[FILE]");
+    lv_obj_t* title = lv_label_create(card);
+    lv_label_set_text_fmt(title, "%s %s", tag, path);
+    lv_label_set_long_mode(title, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(title, LV_PCT(100));
+    lv_obj_set_style_text_color(title, lv_color_make(235, 242, 255), 0);
+    lv_obj_set_style_text_font(title, CJK_FONT_SMALL, 0);
+
+    if (image_file) {
+        lv_obj_t* preview = lv_image_create(card);
+        lv_image_set_src(preview, path);
+        lv_obj_set_size(preview, SCALE(96), SCALE(96));
+        lv_obj_set_style_radius(preview, 6, 0);
+        lv_obj_t* preview_hint = lv_label_create(card);
+        lv_label_set_text(preview_hint, "Image preview (click to open original)");
+        lv_obj_set_style_text_color(preview_hint, lv_color_make(200, 220, 255), 0);
+        lv_obj_set_style_text_font(preview_hint, CJK_FONT_SMALL, 0);
+    }
+
+    lv_obj_t* open_tip = lv_label_create(card);
+    lv_label_set_text(open_tip, "Click to open");
+    lv_obj_set_style_text_color(open_tip, lv_color_make(180, 210, 255), 0);
+    lv_obj_set_style_text_font(open_tip, CJK_FONT_SMALL, 0);
+
+    char* path_copy = _strdup(path);
+    lv_obj_add_event_cb(card, open_local_path_cb, LV_EVENT_CLICKED, path_copy);
+}
+
 /* Upload menu click callbacks */
 static void upload_file_click_cb(lv_event_t* e) {
     upload_menu_hide_cb(e);
@@ -4324,6 +4462,8 @@ static void upload_file_click_cb(lv_event_t* e) {
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
     if (GetOpenFileNameA(&ofn)) {
         ui_log("[Upload] Selected file: %s", file_buf);
+        chat_add_attachment_card(file_buf, false);
+        chat_force_scroll_bottom();
     }
 }
 static void upload_dir_click_cb(lv_event_t* e) {
@@ -4337,6 +4477,8 @@ static void upload_dir_click_cb(lv_event_t* e) {
         char dir_buf[MAX_PATH];
         if (SHGetPathFromIDListA(pidl, dir_buf)) {
             ui_log("[Upload] Selected dir: %s", dir_buf);
+            chat_add_attachment_card(dir_buf, true);
+            chat_force_scroll_bottom();
         }
         CoTaskMemFree(pidl);
     }
@@ -5518,6 +5660,7 @@ void app_ui_init() {
         GAP            = SCALE(12);
         CHAT_GAP       = SCALE(6);
         CHAT_MSG_MARGIN = SCALE(8);
+        MODE_BAR_H     = SCALE(36);
         PANEL_TOP      = TITLE_H + SCALE(8);
         int s = app_get_dpi_scale();
         if (s != 100)
@@ -5692,15 +5835,87 @@ void app_ui_init() {
     lv_obj_set_style_pad_all(pr, 0, 0);
     lv_obj_clear_flag(pr, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Buttons removed — all actions moved to tray menu */
+    int content_w = mode_content_w();
+    int content_h = mode_content_h();
+
+    /* Mode switch bar: Chat / Voice / Work */
+    mode_bar = lv_obj_create(pr);
+    lv_obj_set_size(mode_bar, content_w, MODE_BAR_H);
+    lv_obj_set_pos(mode_bar, CHAT_GAP, CHAT_GAP);
+    lv_obj_set_style_bg_color(mode_bar, lv_color_make(35, 40, 58), 0);
+    lv_obj_set_style_border_width(mode_bar, 0, 0);
+    lv_obj_set_style_radius(mode_bar, 8, 0);
+    lv_obj_set_style_pad_all(mode_bar, 4, 0);
+    lv_obj_clear_flag(mode_bar, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(mode_bar, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(mode_bar, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(mode_bar, 6, 0);
+
+    auto create_mode_btn = [&](const char* txt, lv_event_cb_t cb) -> lv_obj_t* {
+        lv_obj_t* b = lv_button_create(mode_bar);
+        lv_obj_set_height(b, MODE_BAR_H - 8);
+        lv_obj_set_flex_grow(b, 1);
+        lv_obj_set_style_border_width(b, 0, 0);
+        lv_obj_set_style_radius(b, 6, 0);
+        lv_obj_set_style_bg_color(b, lv_color_make(45, 50, 70), 0);
+        lv_obj_clear_flag(b, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* lbl = lv_label_create(b);
+        lv_label_set_text(lbl, txt);
+        lv_obj_set_style_text_color(lbl, lv_color_make(235, 240, 255), 0);
+        lv_obj_set_style_text_font(lbl, CJK_FONT_SMALL, 0);
+        lv_obj_center(lbl);
+        return b;
+    };
+    mode_btn_chat = create_mode_btn("Chat", mode_chat_cb);
+    mode_btn_voice = create_mode_btn("Voice", mode_voice_cb);
+    mode_btn_work = create_mode_btn("Work", mode_work_cb);
+
+    mode_panel_chat = lv_obj_create(pr);
+    lv_obj_set_size(mode_panel_chat, content_w, content_h);
+    lv_obj_set_pos(mode_panel_chat, CHAT_GAP, MODE_BAR_H + CHAT_GAP * 2);
+    lv_obj_set_style_bg_opa(mode_panel_chat, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(mode_panel_chat, 0, 0);
+    lv_obj_set_style_pad_all(mode_panel_chat, 0, 0);
+    lv_obj_clear_flag(mode_panel_chat, LV_OBJ_FLAG_SCROLLABLE);
+
+    mode_panel_voice = lv_obj_create(pr);
+    lv_obj_set_size(mode_panel_voice, content_w, content_h);
+    lv_obj_set_pos(mode_panel_voice, CHAT_GAP, MODE_BAR_H + CHAT_GAP * 2);
+    lv_obj_set_style_bg_opa(mode_panel_voice, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(mode_panel_voice, 0, 0);
+    lv_obj_set_style_pad_all(mode_panel_voice, 0, 0);
+    lv_obj_clear_flag(mode_panel_voice, LV_OBJ_FLAG_SCROLLABLE);
+    {
+        lv_obj_t* v = lv_label_create(mode_panel_voice);
+        lv_label_set_text(v, "Voice mode (V1): UI ready, realtime voice pipeline pending");
+        lv_obj_set_style_text_color(v, c->text_dim, 0);
+        lv_obj_set_style_text_font(v, CJK_FONT_SMALL, 0);
+        lv_obj_align(v, LV_ALIGN_TOP_LEFT, 8, 8);
+    }
+
+    mode_panel_work = lv_obj_create(pr);
+    lv_obj_set_size(mode_panel_work, content_w, content_h);
+    lv_obj_set_pos(mode_panel_work, CHAT_GAP, MODE_BAR_H + CHAT_GAP * 2);
+    lv_obj_set_style_bg_opa(mode_panel_work, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(mode_panel_work, 0, 0);
+    lv_obj_set_style_pad_all(mode_panel_work, 0, 0);
+    lv_obj_clear_flag(mode_panel_work, LV_OBJ_FLAG_SCROLLABLE);
+    {
+        lv_obj_t* w = lv_label_create(mode_panel_work);
+        lv_label_set_text(w, "Work mode (V1): tasks/workflow board entry is reserved");
+        lv_obj_set_style_text_color(w, c->text_dim, 0);
+        lv_obj_set_style_text_font(w, CJK_FONT_SMALL, 0);
+        lv_obj_align(w, LV_ALIGN_TOP_LEFT, 8, 8);
+    }
 
     /* Layout: chat fills space, input pinned to bottom; GAP spacing everywhere */
     int input_h = 96;   /* 默认3行（含LVGL内部padding） */
     int chat_y = CHAT_GAP;    /* Chat: CHAT_GAP from panel top */
     /* Chat fills from chat_y down to above input; CHAT_GAP between chat and input */
-    int chat_h = PANEL_H - chat_y - input_h - CHAT_GAP;
-    chat_cont = lv_obj_create(pr);
-    lv_obj_set_size(chat_cont, RIGHT_PANEL_W - CHAT_GAP * 2, chat_h);
+    int chat_h = content_h - chat_y - input_h - CHAT_GAP;
+    chat_cont = lv_obj_create(mode_panel_chat);
+    lv_obj_set_size(chat_cont, content_w - CHAT_GAP * 2, chat_h);
     lv_obj_set_pos(chat_cont, CHAT_GAP, chat_y);
     lv_obj_set_style_bg_opa(chat_cont, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(chat_cont, 0, 0);
@@ -5774,9 +5989,9 @@ void app_ui_init() {
     /* ═══ Search Bar (SF-01: hidden by default) ═══ */
     {
         int search_h = SCALE(36);
-        g_search_bar = lv_obj_create(pr);
-        lv_obj_set_size(g_search_bar, RIGHT_PANEL_W - CHAT_GAP * 2, search_h);
-        lv_obj_set_pos(g_search_bar, CHAT_GAP, PANEL_H - search_h - GAP);
+        g_search_bar = lv_obj_create(mode_panel_chat);
+        lv_obj_set_size(g_search_bar, content_w - CHAT_GAP * 2, search_h);
+        lv_obj_set_pos(g_search_bar, CHAT_GAP, content_h - search_h - GAP);
         lv_obj_set_style_bg_color(g_search_bar, lv_color_make(25, 28, 42), 0);
         lv_obj_set_style_border_width(g_search_bar, 1, 0);
         lv_obj_set_style_border_color(g_search_bar, lv_color_make(59, 130, 246), 0);
@@ -5837,7 +6052,7 @@ void app_ui_init() {
     /* ═══ Search toggle button (magnifying glass icon) ═══ */
     {
         int search_btn_size = SCALE(20);
-        g_search_btn = lv_button_create(pr);
+        g_search_btn = lv_button_create(mode_panel_chat);
         lv_obj_set_size(g_search_btn, search_btn_size, search_btn_size);
         lv_obj_set_style_bg_color(g_search_btn, lv_color_make(80, 85, 100), 0);
         lv_obj_set_style_bg_opa(g_search_btn, LV_OPA_COVER, 0);
@@ -5854,22 +6069,22 @@ void app_ui_init() {
 
     /* Chat input area — pinned to bottom with GAP spacing */
     input_h = 108;  /* Default 3-line height (28px/line + padding) */
-    int input_y = PANEL_H - input_h - GAP;
+    int input_y = content_h - input_h - GAP;
 
     /* Adjust for search bar if visible */
     if (g_search_visible && g_search_bar && !lv_obj_has_flag(g_search_bar, LV_OBJ_FLAG_HIDDEN)) {
         int search_h = SCALE(36) + GAP;
         input_y -= search_h;
         /* Reposition search bar above input */
-        lv_obj_set_pos(g_search_bar, CHAT_GAP, PANEL_H - SCALE(36) - GAP - search_h + SCALE(36));
+        lv_obj_set_pos(g_search_bar, CHAT_GAP, content_h - SCALE(36) - GAP - search_h + SCALE(36));
     }
 
     /* Fix chat_cont height: recalc with actual input height */
-    int real_chat_h = PANEL_H - GAP - input_h - GAP;
+    int real_chat_h = content_h - GAP - input_h - GAP;
     if (real_chat_h > 0) lv_obj_set_height(chat_cont, real_chat_h);
 
-    chat_input = lv_textarea_create(pr);
-    lv_obj_set_size(chat_input, RIGHT_PANEL_W - CHAT_GAP * 2, input_h);
+    chat_input = lv_textarea_create(mode_panel_chat);
+    lv_obj_set_size(chat_input, content_w - CHAT_GAP * 2, input_h);
     lv_obj_set_pos(chat_input, CHAT_GAP, input_y);
     lv_textarea_set_placeholder_text(chat_input, tr(STR_CHAT_INPUT));
     lv_textarea_set_one_line(chat_input, false);
@@ -5905,9 +6120,9 @@ void app_ui_init() {
     {
         int btn_size = SCALE(20);
         int btn_margin = 6;
-        int btn_x = RIGHT_PANEL_W - CHAT_GAP - btn_size - btn_margin;
+        int btn_x = content_w - CHAT_GAP - btn_size - btn_margin;
         int btn_y = input_y + input_h - btn_size - btn_margin;
-        btn_send_widget = lv_button_create(pr);
+        btn_send_widget = lv_button_create(mode_panel_chat);
         lv_obj_set_size(btn_send_widget, btn_size, btn_size);
         lv_obj_set_pos(btn_send_widget, btn_x, btn_y);
         lv_obj_set_style_radius(btn_send_widget, btn_size / 2, 0);
@@ -5953,6 +6168,7 @@ void app_ui_init() {
 
     /* Initial refresh - populates task list */
     app_refresh_status();
+    apply_mode_switch_visuals();
 
     /* P2-27: Auto-refresh timer (configurable: 15s / 30s / 60s) */
     g_refresh_timer = lv_timer_create(auto_refresh_cb, g_refresh_interval_ms, nullptr);
