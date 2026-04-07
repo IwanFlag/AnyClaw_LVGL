@@ -1975,6 +1975,35 @@ chat_cont (消息区域)
 |------|------|--------|------|
 | TASK-026 | 离线授权 | P2 | ⏸️ 暂不实施（开源路线） |
 | TASK-052 | Emoji彩色渲染(FreeType) | P2 | 🔧 需编译环境 |
-| WS-01 | 工作区管理（多工作区/模板/锁/迁移） | P0 | ❌ 大型功能待实施 |
+| WS-01 | 工作区管理（多工作区/模板/锁/迁移） | P0 | 🔧 核心已实现 |
 | PERM-01 | 权限系统（三层权限/设备管理/审计） | P0 | ❌ 大型功能待实施 |
+
+---
+
+## TASK-WS01: 工作区管理核心
+
+**优先级：** P0
+**状态：** 🔧 核心已实现
+**创建时间：** 2026-04-07 14:30
+**PRD 编号：** WS-01 (§2.12)
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | workspace_get_root() — 从config.json读取工作区路径 | workspace.cpp | ✅ |
+| 2 | workspace_set_root() — 持久化工作区路径到config.json | workspace.cpp | ✅ |
+| 3 | workspace_check_health() — 健康检查(存在/可写/磁盘/文件) | workspace.cpp | ✅ |
+| 4 | workspace_init() — 自动创建目录+模板文件(AGENTS/SOUL/USER/TOOLS等) | workspace.cpp | ✅ |
+| 5 | workspace_generate_meta() — 生成WORKSPACE.md元信息 | workspace.cpp | ✅ |
+| 6 | workspace.json — 运行时权限配置模板 | workspace.cpp | ✅ |
+| 7 | main.cpp — 启动时自动初始化工作区 | main.cpp | ✅ |
+| 8 | Settings General Tab — 显示工作区路径 | ui_settings.cpp | ✅ |
+
+### 待实现（v2.1）
+- 多工作区支持（创建/切换/删除）
+- 工作区模板选择（通用助手/开发者/写作者/数据分析）
+- 安装向导（首次启动）
+- 工作区锁（.openclaw.lock）
+- AGENTS.md/TOOLS.md MANAGED 区域双向同步
 

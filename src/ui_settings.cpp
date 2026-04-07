@@ -7,6 +7,7 @@
 #include "app_config.h"
 #include "model_manager.h"
 #include "migration.h"
+#include "workspace.h"
 #include "app_log.h"
 #include "theme.h"
 #include "SDL.h"
@@ -210,6 +211,18 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_set_style_text_color(gen_path_label, lv_color_make(160, 165, 185), 0);
     lv_obj_set_style_text_font(gen_path_label, CJK_FONT, 0);
     make_kv_row("Install Path", gen_path_label);
+
+    /* ── Workspace Path (WS-01) ── */
+    {
+        std::string ws_root = workspace_get_root();
+        lv_obj_t* ws_label = lv_label_create(tab);
+        lv_label_set_text(ws_label, ws_root.empty() ? "Not configured" : ws_root.c_str());
+        lv_label_set_long_mode(ws_label, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_set_width(ws_label, LV_SIZE_CONTENT);
+        lv_obj_set_style_text_color(ws_label, lv_color_make(160, 165, 185), 0);
+        lv_obj_set_style_text_font(ws_label, CJK_FONT, 0);
+        make_kv_row("Workspace", ws_label);
+    }
 
     add_divider(tab);
 

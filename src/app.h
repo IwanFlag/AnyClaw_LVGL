@@ -147,4 +147,10 @@ void secure_zero(void* ptr, size_t size);
 bool app_abort_session(const char* session_key);  /* Abort/reset specific session */
 bool app_abort_all_sessions();                     /* Reset all sessions */
 
+/* Workspace management (WS-01) */
+std::string workspace_get_root();
+bool workspace_set_root(const char* path);
+struct WorkspaceHealth;
+bool workspace_init(const char* root_path = nullptr);
+
 #endif /* APP_H */

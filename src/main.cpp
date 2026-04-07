@@ -10,6 +10,7 @@
 #include "health.h"
 #include "garlic_dock.h"
 #include "license.h"
+#include "workspace.h"
 #include "app_log.h"
 #include "SDL.h"
 #include "SDL_syswm.h"
@@ -645,6 +646,15 @@ int main(int argc, char* argv[]) {
 
     /* License check */
     license_init();
+
+    /* Workspace health check & initialization */
+    {
+        std::string ws_root = workspace_get_root();
+        if (!ws_root.empty()) {
+            workspace_init(ws_root.c_str());
+            LOG_I("MAIN", "Workspace: %s", ws_root.c_str());
+        }
+    }
     if (!license_is_valid()) {
         LOG_W("MAIN", "License expired! Showing activation dialog.");
         /* Show license dialog after a brief delay (let UI render first) */
