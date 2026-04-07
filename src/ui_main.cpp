@@ -21,6 +21,7 @@
 #include "tray.h"
 #include "health.h"
 #include "license.h"
+#include "session_manager.h"
 #include "cjk_font_data.h"
 
 /* ═══ System Font: TinyTTF embedded data + bitmap fallback ═══ */
@@ -852,12 +853,14 @@ struct TaskItem {
     char name[128];
     char status[32];    /* Running / Idle / Done / Error */
     char detail[256];   /* Hover detail text (multi-line) */
+    char session_key[256]; /* Session key for abort action (empty if not abortable) */
     lv_obj_t* widget;   /* Container widget */
     lv_obj_t* label;    /* Task name label */
     lv_obj_t* status_lbl; /* Status label */
+    lv_obj_t* abort_btn;  /* Abort/reset button (nullptr if no action) */
     lv_obj_t* tooltip;  /* Hover detail popup (nullptr when hidden) */
 };
-#define MAX_TASK_WIDGETS 8
+#define MAX_TASK_WIDGETS 12
 static TaskItem g_tasks[MAX_TASK_WIDGETS];
 static int g_task_count = 0;
 static int g_task_next_y = 0;  /* Next task item y position (consistent with rg=12) */
@@ -2832,6 +2835,30 @@ static void chat_input_cb(lv_event_t* e) {
 /* ── P2-3: Task list management ── */
 
 /* Add a task to the left panel task list */
+/* ── Session abort callback ── */
+static void session_abort_cb(lv_event_t* e) {
+    lv_obj_t* btn = lv_event_get_target_obj(e);
+    /* Find matching task item */
+    for (int i = 0; i < g_task_count; i++) {
+        if (g_tasks[i].abort_btn == btn && g_tasks[i].session_key[0]) {
+            LOG_I("Session", "User abort: %s", g_tasks[i].session_key);
+            lv_label_set_text(lv_obj_get_child(btn, 0), "...");
+            lv_obj_add_state(btn, LV_STATE_DISABLED);
+
+            /* Execute abort in background (blocking ~1.5s, but UI shows loading) */
+            bool ok = app_abort_session(g_tasks[i].session_key);
+            if (ok) {
+                ui_log("[Session] Aborted: %.60s", g_tasks[i].session_key);
+            } else {
+                ui_log("[Session] Abort failed: %.60s", g_tasks[i].session_key);
+                lv_label_set_text(lv_obj_get_child(btn, 0), "✕");
+                lv_obj_clear_state(btn, LV_STATE_DISABLED);
+            }
+            break;
+        }
+    }
+}
+
 static void task_add(const char* name, const char* status, const char* detail = nullptr) {
     if (!left_panel || g_task_count >= MAX_TASK_WIDGETS) return;
     if (task_empty_label) {
@@ -2842,7 +2869,9 @@ static void task_add(const char* name, const char* status, const char* detail = 
     snprintf(t.name, sizeof(t.name), "%s", name);
     snprintf(t.status, sizeof(t.status), "%s", status);
     snprintf(t.detail, sizeof(t.detail), "%s", detail ? detail : "");
+    t.session_key[0] = '\0';
     t.tooltip = nullptr;
+    t.abort_btn = nullptr;
 
     /* Task container row */
     t.widget = lv_obj_create(left_panel);
@@ -2893,6 +2922,37 @@ static void task_add(const char* name, const char* status, const char* detail = 
     ui_log("[Task] Added: %s [%s]", name, status);
 }
 
+/* Add a task item with an abort/reset button */
+static void task_add_with_abort(const char* name, const char* status, const char* detail,
+                                 const char* session_key) {
+    task_add(name, status, detail);
+    if (g_task_count < 1) return;
+
+    TaskItem& t = g_tasks[g_task_count - 1];
+    if (session_key && session_key[0]) {
+        snprintf(t.session_key, sizeof(t.session_key), "%s", session_key);
+
+        /* Create abort button (small, right-aligned) */
+        t.abort_btn = lv_btn_create(t.widget);
+        lv_obj_set_size(t.abort_btn, SCALE(28), SCALE(22));
+        lv_obj_set_style_bg_color(t.abort_btn, lv_color_make(180, 50, 50), 0);
+        lv_obj_set_style_bg_color(t.abort_btn, lv_color_make(220, 80, 80), LV_STATE_PRESSED);
+        lv_obj_set_style_bg_color(t.abort_btn, lv_color_make(100, 40, 40), LV_STATE_DISABLED);
+        lv_obj_set_style_radius(t.abort_btn, 4, 0);
+        lv_obj_set_style_border_width(t.abort_btn, 0, 0);
+        lv_obj_set_style_pad_all(t.abort_btn, 0, 0);
+        lv_obj_clear_flag(t.abort_btn, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* abort_lbl = lv_label_create(t.abort_btn);
+        lv_label_set_text(abort_lbl, LV_SYMBOL_CLOSE);
+        lv_obj_set_style_text_color(abort_lbl, lv_color_make(255, 255, 255), 0);
+        lv_obj_set_style_text_font(abort_lbl, &lv_font_montserrat_14, 0);
+        lv_obj_center(abort_lbl);
+
+        lv_obj_add_event_cb(t.abort_btn, session_abort_cb, LV_EVENT_CLICKED, nullptr);
+    }
+}
+
 /* Remove all tasks from list */
 static void task_clear() {
     task_destroy_all_tooltips(); /* TASK-054: destroy tooltips before widgets */
@@ -2927,9 +2987,9 @@ static void update_task_list(ClawStatus status) {
     /* Clear previous tasks */
     task_clear();
 
-    /* Get active session count and info from health check */
-    int session_count = health_get_session_count();
-    const char* session_info = health_get_session_info();
+    /* Get active session data from SessionManager */
+    SessionManager& sm = session_mgr();
+    int session_count = sm.active_count();
 
     /* Update count badge */
     if (lp_task_count) {
@@ -2955,39 +3015,26 @@ static void update_task_list(ClawStatus status) {
             break;
         case ClawStatus::Busy:
             task_add("Gateway Service", tr(S_READY), gw_detail);
-            /* Show each active session with channel source */
-            if (session_count > 0 && session_info && session_info[0]) {
-                /* Parse "webchat:30s, telegram:120s" into individual tasks */
-                const char* p = session_info;
-                int idx = 1;
-                while (*p && idx <= MAX_TASK_WIDGETS - 2) {
-                    char channel[32] = {0};
-                    char age_str[16] = {0};
-                    /* Extract channel */
-                    int ci = 0;
-                    while (*p && *p != ':' && *p != ',' && ci < 30) {
-                        channel[ci++] = *p++;
-                    }
-                    channel[ci] = '\0';
-                    if (*p == ':') p++;
-                    /* Extract age */
-                    int ai = 0;
-                    while (*p && *p != ',' && *p != ' ' && ai < 14) {
-                        age_str[ai++] = *p++;
-                    }
-                    age_str[ai] = '\0';
-                    while (*p == ',' || *p == ' ') p++;
+            /* Show each active session with abort button */
+            if (session_count > 0) {
+                auto active = sm.active_sessions();
+                for (size_t i = 0; i < active.size() && (int)i < MAX_TASK_WIDGETS - 2; i++) {
+                    const auto& s = active[i];
 
-                    /* Format: "channel · Session #N (age)" */
-                    char task_name[96];
-                    snprintf(task_name, sizeof(task_name), "%s · #%d (%s)", channel, idx, age_str);
+                    /* Format: "channel · agentId (age)" */
+                    char task_name[128];
+                    snprintf(task_name, sizeof(task_name), "%s · %s (%ds)",
+                             s.display_channel(), s.display_name(), s.age_seconds());
 
                     /* Build session detail for hover */
-                    char session_detail[192];
+                    char session_detail[256];
                     snprintf(session_detail, sizeof(session_detail),
-                             "Channel: %s\nActive: %s\nSession #%d", channel, age_str, idx);
-                    task_add(task_name, tr(S_BUSY), session_detail);
-                    idx++;
+                             "Channel: %s\nAgent: %s\nActive: %ds\nKey: %.60s",
+                             s.display_channel(), s.agentId.c_str(),
+                             s.age_seconds(), s.key.c_str());
+
+                    /* Show abort button for active sessions */
+                    task_add_with_abort(task_name, tr(S_BUSY), session_detail, s.key.c_str());
                 }
             } else {
                 task_add(tr(S_AGENT), tr(S_BUSY), "Gateway processing request");

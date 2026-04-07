@@ -143,4 +143,8 @@ int utf8_safe_truncate(const char* str, int max_bytes);
 /* Secure memory clearing */
 void secure_zero(void* ptr, size_t size);
 
+/* Session management */
+bool app_abort_session(const char* session_key);  /* Abort/reset specific session */
+bool app_abort_all_sessions();                     /* Reset all sessions */
+
 #endif /* APP_H */

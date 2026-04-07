@@ -2,6 +2,7 @@
 #include "app.h"
 #include "app_config.h"
 #include "app_log.h"
+#include "session_manager.h"
 #include <windows.h>
 #include <tlhelp32.h>
 #include <process.h>
@@ -109,69 +110,25 @@ static int g_active_session_count = 0;  /* number of active sessions */
 static char g_active_session_info[256] = {0};  /* formatted session summary for UI */
 
 /*
- * Count active sessions and collect summary info.
- * Calls: openclaw gateway call sessions.list --json
+ * Count active sessions via SessionManager.
+ * Calls SessionManager::refresh() which internally calls sessions.list --json.
  * Updates g_active_session_count and g_active_session_info.
  */
 static int count_active_sessions() {
-    char output[8192] = {0};
-    bool ok = exec_cmd_local(
-        "openclaw gateway call sessions.list --json",
-        output, sizeof(output), 8000
-    );
-
-    if (!ok || output[0] == '\0') {
-        LOG_W("HEALTH", "sessions.list returned empty or failed");
+    SessionManager& sm = session_mgr();
+    if (!sm.refresh()) {
+        LOG_W("HEALTH", "Session refresh failed: %s", sm.last_error());
         return 0;
     }
 
-    int count = 0;
-    g_active_session_info[0] = '\0';
-    int info_pos = 0;
+    g_active_session_count = sm.active_count(SESSION_ACTIVE_AGE_MS);
 
-    /* Parse each session: look for "lastChannel" and "ageMs" pairs */
-    const char* p = output;
-    while ((p = strstr(p, "\"lastChannel\"")) != nullptr) {
-        /* Extract channel name */
-        p += 13;  /* skip "lastChannel" */
-        while (*p == ' ' || *p == ':' || *p == '"') p++;
-        char channel[32] = {0};
-        int ci = 0;
-        while (*p && *p != '"' && ci < 30) {
-            channel[ci++] = *p++;
-        }
-        channel[ci] = '\0';
+    /* Format info string: "channel:age_s, channel:age_s" */
+    std::string info = sm.format_active_info(SESSION_ACTIVE_AGE_MS);
+    snprintf(g_active_session_info, sizeof(g_active_session_info), "%s", info.c_str());
 
-        /* Look for ageMs near this session */
-        const char* next_ch = strstr(p, "\"lastChannel\"");
-        const char* age_p = strstr(p, "\"ageMs\"");
-        if (!age_p || (next_ch && age_p > next_ch)) {
-            /* No ageMs found for this session, skip */
-            continue;
-        }
-        age_p += 7;
-        while (*age_p == ' ' || *age_p == ':') age_p++;
-        long long ageMs = 0;
-        while (*age_p >= '0' && *age_p <= '9') {
-            ageMs = ageMs * 10 + (*age_p - '0');
-            age_p++;
-        }
-
-        if (ageMs > 0 && ageMs < SESSION_ACTIVE_AGE_MS) {
-            count++;
-            /* Append to summary: "channel:age_s" */
-            int age_s = (int)(ageMs / 1000);
-            int written = snprintf(g_active_session_info + info_pos,
-                sizeof(g_active_session_info) - info_pos,
-                "%s%s:%ds", info_pos > 0 ? ", " : "", channel[0] ? channel : "?", age_s);
-            if (written > 0) info_pos += written;
-        }
-
-        p = age_p;
-    }
-
-    LOG_D("HEALTH", "Active sessions: %d (%s)", count, g_active_session_info);
-    return count;
+    LOG_D("HEALTH", "Active sessions: %d (%s)", g_active_session_count, g_active_session_info);
+    return g_active_session_count;
 }
 
 /* Backward-compatible wrapper */

@@ -1096,3 +1096,41 @@ EnvCheckResult app_check_environment() {
 
     return result;
 }
+
+/* ═══ Session Management ═══ */
+
+bool app_abort_session(const char* session_key) {
+    if (!session_key || !session_key[0]) return false;
+
+    char cmd[512];
+    snprintf(cmd, sizeof(cmd),
+             "openclaw gateway call sessions.reset --json -d \"{\\\"sessionKey\\\":\\\"%s\\\"}\"",
+             session_key);
+
+    char output[2048] = {0};
+    bool ok = exec_cmd(cmd, output, sizeof(output), 10000);
+
+    if (!ok || !output[0]) {
+        LOG_W("Session", "Abort '%s' failed", session_key);
+        return false;
+    }
+
+    LOG_I("Session", "Aborted '%s': %.100s", session_key, output);
+    return true;
+}
+
+bool app_abort_all_sessions() {
+    char output[4096] = {0};
+    bool ok = exec_cmd(
+        "openclaw gateway call sessions.reset --json",
+        output, sizeof(output), 15000
+    );
+
+    if (!ok) {
+        LOG_W("Session", "Abort all sessions failed");
+        return false;
+    }
+
+    LOG_I("Session", "Reset all sessions: %.200s", output);
+    return true;
+}

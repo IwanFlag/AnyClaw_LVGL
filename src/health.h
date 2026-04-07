@@ -3,6 +3,7 @@
 
 #include "tray.h"
 #include "app.h"  /* for ClawStatus */
+#include "session_manager.h"  /* for SessionManager */
 
 /* Health status callback type */
 typedef void (*HealthStatusCallback)(ClawStatus status);
