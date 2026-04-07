@@ -49,9 +49,9 @@ namespace aw {
 
     /* Functional colors */
     inline lv_color_t color_primary()  { return g_colors ? g_colors->accent : lv_color_make(59, 130, 246); }
-    inline lv_color_t color_success()  { return g_colors ? g_colors->status_ok : lv_color_make(0, 220, 60); }
-    inline lv_color_t color_warning()  { return g_colors ? g_colors->status_warn : lv_color_make(220, 200, 40); }
-    inline lv_color_t color_danger()   { return g_colors ? g_colors->status_err : lv_color_make(220, 80, 80); }
+    inline lv_color_t color_success()  { return g_colors ? g_colors->btn_add : lv_color_make(0, 220, 60); }
+    inline lv_color_t color_warning()  { return g_colors ? g_colors->btn_secondary : lv_color_make(220, 200, 40); }
+    inline lv_color_t color_danger()   { return g_colors ? g_colors->btn_close : lv_color_make(220, 80, 80); }
     inline lv_color_t color_white()    { return lv_color_make(255, 255, 255); }
 
     /* Selection */

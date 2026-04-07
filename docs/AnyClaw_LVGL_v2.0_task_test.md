@@ -2130,7 +2130,7 @@ chat_cont (消息区域)
 | TASK-KB01 | 本地知识库（来源管理/索引/检索） | P1 | 🆕 待实施 |
 | TASK-MODE01 | 界面模式（聊天/语音/工作）与状态保持 | P1 | 🔧 实施中（V1 框架已落地，含 Work 配置区） |
 | TASK-SHARE01 | 文件/图片/目录发送与聊天内可点击打开 | P0 | 🔧 实施中（V1.5：附件详情/目录统计/预览兜底） |
-| TASK-PROFILE01 | AI/用户头像与角色画像配置 | P1 | 🔧 实施中（V1：Work 面板可编辑并持久化） |
+| TASK-PROFILE01 | AI/用户头像与角色画像配置 | P1 | 🔧 实施中（V2：头像选择+聊天头像联动） |
 | TASK-REMOTE01 | 双端远程协作（桌面/语音/控制） | P0 | 🆕 待实施（高风险） |
 | TASK-CTRL01 | 控制权模式（用户控制 / AI 控制） | P0 | 🔧 实施中（V1 持久化配置已落地） |
 | TASK-LLM01 | 大模型接入模式（Gateway / Direct API） | P0 | 🔧 实施中（V1 持久化配置已落地） |
@@ -2139,6 +2139,7 @@ chat_cont (消息区域)
 | TASK-SHARE02 | 附件发送队列（进度/失败重试/批量） | P0 | 🆕 待实施 |
 | TASK-PROFILE02 | 头像资源选择与AI/用户角色卡展示 | P1 | 🆕 待实施 |
 | TASK-REMOTE-SAFE01 | 远程协作安全闸门（双确认/倒计时/红条/一键断开） | P0 | 🆕 待实施 |
+| TASK-WIDGET02 | 通用表单插件库（section/field/dropdown/button） | P1 | ✅ 已完成（aw_form.h 已落地并接入 Work 面板） |
 
 ---
 

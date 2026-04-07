@@ -24,6 +24,7 @@
 #include "license.h"
 #include "session_manager.h"
 #include "cjk_font_data.h"
+#include "widgets/aw_form.h"
 
 /* ═══ System Font: TinyTTF embedded data + bitmap fallback ═══ */
 #ifdef __cplusplus
@@ -180,6 +181,8 @@ static char g_profile_ai_name[64] = "AI";
 static char g_profile_ai_role[64] = "Assistant";
 static char g_profile_ai_persona[128] = "";
 static char g_profile_ai_skills[192] = "";
+static char g_profile_user_avatar[64] = "garlic";
+static char g_profile_ai_avatar[64] = "lobster";
 
 /* ═══ Theme System (P2-4) ═══ */
 Theme g_theme = Theme::Dark;
@@ -707,6 +710,8 @@ void save_theme_config() {
         f << "  \"profile_ai_role\": \"" << g_profile_ai_role << "\",\n";
         f << "  \"profile_ai_persona\": \"" << g_profile_ai_persona << "\",\n";
         f << "  \"profile_ai_skills\": \"" << g_profile_ai_skills << "\",\n";
+        f << "  \"profile_user_avatar\": \"" << g_profile_user_avatar << "\",\n";
+        f << "  \"profile_ai_avatar\": \"" << g_profile_ai_avatar << "\",\n";
         f << "  \"model_name\": \"" << (g_selected_model[0] ? g_selected_model : "") << "\",\n";
         f << "  \"api_key\": \"" << (g_api_key[0] ? g_api_key : "") << "\"\n";
         f << "}\n";
@@ -796,6 +801,8 @@ void load_theme_config() {
     json_extract_string(content.c_str(), "profile_ai_role", g_profile_ai_role, sizeof(g_profile_ai_role));
     json_extract_string(content.c_str(), "profile_ai_persona", g_profile_ai_persona, sizeof(g_profile_ai_persona));
     json_extract_string(content.c_str(), "profile_ai_skills", g_profile_ai_skills, sizeof(g_profile_ai_skills));
+    json_extract_string(content.c_str(), "profile_user_avatar", g_profile_user_avatar, sizeof(g_profile_user_avatar));
+    json_extract_string(content.c_str(), "profile_ai_avatar", g_profile_ai_avatar, sizeof(g_profile_ai_avatar));
 
     /* Restore wizard_completed flag */
     g_wizard_completed = is_wizard_completed();
@@ -1022,6 +1029,8 @@ static lv_obj_t* mode_ta_ai_name = nullptr;
 static lv_obj_t* mode_ta_ai_role = nullptr;
 static lv_obj_t* mode_ta_ai_persona = nullptr;
 static lv_obj_t* mode_ta_ai_skills = nullptr;
+static lv_obj_t* mode_dd_user_avatar = nullptr;
+static lv_obj_t* mode_dd_ai_avatar = nullptr;
 static int MODE_BAR_H = 36;
 enum UiMainMode { UI_MODE_CHAT = 0, UI_MODE_VOICE = 1, UI_MODE_WORK = 2 };
 static UiMainMode g_ui_mode = UI_MODE_CHAT;
@@ -1308,6 +1317,12 @@ static int mode_content_w() { return std::max(200, RIGHT_PANEL_W - CHAT_GAP * 2)
 extern void save_theme_config();
 static const char* profile_user_name() { return g_profile_user_name[0] ? g_profile_user_name : "User"; }
 static const char* profile_ai_name() { return g_profile_ai_name[0] ? g_profile_ai_name : "AI"; }
+static const char* profile_user_avatar_src() {
+    return (strcmp(g_profile_user_avatar, "lobster") == 0) ? "A:assets/icons/ai/lobster_01_24.png" : "A:assets/garlic_32.png";
+}
+static const char* profile_ai_avatar_src() {
+    return (strcmp(g_profile_ai_avatar, "garlic") == 0) ? "A:assets/garlic_32.png" : "A:assets/icons/ai/lobster_01_24.png";
+}
 
 static void update_work_mode_hint() {
     if (!mode_lbl_work_hint) return;
@@ -1351,6 +1366,14 @@ static void work_profile_save_cb(lv_event_t* e) {
     cp(mode_ta_ai_role, g_profile_ai_role, sizeof(g_profile_ai_role));
     cp(mode_ta_ai_persona, g_profile_ai_persona, sizeof(g_profile_ai_persona));
     cp(mode_ta_ai_skills, g_profile_ai_skills, sizeof(g_profile_ai_skills));
+    if (mode_dd_user_avatar) {
+        uint16_t s = lv_dropdown_get_selected(mode_dd_user_avatar);
+        snprintf(g_profile_user_avatar, sizeof(g_profile_user_avatar), "%s", (s == 1) ? "lobster" : "garlic");
+    }
+    if (mode_dd_ai_avatar) {
+        uint16_t s = lv_dropdown_get_selected(mode_dd_ai_avatar);
+        snprintf(g_profile_ai_avatar, sizeof(g_profile_ai_avatar), "%s", (s == 1) ? "garlic" : "lobster");
+    }
     update_work_mode_hint();
     save_theme_config();
     LOG_I("PROFILE", "Profile saved user=%s ai=%s", profile_user_name(), profile_ai_name());
@@ -1552,6 +1575,8 @@ static void relayout_panels() {
     if (mode_ta_ai_role) lv_obj_set_width(mode_ta_ai_role, profile_w);
     if (mode_ta_ai_persona) lv_obj_set_width(mode_ta_ai_persona, profile_w);
     if (mode_ta_ai_skills) lv_obj_set_width(mode_ta_ai_skills, profile_w);
+    if (mode_dd_user_avatar) lv_obj_set_width(mode_dd_user_avatar, profile_w);
+    if (mode_dd_ai_avatar) lv_obj_set_width(mode_dd_ai_avatar, profile_w);
 
     /* Re-layout chat mode children */
     int input_h = chat_input ? (int)lv_obj_get_height(chat_input) : 36;
@@ -2321,7 +2346,7 @@ static void chat_add_user_bubble(const char* text) {
     lv_obj_set_style_text_font(user_lbl, FONT(10), 0);
 
     lv_obj_t* avatar = lv_image_create(meta);
-    lv_image_set_src(avatar, "A:assets/garlic_32.png");
+    lv_image_set_src(avatar, profile_user_avatar_src());
     lv_obj_set_size(avatar, SCALE(AVATAR_USER_SIZE), SCALE(AVATAR_USER_SIZE));
     lv_image_set_scale(avatar, 256);
     lv_obj_clear_flag(avatar, LV_OBJ_FLAG_SCROLLABLE);
@@ -2903,7 +2928,7 @@ static void chat_start_stream(const char* user_message) {
     lv_obj_set_style_pad_gap(meta, 6, 0);
 
     lv_obj_t* avatar = lv_image_create(meta);
-    lv_image_set_src(avatar, "A:assets/icons/ai/lobster_01_24.png");
+    lv_image_set_src(avatar, profile_ai_avatar_src());
     lv_obj_set_size(avatar, SCALE(AVATAR_AI_SIZE), SCALE(AVATAR_AI_SIZE));
     lv_image_set_scale(avatar, 256);
     lv_obj_clear_flag(avatar, LV_OBJ_FLAG_SCROLLABLE);
@@ -3001,7 +3026,7 @@ static void chat_add_ai_bubble(const char* text) {
     lv_obj_set_style_pad_gap(meta, 6, 0);
 
     lv_obj_t* avatar = lv_image_create(meta);
-    lv_image_set_src(avatar, "A:assets/icons/ai/lobster_01_24.png");
+    lv_image_set_src(avatar, profile_ai_avatar_src());
     lv_obj_set_size(avatar, SCALE(AVATAR_AI_SIZE), SCALE(AVATAR_AI_SIZE));
     lv_image_set_scale(avatar, 256);
     lv_obj_clear_flag(avatar, LV_OBJ_FLAG_SCROLLABLE);
@@ -6071,80 +6096,43 @@ void app_ui_init() {
     lv_obj_set_pos(mode_panel_work, CHAT_GAP, MODE_BAR_H + CHAT_GAP * 2);
     lv_obj_set_style_bg_opa(mode_panel_work, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(mode_panel_work, 0, 0);
-    lv_obj_set_style_pad_all(mode_panel_work, 0, 0);
-    lv_obj_clear_flag(mode_panel_work, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_all(mode_panel_work, 8, 0);
+    lv_obj_set_flex_flow(mode_panel_work, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(mode_panel_work, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_gap(mode_panel_work, 8, 0);
+    lv_obj_set_scroll_dir(mode_panel_work, LV_DIR_VER);
     {
-        lv_obj_t* t1 = lv_label_create(mode_panel_work);
-        lv_label_set_text(t1, "Control mode");
-        lv_obj_set_style_text_color(t1, c->text_dim, 0);
-        lv_obj_set_style_text_font(t1, CJK_FONT_SMALL, 0);
-        lv_obj_align(t1, LV_ALIGN_TOP_LEFT, 8, 8);
-
-        mode_dd_control = lv_dropdown_create(mode_panel_work);
-        lv_dropdown_set_options(mode_dd_control, "User controls AnyClaw\nAI controls AnyClaw");
-        lv_dropdown_set_selected(mode_dd_control, (uint16_t)g_control_mode);
-        lv_obj_set_width(mode_dd_control, std::min(content_w - 16, SCALE(360)));
-        lv_obj_set_pos(mode_dd_control, 8, 28);
-        lv_obj_set_style_text_font(mode_dd_control, CJK_FONT_SMALL, 0);
+        int card_w = std::min(content_w - 16, SCALE(560));
+        lv_obj_t* sec_runtime = aw_form_section_create(mode_panel_work, "Runtime Mode", card_w);
+        aw_form_field_dropdown(sec_runtime, "Control mode",
+                               "User controls AnyClaw\nAI controls AnyClaw",
+                               (uint16_t)g_control_mode, &mode_dd_control, card_w - 24);
         lv_obj_add_event_cb(mode_dd_control, work_control_mode_cb, LV_EVENT_VALUE_CHANGED, nullptr);
-
-        lv_obj_t* t2 = lv_label_create(mode_panel_work);
-        lv_label_set_text(t2, "LLM access");
-        lv_obj_set_style_text_color(t2, c->text_dim, 0);
-        lv_obj_set_style_text_font(t2, CJK_FONT_SMALL, 0);
-        lv_obj_set_pos(t2, 8, 70);
-
-        mode_dd_llm = lv_dropdown_create(mode_panel_work);
-        lv_dropdown_set_options(mode_dd_llm, "Gateway mode (OpenClaw)\nDirect API mode");
-        lv_dropdown_set_selected(mode_dd_llm, (uint16_t)g_llm_access_mode);
-        lv_obj_set_width(mode_dd_llm, std::min(content_w - 16, SCALE(360)));
-        lv_obj_set_pos(mode_dd_llm, 8, 90);
-        lv_obj_set_style_text_font(mode_dd_llm, CJK_FONT_SMALL, 0);
+        aw_form_field_dropdown(sec_runtime, "LLM access",
+                               "Gateway mode (OpenClaw)\nDirect API mode",
+                               (uint16_t)g_llm_access_mode, &mode_dd_llm, card_w - 24);
         lv_obj_add_event_cb(mode_dd_llm, work_llm_mode_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
-        mode_lbl_work_hint = lv_label_create(mode_panel_work);
+        mode_lbl_work_hint = aw_label_wrap_create(sec_runtime, "", LABEL_HINT, 100);
         lv_obj_set_style_text_color(mode_lbl_work_hint, c->text_dim, 0);
-        lv_obj_set_style_text_font(mode_lbl_work_hint, CJK_FONT_SMALL, 0);
-        lv_obj_set_width(mode_lbl_work_hint, LV_PCT(100));
-        lv_obj_set_pos(mode_lbl_work_hint, 8, 134);
         update_work_mode_hint();
 
-        int px = 8;
-        int py = 208;
-        int cw = std::min(content_w - 16, SCALE(520));
-        auto mk_title = [&](const char* txt, int y) {
-            lv_obj_t* l = lv_label_create(mode_panel_work);
-            lv_label_set_text(l, txt);
-            lv_obj_set_style_text_color(l, c->text_dim, 0);
-            lv_obj_set_style_text_font(l, CJK_FONT_SMALL, 0);
-            lv_obj_set_pos(l, px, y);
-        };
-        auto mk_ta = [&](lv_obj_t** out, const char* text, int y, int h = 30) {
-            lv_obj_t* ta = lv_textarea_create(mode_panel_work);
-            lv_obj_set_size(ta, cw, h);
-            lv_obj_set_pos(ta, px, y);
-            lv_textarea_set_one_line(ta, h <= 36);
-            lv_textarea_set_text(ta, text ? text : "");
-            lv_obj_set_style_text_font(ta, CJK_FONT_SMALL, 0);
-            *out = ta;
-        };
-        mk_title("User profile", py);
-        mk_ta(&mode_ta_user_name, g_profile_user_name, py + 18);
-        mk_ta(&mode_ta_user_role, g_profile_user_role, py + 54);
-        mk_title("AI profile", py + 92);
-        mk_ta(&mode_ta_ai_name, g_profile_ai_name, py + 110);
-        mk_ta(&mode_ta_ai_role, g_profile_ai_role, py + 146);
-        mk_ta(&mode_ta_ai_persona, g_profile_ai_persona, py + 182, 44);
-        mk_ta(&mode_ta_ai_skills, g_profile_ai_skills, py + 230, 44);
+        lv_obj_t* sec_profile = aw_form_section_create(mode_panel_work, "Profile", card_w);
+        aw_form_field_text(sec_profile, "User name", g_profile_user_name, &mode_ta_user_name, false, card_w - 24);
+        aw_form_field_text(sec_profile, "User role", g_profile_user_role, &mode_ta_user_role, false, card_w - 24);
+        aw_form_field_dropdown(sec_profile, "User avatar", "garlic\nlobster",
+                               (uint16_t)(strcmp(g_profile_user_avatar, "lobster") == 0 ? 1 : 0),
+                               &mode_dd_user_avatar, card_w - 24);
+        aw_form_field_text(sec_profile, "AI name", g_profile_ai_name, &mode_ta_ai_name, false, card_w - 24);
+        aw_form_field_text(sec_profile, "AI role", g_profile_ai_role, &mode_ta_ai_role, false, card_w - 24);
+        aw_form_field_dropdown(sec_profile, "AI avatar", "lobster\ngarlic",
+                               (uint16_t)(strcmp(g_profile_ai_avatar, "garlic") == 0 ? 1 : 0),
+                               &mode_dd_ai_avatar, card_w - 24);
+        aw_form_field_text(sec_profile, "AI persona", g_profile_ai_persona, &mode_ta_ai_persona, true, card_w - 24);
+        aw_form_field_text(sec_profile, "AI skills", g_profile_ai_skills, &mode_ta_ai_skills, true, card_w - 24);
 
-        lv_obj_t* btn_save_profile = lv_button_create(mode_panel_work);
-        lv_obj_set_size(btn_save_profile, SCALE(128), SCALE(32));
-        lv_obj_set_pos(btn_save_profile, px, py + 280);
+        lv_obj_t* btn_save_profile = aw_btn_create(sec_profile, "Save Profile", BTN_PRIMARY, SCALE(150), SCALE(34));
         lv_obj_add_event_cb(btn_save_profile, work_profile_save_cb, LV_EVENT_CLICKED, nullptr);
-        lv_obj_t* btn_save_lbl = lv_label_create(btn_save_profile);
-        lv_label_set_text(btn_save_lbl, "Save Profile");
-        lv_obj_set_style_text_font(btn_save_lbl, CJK_FONT_SMALL, 0);
-        lv_obj_center(btn_save_lbl);
     }
 
     /* Layout: chat fills space, input pinned to bottom; GAP spacing everywhere */
@@ -6206,7 +6194,7 @@ void app_ui_init() {
 
         /* Avatar - lobster icon matching AI messages */
         lv_obj_t* sys_avatar = lv_img_create(sys_row);
-        lv_img_set_src(sys_avatar, "A:assets/icons/ai/lobster_01_24.png");
+        lv_img_set_src(sys_avatar, profile_ai_avatar_src());
         lv_obj_set_size(sys_avatar, SCALE(AVATAR_AI_SIZE), SCALE(AVATAR_AI_SIZE));
 
         /* Welcome text */
