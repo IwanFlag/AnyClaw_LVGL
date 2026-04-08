@@ -5,22 +5,15 @@
 
 #include "app.h"
 #include "app_config.h"
-#include "selfcheck.h"
 #include "model_manager.h"
 #include "migration.h"
 #include "workspace.h"
 #include "permissions.h"
-#include "feature_flags.h"
 #include "app_log.h"
 #include "theme.h"
 #include "SDL.h"
 #include "lang.h"
 #include "lvgl.h"
-#include "widgets/aw_common.h"
-#include "widgets/aw_label.h"
-#include "widgets/aw_button.h"
-#include "widgets/aw_input.h"
-#include "widgets/aw_panel.h"
 #include <windows.h>
 #include <commdlg.h>
 
@@ -275,7 +268,9 @@ static void build_general_tab(lv_obj_t* tab) {
         set_auto_start(lv_obj_has_state(sw, LV_STATE_CHECKED));
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 
-    aw_label_create(boot_right, "Start on boot", LABEL_HINT);
+    lv_obj_t* lbl_boot_hint = lv_label_create(boot_right);
+    lv_label_set_text(lbl_boot_hint, "Start on boot");
+    apply_hint_label(lbl_boot_hint);
 
     /* ── Auto Start ── */
     lv_obj_t* row_auto = lv_obj_create(tab);
@@ -314,7 +309,9 @@ static void build_general_tab(lv_obj_t* tab) {
         /* TODO: persist auto_start_on_crash config */
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 
-    aw_label_create(auto_right, "Restart on crash", LABEL_HINT);
+    lv_obj_t* lbl_auto_hint = lv_label_create(auto_right);
+    lv_label_set_text(lbl_auto_hint, "Restart on crash");
+    apply_hint_label(lbl_auto_hint);
 
     add_divider(tab);
 
@@ -411,7 +408,9 @@ static void build_general_tab(lv_obj_t* tab) {
             LOG_I("Config", "close_gateway_on_exit = %s", enabled ? "true" : "false");
         }, LV_EVENT_VALUE_CHANGED, nullptr);
 
-        aw_label_create(close_right, tr("退出程序时停止Gateway", "Stop Gateway when quitting"), LABEL_HINT);
+        lv_obj_t* lbl_hint = lv_label_create(close_right);
+        lv_label_set_text(lbl_hint, tr("退出程序时停止Gateway", "Stop Gateway when quitting"));
+        apply_hint_label(lbl_hint);
     }
 
     add_divider(tab);
@@ -528,108 +527,23 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_set_style_border_width(div4, 0, 0);
     lv_obj_clear_flag(div4, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* ── Feature Flags (FLAG-01) ── */
-    add_divider(tab);
-
-    lv_obj_t* ff_title = lv_label_create(tab);
-    lv_label_set_text(ff_title, tr("功能开关", "Feature Flags"));
-    apply_section_label(ff_title);
-
-    lv_obj_t* ff_hint = lv_label_create(tab);
-    lv_label_set_text(ff_hint, tr("灰色发布开关 — 默认关闭，按需启用",
-                                   "Gray-release toggles — off by default, enable as needed"));
-    apply_hint_label(ff_hint);
-
-    /* Render each flag as a toggle switch row */
-    {
-        const auto& flags = feature_flags().get_all_flags();
-        for (size_t i = 0; i < flags.size(); i++) {
-            const FeatureFlag& f = flags[i];
-
-            lv_obj_t* ff_row = lv_obj_create(tab);
-            lv_obj_set_size(ff_row, LV_PCT(100), LV_SIZE_CONTENT);
-            lv_obj_set_style_bg_opa(ff_row, LV_OPA_TRANSP, 0);
-            lv_obj_set_style_border_width(ff_row, 0, 0);
-            lv_obj_set_style_pad_all(ff_row, 0, 0);
-            lv_obj_set_style_pad_ver(ff_row, 4, 0);
-            lv_obj_clear_flag(ff_row, LV_OBJ_FLAG_SCROLLABLE);
-            lv_obj_set_flex_flow(ff_row, LV_FLEX_FLOW_ROW);
-            lv_obj_set_flex_align(ff_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-            /* Left side: name + restart hint */
-            lv_obj_t* ff_left = lv_obj_create(ff_row);
-            lv_obj_set_size(ff_left, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-            lv_obj_set_style_bg_opa(ff_left, LV_OPA_TRANSP, 0);
-            lv_obj_set_style_border_width(ff_left, 0, 0);
-            lv_obj_set_style_pad_all(ff_left, 0, 0);
-            lv_obj_clear_flag(ff_left, LV_OBJ_FLAG_SCROLLABLE);
-            lv_obj_set_flex_flow(ff_left, LV_FLEX_FLOW_COLUMN);
-            lv_obj_set_flex_align(ff_left, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-            lv_obj_set_style_pad_gap(ff_left, 2, 0);
-
-            lv_obj_t* ff_lbl = lv_label_create(ff_left);
-            lv_label_set_text(ff_lbl, f.description.c_str());
-            lv_obj_set_style_text_color(ff_lbl, g_colors->text, 0);
-            lv_obj_set_style_text_font(ff_lbl, CJK_FONT, 0);
-
-            if (f.requires_restart) {
-                lv_obj_t* ff_rst = lv_label_create(ff_left);
-                lv_label_set_text(ff_rst, tr("需要重启生效", "Requires restart"));
-                apply_hint_label(ff_rst);
-            }
-
-            /* Right side: switch */
-            lv_obj_t* ff_right = lv_obj_create(ff_row);
-            lv_obj_set_size(ff_right, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-            lv_obj_set_style_bg_opa(ff_right, LV_OPA_TRANSP, 0);
-            lv_obj_set_style_border_width(ff_right, 0, 0);
-            lv_obj_set_style_pad_all(ff_right, 0, 0);
-            lv_obj_clear_flag(ff_right, LV_OBJ_FLAG_SCROLLABLE);
-            lv_obj_set_flex_flow(ff_right, LV_FLEX_FLOW_ROW);
-            lv_obj_set_flex_align(ff_right, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-            lv_obj_set_style_pad_gap(ff_right, 8, 0);
-
-            lv_obj_t* ff_sw = lv_switch_create(ff_right);
-            lv_obj_set_size(ff_sw, SCALE(50), SCALE(26));
-            lv_obj_set_style_bg_color(ff_sw, lv_color_make(60, 65, 90), LV_PART_MAIN);
-            lv_obj_set_style_bg_color(ff_sw, lv_color_make(60, 130, 220), LV_PART_INDICATOR | LV_STATE_CHECKED);
-            lv_obj_set_style_bg_color(ff_sw, lv_color_make(255, 255, 255), LV_PART_KNOB);
-
-            if (f.enabled) lv_obj_add_state(ff_sw, LV_STATE_CHECKED);
-
-            /* Store flag name for callback — use a static copy */
-            static char ff_cb_names[16][64];
-            snprintf(ff_cb_names[i], sizeof(ff_cb_names[i]), "%s", f.name.c_str());
-            lv_obj_set_user_data(ff_sw, ff_cb_names[i]);
-
-            lv_obj_add_event_cb(ff_sw, [](lv_event_t* e) {
-                lv_obj_t* sw = (lv_obj_t*)lv_event_get_target(e);
-                const char* flag_name = (const char*)lv_obj_get_user_data(sw);
-                if (!flag_name) return;
-                bool on = lv_obj_has_state(sw, LV_STATE_CHECKED);
-                feature_flags().set_enabled(flag_name, on);
-                feature_flags().save_to_config();
-            }, LV_EVENT_VALUE_CHANGED, nullptr);
-        }
-    }
-
     /* Reconfigure wizard button */
-    lv_obj_t* btn_wizard = aw_btn_create(tab, "Reconfigure Wizard", BTN_PRIMARY, LV_PCT(100), 40);
+    lv_obj_t* btn_wizard = lv_button_create(tab);
+    lv_obj_set_width(btn_wizard, LV_PCT(100));
+    lv_obj_set_height(btn_wizard, 40);
+    lv_obj_set_style_bg_color(btn_wizard, lv_color_make(40, 50, 90), 0);
+    lv_obj_set_style_bg_grad_color(btn_wizard, lv_color_make(30, 40, 70), 0);
+    lv_obj_set_style_bg_grad_dir(btn_wizard, LV_GRAD_DIR_VER, 0);
+    lv_obj_set_style_radius(btn_wizard, 8, 0);
     lv_obj_add_event_cb(btn_wizard, [](lv_event_t* e) {
         (void)e;
         ui_settings_close();
         ui_show_setup_wizard();
     }, LV_EVENT_CLICKED, nullptr);
-
-    /* ── Run Health Check (BOOT-01) ── */
-    lv_obj_t* btn_health = aw_btn_create(tab, "Run Health Check", BTN_SECONDARY, LV_PCT(100), 40);
-    lv_obj_add_event_cb(btn_health, [](lv_event_t* e) {
-        (void)e;
-        std::string report = selfcheck_run_full();
-        ui_log("[Health] %s", report.c_str());
-        g_startup_error_title = "Health Check Results";
-        g_startup_error = report;
-    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* btn_wizard_lbl = lv_label_create(btn_wizard);
+    lv_label_set_text(btn_wizard_lbl, "Reconfigure Wizard");
+    lv_obj_set_style_text_font(btn_wizard_lbl, CJK_FONT, 0);
+    lv_obj_center(btn_wizard_lbl);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -731,7 +645,10 @@ static void build_permissions_tab(lv_obj_t* tab) {
     lv_obj_set_flex_align(row_btn, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(row_btn, 8, 0);
 
-    lv_obj_t* btn_save = aw_btn_create(row_btn, tr("保存权限配置", "Save Permissions"), BTN_PRIMARY, SCALE(180), SCALE(34));
+    lv_obj_t* btn_save = lv_button_create(row_btn);
+    lv_obj_set_size(btn_save, SCALE(180), SCALE(34));
+    lv_obj_set_style_bg_color(btn_save, lv_color_make(59, 130, 246), 0);
+    lv_obj_set_style_radius(btn_save, 6, 0);
     lv_obj_add_event_cb(btn_save, [](lv_event_t* e) {
         (void)e;
         for (const auto& b : g_perm_bindings) {
@@ -750,8 +667,15 @@ static void build_permissions_tab(lv_obj_t* tab) {
         }
         ui_log("[PERM] %s", ok ? "Saved permissions config" : "Save failed");
     }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_save = lv_label_create(btn_save);
+    lv_label_set_text(lbl_save, tr("保存权限配置", "Save Permissions"));
+    lv_obj_set_style_text_font(lbl_save, CJK_FONT, 0);
+    lv_obj_set_style_text_color(lbl_save, lv_color_make(255, 255, 255), 0);
+    lv_obj_center(lbl_save);
 
-    perm_status_label = aw_label_create(row_btn, tr("未保存", "Not saved"), LABEL_HINT);
+    perm_status_label = lv_label_create(row_btn);
+    lv_label_set_text(perm_status_label, tr("未保存", "Not saved"));
+    apply_hint_label(perm_status_label);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1055,7 +979,16 @@ static void build_model_tab(lv_obj_t* tab) {
     lv_obj_add_event_cb(model_dropdown, model_dropdown_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     /* Add model button */
-    lv_obj_t* btn_add = aw_btn_create(dd_row, "+", BTN_SUCCESS, 40, 36);
+    lv_obj_t* btn_add = lv_button_create(dd_row);
+    lv_obj_set_size(btn_add, 40, 36);
+    lv_obj_set_style_bg_color(btn_add, lv_color_make(40, 100, 60), 0);
+    lv_obj_set_style_bg_color(btn_add, lv_color_make(50, 130, 80), LV_STATE_PRESSED);
+    lv_obj_set_style_radius(btn_add, 6, 0);
+    lv_obj_t* lbl_add = lv_label_create(btn_add);
+    lv_label_set_text(lbl_add, "+");
+    lv_obj_set_style_text_font(lbl_add, FONT(16), 0);
+    lv_obj_set_style_text_color(lbl_add, lv_color_make(255, 255, 255), 0);
+    lv_obj_center(lbl_add);
     lv_obj_add_event_cb(btn_add, [](lv_event_t* ev) {
         (void)ev;
         /* Modal overlay */
@@ -1124,10 +1057,28 @@ static void build_model_tab(lv_obj_t* tab) {
         lv_obj_clear_flag(btn_row, LV_OBJ_FLAG_SCROLLABLE);
 
         /* OK button (left) */
-        lv_obj_t* btn_ok = aw_btn_create(btn_row, tr("确定", "OK"), BTN_PRIMARY, 80, 36);
+        lv_obj_t* btn_ok = lv_button_create(btn_row);
+        lv_obj_set_size(btn_ok, 80, 36);
+        lv_obj_set_style_bg_color(btn_ok, lv_color_make(40, 100, 180), 0);
+        lv_obj_set_style_bg_color(btn_ok, lv_color_make(50, 120, 200), LV_STATE_PRESSED);
+        lv_obj_set_style_radius(btn_ok, 6, 0);
+        lv_obj_t* lbl_ok = lv_label_create(btn_ok);
+        lv_label_set_text(lbl_ok, tr("确定", "OK"));
+        lv_obj_set_style_text_font(lbl_ok, CJK_FONT, 0);
+        lv_obj_set_style_text_color(lbl_ok, lv_color_make(255, 255, 255), 0);
+        lv_obj_center(lbl_ok);
 
         /* Cancel button (right) */
-        lv_obj_t* btn_cancel = aw_btn_create(btn_row, tr("取消", "Cancel"), BTN_SECONDARY, 80, 36);
+        lv_obj_t* btn_cancel = lv_button_create(btn_row);
+        lv_obj_set_size(btn_cancel, 80, 36);
+        lv_obj_set_style_bg_color(btn_cancel, lv_color_make(80, 85, 100), 0);
+        lv_obj_set_style_bg_color(btn_cancel, lv_color_make(100, 105, 120), LV_STATE_PRESSED);
+        lv_obj_set_style_radius(btn_cancel, 6, 0);
+        lv_obj_t* lbl_cancel = lv_label_create(btn_cancel);
+        lv_label_set_text(lbl_cancel, tr("取消", "Cancel"));
+        lv_obj_set_style_text_font(lbl_cancel, CJK_FONT, 0);
+        lv_obj_set_style_text_color(lbl_cancel, lv_color_make(255, 255, 255), 0);
+        lv_obj_center(lbl_cancel);
 
         /* Cancel handler */
         lv_obj_add_event_cb(btn_cancel, [](lv_event_t* e2) {
@@ -1188,7 +1139,9 @@ static void build_model_tab(lv_obj_t* tab) {
     make_kv_row("Provider", model_provider_hint);
 
     /* Free model hint — standalone */
-    aw_label_create(tab, tr("带 :free 后缀的模型为免费模型", "Models with :free suffix are free"), LABEL_HINT);
+    lv_obj_t* lbl_hint = lv_label_create(tab);
+    lv_label_set_text(lbl_hint, tr("带 :free 后缀的模型为免费模型", "Models with :free suffix are free"));
+    apply_hint_label(lbl_hint);
 
     /* Pre-populate current model display from Gateway */
     if (g_selected_model[0] && model_current_label) {
@@ -1249,16 +1202,37 @@ static void build_model_tab(lv_obj_t* tab) {
     lv_obj_set_style_pad_gap(row_btns, 8, 0);
 
     /* Show/Hide Key toggle */
-    lv_obj_t* btn_show = aw_btn_create(row_btns, "Hide Key", BTN_SECONDARY, SCALE(100), SCALE(32));
+    lv_obj_t* btn_show = lv_button_create(row_btns);
+    lv_obj_set_size(btn_show, SCALE(100), SCALE(32));
+    lv_obj_set_style_bg_color(btn_show, lv_color_make(60, 65, 90), 0);
+    lv_obj_set_style_radius(btn_show, 6, 0);
     lv_obj_add_event_cb(btn_show, apikey_show_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_show = lv_label_create(btn_show);
+    lv_label_set_text(lbl_show, "Hide Key");
+    lv_obj_set_style_text_font(lbl_show, CJK_FONT, 0);
+    lv_obj_center(lbl_show);
 
     /* Verify button — test API key validity */
-    lv_obj_t* btn_verify = aw_btn_create(row_btns, "Verify", BTN_SUCCESS, SCALE(100), SCALE(32));
+    lv_obj_t* btn_verify = lv_button_create(row_btns);
+    lv_obj_set_size(btn_verify, SCALE(100), SCALE(32));
+    lv_obj_set_style_bg_color(btn_verify, lv_color_make(40, 140, 80), 0);
+    lv_obj_set_style_radius(btn_verify, 6, 0);
     lv_obj_add_event_cb(btn_verify, apikey_verify_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_verify = lv_label_create(btn_verify);
+    lv_label_set_text(lbl_verify, "Verify");
+    lv_obj_set_style_text_font(lbl_verify, CJK_FONT, 0);
+    lv_obj_center(lbl_verify);
 
     /* Save button */
-    lv_obj_t* btn_save = aw_btn_create(row_btns, "Save", BTN_PRIMARY, SCALE(100), SCALE(32));
+    lv_obj_t* btn_save = lv_button_create(row_btns);
+    lv_obj_set_size(btn_save, SCALE(100), SCALE(32));
+    lv_obj_set_style_bg_color(btn_save, lv_color_make(40, 100, 180), 0);
+    lv_obj_set_style_radius(btn_save, 6, 0);
     lv_obj_add_event_cb(btn_save, apikey_save_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_save = lv_label_create(btn_save);
+    lv_label_set_text(lbl_save, "Save");
+    lv_obj_set_style_text_font(lbl_save, CJK_FONT, 0);
+    lv_obj_center(lbl_save);
 
     /* Update current model display */
     if (g_selected_model[0] && model_current_label) {
@@ -1295,10 +1269,14 @@ static void build_model_tab(lv_obj_t* tab) {
     lv_obj_set_flex_flow(fo_switch_row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(fo_switch_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    aw_label_create(fo_switch_row, tr("启用弹性通道", "Enable Failover"), LABEL_BODY);
+    lv_obj_t* lbl_fo_sw = lv_label_create(fo_switch_row);
+    lv_label_set_text(lbl_fo_sw, tr("启用弹性通道", "Enable Failover"));
+    lv_obj_set_style_text_color(lbl_fo_sw, lv_color_make(180, 185, 200), 0);
+    lv_obj_set_style_text_font(lbl_fo_sw, CJK_FONT, 0);
 
-    lv_obj_t* fo_switch = aw_switch_create(fo_switch_row, failover_is_enabled());
+    lv_obj_t* fo_switch = lv_switch_create(fo_switch_row);
     lv_obj_set_width(fo_switch, 50);
+    if (failover_is_enabled()) lv_obj_add_state(fo_switch, LV_STATE_CHECKED);
     lv_obj_add_event_cb(fo_switch, [](lv_event_t* e) {
         lv_obj_t* sw = lv_event_get_target_obj(e);
         bool on = lv_obj_has_state(sw, LV_STATE_CHECKED);
@@ -1701,7 +1679,9 @@ static void build_log_tab(lv_obj_t* tab) {
         LOG_I("CONFIG", "Log system %s", g_log_enabled ? "enabled" : "disabled");
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 
-    aw_label_create(row_log, tr("写入 logs\\app.log", "Write to logs\\app.log"), LABEL_HINT);
+    lv_obj_t* lbl_log_hint = lv_label_create(row_log);
+    lv_label_set_text(lbl_log_hint, tr("写入 logs\\app.log", "Write to logs\\app.log"));
+    apply_hint_label(lbl_log_hint);
 
     /* Row: [Log Level label] [dropdown] */
     lv_obj_t* row_lv = lv_obj_create(tab);
@@ -1782,12 +1762,26 @@ static void build_log_tab(lv_obj_t* tab) {
     lv_obj_set_style_pad_gap(row_actions, 10, 0);
 
     /* Export button */
-    lv_obj_t* btn_export = aw_btn_create(row_actions, tr("导出日志", "Export Log"), BTN_PRIMARY, SCALE(120), SCALE(32));
+    lv_obj_t* btn_export = lv_button_create(row_actions);
+    lv_obj_set_size(btn_export, SCALE(120), SCALE(32));
+    lv_obj_set_style_bg_color(btn_export, lv_color_make(40, 100, 180), 0);
+    lv_obj_set_style_radius(btn_export, 6, 0);
     lv_obj_add_event_cb(btn_export, log_export_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_exp = lv_label_create(btn_export);
+    lv_label_set_text(lbl_exp, tr("导出日志", "Export Log"));
+    lv_obj_set_style_text_font(lbl_exp, CJK_FONT, 0);
+    lv_obj_center(lbl_exp);
 
     /* Clear button */
-    lv_obj_t* btn_clear = aw_btn_create(row_actions, tr("清除日志", "Clear Log"), BTN_DANGER, SCALE(120), SCALE(32));
+    lv_obj_t* btn_clear = lv_button_create(row_actions);
+    lv_obj_set_size(btn_clear, SCALE(120), SCALE(32));
+    lv_obj_set_style_bg_color(btn_clear, lv_color_make(180, 60, 60), 0);
+    lv_obj_set_style_radius(btn_clear, 6, 0);
     lv_obj_add_event_cb(btn_clear, log_clear_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_clr = lv_label_create(btn_clear);
+    lv_label_set_text(lbl_clr, tr("清除日志", "Clear Log"));
+    lv_obj_set_style_text_font(lbl_clr, CJK_FONT, 0);
+    lv_obj_center(lbl_clr);
 
     /* Log level color legend */
     lv_obj_t* row_legend = lv_obj_create(tab);
@@ -1900,7 +1894,10 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_set_style_pad_gap(row_config, 10, 0);
     lv_obj_set_flex_align(row_config, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-    lv_obj_t* btn_cfg_export = aw_btn_create(row_config, "Export Config", BTN_PRIMARY, 160, 36);
+    lv_obj_t* btn_cfg_export = lv_button_create(row_config);
+    lv_obj_set_size(btn_cfg_export, 160, 36);
+    lv_obj_set_style_bg_color(btn_cfg_export, lv_color_make(60, 100, 180), 0);
+    lv_obj_set_style_radius(btn_cfg_export, 6, 0);
     lv_obj_add_event_cb(btn_cfg_export, [](lv_event_t* e) {
         (void)e;
         char path[MAX_PATH];
@@ -1917,15 +1914,26 @@ static void build_about_tab(lv_obj_t* tab) {
             ui_log("[Config] Exported to %s", path);
         }
     }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* l_exp = lv_label_create(btn_cfg_export);
+    lv_label_set_text(l_exp, "Export Config");
+    lv_obj_set_style_text_font(l_exp, CJK_FONT, 0);
+    lv_obj_center(l_exp);
 
     /* Clear Chat History button */
-    lv_obj_t* btn_clear_chat = aw_btn_create(row_config, tr("清除聊天", "Clear Chat"), BTN_DANGER, 160, 36);
+    lv_obj_t* btn_clear_chat = lv_button_create(row_config);
+    lv_obj_set_size(btn_clear_chat, 160, 36);
+    lv_obj_set_style_bg_color(btn_clear_chat, lv_color_make(180, 60, 60), 0);
+    lv_obj_set_style_radius(btn_clear_chat, 6, 0);
     lv_obj_add_event_cb(btn_clear_chat, [](lv_event_t* e) {
         (void)e;
         extern void clear_chat_history();
         clear_chat_history();
         ui_log("[Chat] Chat history cleared");
     }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* l_clr = lv_label_create(btn_clear_chat);
+    lv_label_set_text(l_clr, tr("清除聊天", "Clear Chat"));
+    lv_obj_set_style_text_font(l_clr, CJK_FONT, 0);
+    lv_obj_center(l_clr);
 
     /* Migration row */
     lv_obj_t* row_mig = lv_obj_create(tab);
@@ -2008,7 +2016,10 @@ static void build_about_tab(lv_obj_t* tab) {
     apply_hint_label(lbl_copy2);
 
     /* P2-30: Skill version check button */
-    lv_obj_t* btn_ver_check = aw_btn_create(tab, "Check Updates", BTN_SECONDARY, LV_PCT(100), 36);
+    lv_obj_t* btn_ver_check = lv_button_create(tab);
+    lv_obj_set_size(btn_ver_check, LV_PCT(100), 36);
+    lv_obj_set_style_bg_color(btn_ver_check, lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_radius(btn_ver_check, 6, 0);
     lv_obj_add_event_cb(btn_ver_check, [](lv_event_t* e) {
         (void)e;
         char url[512];
@@ -2021,6 +2032,10 @@ static void build_about_tab(lv_obj_t* tab) {
             ui_log("[Skill] Version check: offline mode");
         }
     }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* l_ver = lv_label_create(btn_ver_check);
+    lv_label_set_text(l_ver, "Check Updates");
+    lv_obj_set_style_text_font(l_ver, CJK_FONT, 0);
+    lv_obj_center(l_ver);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -2337,10 +2352,7 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_set_style_text_font(title, CJK_FONT, 0);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 15, 0);
 
-    /* Close button */
-    lv_obj_t* btn_close = aw_btn_create(title_bar, "X", BTN_DANGER, SCALE(28), SCALE(28));
-    lv_obj_align(btn_close, LV_ALIGN_RIGHT_MID, -10, 0);
-    lv_obj_add_event_cb(btn_close, settings_close_cb, LV_EVENT_CLICKED, nullptr);
+    /* No top-right close button: keep popup behavior consistent with global dialogs. */
 
     /* Tabview */
     settings_tabs = lv_tabview_create(settings_panel);
@@ -2359,7 +2371,7 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_set_style_text_font(tab_btns, CJK_FONT, LV_PART_ITEMS);
     /* Vertical divider between tabs */
     lv_obj_set_style_border_side(tab_btns, LV_BORDER_SIDE_INTERNAL, LV_PART_ITEMS);
-    lv_obj_set_style_border_color(tab_btns, lv_color_make(80, 90, 120), LV_PART_ITEMS);
+    lv_obj_set_style_border_color(tab_btns, g_colors->panel_border, LV_PART_ITEMS);
     lv_obj_set_style_border_width(tab_btns, 2, LV_PART_ITEMS);
     lv_obj_set_style_pad_ver(tab_btns, 8, LV_PART_ITEMS); /* Short divider, not full height */
 
