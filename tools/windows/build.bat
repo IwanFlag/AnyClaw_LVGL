@@ -1,14 +1,12 @@
 @echo off
-REM ══════════════════════════════════════════════════════════════
-REM  AnyClaw LVGL — Windows 原生编译脚本 (MSYS2/MinGW)
-REM  前置条件: 安装 MSYS2 + MinGW-w64
-REM    1. 下载 https://www.msys2.org
-REM    2. pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-cmake mingw-w64-x86_64-SDL2
-REM  用法: 双击运行 或 在 MSYS2 MinGW64 终端中执行 tools\windows\build.bat
-REM ══════════════════════════════════════════════════════════════
+REM =============================================================
+REM AnyClaw LVGL Windows build script
+REM Prerequisite (optional MinGW): https://www.msys2.org
+REM Usage: run this file from cmd/powershell
+REM =============================================================
 
-set PROJECT_DIR=%~dp0..\..
-set BUILD_DIR=%PROJECT_DIR%\build-windows
+for %%I in ("%~dp0..\..") do set "PROJECT_DIR=%%~fI"
+set "BUILD_DIR=%PROJECT_DIR%\build-windows"
 set "CMAKE_BIN=cmake"
 set "GENERATOR="
 set "GEN_ARGS="
@@ -47,8 +45,7 @@ mkdir "%BUILD_DIR%"
 
 REM 2. Configure
 echo [2/3] Configuring...
-cd /d "%BUILD_DIR%"
-"%CMAKE_BIN%" "%PROJECT_DIR%" -G "%GENERATOR%" %GEN_ARGS% -DCMAKE_BUILD_TYPE=Release
+"%CMAKE_BIN%" -S "%PROJECT_DIR%" -B "%BUILD_DIR%" -G "%GENERATOR%" %GEN_ARGS% -DCMAKE_BUILD_TYPE=Release
 if errorlevel 1 (
     echo   X CMake configuration failed
     exit /b 1
@@ -57,9 +54,9 @@ if errorlevel 1 (
 REM 3. Build
 echo [3/3] Building...
 if /I "%GENERATOR%"=="Visual Studio 17 2022" (
-    "%CMAKE_BIN%" --build . --config Release -j %NUMBER_OF_PROCESSORS%
+    "%CMAKE_BIN%" --build "%BUILD_DIR%" --config Release -j %NUMBER_OF_PROCESSORS%
 ) else (
-    "%CMAKE_BIN%" --build . -j %NUMBER_OF_PROCESSORS%
+    "%CMAKE_BIN%" --build "%BUILD_DIR%" -j %NUMBER_OF_PROCESSORS%
 )
 if errorlevel 1 (
     echo   X Build failed
