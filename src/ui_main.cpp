@@ -185,6 +185,9 @@ static char g_profile_ai_skills[192] = "";
 static char g_profile_user_avatar[64] = "garlic";
 static bool g_remote_guard_armed = false;
 static char g_profile_ai_avatar[64] = "lobster";
+static bool g_gemma_install_opt_in = false;
+/* bit0=2B, bit1=9B, bit2=27B (multi-select) */
+static int g_gemma_model_mask = 0;
 
 /* ═══ Theme System (P2-4) ═══ */
 Theme g_theme = Theme::Dark;
@@ -716,6 +719,8 @@ void save_theme_config() {
         f << "  \"profile_ai_skills\": \"" << g_profile_ai_skills << "\",\n";
         f << "  \"profile_user_avatar\": \"" << g_profile_user_avatar << "\",\n";
         f << "  \"profile_ai_avatar\": \"" << g_profile_ai_avatar << "\",\n";
+        f << "  \"gemma_install_opt_in\": " << (g_gemma_install_opt_in ? 1 : 0) << ",\n";
+        f << "  \"gemma_model_mask\": " << g_gemma_model_mask << ",\n";
         f << "  \"remote_guard_armed\": " << (g_remote_guard_armed ? 1 : 0) << ",\n";
         f << "  \"model_name\": \"" << (g_selected_model[0] ? g_selected_model : "") << "\",\n";
         f << "  \"api_key\": \"" << (g_api_key[0] ? g_api_key : "") << "\"\n";
@@ -812,6 +817,10 @@ void load_theme_config() {
     json_extract_string(content.c_str(), "profile_ai_skills", g_profile_ai_skills, sizeof(g_profile_ai_skills));
     json_extract_string(content.c_str(), "profile_user_avatar", g_profile_user_avatar, sizeof(g_profile_user_avatar));
     json_extract_string(content.c_str(), "profile_ai_avatar", g_profile_ai_avatar, sizeof(g_profile_ai_avatar));
+    int gio = json_extract_int(content.c_str(), "gemma_install_opt_in", -1);
+    if (gio >= 0) g_gemma_install_opt_in = (gio == 1);
+    int gmm = json_extract_int(content.c_str(), "gemma_model_mask", -1);
+    if (gmm >= 0 && gmm <= 7) g_gemma_model_mask = gmm;
     int rg = json_extract_int(content.c_str(), "remote_guard_armed", -1);
     if (rg >= 0) g_remote_guard_armed = (rg == 1);
 
@@ -1051,6 +1060,11 @@ static lv_obj_t* mode_btn_remote_request = nullptr;
 static lv_obj_t* mode_btn_remote_accept = nullptr;
 static lv_obj_t* mode_btn_remote_reject = nullptr;
 static lv_obj_t* mode_btn_remote_disconnect = nullptr;
+static lv_obj_t* mode_sw_gemma_install = nullptr;
+static lv_obj_t* mode_cb_gemma_2b = nullptr;
+static lv_obj_t* mode_cb_gemma_9b = nullptr;
+static lv_obj_t* mode_cb_gemma_27b = nullptr;
+static lv_obj_t* mode_lbl_gemma_recommend = nullptr;
 static lv_obj_t* mode_profile_user_avatar_preview = nullptr;
 static lv_obj_t* mode_profile_user_text_preview = nullptr;
 static lv_obj_t* mode_profile_ai_avatar_preview = nullptr;
@@ -1619,13 +1633,101 @@ static void remote_disconnect_cb(lv_event_t* e) {
     update_remote_session_visuals();
 }
 
+static int get_total_ram_gb() {
+    MEMORYSTATUSEX ms = {};
+    ms.dwLength = sizeof(ms);
+    if (!GlobalMemoryStatusEx(&ms)) return 0;
+    return (int)(ms.ullTotalPhys / (1024ULL * 1024ULL * 1024ULL));
+}
+
+static int gemma_recommended_mask() {
+    int ram_gb = get_total_ram_gb();
+    if (ram_gb <= 0) return 1;     /* 2B */
+    if (ram_gb < 16) return 1;     /* 2B */
+    if (ram_gb < 32) return 2;     /* 9B */
+    return 4;                      /* 27B */
+}
+
+static const char* gemma_mask_to_text(int mask) {
+    if (mask == 0) return "none";
+    static char buf[64] = {0};
+    buf[0] = '\0';
+    if (mask & 1) strcat(buf, "2B");
+    if (mask & 2) strcat(buf, buf[0] ? ",9B" : "9B");
+    if (mask & 4) strcat(buf, buf[0] ? ",27B" : "27B");
+    return buf;
+}
+
+static void update_gemma_recommend_visuals() {
+    const int rec = gemma_recommended_mask();
+    if (mode_lbl_gemma_recommend) {
+        int ram_gb = get_total_ram_gb();
+        const char* rec_name = (rec == 4) ? "Gemma 4 27B" : ((rec == 2) ? "Gemma 4 9B" : "Gemma 4 2B");
+        lv_label_set_text_fmt(mode_lbl_gemma_recommend,
+                              "RAM: %d GB, recommended: %s\nSelected count: %d",
+                              ram_gb, rec_name,
+                              ((g_gemma_model_mask & 1) ? 1 : 0) + ((g_gemma_model_mask & 2) ? 1 : 0) + ((g_gemma_model_mask & 4) ? 1 : 0));
+    }
+    if (mode_cb_gemma_2b) {
+        if (g_gemma_install_opt_in) lv_obj_clear_state(mode_cb_gemma_2b, LV_STATE_DISABLED);
+        else lv_obj_add_state(mode_cb_gemma_2b, LV_STATE_DISABLED);
+        if (g_gemma_model_mask & 1) lv_obj_add_state(mode_cb_gemma_2b, LV_STATE_CHECKED);
+        else lv_obj_clear_state(mode_cb_gemma_2b, LV_STATE_CHECKED);
+    }
+    if (mode_cb_gemma_9b) {
+        if (g_gemma_install_opt_in) lv_obj_clear_state(mode_cb_gemma_9b, LV_STATE_DISABLED);
+        else lv_obj_add_state(mode_cb_gemma_9b, LV_STATE_DISABLED);
+        if (g_gemma_model_mask & 2) lv_obj_add_state(mode_cb_gemma_9b, LV_STATE_CHECKED);
+        else lv_obj_clear_state(mode_cb_gemma_9b, LV_STATE_CHECKED);
+    }
+    if (mode_cb_gemma_27b) {
+        if (g_gemma_install_opt_in) lv_obj_clear_state(mode_cb_gemma_27b, LV_STATE_DISABLED);
+        else lv_obj_add_state(mode_cb_gemma_27b, LV_STATE_DISABLED);
+        if (g_gemma_model_mask & 4) lv_obj_add_state(mode_cb_gemma_27b, LV_STATE_CHECKED);
+        else lv_obj_clear_state(mode_cb_gemma_27b, LV_STATE_CHECKED);
+    }
+}
+
+static void gemma_install_sw_cb(lv_event_t* e) {
+    lv_obj_t* sw = lv_event_get_target_obj(e);
+    if (!sw) return;
+    g_gemma_install_opt_in = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    if (g_gemma_install_opt_in && g_gemma_model_mask == 0) {
+        g_gemma_model_mask = gemma_recommended_mask();
+    } else if (!g_gemma_install_opt_in) {
+        g_gemma_model_mask = 0;
+    }
+    update_gemma_recommend_visuals();
+    save_theme_config();
+    LOG_I("GEMMA", "Local Gemma install opt-in=%d mask=%d", g_gemma_install_opt_in ? 1 : 0, g_gemma_model_mask);
+}
+
+static void gemma_model_checkbox_cb(lv_event_t* e) {
+    lv_obj_t* cb = lv_event_get_target_obj(e);
+    if (!cb) return;
+    int bit = 0;
+    if (cb == mode_cb_gemma_2b) bit = 1;
+    else if (cb == mode_cb_gemma_9b) bit = 2;
+    else if (cb == mode_cb_gemma_27b) bit = 4;
+    if (bit == 0) return;
+    if (lv_obj_has_state(cb, LV_STATE_CHECKED)) g_gemma_model_mask |= bit;
+    else g_gemma_model_mask &= ~bit;
+    if (g_gemma_install_opt_in && g_gemma_model_mask == 0) {
+        /* Keep at least one model selected when installation is enabled. */
+        g_gemma_model_mask = gemma_recommended_mask();
+    }
+    update_gemma_recommend_visuals();
+    save_theme_config();
+}
+
 static void update_work_mode_hint() {
     if (!mode_lbl_work_hint) return;
     const char* control = (g_control_mode == CONTROL_AI) ? "AI controls AnyClaw" : "User controls AnyClaw";
     const char* llm = "Gateway mode (OpenClaw, Direct API paused)";
-    lv_label_set_text_fmt(mode_lbl_work_hint, "Control: %s\nLLM Access: %s\nRemote Guard: %s\nUser: %s (%s)\nAI: %s (%s)",
+    lv_label_set_text_fmt(mode_lbl_work_hint, "Control: %s\nLLM Access: %s\nRemote Guard: %s\nLocal Gemma4: %s\nUser: %s (%s)\nAI: %s (%s)",
                           control, llm,
                           g_remote_guard_armed ? "Armed" : "Disarmed",
+                          g_gemma_install_opt_in ? "Enabled" : "Disabled",
                           profile_user_name(), g_profile_user_role[0] ? g_profile_user_role : "Owner",
                           profile_ai_name(), g_profile_ai_role[0] ? g_profile_ai_role : "Assistant");
 }
@@ -1919,6 +2021,7 @@ static void relayout_panels() {
     if (mode_dd_control) lv_obj_set_width(mode_dd_control, std::min(content_w - 16, SCALE(360)));
     if (mode_dd_llm) lv_obj_set_width(mode_dd_llm, std::min(content_w - 16, SCALE(360)));
     if (mode_lbl_work_hint) lv_obj_set_width(mode_lbl_work_hint, content_w - 16);
+    if (mode_lbl_gemma_recommend) lv_obj_set_width(mode_lbl_gemma_recommend, content_w - 16);
     int profile_w = std::min(content_w - 16, SCALE(520));
     if (mode_ta_user_name) lv_obj_set_width(mode_ta_user_name, profile_w);
     if (mode_ta_user_role) lv_obj_set_width(mode_ta_user_role, profile_w);
@@ -5749,6 +5852,52 @@ static void wizard_build_step_model_api() {
     lv_obj_set_style_text_font(g_wiz_api_ta, CJK_FONT, 0);
     lv_obj_set_style_pad_all(g_wiz_api_ta, 8, 0);
     lv_group_add_obj(lv_group_get_default(), g_wiz_api_ta);
+
+    /* ── Local Gemma 4 Installer Options (L3) ── */
+    lv_obj_t* div2 = lv_obj_create(g_wizard_content);
+    lv_obj_set_size(div2, LV_PCT(100), 1);
+    lv_obj_set_style_bg_color(div2, lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_border_width(div2, 0, 0);
+    lv_obj_clear_flag(div2, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* gemma_hint = lv_label_create(g_wizard_content);
+    lv_label_set_text(gemma_hint, "Optional: Install local Gemma 4 models");
+    lv_obj_set_style_text_color(gemma_hint, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(gemma_hint, CJK_FONT, 0);
+
+    lv_obj_t* gemma_sw_row = lv_obj_create(g_wizard_content);
+    lv_obj_set_size(gemma_sw_row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(gemma_sw_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(gemma_sw_row, 0, 0);
+    lv_obj_set_style_pad_all(gemma_sw_row, 0, 0);
+    lv_obj_set_style_pad_gap(gemma_sw_row, 8, 0);
+    lv_obj_set_flex_flow(gemma_sw_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(gemma_sw_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(gemma_sw_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* gemma_sw_label = lv_label_create(gemma_sw_row);
+    lv_label_set_text(gemma_sw_label, "Enable Gemma local install");
+    lv_obj_set_style_text_color(gemma_sw_label, g_colors->text, 0);
+    lv_obj_set_style_text_font(gemma_sw_label, CJK_FONT_SMALL, 0);
+
+    mode_sw_gemma_install = lv_switch_create(gemma_sw_row);
+    if (g_gemma_install_opt_in) lv_obj_add_state(mode_sw_gemma_install, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(mode_sw_gemma_install, gemma_install_sw_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    mode_cb_gemma_2b = lv_checkbox_create(g_wizard_content);
+    lv_checkbox_set_text(mode_cb_gemma_2b, "Gemma 4 2B (download)");
+    lv_obj_add_event_cb(mode_cb_gemma_2b, gemma_model_checkbox_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+    mode_cb_gemma_9b = lv_checkbox_create(g_wizard_content);
+    lv_checkbox_set_text(mode_cb_gemma_9b, "Gemma 4 9B (download)");
+    lv_obj_add_event_cb(mode_cb_gemma_9b, gemma_model_checkbox_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+    mode_cb_gemma_27b = lv_checkbox_create(g_wizard_content);
+    lv_checkbox_set_text(mode_cb_gemma_27b, "Gemma 4 27B (download)");
+    lv_obj_add_event_cb(mode_cb_gemma_27b, gemma_model_checkbox_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+    mode_lbl_gemma_recommend = lv_label_create(g_wizard_content);
+    lv_obj_set_style_text_color(mode_lbl_gemma_recommend, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(mode_lbl_gemma_recommend, CJK_FONT_SMALL, 0);
+    lv_label_set_long_mode(mode_lbl_gemma_recommend, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(mode_lbl_gemma_recommend, LV_PCT(100));
+    update_gemma_recommend_visuals();
 }
 
 /* ── Step 5: User Profile ── */
@@ -5826,7 +5975,7 @@ static void wizard_build_step_summary() {
     lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
 
     /* Build summary text */
-    static char summary_buf[1024];
+    static char summary_buf[1280];
 
     const char* lang_str = (g_wizard_lang_sel == 0) ? tr(W_CN) : tr(W_EN);
     const char* detect_str = g_wizard_openclaw_ok ? tr(W_DETECTED) : tr(W_NOTFOUND);
@@ -5846,14 +5995,17 @@ static void wizard_build_step_summary() {
         snprintf(tz_str, sizeof(tz_str), "UTC+8 (Asia/Shanghai)");
     }
 
+    const char* gemma_sw = g_gemma_install_opt_in ? "enabled" : "disabled";
+    const char* gemma_models = gemma_mask_to_text(g_gemma_model_mask);
     snprintf(summary_buf, sizeof(summary_buf),
-        "%s %s\n%s %s\n%s %s\n%s %s\n%s %s\n%s %s",
+        "%s %s\n%s %s\n%s %s\n%s %s\n%s %s\n%s %s\nGemma Local %s\nGemma Models %s",
         tr(W_LANG_LABEL), lang_str,
         tr(W_OC_LABEL), detect_str,
         tr(W_APIK_LABEL), api_str,
         tr(W_MODEL_LABEL), model_str,
         tr(W_NAME_LABEL), nick_str,
-        tr(W_TZ_HINT), tz_str);
+        tr(W_TZ_HINT), tz_str,
+        gemma_sw, gemma_models);
 
     g_wiz_summary_lbl = lv_label_create(box);
     lv_label_set_text(g_wiz_summary_lbl, summary_buf);
@@ -5898,15 +6050,18 @@ static void wizard_refresh_summary() {
         snprintf(tz_str, sizeof(tz_str), "UTC+8 (Asia/Shanghai)");
     }
 
-    static char buf[1024];
+    static char buf[1280];
+    const char* gemma_sw = g_gemma_install_opt_in ? "enabled" : "disabled";
+    const char* gemma_models = gemma_mask_to_text(g_gemma_model_mask);
     snprintf(buf, sizeof(buf),
-        "%s %s\n%s %s\n%s %s\n%s %s\n%s %s\n%s %s",
+        "%s %s\n%s %s\n%s %s\n%s %s\n%s %s\n%s %s\nGemma Local %s\nGemma Models %s",
         tr(W_LANG_LABEL), lang_str,
         tr(W_OC_LABEL), detect_str,
         tr(W_APIK_LABEL), api_str,
         tr(W_MODEL_LABEL), model_str,
         tr(W_NAME_LABEL), nick_str,
-        tr(W_TZ_HINT), tz_str);
+        tr(W_TZ_HINT), tz_str,
+        gemma_sw, gemma_models);
     lv_label_set_text(g_wiz_summary_lbl, buf);
 }
 
@@ -6562,6 +6717,53 @@ void app_ui_init() {
         mode_lbl_work_hint = aw_label_wrap_create(sec_runtime, "", LABEL_HINT, 100);
         lv_obj_set_style_text_color(mode_lbl_work_hint, c->text_dim, 0);
         update_work_mode_hint();
+
+        lv_obj_t* sec_gemma = aw_form_section_create(mode_panel_work, "Local Gemma 4 Install", card_w);
+        lv_obj_t* row_gemma_sw = lv_obj_create(sec_gemma);
+        lv_obj_set_width(row_gemma_sw, card_w - 24);
+        lv_obj_set_height(row_gemma_sw, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(row_gemma_sw, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(row_gemma_sw, 0, 0);
+        lv_obj_set_style_pad_all(row_gemma_sw, 0, 0);
+        lv_obj_set_style_pad_gap(row_gemma_sw, 8, 0);
+        lv_obj_set_flex_flow(row_gemma_sw, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(row_gemma_sw, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(row_gemma_sw, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* lbl_gemma_sw = lv_label_create(row_gemma_sw);
+        lv_label_set_text(lbl_gemma_sw, "Enable local Gemma 4 install");
+        lv_obj_set_style_text_color(lbl_gemma_sw, c->text, 0);
+        lv_obj_set_style_text_font(lbl_gemma_sw, CJK_FONT_SMALL, 0);
+
+        mode_sw_gemma_install = lv_switch_create(row_gemma_sw);
+        if (g_gemma_install_opt_in) lv_obj_add_state(mode_sw_gemma_install, LV_STATE_CHECKED);
+        lv_obj_set_style_bg_color(mode_sw_gemma_install, c->btn_secondary, 0);
+        lv_obj_set_style_bg_color(mode_sw_gemma_install, c->btn_action, LV_PART_INDICATOR | LV_STATE_CHECKED);
+        lv_obj_add_event_cb(mode_sw_gemma_install, gemma_install_sw_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+        mode_cb_gemma_2b = lv_checkbox_create(sec_gemma);
+        lv_checkbox_set_text(mode_cb_gemma_2b, "Gemma 4 2B (builtin in installer)");
+        lv_obj_set_style_text_color(mode_cb_gemma_2b, c->text, 0);
+        lv_obj_set_style_text_font(mode_cb_gemma_2b, CJK_FONT_SMALL, 0);
+        lv_obj_add_event_cb(mode_cb_gemma_2b, gemma_model_checkbox_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+        mode_cb_gemma_9b = lv_checkbox_create(sec_gemma);
+        lv_checkbox_set_text(mode_cb_gemma_9b, "Gemma 4 9B (network download)");
+        lv_obj_set_style_text_color(mode_cb_gemma_9b, c->text, 0);
+        lv_obj_set_style_text_font(mode_cb_gemma_9b, CJK_FONT_SMALL, 0);
+        lv_obj_add_event_cb(mode_cb_gemma_9b, gemma_model_checkbox_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+        mode_cb_gemma_27b = lv_checkbox_create(sec_gemma);
+        lv_checkbox_set_text(mode_cb_gemma_27b, "Gemma 4 27B (network download)");
+        lv_obj_set_style_text_color(mode_cb_gemma_27b, c->text, 0);
+        lv_obj_set_style_text_font(mode_cb_gemma_27b, CJK_FONT_SMALL, 0);
+        lv_obj_add_event_cb(mode_cb_gemma_27b, gemma_model_checkbox_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+        mode_lbl_gemma_recommend = aw_label_wrap_create(sec_gemma, "", LABEL_HINT, 100);
+        lv_obj_set_style_text_color(mode_lbl_gemma_recommend, c->text_dim, 0);
+        if (g_gemma_install_opt_in && g_gemma_model_mask == 0) g_gemma_model_mask = gemma_recommended_mask();
+        if (!g_gemma_install_opt_in) g_gemma_model_mask = 0;
+        update_gemma_recommend_visuals();
 
         mode_remote_warning_bar = lv_obj_create(sec_runtime);
         lv_obj_set_width(mode_remote_warning_bar, card_w - 24);
