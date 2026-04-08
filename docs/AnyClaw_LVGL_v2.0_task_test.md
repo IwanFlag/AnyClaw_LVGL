@@ -2111,6 +2111,52 @@ chat_cont (消息区域)
 
 ---
 
+## TASK-BUILD-TOOLCHAIN-01: 跨平台一键环境与编译打包工具
+
+**优先级：** P0  
+**状态：** ✅ 已完成（v1）  
+**完成时间：** 2026-04-09
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | 通用打包脚本（Windows full-runtime） | `tools/common/package_windows_full_runtime.ps1/.sh` | ✅ |
+| 2 | Windows 一键环境检查 | `tools/windows/setup-env.bat` | ✅ |
+| 3 | Windows 运行时依赖缓存（SDL2） | `tools/windows/fetch-runtime-deps.bat` | ✅ |
+| 4 | Windows 一键编译+打包 | `tools/windows/build-package.bat` | ✅ |
+| 5 | Linux 一键环境检查 | `tools/linux/setup-env.sh` | ✅ |
+| 6 | Linux->Windows 一键构建 | `tools/linux/build-win.sh` | ✅ |
+| 7 | Linux->Linux 一键构建 | `tools/linux/build-linux.sh` | ✅ |
+| 8 | 平台化产物目录规范 | `artifacts/README.md` | ✅ |
+
+### 验证
+- Windows 下 `tools\\windows\\build-package.bat` 已验证通过，产物输出到 `artifacts/windows-native/`。
+
+---
+
+## TASK-UI-HEADER-20260409: 顶部布局与设置关闭交互修复
+
+**优先级：** P0  
+**状态：** ✅ 已完成  
+**完成时间：** 2026-04-09
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | 右上角模式切换（Chat/Voice/Work）迁移至最小化按钮左侧 | `src/ui_main.cpp` | ✅ |
+| 2 | 右上角增加“设备”“设置”快捷按钮 | `src/ui_main.cpp` | ✅ |
+| 3 | Settings 页面新增显式关闭按钮 | `src/ui_settings.cpp` | ✅ |
+| 4 | API Key 输入框高度与单行输入统一 | `src/ui_main.cpp` | ✅ |
+| 5 | 恢复聊天上传按钮 | `src/ui_main.cpp` | ✅ |
+| 6 | FTP 长任务防重复点击（进行中禁点） | `src/ui_main.cpp` | ✅ |
+
+### 验证
+- Windows Release 构建通过。
+
+---
+
 ## TASK-INSTALL01: 向导安装进度可视化与可取消机制（2026-04-08）
 
 **优先级：** P0
