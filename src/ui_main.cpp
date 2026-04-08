@@ -951,9 +951,7 @@ static lv_obj_t* btn_minimize = nullptr;
 static lv_obj_t* btn_maximize = nullptr;
 static lv_obj_t* btn_close = nullptr;
 static lv_obj_t* top_mode_chat = nullptr;
-static lv_obj_t* top_mode_voice = nullptr;
 static lv_obj_t* top_mode_work = nullptr;
-static lv_obj_t* top_btn_device = nullptr;
 static lv_obj_t* top_btn_settings = nullptr;
 static lv_obj_t* lbl_maximize = nullptr;  /* Label inside maximize button, for icon swap */
 static bool g_maximized = false;          /* Track maximize state */
@@ -1147,6 +1145,7 @@ static UiMainMode g_ui_mode = UI_MODE_CHAT;
 /* chat_cont is declared above for early chat-history restore helpers */
 static lv_obj_t* btn_send_widget = nullptr; /* Send button */
 static lv_obj_t* btn_upload_widget = nullptr; /* Upload button */
+static lv_obj_t* btn_voice_widget = nullptr; /* Voice mode quick button */
 
 struct AttachmentQueueItem {
     std::string path;
@@ -2142,13 +2141,22 @@ static void apply_mode_switch_visuals() {
     paint_btn(mode_btn_voice, g_ui_mode == UI_MODE_VOICE);
     paint_btn(mode_btn_work, g_ui_mode == UI_MODE_WORK);
     paint_btn(top_mode_chat, g_ui_mode == UI_MODE_CHAT);
-    paint_btn(top_mode_voice, g_ui_mode == UI_MODE_VOICE);
     paint_btn(top_mode_work, g_ui_mode == UI_MODE_WORK);
+    if (top_mode_chat) {
+        lv_obj_t* lbl = lv_obj_get_child(top_mode_chat, 0);
+        if (lbl) lv_label_set_text(lbl, g_ui_mode == UI_MODE_WORK ? "切到Chat" : "切到Work");
+    }
 }
 
 static void mode_chat_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_CHAT; apply_mode_switch_visuals(); relayout_panels(); }
 static void mode_voice_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_VOICE; apply_mode_switch_visuals(); relayout_panels(); }
 static void mode_work_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_WORK; apply_mode_switch_visuals(); relayout_panels(); }
+static void mode_chat_work_toggle_cb(lv_event_t* e) {
+    (void)e;
+    g_ui_mode = (g_ui_mode == UI_MODE_WORK) ? UI_MODE_CHAT : UI_MODE_WORK;
+    apply_mode_switch_visuals();
+    relayout_panels();
+}
 
 static lv_obj_t* g_disclaimer_modal = nullptr;
 static lv_obj_t* g_exit_dialog_modal = nullptr;
@@ -2251,11 +2259,6 @@ void ui_relayout_all() {
             right_x -= side_w;
             lv_obj_set_size(top_btn_settings, side_w, wc_btn_h);
             lv_obj_set_pos(top_btn_settings, right_x, top_y);
-        }
-        if (top_btn_device) {
-            right_x -= (side_w + top_gap);
-            lv_obj_set_size(top_btn_device, side_w, wc_btn_h);
-            lv_obj_set_pos(top_btn_device, right_x, top_y);
         }
         if (mode_bar) {
             right_x -= (mode_w + top_gap);
@@ -2383,6 +2386,12 @@ static void relayout_panels() {
         int btn_gap = 6;
         lv_obj_set_pos(btn_upload_widget, content_w - CHAT_GAP - btn_size - btn_margin - btn_size - btn_gap, input_y + input_h - btn_size - btn_margin);
     }
+    if (btn_voice_widget) {
+        int btn_size = SCALE(20);
+        int btn_margin = 6;
+        int btn_gap = 6;
+        lv_obj_set_pos(btn_voice_widget, content_w - CHAT_GAP - btn_size - btn_margin - (btn_size + btn_gap) * 2, input_y + input_h - btn_size - btn_margin);
+    }
     /* Reposition search button: left of upload button */
     if (g_search_btn) {
         int btn_size = SCALE(20);
@@ -2390,6 +2399,7 @@ static void relayout_panels() {
         int btn_gap = 6;
         int base_x = content_w - CHAT_GAP - btn_size - btn_margin;
         if (btn_upload_widget) base_x -= (btn_size + btn_gap);
+        if (btn_voice_widget) base_x -= (btn_size + btn_gap);
         lv_obj_set_pos(g_search_btn, base_x - btn_size - btn_gap, input_y + input_h - btn_size - btn_margin);
     }
 
@@ -2964,6 +2974,9 @@ static void chat_input_resize_cb(lv_event_t* e) {
         }
         if (btn_upload_widget) {
             lv_obj_set_pos(btn_upload_widget, content_w - CHAT_GAP - 20 - 6 - 20 - 6, new_input_y + new_h - 20 - 6);
+        }
+        if (btn_voice_widget) {
+            lv_obj_set_pos(btn_voice_widget, content_w - CHAT_GAP - 20 - 6 - 20 - 6 - 20 - 6, new_input_y + new_h - 20 - 6);
         }
 
         int panel_h = content_h;
@@ -3958,6 +3971,9 @@ static void chat_input_reset_height() {
         }
         if (btn_upload_widget) {
             lv_obj_set_pos(btn_upload_widget, content_w - CHAT_GAP - 20 - 6 - 20 - 6, new_input_y + min_h - 20 - 6);
+        }
+        if (btn_voice_widget) {
+            lv_obj_set_pos(btn_voice_widget, content_w - CHAT_GAP - 20 - 6 - 20 - 6 - 20 - 6, new_input_y + min_h - 20 - 6);
         }
         int chat_y = chat_top_y_with_trace(content_w);
         int new_chat_h = content_h - chat_y - min_h - GAP;
@@ -5681,6 +5697,9 @@ void apply_theme_to_all() {
     if (btn_upload_widget) {
         lv_obj_set_style_bg_color(btn_upload_widget, c->btn_secondary, 0);
     }
+    if (btn_voice_widget) {
+        lv_obj_set_style_bg_color(btn_voice_widget, c->btn_secondary, 0);
+    }
     /* Search button */
     if (g_search_btn) {
         lv_obj_set_style_bg_color(g_search_btn, c->btn_secondary, 0);
@@ -6145,7 +6164,7 @@ static void create_title_bar(lv_obj_t* scr) {
 
         /* Right-top quick controls: mode switch + device + settings (left of minimize). */
         int top_gap = SCALE(6);
-        int mode_w = SCALE(180);
+        int mode_w = SCALE(110);
         int side_w = SCALE(68);
         int top_y = wc_btn_y;
         int right_x = wc_base_x - top_gap;
@@ -6158,16 +6177,6 @@ static void create_title_bar(lv_obj_t* scr) {
         right_x -= side_w;
         lv_obj_set_size(top_btn_settings, side_w, wc_btn_h);
         lv_obj_set_pos(top_btn_settings, right_x, top_y);
-
-        top_btn_device = create_top_small_btn("设备", [](lv_event_t* e) {
-            (void)e;
-            if (ui_settings_is_open()) return;
-            ui_settings_open();
-            ui_log("[UI] Device shortcut -> Settings");
-        });
-        right_x -= (side_w + top_gap);
-        lv_obj_set_size(top_btn_device, side_w, wc_btn_h);
-        lv_obj_set_pos(top_btn_device, right_x, top_y);
 
         mode_bar = lv_obj_create(title_bar);
         lv_obj_set_size(mode_bar, mode_w, wc_btn_h);
@@ -6199,9 +6208,8 @@ static void create_title_bar(lv_obj_t* scr) {
             lv_obj_center(lbl);
             return b;
         };
-        top_mode_chat = create_mode_btn("Chat", mode_chat_cb);
-        top_mode_voice = create_mode_btn("Voice", mode_voice_cb);
-        top_mode_work = create_mode_btn("Work", mode_work_cb);
+        top_mode_chat = create_mode_btn("切到Work", mode_chat_work_toggle_cb);
+        top_mode_work = top_mode_chat;
 
         /* Minimize button - 灰色 */
         btn_minimize = lv_button_create(title_bar);
@@ -7806,7 +7814,7 @@ void app_ui_init() {
 
     /* Mode switch moved to title-bar right side. Keep pointers for visual update logic. */
     mode_btn_chat = top_mode_chat;
-    mode_btn_voice = top_mode_voice;
+    mode_btn_voice = nullptr;
     mode_btn_work = top_mode_work;
 
     mode_panel_chat = lv_obj_create(pr);
@@ -8488,6 +8496,22 @@ void app_ui_init() {
         lv_label_set_text(upload_lbl, LV_SYMBOL_UPLOAD);
         lv_obj_set_style_text_color(upload_lbl, lv_color_make(255, 255, 255), 0);
         lv_obj_center(upload_lbl);
+
+        btn_voice_widget = lv_button_create(mode_panel_chat);
+        lv_obj_set_size(btn_voice_widget, btn_size, btn_size);
+        lv_obj_set_pos(btn_voice_widget, btn_x - (btn_size + 6) * 2, btn_y);
+        lv_obj_set_style_radius(btn_voice_widget, btn_size / 2, 0);
+        lv_obj_set_style_bg_color(btn_voice_widget, c->btn_secondary, 0);
+        lv_obj_set_style_bg_opa(btn_voice_widget, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(btn_voice_widget, 0, 0);
+        lv_obj_clear_flag(btn_voice_widget, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(btn_voice_widget, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+        lv_obj_add_event_cb(btn_voice_widget, mode_voice_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_add_event_cb(btn_voice_widget, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
+        lv_obj_t* voice_lbl = lv_label_create(btn_voice_widget);
+        lv_label_set_text(voice_lbl, "V");
+        lv_obj_set_style_text_color(voice_lbl, lv_color_make(255, 255, 255), 0);
+        lv_obj_center(voice_lbl);
 
         /* Track input text changes to update button state */
         lv_obj_add_event_cb(chat_input, chat_input_value_changed_for_btn_cb, LV_EVENT_VALUE_CHANGED, nullptr);
