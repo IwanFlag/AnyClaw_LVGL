@@ -36,6 +36,10 @@ void app_ui_init();
 void app_refresh_status();
 void update_ui_language();  /* Refresh all translatable UI text */
 void ui_log(const char* fmt, ...);  /* Append to log area */
+/* Long-task progress UI bridge (thread-safe) */
+void ui_progress_begin(const char* task, const char* step, int percent);
+void ui_progress_update(const char* task, const char* step, int percent);
+void ui_progress_finish(const char* task, bool ok, const char* result);
 /* Unified permission prompt: -1 unavailable, 0 deny, 1 allow once, 2 allow persist */
 int ui_permission_confirm(const char* perm_key, const char* target);
 

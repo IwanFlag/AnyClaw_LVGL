@@ -9,6 +9,7 @@
 #include <winhttp.h>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -897,6 +898,45 @@ static bool file_size_ok(const std::string& path, uint64_t min_bytes) {
     }
 }
 
+static bool install_nodejs_if_missing(char* output, int out_size) {
+    if (app_check_nodejs(nullptr, 0)) return true;
+#ifdef _WIN32
+    const char* temp = std::getenv("TEMP");
+    std::string installer = std::string(temp ? temp : ".") + "\\anyclaw_nodejs_installer.msi";
+    char cmd[2048];
+    char node_ver[64] = {0};
+    ui_progress_begin("Node.js Setup", "Node.js missing, starting download", 5);
+    for (int i = 0; nodejs_sources[i].name; i++) {
+        ui_progress_update("Node.js Setup", nodejs_sources[i].name, 10 + i * 20);
+        snprintf(cmd, sizeof(cmd),
+                 "curl -L --fail --retry 1 --connect-timeout 15 --speed-time 30 --speed-limit 1024 --max-time 1200 -o \"%s\" \"%s\"",
+                 installer.c_str(), nodejs_sources[i].url);
+        if (!exec_cmd(cmd, output, out_size, 25 * 60 * 1000) || !file_size_ok(installer, 5ull * 1024ull * 1024ull)) {
+            ui_log("[Setup] Node source %d failed/stalled, switching...", i + 1);
+            continue;
+        }
+        ui_progress_update("Node.js Setup", "Installing Node.js", 70);
+        snprintf(cmd, sizeof(cmd), "msiexec /i \"%s\" /qn /norestart", installer.c_str());
+        if (!exec_cmd(cmd, output, out_size, 20 * 60 * 1000)) {
+            ui_log("[Setup] Node installer failed on source %d", i + 1);
+            continue;
+        }
+        ui_progress_update("Node.js Setup", "Verifying node --version", 90);
+        if (app_check_nodejs(node_ver, sizeof(node_ver))) {
+            ui_progress_finish("Node.js Setup", true, "Node.js installed");
+            return true;
+        }
+    }
+    snprintf(output, out_size, "Node.js download/install failed from all sources");
+    ui_progress_finish("Node.js Setup", false, output);
+    return false;
+#else
+    snprintf(output, out_size, "Node.js auto-install is implemented for Windows only");
+    ui_progress_finish("Node.js Setup", false, output);
+    return false;
+#endif
+}
+
 static bool download_file_with_fallback(const char* primary_url,
                                         const char* secondary_url,
                                         const char* fallback_url,
@@ -933,9 +973,11 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
     if (!output || out_size <= 0) return false;
     output[0] = '\0';
 
-    /* Check Node.js first */
-    if (!app_check_nodejs(nullptr, 0)) {
-        snprintf(output, out_size, "Node.js not installed");
+    ui_progress_begin("OpenClaw Setup", "Pre-check environment", 3);
+
+    /* Check Node.js first; if missing, auto install */
+    if (!install_nodejs_if_missing(output, out_size)) {
+        ui_progress_finish("OpenClaw Setup", false, output);
         return false;
     }
 
@@ -944,9 +986,11 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
 
     /* Mode: local (bundled) */
     if (strcmp(mode, "local") == 0) {
+        ui_progress_update("OpenClaw Setup", "Installing from bundled package", 45);
         char tarball[256] = {0};
         if (!find_bundled_tarball(tarball, sizeof(tarball))) {
             snprintf(output, out_size, "Bundled OpenClaw package not found");
+            ui_progress_finish("OpenClaw Setup", false, output);
             return false;
         }
         snprintf(cmd, sizeof(cmd), "npm install -g \"%s\"", tarball);
@@ -962,6 +1006,7 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
             nullptr
         };
         for (int i = 0; registries[i]; i++) {
+            ui_progress_update("OpenClaw Setup", registries[i], 40 + i * 15);
             ui_log("[Setup] OpenClaw network source %d/3: %s", i + 1, registries[i]);
             snprintf(cmd, sizeof(cmd), "set \"npm_config_registry=%s\" && npm install -g openclaw", registries[i]);
             ok = exec_cmd(cmd, output, out_size, 8 * 60 * 1000);
@@ -978,6 +1023,7 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
             nullptr
         };
         for (int i = 0; registries[i]; i++) {
+            ui_progress_update("OpenClaw Setup", registries[i], 40 + i * 10);
             ui_log("[Setup] OpenClaw network source %d/3: %s", i + 1, registries[i]);
             snprintf(cmd, sizeof(cmd), "set \"npm_config_registry=%s\" && npm install -g openclaw", registries[i]);
             ok = exec_cmd(cmd, output, out_size, 8 * 60 * 1000);
@@ -987,6 +1033,7 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
 
         if (!ok) {
             LOG_W("Setup", "Network install failed, trying bundled...");
+            ui_progress_update("OpenClaw Setup", "Network failed, fallback to bundled", 75);
             char local_out[1024] = {0};
             ok = app_install_openclaw_ex(local_out, sizeof(local_out), "local");
             if (!ok && out_size > 0) {
@@ -998,8 +1045,10 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
     if (ok) {
         LOG_I("OpenClaw", "Install succeeded (%s)", mode);
         LOG_I("Setup", "OpenClaw installed (%s)", mode);
+        ui_progress_finish("OpenClaw Setup", true, "OpenClaw installed");
     } else {
         LOG_E("OpenClaw", "Install failed (%s): %s", mode, output);
+        ui_progress_finish("OpenClaw Setup", false, output[0] ? output : "OpenClaw install failed");
     }
     return ok;
 }
@@ -1018,6 +1067,7 @@ bool app_install_gemma_models(int model_mask, char* output, int out_size) {
     }
     if (!perm_check_exec(PermKey::EXEC_INSTALL, "gemma model download")) {
         snprintf(output, out_size, "DENY: exec_install permission blocked");
+        ui_progress_finish("Gemma Setup", false, output);
         return false;
     }
 
@@ -1032,11 +1082,14 @@ bool app_install_gemma_models(int model_mask, char* output, int out_size) {
     int ok_count = 0;
     int need_count = 0;
     char last_err[512] = {0};
+    ui_progress_begin("Gemma Setup", "Preparing model downloads", 5);
     for (int i = 0; i < 3; i++) {
         int bit = (1 << i);
         if ((model_mask & bit) == 0) continue;
         need_count++;
         std::string target = model_root + "\\" + kGemmaSources[i].file_name;
+        int base_pct = 10 + (need_count - 1) * 30;
+        ui_progress_update("Gemma Setup", kGemmaSources[i].name, base_pct);
         if (file_size_ok(target, 10ull * 1024ull * 1024ull)) {
             LOG_I("GEMMA", "%s already exists, skip: %s", kGemmaSources[i].name, target.c_str());
             ok_count++;
@@ -1054,6 +1107,7 @@ bool app_install_gemma_models(int model_mask, char* output, int out_size) {
         if (ok) {
             ok_count++;
             LOG_I("GEMMA", "Downloaded %s", kGemmaSources[i].name);
+            ui_progress_update("Gemma Setup", "Downloaded one model", base_pct + 25);
         } else {
             snprintf(last_err, sizeof(last_err), "%s", dl_out[0] ? dl_out : "download failed");
             LOG_E("GEMMA", "Download failed %s: %s", kGemmaSources[i].name, last_err);
@@ -1062,10 +1116,12 @@ bool app_install_gemma_models(int model_mask, char* output, int out_size) {
 
     if (ok_count == need_count) {
         snprintf(output, out_size, "Gemma download complete: %d/%d at %s", ok_count, need_count, model_root.c_str());
+        ui_progress_finish("Gemma Setup", true, output);
         return true;
     }
 
     snprintf(output, out_size, "Gemma partial/failed: %d/%d success, last_error=%s", ok_count, need_count, last_err);
+    ui_progress_finish("Gemma Setup", false, output);
     return false;
 }
 

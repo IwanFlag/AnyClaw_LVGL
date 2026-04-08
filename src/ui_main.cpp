@@ -1128,6 +1128,11 @@ static lv_obj_t* lp_separator = nullptr;
 static lv_obj_t* lp_task_title = nullptr;
 static lv_obj_t* lp_task_count = nullptr;  /* task count badge "(N)" */
 static lv_obj_t* lp_hint = nullptr;
+static lv_obj_t* lp_progress_panel = nullptr;
+static lv_obj_t* lp_progress_title = nullptr;
+static lv_obj_t* lp_progress_step = nullptr;
+static lv_obj_t* lp_progress_result = nullptr;
+static lv_obj_t* lp_progress_bar = nullptr;
 
 /* P2-3: Task list dynamic widgets */
 struct TaskItem {
@@ -1272,6 +1277,16 @@ struct PendingUiLogEntry {
 static std::mutex g_ui_log_queue_mtx;
 static std::deque<PendingUiLogEntry> g_ui_log_queue;
 static lv_timer_t* g_ui_log_flush_timer = nullptr;
+struct PendingProgressEvent {
+    int type; /* 0 begin/update, 1 finish */
+    bool ok;
+    int percent;
+    char task[96];
+    char step[192];
+    char result[192];
+};
+static std::mutex g_progress_queue_mtx;
+static std::deque<PendingProgressEvent> g_progress_queue;
 
 /* Log display refresh (no-op: UI panel not in main view) */
 static void log_refresh_display() { }
@@ -1303,6 +1318,29 @@ static void ui_log_flush_timer_cb(lv_timer_t* t) {
     (void)t;
     if (g_ui_thread_id != 0 && GetCurrentThreadId() == g_ui_thread_id) {
         ui_log_flush_pending();
+        std::deque<PendingProgressEvent> local;
+        {
+            std::lock_guard<std::mutex> lk(g_progress_queue_mtx);
+            if (!g_progress_queue.empty()) local.swap(g_progress_queue);
+        }
+        for (const auto& ev : local) {
+            if (!lp_progress_panel || !lp_progress_bar) continue;
+            lv_obj_clear_flag(lp_progress_panel, LV_OBJ_FLAG_HIDDEN);
+            if (lp_progress_title) lv_label_set_text_fmt(lp_progress_title, "Task: %s", ev.task[0] ? ev.task : "Long Task");
+            if (lp_progress_step) lv_label_set_text_fmt(lp_progress_step, "Step: %s", ev.step[0] ? ev.step : "Running...");
+            int pct = ev.percent;
+            if (pct < 0) pct = 0;
+            if (pct > 100) pct = 100;
+            lv_bar_set_value(lp_progress_bar, pct, LV_ANIM_ON);
+            if (lp_progress_result) {
+                if (ev.type == 1) {
+                    lv_label_set_text(lp_progress_result, ev.result[0] ? ev.result : (ev.ok ? "Done" : "Failed"));
+                    lv_obj_set_style_text_color(lp_progress_result, ev.ok ? lv_color_make(120, 220, 150) : lv_color_make(255, 120, 120), 0);
+                } else {
+                    lv_label_set_text(lp_progress_result, "");
+                }
+            }
+        }
     }
 }
 
@@ -1385,6 +1423,31 @@ void ui_log(const char* fmt, ...) {
     ui_log_flush_pending();
     ui_log_append_entry(timed, level);
     log_refresh_display();
+}
+
+static void enqueue_progress_event(int type, const char* task, const char* step, int percent, bool ok, const char* result) {
+    PendingProgressEvent ev{};
+    ev.type = type;
+    ev.ok = ok;
+    ev.percent = percent;
+    snprintf(ev.task, sizeof(ev.task), "%s", task ? task : "");
+    snprintf(ev.step, sizeof(ev.step), "%s", step ? step : "");
+    snprintf(ev.result, sizeof(ev.result), "%s", result ? result : "");
+    std::lock_guard<std::mutex> lk(g_progress_queue_mtx);
+    if (g_progress_queue.size() > 256) g_progress_queue.pop_front();
+    g_progress_queue.push_back(ev);
+}
+
+void ui_progress_begin(const char* task, const char* step, int percent) {
+    enqueue_progress_event(0, task, step, percent, true, "");
+}
+
+void ui_progress_update(const char* task, const char* step, int percent) {
+    enqueue_progress_event(0, task, step, percent, true, "");
+}
+
+void ui_progress_finish(const char* task, bool ok, const char* result) {
+    enqueue_progress_event(1, task, "", 100, ok, result ? result : "");
 }
 
 void update_ui_language();
@@ -2225,6 +2288,10 @@ static void relayout_panels() {
     if (lp_task_title) { lv_obj_set_width(lp_task_title, LEFT_PANEL_W - GAP * 5); lv_obj_set_x(lp_task_title, GAP); }
     if (lp_task_count) { lv_obj_set_x(lp_task_count, GAP + lv_obj_get_width(lp_task_title) + 4); }
     if (task_empty_label) { lv_obj_set_width(task_empty_label, LEFT_PANEL_W - GAP * 4); lv_obj_set_x(task_empty_label, GAP); }
+    if (lp_progress_panel) {
+        lv_obj_set_width(lp_progress_panel, LEFT_PANEL_W - GAP * 2);
+        lv_obj_align(lp_progress_panel, LV_ALIGN_BOTTOM_MID, 0, -SCALE(30));
+    }
 
     /* Resize + reposition task item widgets */
     for (int i = 0; i < g_task_count; i++) {
@@ -5085,6 +5152,16 @@ void apply_theme_to_all() {
     /* Status label colors */
     if (status_label) lv_obj_set_style_text_color(status_label, c->text_dim, 0);
     if (lp_panel_title) lv_obj_set_style_text_color(lp_panel_title, c->accent, 0);
+    if (lp_progress_panel) {
+        lv_obj_set_style_bg_color(lp_progress_panel, c->input_bg, 0);
+        lv_obj_set_style_border_color(lp_progress_panel, c->panel_border, 0);
+    }
+    if (lp_progress_title) lv_obj_set_style_text_color(lp_progress_title, c->text, 0);
+    if (lp_progress_step) lv_obj_set_style_text_color(lp_progress_step, c->text_dim, 0);
+    if (lp_progress_bar) {
+        lv_obj_set_style_bg_color(lp_progress_bar, c->panel, LV_PART_MAIN);
+        lv_obj_set_style_bg_color(lp_progress_bar, c->btn_action, LV_PART_INDICATOR);
+    }
     // version_label, port_label removed from main panel
 
     /* Chat area */
@@ -5915,9 +5992,11 @@ static void wiz_install_oc_cb(lv_event_t* e) {
     if (ok) {
         if (lbl) lv_label_set_text(lbl, tr(W_INIT_GATEWAY));
         lv_refr_now(NULL);
+        ui_progress_update("OpenClaw Setup", "Initializing gateway", 88);
         char init_out[512] = {0};
         ok = app_init_openclaw(init_out, sizeof(init_out));
         if (ok) g_wizard_oc_installed_now = true; /* Mark: OC installed this session */
+        ui_progress_finish("OpenClaw Setup", ok, ok ? "OpenClaw ready" : init_out);
     }
 
     if (ok && lbl) {
@@ -6884,6 +6963,45 @@ void app_ui_init() {
     static const I18n S_NO_TASKS_YET = {"No tasks yet", "暂无任务"};
     task_empty_label = create_styled_label(pl, tr(S_NO_TASKS_YET), c->text_dim, GAP * 2, empty_y, LEFT_PANEL_W - GAP * 4);
     lv_obj_set_style_text_font(task_empty_label, CJK_FONT_SMALL, 0);
+
+    /* Long task progress strip (download/install/other time-consuming operations) */
+    lp_progress_panel = lv_obj_create(pl);
+    lv_obj_set_size(lp_progress_panel, LEFT_PANEL_W - GAP * 2, SCALE(84));
+    lv_obj_align(lp_progress_panel, LV_ALIGN_BOTTOM_MID, 0, -SCALE(30));
+    lv_obj_set_style_bg_color(lp_progress_panel, c->input_bg, 0);
+    lv_obj_set_style_border_color(lp_progress_panel, c->panel_border, 0);
+    lv_obj_set_style_border_width(lp_progress_panel, 1, 0);
+    lv_obj_set_style_radius(lp_progress_panel, 8, 0);
+    lv_obj_set_style_pad_all(lp_progress_panel, 6, 0);
+    lv_obj_set_style_pad_gap(lp_progress_panel, 4, 0);
+    lv_obj_set_flex_flow(lp_progress_panel, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(lp_progress_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_clear_flag(lp_progress_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(lp_progress_panel, LV_OBJ_FLAG_HIDDEN);
+
+    lp_progress_title = lv_label_create(lp_progress_panel);
+    lv_label_set_text(lp_progress_title, "Task: -");
+    lv_obj_set_style_text_color(lp_progress_title, c->text, 0);
+    lv_obj_set_style_text_font(lp_progress_title, CJK_FONT_SMALL, 0);
+
+    lp_progress_step = lv_label_create(lp_progress_panel);
+    lv_label_set_text(lp_progress_step, "Step: -");
+    lv_obj_set_style_text_color(lp_progress_step, c->text_dim, 0);
+    lv_obj_set_style_text_font(lp_progress_step, CJK_FONT_SMALL, 0);
+
+    lp_progress_bar = lv_bar_create(lp_progress_panel);
+    lv_obj_set_width(lp_progress_bar, LV_PCT(100));
+    lv_obj_set_height(lp_progress_bar, SCALE(10));
+    lv_bar_set_range(lp_progress_bar, 0, 100);
+    lv_bar_set_value(lp_progress_bar, 0, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(lp_progress_bar, c->panel, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(lp_progress_bar, c->btn_action, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(lp_progress_bar, 999, 0);
+
+    lp_progress_result = lv_label_create(lp_progress_panel);
+    lv_label_set_text(lp_progress_result, "");
+    lv_obj_set_style_text_color(lp_progress_result, c->text_dim, 0);
+    lv_obj_set_style_text_font(lp_progress_result, CJK_FONT_SMALL, 0);
 
     /* Hint at bottom - centered, small font */
     lp_hint = lv_label_create(pl);
