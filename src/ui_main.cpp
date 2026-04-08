@@ -6669,8 +6669,9 @@ static void wizard_build_step_detect() {
         lv_obj_set_style_text_color(dl_label, g_colors->text_dim, 0);
         lv_obj_set_style_text_font(dl_label, CJK_FONT, 0);
 
-        /* Show both download sources */
+        /* Show download sources */
         const char* urls[] = {
+            "https://github.com/IwanFlag/AnyClaw_Tools/releases",
             "https://nodejs.org/",
             "https://registry.npmmirror.com/-/binary/node/",
             nullptr

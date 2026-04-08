@@ -221,8 +221,9 @@ bool selfcheck_fix(SelfCheckResult& result) {
         /* Store error for LVGL popup (shown after UI init) */
         g_startup_error_title = "AnyClaw - Node.js Required";
         g_startup_error = "Node.js is not installed or not in PATH.\n\n"
-                          "Please install Node.js from https://nodejs.org/\n"
-                          "and restart AnyClaw.";
+                          "Install from: https://github.com/IwanFlag/AnyClaw_Tools/releases\n"
+                          "Or: https://nodejs.org/\n"
+                          "Then restart AnyClaw.";
         fixed = false;
     }
 

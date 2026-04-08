@@ -246,7 +246,7 @@ bool migration_preflight_check(char* err_msg, int err_size) {
         fgets(buf, sizeof(buf), pipe);
         _pclose(pipe);
         if (buf[0] != 'v') {
-            if (err_msg) snprintf(err_msg, err_size, "Node.js not found. Install from https://nodejs.org/");
+            if (err_msg) snprintf(err_msg, err_size, "Node.js not found. Install from https://github.com/IwanFlag/AnyClaw_Tools/releases or https://nodejs.org/");
             return false;
         }
     }

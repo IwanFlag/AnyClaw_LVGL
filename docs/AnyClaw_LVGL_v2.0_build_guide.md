@@ -688,6 +688,7 @@ AnyClaw_LVGL_v2.x.x.zip
 OpenClaw 官方要求：Node 24（推荐）或 Node 22.14+（兼容）
 
 下载源：
+- GitHub (AnyClaw): https://github.com/IwanFlag/AnyClaw_Tools/releases
 - 主站：https://nodejs.org/
 - 国内镜像：https://registry.npmmirror.com/-/binary/node/
 

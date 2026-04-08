@@ -792,11 +792,13 @@ struct DownloadSource {
 
 static const DownloadSource nodejs_sources[] = {
 #ifdef _WIN32
+    {"GitHub (AnyClaw)", "https://github.com/IwanFlag/AnyClaw_Tools/releases/download/v1.0.0/node-v22.22.1-x64.msi"},
     {"nodejs.org",       "https://nodejs.org/dist/v22.22.1/node-v22.22.1-x64.msi"},
     {"npmmirror (CN)",   "https://registry.npmmirror.com/-/binary/node/v22.22.1/node-v22.22.1-x64.msi"},
     {"Tencent mirror",   "https://mirrors.cloud.tencent.com/nodejs-release/v22.22.1/node-v22.22.1-x64.msi"},
     {nullptr, nullptr}
 #else
+    {"GitHub (AnyClaw)", "https://github.com/IwanFlag/AnyClaw_Tools/releases/download/v1.0.0/node-v22.22.1-linux-x64.tar.xz"},
     {"nodejs.org",       "https://nodejs.org/dist/v22.22.1/node-v22.22.1-linux-x64.tar.xz"},
     {"npmmirror (CN)",   "https://registry.npmmirror.com/-/binary/node/v22.22.1/node-v22.22.1-linux-x64.tar.xz"},
     {"Tencent mirror",   "https://mirrors.cloud.tencent.com/nodejs-release/v22.22.1/node-v22.22.1-linux-x64.tar.xz"},
@@ -805,7 +807,7 @@ static const DownloadSource nodejs_sources[] = {
 };
 
 const char* app_get_nodejs_download_url() {
-    return nodejs_sources[0].url;
+    return nodejs_sources[0].url; /* GitHub (AnyClaw) */
 }
 
 /* Minimum Node.js major version required (OpenClaw needs 22.14+) */
@@ -1000,6 +1002,10 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
     char cmd[512];
     bool ok = false;
 
+    /* GitHub release URL for OpenClaw tgz (primary source) */
+    const char* github_openclaw_url =
+        "https://github.com/IwanFlag/AnyClaw_Tools/releases/download/v1.0.0/openclaw-2026.4.8.tgz";
+
     /* Mode: local (bundled) */
     if (strcmp(mode, "local") == 0) {
         ui_progress_update("OpenClaw Setup", "Installing from bundled package", 45);
@@ -1015,38 +1021,78 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
     }
     /* Mode: network */
     else if (strcmp(mode, "network") == 0) {
-        const char* registries[] = {
-            "https://registry.npmjs.org/",
-            "https://registry.npmmirror.com/",
-            "https://mirrors.cloud.tencent.com/npm/",
-            nullptr
-        };
-        for (int i = 0; registries[i]; i++) {
-            ui_progress_update("OpenClaw Setup", registries[i], 40 + i * 15);
-            ui_log("[Setup] OpenClaw network source %d/3: %s", i + 1, registries[i]);
-            snprintf(cmd, sizeof(cmd), "set \"npm_config_registry=%s\" && npm install -g openclaw", registries[i]);
-            ok = exec_cmd(cmd, output, out_size, 8 * 60 * 1000);
-            if (ok) break;
-            ui_log("[Setup] Source %d failed/timeout, auto switch next source", i + 1);
+        /* Try GitHub release first */
+        ui_progress_update("OpenClaw Setup", "GitHub release (AnyClaw)", 35);
+        {
+            const char* temp = std::getenv("TEMP");
+            std::string tgz_path = std::string(temp ? temp : ".") + "\\anyclaw_openclaw.tgz";
+            char dl_cmd[1024];
+            snprintf(dl_cmd, sizeof(dl_cmd),
+                     "curl -L --fail --retry 1 --connect-timeout 15 --max-time 600 -o \"%s\" \"%s\"",
+                     tgz_path.c_str(), github_openclaw_url);
+            if (exec_cmd(dl_cmd, output, out_size, 10 * 60 * 1000) && file_size_ok(tgz_path, 1ull * 1024ull * 1024ull)) {
+                snprintf(cmd, sizeof(cmd), "npm install -g \"%s\"", tgz_path.c_str());
+                ok = exec_cmd(cmd, output, out_size, 120000);
+                if (ok) ui_log("[Setup] OpenClaw installed from GitHub release");
+            }
+            if (!ok) ui_log("[Setup] GitHub source failed, falling back to npm registry...");
+        }
+        /* Fallback: npm registries */
+        if (!ok) {
+            const char* registries[] = {
+                "https://registry.npmjs.org/",
+                "https://registry.npmmirror.com/",
+                "https://mirrors.cloud.tencent.com/npm/",
+                nullptr
+            };
+            for (int i = 0; registries[i]; i++) {
+                ui_progress_update("OpenClaw Setup", registries[i], 40 + i * 15);
+                ui_log("[Setup] OpenClaw npm source %d/3: %s", i + 1, registries[i]);
+                snprintf(cmd, sizeof(cmd), "set \"npm_config_registry=%s\" && npm install -g openclaw", registries[i]);
+                ok = exec_cmd(cmd, output, out_size, 8 * 60 * 1000);
+                if (ok) break;
+                ui_log("[Setup] Source %d failed/timeout, auto switch next source", i + 1);
+            }
         }
     }
-    /* Mode: auto (network first, fallback to local) */
+    /* Mode: auto (GitHub → npm registries → bundled) */
     else {
-        const char* registries[] = {
-            "https://registry.npmjs.org/",
-            "https://registry.npmmirror.com/",
-            "https://mirrors.cloud.tencent.com/npm/",
-            nullptr
-        };
-        for (int i = 0; registries[i]; i++) {
-            ui_progress_update("OpenClaw Setup", registries[i], 40 + i * 10);
-            ui_log("[Setup] OpenClaw network source %d/3: %s", i + 1, registries[i]);
-            snprintf(cmd, sizeof(cmd), "set \"npm_config_registry=%s\" && npm install -g openclaw", registries[i]);
-            ok = exec_cmd(cmd, output, out_size, 8 * 60 * 1000);
-            if (ok) break;
-            ui_log("[Setup] Source %d failed/timeout, auto switch next source", i + 1);
+        /* Step 1: Try GitHub release */
+        ui_progress_update("OpenClaw Setup", "GitHub release (AnyClaw)", 30);
+        {
+            const char* temp = std::getenv("TEMP");
+            std::string tgz_path = std::string(temp ? temp : ".") + "\\anyclaw_openclaw.tgz";
+            char dl_cmd[1024];
+            snprintf(dl_cmd, sizeof(dl_cmd),
+                     "curl -L --fail --retry 1 --connect-timeout 15 --max-time 600 -o \"%s\" \"%s\"",
+                     tgz_path.c_str(), github_openclaw_url);
+            if (exec_cmd(dl_cmd, output, out_size, 10 * 60 * 1000) && file_size_ok(tgz_path, 1ull * 1024ull * 1024ull)) {
+                snprintf(cmd, sizeof(cmd), "npm install -g \"%s\"", tgz_path.c_str());
+                ok = exec_cmd(cmd, output, out_size, 120000);
+                if (ok) ui_log("[Setup] OpenClaw installed from GitHub release");
+            }
+            if (!ok) ui_log("[Setup] GitHub source failed, falling back to npm registry...");
         }
 
+        /* Step 2: Fallback to npm registries */
+        if (!ok) {
+            const char* registries[] = {
+                "https://registry.npmjs.org/",
+                "https://registry.npmmirror.com/",
+                "https://mirrors.cloud.tencent.com/npm/",
+                nullptr
+            };
+            for (int i = 0; registries[i]; i++) {
+                ui_progress_update("OpenClaw Setup", registries[i], 40 + i * 10);
+                ui_log("[Setup] OpenClaw npm source %d/3: %s", i + 1, registries[i]);
+                snprintf(cmd, sizeof(cmd), "set \"npm_config_registry=%s\" && npm install -g openclaw", registries[i]);
+                ok = exec_cmd(cmd, output, out_size, 8 * 60 * 1000);
+                if (ok) break;
+                ui_log("[Setup] Source %d failed/timeout, auto switch next source", i + 1);
+            }
+        }
+
+        /* Step 3: Fallback to bundled */
         if (!ok) {
             LOG_W("Setup", "Network install failed, trying bundled...");
             ui_progress_update("OpenClaw Setup", "Network failed, fallback to bundled", 75);

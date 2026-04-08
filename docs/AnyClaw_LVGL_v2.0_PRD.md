@@ -832,7 +832,7 @@ src/widgets/
 |--------|-----------|
 | Node.js | 弹窗提示安装（附下载链接） |
 | npm | 尝试自动修复 |
-| OpenClaw | 自动执行 `npm install -g openclaw` |
+| OpenClaw | GitHub Release优先下载 → `npm install -g openclaw`回退 |
 | 磁盘空间 | 检查可用空间 > 500MB |
 
 - 导入流程：
@@ -1360,7 +1360,7 @@ AnyClaw 启动时加载上次使用的工作区，Settings 中提供工作区切
 **步骤 2 - OpenClaw 安装**
 - 自动检测：Node.js 是否已安装、版本是否 ≥ 22.14
 - Node.js 缺失时自动下载安装（Windows MSI 静默安装）
-- 自动执行 `npm install -g openclaw`（支持多源自动切换）
+- 从 GitHub Release 下载 OpenClaw 安装包（优先）→ 回退到 `npm install -g openclaw`（支持多源自动切换）
 - 或用户指定已安装的 OpenClaw 路径
 
 **步骤 3 - 工作区设置**
