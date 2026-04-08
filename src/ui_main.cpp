@@ -1088,6 +1088,9 @@ static lv_obj_t* mode_ta_ftp_user = nullptr;
 static lv_obj_t* mode_ta_ftp_pass = nullptr;
 static lv_obj_t* mode_ta_ftp_remote = nullptr;
 static lv_obj_t* mode_ta_ftp_local = nullptr;
+static lv_obj_t* mode_btn_ftp_upload = nullptr;
+static lv_obj_t* mode_btn_ftp_download = nullptr;
+static lv_obj_t* mode_btn_ftp_cancel = nullptr;
 static lv_obj_t* mode_dd_control = nullptr;
 static lv_obj_t* mode_dd_llm = nullptr;
 static lv_obj_t* mode_lbl_work_hint = nullptr;
@@ -4217,6 +4220,9 @@ static void run_ftp_transfer(bool upload) {
         ui_log("[FTP] Transfer already running");
         return;
     }
+    if (mode_btn_ftp_upload) lv_obj_add_state(mode_btn_ftp_upload, LV_STATE_DISABLED);
+    if (mode_btn_ftp_download) lv_obj_add_state(mode_btn_ftp_download, LV_STATE_DISABLED);
+    if (mode_btn_ftp_cancel) lv_obj_clear_state(mode_btn_ftp_cancel, LV_STATE_DISABLED);
     g_ftp_cancel.store(false);
     FtpTransferConfig cfg;
     cfg.host = ta_text(mode_ta_ftp_host);
@@ -4240,6 +4246,9 @@ static void run_ftp_transfer(bool upload) {
             ui_log("[FTP] %s failed: %s", cfg.upload ? "Upload" : "Download", err.c_str());
         }
         g_ftp_running.store(false);
+        if (mode_btn_ftp_upload) lv_obj_clear_state(mode_btn_ftp_upload, LV_STATE_DISABLED);
+        if (mode_btn_ftp_download) lv_obj_clear_state(mode_btn_ftp_download, LV_STATE_DISABLED);
+        if (mode_btn_ftp_cancel) lv_obj_add_state(mode_btn_ftp_cancel, LV_STATE_DISABLED);
     }).detach();
 }
 
@@ -6076,6 +6085,7 @@ static void create_title_bar(lv_obj_t* scr) {
 
         top_btn_settings = create_top_small_btn("设置", [](lv_event_t* e) {
             (void)e;
+            if (ui_settings_is_open()) return;
             ui_settings_open();
         });
         right_x -= side_w;
@@ -6084,6 +6094,7 @@ static void create_title_bar(lv_obj_t* scr) {
 
         top_btn_device = create_top_small_btn("设备", [](lv_event_t* e) {
             (void)e;
+            if (ui_settings_is_open()) return;
             ui_settings_open();
             ui_log("[UI] Device shortcut -> Settings");
         });
@@ -6635,7 +6646,7 @@ static void wizard_build_step_detect() {
 
     /* ═══ 2. Network check ═══ */
     char net_resp[128] = {0};
-    int net_code = http_get("https://openrouter.ai/api/v1/models", net_resp, sizeof(net_resp), 8);
+    int net_code = http_get("https://openrouter.ai/api/v1/models", net_resp, sizeof(net_resp), 2);
     bool net_ok = (net_code > 0 && net_code < 500);
 
     wizard_add_status_row(g_wizard_content,
@@ -6860,7 +6871,7 @@ static void wizard_build_step_model_api() {
     lv_textarea_set_password_mode(g_wiz_api_ta, true);
     lv_textarea_set_placeholder_text(g_wiz_api_ta, "sk-or-...");
     lv_obj_set_width(g_wiz_api_ta, LV_PCT(100));
-    lv_obj_set_height(g_wiz_api_ta, 44);
+    lv_obj_set_height(g_wiz_api_ta, SCALE(34));
     lv_obj_set_style_bg_color(g_wiz_api_ta, g_colors->input_bg, 0);
     lv_obj_set_style_border_color(g_wiz_api_ta, g_colors->panel_border, 0);
     lv_obj_set_style_border_width(g_wiz_api_ta, 1, 0);
@@ -8089,12 +8100,13 @@ void app_ui_init() {
         lv_obj_set_flex_flow(ftp_row, LV_FLEX_FLOW_ROW_WRAP);
         lv_obj_set_flex_align(ftp_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_clear_flag(ftp_row, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_t* ftp_up = aw_btn_create(ftp_row, "FTP Upload", BTN_PRIMARY, SCALE(120), SCALE(34));
-        lv_obj_add_event_cb(ftp_up, work_ftp_upload_cb, LV_EVENT_CLICKED, nullptr);
-        lv_obj_t* ftp_down = aw_btn_create(ftp_row, "FTP Download", BTN_SECONDARY, SCALE(130), SCALE(34));
-        lv_obj_add_event_cb(ftp_down, work_ftp_download_cb, LV_EVENT_CLICKED, nullptr);
-        lv_obj_t* ftp_cancel = aw_btn_create(ftp_row, "Cancel FTP", BTN_DANGER, SCALE(120), SCALE(34));
-        lv_obj_add_event_cb(ftp_cancel, work_ftp_cancel_cb, LV_EVENT_CLICKED, nullptr);
+        mode_btn_ftp_upload = aw_btn_create(ftp_row, "FTP Upload", BTN_PRIMARY, SCALE(120), SCALE(34));
+        lv_obj_add_event_cb(mode_btn_ftp_upload, work_ftp_upload_cb, LV_EVENT_CLICKED, nullptr);
+        mode_btn_ftp_download = aw_btn_create(ftp_row, "FTP Download", BTN_SECONDARY, SCALE(130), SCALE(34));
+        lv_obj_add_event_cb(mode_btn_ftp_download, work_ftp_download_cb, LV_EVENT_CLICKED, nullptr);
+        mode_btn_ftp_cancel = aw_btn_create(ftp_row, "Cancel FTP", BTN_DANGER, SCALE(120), SCALE(34));
+        lv_obj_add_event_cb(mode_btn_ftp_cancel, work_ftp_cancel_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_add_state(mode_btn_ftp_cancel, LV_STATE_DISABLED);
     }
 
     /* Cursor-like trace panel (Chat mode): next step + script output */
@@ -8365,6 +8377,23 @@ void app_ui_init() {
         lv_label_set_text(send_lbl, LV_SYMBOL_RIGHT);
         lv_obj_set_style_text_color(send_lbl, lv_color_make(255, 255, 255), 0);
         lv_obj_center(send_lbl);
+
+        /* Restore upload button: left of send button */
+        btn_upload_widget = lv_button_create(mode_panel_chat);
+        lv_obj_set_size(btn_upload_widget, btn_size, btn_size);
+        lv_obj_set_pos(btn_upload_widget, btn_x - btn_size - 6, btn_y);
+        lv_obj_set_style_radius(btn_upload_widget, btn_size / 2, 0);
+        lv_obj_set_style_bg_color(btn_upload_widget, c->btn_secondary, 0);
+        lv_obj_set_style_bg_opa(btn_upload_widget, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(btn_upload_widget, 0, 0);
+        lv_obj_clear_flag(btn_upload_widget, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(btn_upload_widget, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+        lv_obj_add_event_cb(btn_upload_widget, upload_file_click_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_add_event_cb(btn_upload_widget, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
+        lv_obj_t* upload_lbl = lv_label_create(btn_upload_widget);
+        lv_label_set_text(upload_lbl, LV_SYMBOL_UPLOAD);
+        lv_obj_set_style_text_color(upload_lbl, lv_color_make(255, 255, 255), 0);
+        lv_obj_center(upload_lbl);
 
         /* Track input text changes to update button state */
         lv_obj_add_event_cb(chat_input, chat_input_value_changed_for_btn_cb, LV_EVENT_VALUE_CHANGED, nullptr);
