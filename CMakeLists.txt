@@ -108,6 +108,8 @@ set(APP_SOURCES
     src/lan_chat_protocol.cpp
     src/lan_chat_client.cpp
     src/ftp_client.cpp
+    src/remote_protocol.cpp
+    src/kb_store.cpp
 )
 
 set(APP_FONT_SOURCES

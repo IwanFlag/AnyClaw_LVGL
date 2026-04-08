@@ -13,6 +13,8 @@ struct FtpTransferConfig {
     std::string remote_path;
     std::string local_path;
     bool upload = false;
+    bool use_ftps = false;
+    bool recursive_upload = false;
 };
 
 using FtpProgressCallback = std::function<void(int percent, const char* step)>;

@@ -3,6 +3,9 @@
 #include <windows.h>
 #include <wininet.h>
 #include <cstdio>
+#include <algorithm>
+#include <filesystem>
+#include <vector>
 
 #pragma comment(lib, "wininet.lib")
 
@@ -37,45 +40,65 @@ bool ftp_transfer_file(const FtpTransferConfig& cfg,
         return false;
     }
 
-    const DWORD chunk = 32 * 1024;
+    constexpr DWORD chunk = 32 * 1024;
     bool ok = true;
     if (cfg.upload) {
-        HANDLE hLocal = CreateFileA(cfg.local_path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-        if (hLocal == INVALID_HANDLE_VALUE) {
-            error_out = "Cannot open local file for upload";
-            ok = false;
-        } else {
-            if (on_progress) on_progress(20, "Opening remote upload file");
-            HINTERNET hRemote = FtpOpenFileA(hFtp, cfg.remote_path.c_str(), GENERIC_WRITE, FTP_TRANSFER_TYPE_BINARY, 0);
+        auto upload_one = [&](const std::string& local_file, const std::string& remote_file, int base_pct, int range_pct) -> bool {
+            HANDLE hLocal = CreateFileA(local_file.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+            if (hLocal == INVALID_HANDLE_VALUE) {
+                error_out = "Cannot open local file for upload";
+                return false;
+            }
+            HINTERNET hRemote = FtpOpenFileA(hFtp, remote_file.c_str(), GENERIC_WRITE,
+                                             FTP_TRANSFER_TYPE_BINARY | (cfg.use_ftps ? INTERNET_FLAG_SECURE : 0), 0);
             if (!hRemote) {
+                CloseHandle(hLocal);
                 error_out = "FtpOpenFile upload failed";
+                return false;
+            }
+            uint64_t total = file_size_u64(local_file);
+            uint64_t sent = 0;
+            char buf[32768];
+            bool one_ok = true;
+            while (one_ok && !cancel_flag.load()) {
+                DWORD readn = 0;
+                if (!ReadFile(hLocal, buf, chunk, &readn, nullptr)) { error_out = "Read local file failed"; one_ok = false; break; }
+                if (readn == 0) break;
+                DWORD writen = 0;
+                if (!InternetWriteFile(hRemote, buf, readn, &writen) || writen != readn) { error_out = "InternetWriteFile failed"; one_ok = false; break; }
+                sent += writen;
+                int pct = (total > 0) ? (int)(base_pct + (sent * range_pct) / total) : (base_pct + range_pct);
+                if (pct > 95) pct = 95;
+                if (on_progress) on_progress(pct, "Uploading");
+            }
+            InternetCloseHandle(hRemote);
+            CloseHandle(hLocal);
+            return one_ok;
+        };
+
+        namespace fs = std::filesystem;
+        fs::path lp(cfg.local_path);
+        if (cfg.recursive_upload && fs::exists(lp) && fs::is_directory(lp)) {
+            std::vector<fs::path> files;
+            for (auto& p : fs::recursive_directory_iterator(lp)) {
+                if (p.is_regular_file()) files.push_back(p.path());
+            }
+            if (files.empty()) {
+                error_out = "Directory has no files";
                 ok = false;
             } else {
-                uint64_t total = file_size_u64(cfg.local_path);
-                uint64_t sent = 0;
-                char buf[chunk];
-                while (ok && !cancel_flag.load()) {
-                    DWORD readn = 0;
-                    if (!ReadFile(hLocal, buf, chunk, &readn, nullptr)) {
-                        error_out = "Read local file failed";
-                        ok = false;
-                        break;
-                    }
-                    if (readn == 0) break;
-                    DWORD writen = 0;
-                    if (!InternetWriteFile(hRemote, buf, readn, &writen) || writen != readn) {
-                        error_out = "InternetWriteFile failed";
-                        ok = false;
-                        break;
-                    }
-                    sent += writen;
-                    int pct = (total > 0) ? (int)(20 + (sent * 75) / total) : 80;
-                    if (pct > 95) pct = 95;
-                    if (on_progress) on_progress(pct, "Uploading");
+                int count = (int)files.size();
+                for (int i = 0; i < count && ok && !cancel_flag.load(); ++i) {
+                    fs::path rel = fs::relative(files[i], lp);
+                    std::string remote_file = cfg.remote_path;
+                    if (!remote_file.empty() && remote_file.back() != '/') remote_file += "/";
+                    remote_file += rel.generic_string();
+                    if (on_progress) on_progress(20 + (i * 70) / count, "Uploading directory");
+                    ok = upload_one(files[i].string(), remote_file, 20 + (i * 70) / count, std::max(1, 70 / count));
                 }
-                InternetCloseHandle(hRemote);
             }
-            CloseHandle(hLocal);
+        } else {
+            ok = upload_one(cfg.local_path, cfg.remote_path, 20, 75);
         }
     } else {
         if (on_progress) on_progress(20, "Opening remote download file");
@@ -89,7 +112,8 @@ bool ftp_transfer_file(const FtpTransferConfig& cfg,
             remote_total = li.QuadPart;
             InternetCloseHandle(hFind);
         }
-        HINTERNET hRemote = FtpOpenFileA(hFtp, cfg.remote_path.c_str(), GENERIC_READ, FTP_TRANSFER_TYPE_BINARY, 0);
+        HINTERNET hRemote = FtpOpenFileA(hFtp, cfg.remote_path.c_str(), GENERIC_READ,
+                                         FTP_TRANSFER_TYPE_BINARY | (cfg.use_ftps ? INTERNET_FLAG_SECURE : 0), 0);
         if (!hRemote) {
             error_out = "FtpOpenFile download failed";
             ok = false;
@@ -100,7 +124,7 @@ bool ftp_transfer_file(const FtpTransferConfig& cfg,
                 ok = false;
             } else {
                 uint64_t recv_total = 0;
-                char buf[chunk];
+                char buf[32768];
                 while (ok && !cancel_flag.load()) {
                     DWORD got = 0;
                     if (!InternetReadFile(hRemote, buf, chunk, &got)) {

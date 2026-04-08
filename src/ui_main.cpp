@@ -33,6 +33,8 @@
 #include "tracing.h"
 #include "lan_chat_client.h"
 #include "ftp_client.h"
+#include "remote_protocol.h"
+#include "kb_store.h"
 #include "cjk_font_data.h"
 #include "markdown.h"
 #include "widgets/aw_form.h"
@@ -1088,6 +1090,11 @@ static lv_obj_t* mode_ta_ftp_user = nullptr;
 static lv_obj_t* mode_ta_ftp_pass = nullptr;
 static lv_obj_t* mode_ta_ftp_remote = nullptr;
 static lv_obj_t* mode_ta_ftp_local = nullptr;
+static lv_obj_t* mode_sw_ftp_ftps = nullptr;
+static lv_obj_t* mode_sw_ftp_recursive = nullptr;
+static lv_obj_t* mode_ta_kb_source = nullptr;
+static lv_obj_t* mode_ta_kb_keyword = nullptr;
+static lv_obj_t* mode_ta_kb_result = nullptr;
 static lv_obj_t* mode_btn_ftp_upload = nullptr;
 static lv_obj_t* mode_btn_ftp_download = nullptr;
 static lv_obj_t* mode_btn_ftp_cancel = nullptr;
@@ -1769,10 +1776,10 @@ static void update_remote_session_visuals() {
 }
 
 static void remote_stub_prepare_auth_token() {
-    unsigned int now = (unsigned int)GetTickCount();
-    snprintf(g_remote_stub_auth_token, sizeof(g_remote_stub_auth_token), "tok-%08X-%04X",
-             now, (unsigned int)(g_remote_stub_session_seq & 0xFFFF));
-    g_remote_stub_auth_expire_tick = GetTickCount() + 120000; /* 2 minutes */
+    auto rec = RemoteProtocolManager::instance().create_session("work_mode", 120000);
+    snprintf(g_remote_stub_session_id, sizeof(g_remote_stub_session_id), "%s", rec.session_id.c_str());
+    snprintf(g_remote_stub_auth_token, sizeof(g_remote_stub_auth_token), "%s", rec.auth_token.c_str());
+    g_remote_stub_auth_expire_tick = (DWORD)rec.expire_tick;
 }
 
 static void remote_request_cb(lv_event_t* e) {
@@ -1784,13 +1791,14 @@ static void remote_request_cb(lv_event_t* e) {
         return;
     }
     if (g_remote_state != REMOTE_IDLE) return;
-    snprintf(g_remote_stub_session_id, sizeof(g_remote_stub_session_id), "stub-%06u", g_remote_stub_session_seq++);
     remote_stub_prepare_auth_token();
+    RemoteProtocolManager::instance().update_state(g_remote_stub_session_id, "requesting");
     g_remote_state = REMOTE_REQUESTING;
     update_remote_session_visuals();
     ui_log("[Remote] Session request sent (session=%s, token=%s, ttl=120s)",
            g_remote_stub_session_id, g_remote_stub_auth_token);
     g_remote_state = REMOTE_PENDING_ACCEPT;
+    RemoteProtocolManager::instance().update_state(g_remote_stub_session_id, "pending_accept");
     g_remote_session_left = 15;
     stop_remote_session_timer();
     g_remote_session_timer = lv_timer_create(remote_session_timer_cb, 1000, nullptr);
@@ -1801,10 +1809,18 @@ static void remote_accept_cb(lv_event_t* e) {
     (void)e;
     TraceSpan span("remote_accept", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "no-session");
     if (g_remote_state != REMOTE_PENDING_ACCEPT) return;
-    if (!g_remote_stub_auth_token[0] || GetTickCount() > g_remote_stub_auth_expire_tick) {
+    bool expired = false;
+    bool auth_ok = RemoteProtocolManager::instance().verify_token(
+        g_remote_stub_session_id,
+        g_remote_stub_auth_token,
+        "pending_accept",
+        &expired
+    );
+    if (!auth_ok) {
         span.set_fail();
-        ui_log("[Remote] Session accept failed: auth token expired");
+        ui_log("[Remote] Session accept failed: auth token %s", expired ? "expired" : "invalid");
         g_remote_state = REMOTE_IDLE;
+        RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
         g_remote_stub_session_id[0] = '\0';
         g_remote_stub_auth_token[0] = '\0';
         update_remote_session_visuals();
@@ -1812,6 +1828,7 @@ static void remote_accept_cb(lv_event_t* e) {
     }
     stop_remote_session_timer();
     g_remote_state = REMOTE_CONNECTED;
+    RemoteProtocolManager::instance().update_state(g_remote_stub_session_id, "connected");
     ui_log("[Remote] Session accepted and connected (session=%s, auth=ok, channel=stub)",
            g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
     update_remote_session_visuals();
@@ -1823,6 +1840,7 @@ static void remote_reject_cb(lv_event_t* e) {
     if (g_remote_state != REMOTE_PENDING_ACCEPT) return;
     stop_remote_session_timer();
     g_remote_state = REMOTE_IDLE;
+    RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
     ui_log("[Remote] Session rejected (session=%s)", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
     g_remote_stub_session_id[0] = '\0';
     g_remote_stub_auth_token[0] = '\0';
@@ -1834,6 +1852,7 @@ static void remote_disconnect_cb(lv_event_t* e) {
     TraceSpan span("remote_disconnect", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "no-session");
     stop_remote_session_timer();
     g_remote_state = REMOTE_IDLE;
+    RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
     ui_log("[Remote] Session disconnected (session=%s)", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
     g_remote_stub_session_id[0] = '\0';
     g_remote_stub_auth_token[0] = '\0';
@@ -3913,9 +3932,12 @@ static void work_lan_send_private_cb(lv_event_t* e);
 static void work_lan_create_group_cb(lv_event_t* e);
 static void work_lan_join_group_cb(lv_event_t* e);
 static void work_lan_send_group_cb(lv_event_t* e);
+static void work_lan_discover_cb(lv_event_t* e);
 static void work_ftp_upload_cb(lv_event_t* e);
 static void work_ftp_download_cb(lv_event_t* e);
 static void work_ftp_cancel_cb(lv_event_t* e);
+static void work_kb_add_source_cb(lv_event_t* e);
+static void work_kb_search_cb(lv_event_t* e);
 static void enqueue_attachment_card(const char* path, bool is_dir);
 
 /* Reset input box to single-line height after sending */
@@ -4215,6 +4237,23 @@ static void work_lan_send_group_cb(lv_event_t* e) {
     if (!g_lan_chat_client.send_group(group, msg)) ui_log("[LAN] Group send failed");
 }
 
+static void work_lan_discover_cb(lv_event_t* e) {
+    (void)e;
+    int port = atoi(ta_text(mode_ta_lan_port, "19999").c_str());
+    if (port <= 0) port = 19999;
+    auto hosts = g_lan_chat_client.discover_hosts((unsigned short)(port + 1), 1200);
+    if (hosts.empty()) {
+        ui_log("[LAN] No host discovered on UDP port %d", port + 1);
+        return;
+    }
+    std::string merged;
+    for (size_t i = 0; i < hosts.size(); ++i) {
+        if (i) merged += ", ";
+        merged += hosts[i];
+    }
+    ui_log("[LAN] Discovered hosts: %s", merged.c_str());
+}
+
 static void run_ftp_transfer(bool upload) {
     if (g_ftp_running.exchange(true)) {
         ui_log("[FTP] Transfer already running");
@@ -4232,6 +4271,8 @@ static void run_ftp_transfer(bool upload) {
     cfg.remote_path = ta_text(mode_ta_ftp_remote);
     cfg.local_path = ta_text(mode_ta_ftp_local);
     cfg.upload = upload;
+    cfg.use_ftps = mode_sw_ftp_ftps && lv_obj_has_state(mode_sw_ftp_ftps, LV_STATE_CHECKED);
+    cfg.recursive_upload = upload && mode_sw_ftp_recursive && lv_obj_has_state(mode_sw_ftp_recursive, LV_STATE_CHECKED);
     std::thread([cfg]() {
         ui_progress_begin("FTP Transfer", cfg.upload ? "Starting upload" : "Starting download", 3);
         std::string err;
@@ -4265,6 +4306,32 @@ static void work_ftp_download_cb(lv_event_t* e) {
 static void work_ftp_cancel_cb(lv_event_t* e) {
     (void)e;
     g_ftp_cancel.store(true);
+}
+
+static void work_kb_add_source_cb(lv_event_t* e) {
+    (void)e;
+    std::string p = ta_text(mode_ta_kb_source);
+    std::string err;
+    if (KbStore::instance().add_source_file(p.c_str(), err)) {
+        ui_log("[KB] Added source: %s (total=%d)", p.c_str(), KbStore::instance().doc_count());
+    } else {
+        ui_log("[KB] Add source failed: %s", err.c_str());
+    }
+}
+
+static void work_kb_search_cb(lv_event_t* e) {
+    (void)e;
+    if (!mode_ta_kb_result) return;
+    std::string kw = ta_text(mode_ta_kb_keyword);
+    auto hits = KbStore::instance().search_keyword(kw.c_str(), 8);
+    std::string out;
+    if (hits.empty()) out = "No hits.";
+    else {
+        for (size_t i = 0; i < hits.size(); ++i) {
+            out += "[" + std::to_string(i + 1) + "] " + hits[i].path + "\n";
+        }
+    }
+    lv_textarea_set_text(mode_ta_kb_result, out.c_str());
 }
 
 /* Update send button visual state based on input content */
@@ -6669,9 +6736,8 @@ static void wizard_build_step_detect() {
         lv_obj_set_style_text_color(dl_label, g_colors->text_dim, 0);
         lv_obj_set_style_text_font(dl_label, CJK_FONT, 0);
 
-        /* Show download sources */
+        /* Show both download sources */
         const char* urls[] = {
-            "https://github.com/IwanFlag/AnyClaw_Tools/releases",
             "https://nodejs.org/",
             "https://registry.npmmirror.com/-/binary/node/",
             nullptr
@@ -8055,6 +8121,8 @@ void app_ui_init() {
         lv_obj_add_event_cb(lan_btn_host, work_lan_start_host_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_t* lan_btn_conn = aw_btn_create(lan_row_a, "Connect", BTN_PRIMARY, SCALE(120), SCALE(34));
         lv_obj_add_event_cb(lan_btn_conn, work_lan_connect_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* lan_btn_discover = aw_btn_create(lan_row_a, "Discover", BTN_SECONDARY, SCALE(110), SCALE(34));
+        lv_obj_add_event_cb(lan_btn_discover, work_lan_discover_cb, LV_EVENT_CLICKED, nullptr);
         mode_ta_lan_to = aw_textarea_create(sec_lan, "Private to user", true, card_w - 24, SCALE(34));
         mode_ta_lan_group = aw_textarea_create(sec_lan, "Group name", true, card_w - 24, SCALE(34));
         mode_ta_lan_msg = aw_textarea_create(sec_lan, "LAN message", false, card_w - 24, SCALE(80));
@@ -8091,6 +8159,12 @@ void app_ui_init() {
         mode_ta_ftp_pass = aw_textarea_create(sec_ftp, "FTP password", true, card_w - 24, SCALE(34));
         mode_ta_ftp_remote = aw_textarea_create(sec_ftp, "Remote path", true, card_w - 24, SCALE(34));
         mode_ta_ftp_local = aw_textarea_create(sec_ftp, "Local file path", true, card_w - 24, SCALE(34));
+        mode_sw_ftp_ftps = lv_switch_create(sec_ftp);
+        lv_obj_t* ftp_ftps_lbl = lv_label_create(sec_ftp);
+        lv_label_set_text(ftp_ftps_lbl, "Use FTPS (secure)");
+        mode_sw_ftp_recursive = lv_switch_create(sec_ftp);
+        lv_obj_t* ftp_rec_lbl = lv_label_create(sec_ftp);
+        lv_label_set_text(ftp_rec_lbl, "Recursive upload (directory)");
         lv_obj_t* ftp_row = lv_obj_create(sec_ftp);
         lv_obj_set_width(ftp_row, card_w - 24);
         lv_obj_set_height(ftp_row, LV_SIZE_CONTENT);
@@ -8108,6 +8182,25 @@ void app_ui_init() {
         mode_btn_ftp_cancel = aw_btn_create(ftp_row, "Cancel FTP", BTN_DANGER, SCALE(120), SCALE(34));
         lv_obj_add_event_cb(mode_btn_ftp_cancel, work_ftp_cancel_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_add_state(mode_btn_ftp_cancel, LV_STATE_DISABLED);
+
+        lv_obj_t* sec_kb = aw_form_section_create(mode_panel_work, "Local Knowledge Base", card_w);
+        mode_ta_kb_source = aw_textarea_create(sec_kb, "Source file path", true, card_w - 24, SCALE(34));
+        mode_ta_kb_keyword = aw_textarea_create(sec_kb, "Search keyword", true, card_w - 24, SCALE(34));
+        lv_obj_t* kb_row = lv_obj_create(sec_kb);
+        lv_obj_set_width(kb_row, card_w - 24);
+        lv_obj_set_height(kb_row, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(kb_row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(kb_row, 0, 0);
+        lv_obj_set_style_pad_all(kb_row, 0, 0);
+        lv_obj_set_style_pad_gap(kb_row, 8, 0);
+        lv_obj_set_flex_flow(kb_row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(kb_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(kb_row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t* kb_add = aw_btn_create(kb_row, "Add Source", BTN_SECONDARY, SCALE(120), SCALE(34));
+        lv_obj_add_event_cb(kb_add, work_kb_add_source_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* kb_search = aw_btn_create(kb_row, "Search", BTN_PRIMARY, SCALE(100), SCALE(34));
+        lv_obj_add_event_cb(kb_search, work_kb_search_cb, LV_EVENT_CLICKED, nullptr);
+        mode_ta_kb_result = aw_textarea_create(sec_kb, "KB result", false, card_w - 24, SCALE(100));
     }
 
     /* Cursor-like trace panel (Chat mode): next step + script output */

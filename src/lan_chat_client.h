@@ -29,6 +29,7 @@ public:
     bool create_group(const std::string& group_name);
     bool join_group(const std::string& group_name);
     bool send_group(const std::string& group_name, const std::string& text);
+    std::vector<std::string> discover_hosts(unsigned short discovery_port, int timeout_ms);
 
     void set_event_callback(EventCallback cb);
 
@@ -47,7 +48,9 @@ private:
     std::atomic<bool> connected_{false};
     std::atomic<bool> stop_recv_{false};
     void* host_listen_sock_ = nullptr;
+    void* host_discovery_sock_ = nullptr;
     std::thread host_thread_;
+    std::thread host_discovery_thread_;
     std::mutex host_mtx_;
     std::vector<HostClient> host_clients_;
     std::vector<std::string> groups_;

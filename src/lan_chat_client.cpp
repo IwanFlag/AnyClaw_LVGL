@@ -70,8 +70,38 @@ bool LanChatClient::start_host(unsigned short port, std::string& err) {
         return false;
     }
     host_listen_sock_ = (void*)listen_sock;
+    SOCKET disc_sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (disc_sock != INVALID_SOCKET) {
+        sockaddr_in daddr{};
+        daddr.sin_family = AF_INET;
+        daddr.sin_port = htons((unsigned short)(port + 1));
+        daddr.sin_addr.s_addr = htonl(INADDR_ANY);
+        if (bind(disc_sock, (sockaddr*)&daddr, sizeof(daddr)) == 0) {
+            host_discovery_sock_ = (void*)disc_sock;
+        } else {
+            close_sock(disc_sock);
+        }
+    }
     hosting_.store(true);
     host_thread_ = std::thread([this]() { host_accept_loop(); });
+    if (host_discovery_sock_) {
+        host_discovery_thread_ = std::thread([this, port]() {
+            SOCKET ds = (SOCKET)host_discovery_sock_;
+            char buf[256];
+            while (hosting_.load()) {
+                sockaddr_in src{};
+                int slen = sizeof(src);
+                int n = recvfrom(ds, buf, sizeof(buf) - 1, 0, (sockaddr*)&src, &slen);
+                if (n <= 0) break;
+                buf[n] = '\0';
+                if (strstr(buf, "ANYCLAW_DISCOVER")) {
+                    char out[128] = {0};
+                    snprintf(out, sizeof(out), "ANYCLAW_HOST|%u", (unsigned int)port);
+                    sendto(ds, out, (int)strlen(out), 0, (sockaddr*)&src, slen);
+                }
+            }
+        });
+    }
     return true;
 }
 
@@ -81,7 +111,11 @@ void LanChatClient::stop_host() {
     SOCKET ls = (SOCKET)host_listen_sock_;
     host_listen_sock_ = nullptr;
     close_sock(ls);
+    SOCKET ds = (SOCKET)host_discovery_sock_;
+    host_discovery_sock_ = nullptr;
+    close_sock(ds);
     if (host_thread_.joinable()) host_thread_.join();
+    if (host_discovery_thread_.joinable()) host_discovery_thread_.join();
     std::lock_guard<std::mutex> lk(host_mtx_);
     for (auto& c : host_clients_) close_sock((SOCKET)c.sock);
     host_clients_.clear();
@@ -163,6 +197,40 @@ bool LanChatClient::join_group(const std::string& group_name) {
 
 bool LanChatClient::send_group(const std::string& group_name, const std::string& text) {
     return send_packet(lan_pack({"GROUP_MSG", nickname_, "", group_name, text}));
+}
+
+std::vector<std::string> LanChatClient::discover_hosts(unsigned short discovery_port, int timeout_ms) {
+    std::vector<std::string> out;
+    if (!ensure_wsa()) return out;
+    SOCKET s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (s == INVALID_SOCKET) return out;
+    BOOL b = TRUE;
+    setsockopt(s, SOL_SOCKET, SO_BROADCAST, (const char*)&b, sizeof(b));
+    DWORD to = (DWORD)std::max(50, timeout_ms);
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&to, sizeof(to));
+
+    sockaddr_in dst{};
+    dst.sin_family = AF_INET;
+    dst.sin_port = htons(discovery_port);
+    dst.sin_addr.s_addr = INADDR_BROADCAST;
+    const char* ping = "ANYCLAW_DISCOVER";
+    sendto(s, ping, (int)strlen(ping), 0, (sockaddr*)&dst, sizeof(dst));
+
+    char buf[256];
+    for (;;) {
+        sockaddr_in src{};
+        int slen = sizeof(src);
+        int n = recvfrom(s, buf, sizeof(buf) - 1, 0, (sockaddr*)&src, &slen);
+        if (n <= 0) break;
+        buf[n] = '\0';
+        if (!strstr(buf, "ANYCLAW_HOST|")) continue;
+        char ip[64] = {0};
+        InetNtopA(AF_INET, &src.sin_addr, ip, sizeof(ip));
+        std::string host = std::string(ip) + ":" + (buf + strlen("ANYCLAW_HOST|"));
+        if (std::find(out.begin(), out.end(), host) == out.end()) out.push_back(host);
+    }
+    close_sock(s);
+    return out;
 }
 
 void LanChatClient::recv_loop() {
