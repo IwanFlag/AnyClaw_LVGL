@@ -2,6 +2,7 @@
 #include "app.h"
 #include "app_log.h"
 #include "permissions.h"
+#include "tracing.h"
 #include <windows.h>
 #include <cstdio>
 #include <cstring>
@@ -168,6 +169,7 @@ static SessionManager g_session_mgr;
 SessionManager& session_mgr() { return g_session_mgr; }
 
 bool SessionManager::refresh() {
+    TraceSpan span("session_refresh");
     sessions_.clear();
     last_error_.clear();
 
@@ -180,6 +182,7 @@ bool SessionManager::refresh() {
     if (!ok || output[0] == '\0') {
         last_error_ = "Failed to query sessions";
         LOG_W("SESSION", "sessions.list returned empty or failed");
+        span.set_fail();
         return false;
     }
 
@@ -266,8 +269,10 @@ int SessionManager::active_count(long long threshold_ms) const {
 }
 
 bool SessionManager::abort_session(const char* session_key) {
+    TraceSpan span("session_abort", session_key ? session_key : "");
     if (!session_key || !session_key[0]) {
         last_error_ = "Invalid session key";
+        span.set_fail();
         return false;
     }
 
@@ -282,6 +287,7 @@ bool SessionManager::abort_session(const char* session_key) {
     if (!ok) {
         last_error_ = "Failed to execute session reset";
         LOG_W("SESSION", "Abort session '%s' failed: exec error", session_key);
+        span.set_fail();
         return false;
     }
 
@@ -290,6 +296,7 @@ bool SessionManager::abort_session(const char* session_key) {
 }
 
 bool SessionManager::abort_all() {
+    TraceSpan span("session_abort_all");
     char output[4096] = {0};
     bool ok = exec_cmd_local(
         "openclaw gateway call sessions.reset --json",
@@ -299,6 +306,7 @@ bool SessionManager::abort_all() {
     if (!ok) {
         last_error_ = "Failed to reset all sessions";
         LOG_W("SESSION", "Abort all sessions failed");
+        span.set_fail();
         return false;
     }
 

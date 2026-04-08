@@ -4,8 +4,10 @@
  * ═══════════════════════════════════════════════════════════════ */
 
 #include "selfcheck.h"
+#include "boot_check.h"
 #include "app.h"
 #include "app_log.h"
+#include "permissions.h"
 #include <windows.h>
 #include <cstdio>
 #include <cstring>
@@ -73,6 +75,13 @@ static bool run_cmd(const char* cmd, char* output, int out_size, DWORD timeout_m
 
 /* ── Check Node.js ── */
 static void check_nodejs(SelfCheckItem& item) {
+    if (!perm_check_exec(PermKey::EXEC_SHELL, "node --version")) {
+        item.ok = false;
+        strncpy(item.message, "Node.js check skipped (permission denied)", sizeof(item.message) - 1);
+        ui_log("[SelfCheck] Node.js: permission denied");
+        LOG_W("SELF", "Node.js: permission denied");
+        return;
+    }
     char output[256] = {0};
     if (run_cmd("node --version", output, sizeof(output)) && output[0]) {
         item.ok = true;
@@ -89,6 +98,13 @@ static void check_nodejs(SelfCheckItem& item) {
 
 /* ── Check npm ── */
 static void check_npm(SelfCheckItem& item) {
+    if (!perm_check_exec(PermKey::EXEC_SHELL, "npm --version")) {
+        item.ok = false;
+        strncpy(item.message, "npm check skipped (permission denied)", sizeof(item.message) - 1);
+        ui_log("[SelfCheck] npm: permission denied");
+        LOG_W("SELF", "npm: permission denied");
+        return;
+    }
     char output[256] = {0};
     if (run_cmd("npm --version", output, sizeof(output)) && output[0]) {
         item.ok = true;
@@ -212,8 +228,13 @@ bool selfcheck_fix(SelfCheckResult& result) {
 
     /* npm issues - try cache clean */
     if (!result.npm.ok && result.nodejs.ok) {
-        ui_log("[SelfCheck] Attempting: npm cache clean --force");
-        LOG_I("SELF", "Attempting: npm cache clean --force");
+        if (!perm_check_exec(PermKey::EXEC_SHELL, "npm cache clean --force")) {
+            ui_log("[SelfCheck] npm cache clean skipped (permission denied)");
+            LOG_W("SELF", "npm cache clean skipped (permission denied)");
+            fixed = false;
+        } else {
+            ui_log("[SelfCheck] Attempting: npm cache clean --force");
+            LOG_I("SELF", "Attempting: npm cache clean --force");
         char output[256] = {0};
         if (run_cmd("npm cache clean --force", output, sizeof(output), 10000)) {
             /* Re-check */
@@ -231,6 +252,7 @@ bool selfcheck_fix(SelfCheckResult& result) {
             LOG_W("SELF", "npm cache clean failed");
             fixed = false;
         }
+        }  /* else (permission allowed) */
     }
 
     /* Config dir issues - try to create */
@@ -284,4 +306,30 @@ bool selfcheck_run_and_fix() {
         selfcheck_fix(result);
     }
     return result.all_ok;
+}
+
+/* ── Comprehensive health check (BOOT-01) ── */
+std::string selfcheck_run_full() {
+    BootCheckManager mgr;
+    auto results = mgr.run_and_fix();
+
+    /* Build human-readable report */
+    std::string report;
+    for (const auto& r : results) {
+        const char* icon = "✓";
+        if (r.status == BootCheckStatus::Warn)  icon = "⚠";
+        if (r.status == BootCheckStatus::Error) icon = "✗";
+
+        report += icon;
+        report += " ";
+        report += r.check_name;
+        report += ": ";
+        report += r.message;
+        if (r.fix_applied) report += " [fixed]";
+        report += "\n";
+    }
+
+    report += "\n";
+    report += mgr.summarize(results);
+    return report;
 }

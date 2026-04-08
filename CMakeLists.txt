@@ -92,6 +92,7 @@ set(APP_SOURCES
     src/http_client.cpp
     src/autostart.cpp
     src/selfcheck.cpp
+    src/boot_check.cpp
     src/model_manager.cpp
     src/license.cpp
     src/migration.cpp
@@ -101,6 +102,7 @@ set(APP_SOURCES
     src/session_manager.cpp
     src/workspace.cpp
     src/permissions.cpp
+    src/tracing.cpp
 )
 
 set(APP_FONT_SOURCES

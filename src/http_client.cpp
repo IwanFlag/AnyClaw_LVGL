@@ -1,6 +1,7 @@
 #include "app.h"
 #include "app_log.h"
 #include "paths.h"
+#include "tracing.h"
 #include <windows.h>
 #include <winhttp.h>
 #include <cstdio>
@@ -159,12 +160,16 @@ static int http_request(const char* method, const char* url,
 
 /* Simple HTTP GET using WinHTTP */
 int http_get(const char* url, char* response, int resp_size, int timeout_sec) {
-    return http_request("GET", url, nullptr, 0, nullptr, response, resp_size, timeout_sec, nullptr, nullptr);
+    TraceSpan span("http_get", url ? url : "");
+    int result = http_request("GET", url, nullptr, 0, nullptr, response, resp_size, timeout_sec, nullptr, nullptr);
+    if (result < 0) span.set_fail();
+    return result;
 }
 
 /* HTTP POST with JSON body */
 int http_post(const char* url, const char* json_body, const char* api_key,
               char* response, int resp_size, int timeout_sec) {
+    TraceSpan span("http_post", url ? url : "");
     char headers[1024];
     if (api_key && api_key[0]) {
         snprintf(headers, sizeof(headers),
@@ -173,14 +178,17 @@ int http_post(const char* url, const char* json_body, const char* api_key,
         snprintf(headers, sizeof(headers), "Content-Type: application/json");
     }
     int body_len = json_body ? (int)strlen(json_body) : 0;
-    return http_request("POST", url, json_body, body_len, headers,
+    int result = http_request("POST", url, json_body, body_len, headers,
                         response, resp_size, timeout_sec, nullptr, nullptr);
+    if (result < 0) span.set_fail();
+    return result;
 }
 
 /* HTTP POST with SSE streaming — calls cb for each chunk received */
 int http_post_stream(const char* url, const char* json_body, const char* api_key,
                      void (*stream_cb)(const char* chunk, void* ctx), void* stream_ctx,
                      int timeout_sec) {
+    TraceSpan span("http_post_stream", url ? url : "");
     char headers[1024];
     if (api_key && api_key[0]) {
         snprintf(headers, sizeof(headers),
@@ -199,5 +207,6 @@ int http_post_stream(const char* url, const char* json_body, const char* api_key
                         nullptr, 0, timeout_sec, stream_cb, stream_ctx);
     DWORD elapsed = GetTickCount() - tick_start;
     LOG_I("HTTP", "SSE stream end: status=%d elapsed=%lums", result, elapsed);
+    if (result < 0) span.set_fail();
     return result;
 }

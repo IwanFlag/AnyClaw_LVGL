@@ -13,6 +13,7 @@
 #include "license.h"
 #include "workspace.h"
 #include "permissions.h"
+#include "feature_flags.h"
 #include "app_log.h"
 #include "SDL.h"
 #include "SDL_syswm.h"
@@ -668,6 +669,9 @@ int main(int argc, char* argv[]) {
             }
             workspace_sync_managed_sections();
             workspace_sync_runtime_config_from_permissions();
+
+            /* FLAG-01: Initialize feature flags */
+            feature_flags_init();
         }
     }
     if (!license_is_valid()) {

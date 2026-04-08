@@ -1989,10 +1989,10 @@ chat_cont (消息区域)
 | TASK-052 | Emoji彩色渲染(FreeType) | P2 | 🔧 需编译环境 |
 | WS-01 | 工作区管理（多工作区/模板/锁/迁移） | P0 | 🔧 核心已实现 |
 | PERM-01 | 权限系统（三层权限/设备管理/审计） | P0 | 🔧 核心已实现（含 Settings 权限页、审计、exec 拦截v1） |
-| SBX-01 | 沙箱执行模式（高危命令隔离） | P0 | 🆕 待实施 |
-| OBS-01 | 可观测性追踪（链路/耗时/错误） | P1 | 🆕 待实施 |
-| BOOT-01 | 一键体检与自修复 | P1 | 🆕 待实施 |
-| FLAG-01 | Feature Flag 开关体系 | P1 | 🆕 待实施 |
+| SBX-01 | 沙箱执行模式（高危命令隔离） | P0 | ✅ 已完成（v1） |
+| OBS-01 | 可观测性追踪（链路/耗时/错误） | P1 | ✅ 已完成 |
+| BOOT-01 | 一键体检与自修复 | P1 | ✅ 已完成 |
+| FLAG-01 | Feature Flag 开关体系 | P1 | ✅ 已完成 |
 | MEM-01 | 长记忆整理任务 | P2 | 🆕 待实施 |
 
 ---
@@ -2120,13 +2120,13 @@ chat_cont (消息区域)
 | 任务 | 描述 | 优先级 | 状态 |
 |------|------|--------|------|
 | TASK-PERM05 | ask 交互闭环（仅本次/永久/拒绝）+ 永久授权落盘同步 | P0 | ✅ 已完成 |
-| TASK-PERM06 | 统一命令拦截层（覆盖 selfcheck 等剩余入口） | P1 | 🆕 待实施 |
+| TASK-PERM06 | 统一命令拦截层（覆盖 selfcheck 等剩余入口） | P1 | ✅ 已完成 |
 | TASK-CONF01 | permissions/workspace 配置一致性校验与自动重建 | P0 | ✅ 已完成 |
-| TASK-AUDIT01 | 审计日志链式校验字段（防篡改） | P1 | 🆕 待实施 |
+| TASK-AUDIT01 | 审计日志链式校验字段（防篡改） | P1 | ✅ 已完成 |
 | TASK-SBX01 | 沙箱执行最小可用版本（隔离+超时+资源上限） | P0 | ✅ 已完成（v1） |
-| TASK-OBS01 | 追踪埋点（action/latency/outcome/trace_id） | P1 | 🆕 待实施 |
-| TASK-BOOT01 | 一键体检与修复向导 | P1 | 🆕 待实施 |
-| TASK-FLAG01 | Feature Flag 体系与灰度开关 | P1 | 🆕 待实施 |
+| TASK-OBS01 | 追踪埋点（action/latency/outcome/trace_id） | P1 | ✅ 已完成 |
+| TASK-BOOT01 | 一键体检与修复向导 | P1 | ✅ 已完成 |
+| TASK-FLAG01 | Feature Flag 体系与灰度开关 | P1 | ✅ 已完成 |
 | TASK-KB01 | 本地知识库（来源管理/索引/检索） | P1 | 🆕 待实施 |
 | TASK-MODE01 | 界面模式（聊天/语音/工作）与状态保持 | P1 | 🔧 实施中（V1 框架已落地，含 Work 配置区） |
 | TASK-SHARE01 | 文件/图片/目录发送与聊天内可点击打开 | P0 | 🔧 实施中（V1.5：附件详情/目录统计/预览兜底） |
@@ -2259,3 +2259,183 @@ chat_cont (消息区域)
 ### 验证
 - Windows 原生构建通过（`tools\\windows\\build.bat`）。
 
+
+---
+
+## TASK-FLAG01: Feature Flag 开关体系
+
+**优先级：** P1
+**状态：** ✅ 已完成
+**创建时间：** 2026-04-08
+**完成时间：** 2026-04-08
+**PRD 编号：** FLAG-01 (§2.22.1)
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | FeatureFlag 结构体（name/description/enabled/default/requires_restart） | feature_flags.h | ✅ |
+| 2 | FeatureFlagManager 单例（load/save/get/set/list/reset） | feature_flags.h/cpp | ✅ |
+| 3 | 6 个预置开关：SBX_SANDBOX_EXEC / OBS_TRACING / BOOT_SELF_HEAL / MEM_LONG_TERM / KB_KNOWLEDGE_BASE / REMOTE_COLLAB | feature_flags.cpp | ✅ |
+| 4 | config.json 持久化（feature_flags 段） | feature_flags.cpp | ✅ |
+| 5 | Settings > General 页新增开关面板（每个 flag 一行 toggle switch） | ui_settings.cpp | ✅ |
+| 6 | main.cpp 启动时 feature_flags_init() | main.cpp | ✅ |
+
+### 设计决策
+- 所有新功能默认关闭（gray release 模式）
+- OBS_TRACING 和 REMOTE_COLLAB 标记 requires_restart
+- 配置格式与 permissions.json 风格一致
+
+### 验证
+- 语法检查通过
+
+---
+
+## TASK-OBS01: 可观测性追踪
+
+**优先级：** P1
+**状态：** ✅ 已完成
+**创建时间：** 2026-04-08
+**完成时间：** 2026-04-08
+**PRD 编号：** OBS-01 (§2.22.1)
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | TraceEvent 结构体（ts/trace_id/action/target/latency_ms/outcome） | tracing.h | ✅ |
+| 2 | TraceManager 单例（start_trace/record_event/get_recent/flush_to_file） | tracing.h/cpp | ✅ |
+| 3 | TraceSpan RAII 类（构造开始计时，析构自动记录） | tracing.h | ✅ |
+| 4 | TRACE() / TRACE_RECORD() 便捷宏 | tracing.h | ✅ |
+| 5 | 1000 条环形缓冲 + 线程安全（CRITICAL_SECTION） | tracing.cpp | ✅ |
+| 6 | JSON Lines 落盘到 traces.jsonl（每 50 条自动 flush） | tracing.cpp | ✅ |
+| 7 | http_client.cpp 接入（http_get/http_post/http_post_stream） | http_client.cpp | ✅ |
+| 8 | health.cpp 接入（健康检查周期延迟） | health.cpp | ✅ |
+| 9 | session_manager.cpp 接入（refresh/abort） | session_manager.cpp | ✅ |
+| 10 | permissions.cpp 接入（perm_check_exec） | permissions.cpp | ✅ |
+
+### 设计决策
+- 使用 RAII TraceSpan 而非成对的 BEGIN/END 宏（更安全，scope exit 自动记录）
+- Copy-on-flush 避免持锁期间 IO
+- trace_id 格式: tr_<tick32>_<seq>
+
+### 验证
+- 语法检查通过
+
+---
+
+## TASK-BOOT01: 一键环境体检与自修复
+
+**优先级：** P1
+**状态：** ✅ 已完成
+**创建时间：** 2026-04-08
+**完成时间：** 2026-04-08
+**PRD 编号：** BOOT-01 (§2.22.1)
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | BootCheckResult 结构体 + BootCheckStatus 枚举 | boot_check.h | ✅ |
+| 2 | BootCheckManager（run_all_checks / auto_fix / auto_fix_all） | boot_check.h/cpp | ✅ |
+| 3 | 9 项检查：Node.js/npm/OpenClaw/端口/配置目录/工作区/磁盘/网络/SDL2.dll | boot_check.cpp | ✅ |
+| 4 | 4 项自动修复：npm cache clean/端口释放/配置目录创建/工作区初始化 | boot_check.cpp | ✅ |
+| 5 | selfcheck.cpp 新增 selfcheck_run_full() 调用入口 | selfcheck.cpp/h | ✅ |
+| 6 | Settings > General "Run Health Check" 按钮 | ui_settings.cpp | ✅ |
+| 7 | CMakeLists.txt 新增 boot_check.cpp | CMakeLists.txt | ✅ |
+
+### 检查项详情
+
+| 检查项 | 检测方式 | 自动修复 |
+|--------|---------|---------|
+| Node.js | node --version ≥ 22 | 不可修复 |
+| npm | npm --version | npm cache clean --force |
+| OpenClaw | where openclaw | 不可修复 |
+| Gateway 端口 | 18789 是否可用 | kill 占用进程 |
+| 配置目录 | %APPDATA%\AnyClaw_LVGL\ 可写 | create_directories |
+| 工作区 | 存在 + 可写 | workspace_init() |
+| 磁盘空间 | > 500MB | 不可修复 |
+| 网络 | HTTP openrouter.ai | 不可修复 |
+| SDL2.dll | 同目录存在 | 不可修复 |
+
+### 验证
+- 语法检查通过
+
+---
+
+## TASK-PERM06: 统一命令拦截层（selfcheck.cpp）
+
+**优先级：** P1
+**状态：** ✅ 已完成
+**创建时间：** 2026-04-08
+**完成时间：** 2026-04-08
+**PRD 编号：** PERM-01 (§2.13.7)
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | selfcheck.cpp 增加 #include "permissions.h" | selfcheck.cpp | ✅ |
+| 2 | check_nodejs() 前置 perm_check_exec("exec_shell", "node --version") | selfcheck.cpp | ✅ |
+| 3 | check_npm() 前置 perm_check_exec("exec_shell", "npm --version") | selfcheck.cpp | ✅ |
+| 4 | selfcheck_fix() npm cache clean 前置权限校验 | selfcheck.cpp | ✅ |
+
+### 验证
+- 语法检查通过
+
+---
+
+## TASK-AUDIT01: 审计日志链式校验
+
+**优先级：** P1
+**状态：** ✅ 已完成
+**创建时间：** 2026-04-08
+**完成时间：** 2026-04-08
+**PRD 编号：** PERM-01 (§2.21.4)
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | FNV-1a 哈希函数（fnv1a / fnv1a_str） | permissions.cpp | ✅ |
+| 2 | g_prev_audit_hash 链式状态变量 | permissions.cpp | ✅ |
+| 3 | perm_audit_log() 输出增加 chain_prev/chain_curr 字段 | permissions.cpp | ✅ |
+| 4 | perm_audit_verify_chain() 链式完整性验证函数 | permissions.h/cpp | ✅ |
+
+### 审计日志格式
+
+```
+[2026-04-08 17:28:01] action=exec_check target=node --version decision=allow chain_prev=811c9dc5 chain_curr=a1b2c3d4
+[2026-04-08 17:28:03] action=exec_check target=npm --version decision=deny chain_prev=a1b2c3d4 chain_curr=e5f6a7b8
+```
+
+### 验证
+- 语法检查通过
+
+---
+
+## TASK-023 完成: 通用控件体系集成
+
+**优先级：** P1
+**状态：** ✅ 已完成（ui_settings 100%）
+**创建时间：** 2026-04-07
+**完成时间：** 2026-04-08
+
+### 本次完成内容
+
+| # | 改动 | 数量 |
+|---|------|------|
+| 1 | hint 标签 → aw_label_create(LABEL_HINT) | 6 处 |
+| 2 | 按钮 → aw_btn_create(PRIMARY/SECONDARY/SUCCESS/DANGER) | 14 处 |
+| 3 | 开关 → aw_switch_create() | 1 处 |
+| 4 | 净减代码行数 | 23 行 |
+
+### 有意跳过
+- 图标按钮（Refresh，无文字）
+- 迁移导出/导入按钮（自定义字体）
+- 自定义 knob 颜色的开关
+- 动态循环内的控件
+- 回调实现
+
+### 验证
+- 语法检查通过

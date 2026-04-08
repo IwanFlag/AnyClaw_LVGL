@@ -114,4 +114,7 @@ bool perm_check_exec(PermKey key, const char* target);
 /* Audit log (APPDATA\\AnyClaw_LVGL\\audit.log) */
 void perm_audit_log(const char* action, const char* target, const char* decision);
 
+/* Verify audit log chain integrity. Returns true if unbroken. */
+bool perm_audit_verify_chain(std::string* error_out = nullptr);
+
 #endif /* PERMISSIONS_H */

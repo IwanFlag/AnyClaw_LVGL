@@ -4,6 +4,7 @@
 #include "app_log.h"
 #include "session_manager.h"
 #include "permissions.h"
+#include "tracing.h"
 #include <windows.h>
 #include <tlhelp32.h>
 #include <process.h>
@@ -159,6 +160,7 @@ static unsigned __stdcall health_thread(void* arg) {
         Sleep(g_refresh_interval_ms);
         if (!g_running) break;
 
+        TraceSpan span("health_check_cycle");
         DWORD tick_start = GetTickCount();
         bool nodeRunning = is_node_running();
         bool httpOk = check_http_health();

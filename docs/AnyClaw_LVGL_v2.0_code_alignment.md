@@ -6,9 +6,17 @@
 
 ---
 
-## 2026-04-07 更新摘要
+## 2026-04-08 更新摘要
 
-上次审计后新增实现：
+本轮新增实现：
+- FLAG-01 Feature Flag 开关体系（feature_flags.h/cpp + Settings UI）
+- OBS-01 可观测性追踪（tracing.h/cpp + 4 模块接入）
+- BOOT-01 一键环境体检与自修复（boot_check.h/cpp + 9 项检查 + 4 项修复）
+- TASK-PERM06 selfcheck.cpp 权限拦截
+- TASK-AUDIT01 审计日志 FNV-1a 链式校验
+- TASK-023 通用控件体系 ui_settings 集成完成（23 处 aw_* 替换）
+
+上次 2026-04-07 审计：
 - TASK-027b 会话管理（SessionManager + abort按钮）
 - SF-01 聊天搜索功能
 - CMakeLists.txt 完整编译配置
@@ -67,6 +75,12 @@
 | 47 | 日志导出/清除 | 2.4.6 | P1 | `ui_settings.cpp` log_export_cb / log_clear_cb | 导出到Documents, 清除写入标记 |
 | 48 | 右键上下文菜单 | - | - | `ui_main.cpp` chat_input_right_click_cb | Copy/Cut/Paste/Select All |
 | 49 | 首次启动法律声明 | - | - | `ui_main.cpp` show_disclaimer | accepted.json持久化 |
+| 50 | Feature Flag 开关体系 | FLAG-01 | P1 | `feature_flags.h/cpp` + `ui_settings.cpp` | 6个预置开关，默认关闭，config.json持久化 |
+| 51 | 可观测性追踪 | OBS-01 | P1 | `tracing.h/cpp` | TraceSpan RAII，1000条环形缓冲，JSON Lines落盘 |
+| 52 | 一键环境体检 | BOOT-01 | P1 | `boot_check.h/cpp` + `selfcheck.cpp` | 9项检查+4项自动修复 |
+| 53 | selfcheck 权限拦截 | PERM-06 | P1 | `selfcheck.cpp` | node/npm/cache clean 前置 perm_check_exec |
+| 54 | 审计链式校验 | AUDIT-01 | P1 | `permissions.h/cpp` | FNV-1a chain_prev/chain_curr |
+| 55 | 通用控件集成完成 | WIDGET-01 | P1 | `ui_settings.cpp` | 23处 aw_* 替换完成 |
 
 ---
 

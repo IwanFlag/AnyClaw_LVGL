@@ -26,4 +26,8 @@ bool selfcheck_fix(SelfCheckResult& result);
 /* Convenience: run + fix + log */
 bool selfcheck_run_and_fix();
 
+/* Comprehensive health check (BOOT-01) — runs BootCheckManager, auto-fixes,
+   returns formatted report string suitable for display. */
+std::string selfcheck_run_full();
+
 #endif /* SELFCHECK_H */
