@@ -12,6 +12,7 @@
 #include <cstdarg>
 #include <string>
 #include <vector>
+#include <thread>
 #include <fstream>
 #include <filesystem>
 #include <windows.h>
@@ -1718,6 +1719,19 @@ static void gemma_model_checkbox_cb(lv_event_t* e) {
     }
     update_gemma_recommend_visuals();
     save_theme_config();
+}
+
+static void start_gemma_install_async(int model_mask) {
+    std::thread([model_mask]() {
+        char out[1024] = {0};
+        ui_log("[Gemma] Installer started. mask=%d", model_mask);
+        bool ok = app_install_gemma_models(model_mask, out, sizeof(out));
+        if (ok) {
+            ui_log("[Gemma] %s", out);
+        } else {
+            ui_log("[Gemma] Install failed: %s", out[0] ? out : "unknown error");
+        }
+    }).detach();
 }
 
 static void update_work_mode_hint() {
@@ -6250,6 +6264,10 @@ static void wizard_next_cb(lv_event_t* e) {
         }
         save_wizard_completed();
         save_theme_config();
+
+        if (g_gemma_install_opt_in && g_gemma_model_mask != 0) {
+            start_gemma_install_async(g_gemma_model_mask);
+        }
 
         /* Sync model + API key to Gateway */
         if (g_selected_model[0]) {

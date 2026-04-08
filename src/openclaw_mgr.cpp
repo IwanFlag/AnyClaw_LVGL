@@ -845,6 +845,78 @@ static bool find_bundled_tarball(char* path_out, int out_size) {
     return false;
 }
 
+struct GemmaSource {
+    const char* name;
+    const char* mirror_url;
+    const char* official_url;
+    const char* file_name;
+};
+
+static const GemmaSource kGemmaSources[] = {
+    {
+        "Gemma 4 2B",
+        "https://hf-mirror.com/bartowski/google_gemma-2-2b-it-GGUF/resolve/main/google_gemma-2-2b-it-Q4_K_M.gguf",
+        "https://huggingface.co/bartowski/google_gemma-2-2b-it-GGUF/resolve/main/google_gemma-2-2b-it-Q4_K_M.gguf",
+        "gemma-2-2b-it-q4_k_m.gguf"
+    },
+    {
+        "Gemma 4 9B",
+        "https://hf-mirror.com/bartowski/google_gemma-2-9b-it-GGUF/resolve/main/google_gemma-2-9b-it-Q4_K_M.gguf",
+        "https://huggingface.co/bartowski/google_gemma-2-9b-it-GGUF/resolve/main/google_gemma-2-9b-it-Q4_K_M.gguf",
+        "gemma-2-9b-it-q4_k_m.gguf"
+    },
+    {
+        "Gemma 4 27B",
+        "https://hf-mirror.com/bartowski/google_gemma-2-27b-it-GGUF/resolve/main/google_gemma-2-27b-it-Q4_K_M.gguf",
+        "https://huggingface.co/bartowski/google_gemma-2-27b-it-GGUF/resolve/main/google_gemma-2-27b-it-Q4_K_M.gguf",
+        "gemma-2-27b-it-q4_k_m.gguf"
+    }
+};
+
+static bool ensure_parent_dir(const std::string& path) {
+    try {
+        fs::create_directories(fs::path(path).parent_path());
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+static bool file_size_ok(const std::string& path, uint64_t min_bytes) {
+    try {
+        if (!fs::exists(path) || fs::is_directory(path)) return false;
+        return fs::file_size(path) >= min_bytes;
+    } catch (...) {
+        return false;
+    }
+}
+
+static bool download_file_with_fallback(const char* primary_url,
+                                        const char* fallback_url,
+                                        const char* target_path,
+                                        char* output, int out_size) {
+    if (!primary_url || !fallback_url || !target_path) return false;
+    if (!ensure_parent_dir(target_path)) {
+        snprintf(output, out_size, "Cannot create model directory");
+        return false;
+    }
+
+    const char* urls[2] = {primary_url, fallback_url};
+    char cmd[2048];
+    for (int i = 0; i < 2; i++) {
+        snprintf(cmd, sizeof(cmd),
+                 "curl -L --fail --retry 2 --connect-timeout 15 --max-time 0 -o \"%s\" \"%s\"",
+                 target_path, urls[i]);
+        if (exec_cmd(cmd, output, out_size, 4 * 60 * 60 * 1000)) {
+            if (file_size_ok(target_path, 10ull * 1024ull * 1024ull)) {
+                return true;
+            }
+            snprintf(output, out_size, "Downloaded file too small, possible incomplete: %s", target_path);
+        }
+    }
+    return false;
+}
+
 /* ── Install OpenClaw ──────────────────────────────────────── */
 /* mode: "network" = npm registry, "local" = bundled tarball, "auto" = try network then fallback */
 bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
@@ -905,6 +977,65 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
 /* Simple wrapper: try network, fallback to local */
 bool app_install_openclaw(char* output, int out_size) {
     return app_install_openclaw_ex(output, out_size, "auto");
+}
+
+bool app_install_gemma_models(int model_mask, char* output, int out_size) {
+    if (!output || out_size <= 0) return false;
+    output[0] = '\0';
+    if (model_mask <= 0 || model_mask > 7) {
+        snprintf(output, out_size, "Invalid model mask: %d", model_mask);
+        return false;
+    }
+    if (!perm_check_exec(PermKey::EXEC_INSTALL, "gemma model download")) {
+        snprintf(output, out_size, "DENY: exec_install permission blocked");
+        return false;
+    }
+
+    const char* userprofile = std::getenv("USERPROFILE");
+    if (!userprofile) {
+        snprintf(output, out_size, "USERPROFILE not found");
+        return false;
+    }
+    std::string model_root = std::string(userprofile) + "\\.anyclaw\\models\\gemma";
+    try { fs::create_directories(model_root); } catch (...) {}
+
+    int ok_count = 0;
+    int need_count = 0;
+    char last_err[512] = {0};
+    for (int i = 0; i < 3; i++) {
+        int bit = (1 << i);
+        if ((model_mask & bit) == 0) continue;
+        need_count++;
+        std::string target = model_root + "\\" + kGemmaSources[i].file_name;
+        if (file_size_ok(target, 10ull * 1024ull * 1024ull)) {
+            LOG_I("GEMMA", "%s already exists, skip: %s", kGemmaSources[i].name, target.c_str());
+            ok_count++;
+            continue;
+        }
+        LOG_I("GEMMA", "Downloading %s to %s", kGemmaSources[i].name, target.c_str());
+        char dl_out[512] = {0};
+        bool ok = download_file_with_fallback(
+            kGemmaSources[i].mirror_url,
+            kGemmaSources[i].official_url,
+            target.c_str(),
+            dl_out, sizeof(dl_out)
+        );
+        if (ok) {
+            ok_count++;
+            LOG_I("GEMMA", "Downloaded %s", kGemmaSources[i].name);
+        } else {
+            snprintf(last_err, sizeof(last_err), "%s", dl_out[0] ? dl_out : "download failed");
+            LOG_E("GEMMA", "Download failed %s: %s", kGemmaSources[i].name, last_err);
+        }
+    }
+
+    if (ok_count == need_count) {
+        snprintf(output, out_size, "Gemma download complete: %d/%d at %s", ok_count, need_count, model_root.c_str());
+        return true;
+    }
+
+    snprintf(output, out_size, "Gemma partial/failed: %d/%d success, last_error=%s", ok_count, need_count, last_err);
+    return false;
 }
 
 /* ── Check if openclaw.json exists ─────────────────────────── */

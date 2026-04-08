@@ -55,6 +55,7 @@ const char* app_get_nodejs_download_url();
 bool app_install_openclaw(char* output, int out_size); /* auto: network → local fallback */
 bool app_install_openclaw_ex(char* output, int out_size, const char* mode); /* "network"/"local"/"auto" */
 bool app_init_openclaw(char* output, int out_size); /* gateway start → stop (generate default config) */
+bool app_install_gemma_models(int model_mask, char* output, int out_size); /* bit0=2B bit1=9B bit2=27B */
 bool app_full_setup(const char* install_mode, const char* api_key, const char* model_name,
                     char* output, int out_size); /* install → init → configure → verify */
 bool app_uninstall_openclaw(char* output, int out_size); /* npm uninstall only */
