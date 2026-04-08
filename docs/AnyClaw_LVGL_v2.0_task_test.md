@@ -2048,6 +2048,46 @@ chat_cont (消息区域)
 
 ---
 
+## TASK-KB02: 本地知识库接入聊天上下文（2026-04-09）
+
+**优先级：** P1  
+**状态：** ✅ 已完成（V1）  
+**完成时间：** 2026-04-09
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | KB 索引持久化（`kb_index.txt`）+ 启动自动加载 | `src/kb_store.cpp` | ✅ |
+| 2 | 新增 `build_context_snippet()` 生成检索片段上下文 | `src/kb_store.h/.cpp` | ✅ |
+| 3 | 发送聊天时自动拼接 KB 上下文到请求 payload | `src/ui_main.cpp` | ✅ |
+| 4 | 保持 UI 显示用户原始输入，不回显 KB 拼接内容 | `src/ui_main.cpp` | ✅ |
+
+### 验证
+- Windows 原生构建通过（`tools\\windows\\build.bat`）。
+- Windows 一键打包通过（`tools\\windows\\build-package.bat`）。
+
+---
+
+## TASK-STABILITY03: 健康线程可中断轮询与无效探测优化（2026-04-09）
+
+**优先级：** P1  
+**状态：** ✅ 已完成  
+**完成时间：** 2026-04-09
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | 健康线程 `Sleep(interval)` 改为分片可中断等待 | `src/health.cpp` | ✅ |
+| 2 | `node.exe` 不存在时跳过 HTTP 健康探测 | `src/health.cpp` | ✅ |
+
+### 验证
+- Windows 原生构建通过（`tools\\windows\\build.bat`）。
+- Lint 检查通过（本轮修改文件无新增告警）。
+
+---
+
 ## TASK-WIZARD-P0-20260409: 向导四项阻塞问题修复
 
 **优先级：** P0  

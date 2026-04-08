@@ -1576,7 +1576,13 @@ static void submit_prompt_to_chat(const char* text) {
     if (!text || !text[0]) return;
     chat_add_user_bubble(text);
     chat_force_scroll_bottom();
-    chat_start_stream(text);
+    std::string payload = text;
+    std::string kb_ctx = KbStore::instance().build_context_snippet(text, 3, 1000);
+    if (!kb_ctx.empty()) {
+        payload = kb_ctx + "\nUser request:\n" + text;
+        ui_log("[KB] Attached local context to chat request");
+    }
+    chat_start_stream(payload.c_str());
 }
 
 static void update_remote_guard_visuals() {

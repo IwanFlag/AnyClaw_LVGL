@@ -50,6 +50,17 @@ static bool check_http_health() {
     return (code == 200);
 }
 
+static bool sleep_interruptible(int total_ms) {
+    const int slice_ms = 200;
+    int left = total_ms;
+    while (left > 0 && g_running) {
+        int step = (left < slice_ms) ? left : slice_ms;
+        Sleep(step);
+        left -= step;
+    }
+    return g_running;
+}
+
 /*
  * Execute a CLI command and capture stdout.
  * Returns true if exit code == 0.
@@ -157,13 +168,15 @@ static unsigned __stdcall health_thread(void* arg) {
     LOG_I("HEALTH", "Monitoring thread started (interval=%dms)", g_refresh_interval_ms);
 
     while (g_running) {
-        Sleep(g_refresh_interval_ms);
-        if (!g_running) break;
+        if (!sleep_interruptible(g_refresh_interval_ms)) break;
 
         TraceSpan span("health_check_cycle");
         DWORD tick_start = GetTickCount();
         bool nodeRunning = is_node_running();
-        bool httpOk = check_http_health();
+        bool httpOk = false;
+        if (nodeRunning) {
+            httpOk = check_http_health();
+        }
         DWORD check_ms = GetTickCount() - tick_start;
 
         LOG_D("HEALTH", "Check: node=%d http=%d elapsed=%lums", nodeRunning, httpOk, check_ms);
