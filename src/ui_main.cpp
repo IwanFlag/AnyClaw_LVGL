@@ -40,6 +40,7 @@ lv_font_t* g_cjk_font = nullptr;
 lv_font_t* g_cjk_font_small = nullptr;
 lv_font_t* g_cjk_font_chat = nullptr;   /* Chat text: 4/5 of default (13px at 100%) */
 static DWORD g_ui_thread_id = 0;
+static bool g_restore_last_session = false; /* default: start fresh every launch */
 
 /* Global startup error title (set by selfcheck, displayed by UI after LVGL init) */
 std::string g_startup_error_title;
@@ -725,7 +726,8 @@ void save_theme_config() {
         f << "  \"gemma_model_mask\": " << g_gemma_model_mask << ",\n";
         f << "  \"remote_guard_armed\": " << (g_remote_guard_armed ? 1 : 0) << ",\n";
         f << "  \"model_name\": \"" << (g_selected_model[0] ? g_selected_model : "") << "\",\n";
-        f << "  \"api_key\": \"" << (g_api_key[0] ? g_api_key : "") << "\"\n";
+        f << "  \"api_key\": \"" << (g_api_key[0] ? g_api_key : "") << "\",\n";
+        f << "  \"restore_last_session\": " << (g_restore_last_session ? 1 : 0) << "\n";
         f << "}\n";
         f.close();
     }
@@ -832,6 +834,8 @@ void load_theme_config() {
     /* FIX 1: Use robust JSON extraction for model_name and api_key */
     json_extract_string(content.c_str(), "model_name", g_selected_model, sizeof(g_selected_model));
     json_extract_string(content.c_str(), "api_key", g_api_key, sizeof(g_api_key));
+    int rls = json_extract_int(content.c_str(), "restore_last_session", -1);
+    if (rls >= 0) g_restore_last_session = (rls == 1);
 
     LOG_I("CONFIG", "log_enabled=%d log_level=%d model=%s control=%d llm=%d remote_guard=%d",
           g_log_enabled, g_log_level,
@@ -4363,81 +4367,13 @@ static void perm_dialog_allow_persist_cb(lv_event_t* e) {
 }
 
 int ui_permission_confirm(const char* perm_key, const char* target) {
-    if (!g_ui_ready || g_ui_thread_id == 0 || GetCurrentThreadId() != g_ui_thread_id) {
-        return -1;
-    }
-    lv_obj_t* scr = lv_screen_active();
-    if (!scr) return -1;
-
-    lv_obj_t* overlay = nullptr;
-    lv_obj_t* box = create_dialog(scr, "AnyClaw 权限确认", SCALE(620), 0, &overlay);
-    if (!box || !overlay) return -1;
-
-    const ThemeColors* c = g_colors;
-    char content[1200] = {0};
-    snprintf(content, sizeof(content),
-             "Agent 请求执行命令：\n\n%s\n\n权限项：%s\n\n"
-             "仅本次允许：只放行这一次\n"
-             "永久允许：后续同类命令不再询问\n"
-             "拒绝：本次不执行",
-             target ? target : "(unknown)",
-             perm_key ? perm_key : "exec_shell");
-
-    lv_obj_t* lbl = lv_label_create(box);
-    lv_label_set_text(lbl, content);
-    lv_obj_set_style_text_color(lbl, c->text, 0);
-    lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
-    lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(lbl, LV_PCT(100));
-
-    lv_obj_t* btn_row = lv_obj_create(box);
-    lv_obj_set_size(btn_row, LV_PCT(100), LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_opa(btn_row, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(btn_row, 0, 0);
-    lv_obj_set_style_pad_all(btn_row, 0, 0);
-    lv_obj_set_style_pad_gap(btn_row, SCALE(8), 0);
-    lv_obj_set_flex_flow(btn_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(btn_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(btn_row, LV_OBJ_FLAG_SCROLLABLE);
-
-    volatile int decision = 0;
-    PermDialogCtx ctx = {&decision, overlay};
-
-    auto add_btn = [&](const char* text, lv_color_t bg, lv_event_cb_t cb) {
-        lv_obj_t* b = lv_button_create(btn_row);
-        lv_obj_set_height(b, SCALE(38));
-        lv_obj_set_flex_grow(b, 1);
-        lv_obj_set_style_bg_color(b, bg, 0);
-        lv_obj_set_style_radius(b, SCALE(8), 0);
-        lv_obj_set_style_border_width(b, 0, 0);
-        lv_obj_t* t = lv_label_create(b);
-        lv_label_set_text(t, text);
-        lv_obj_set_style_text_color(t, lv_color_white(), 0);
-        lv_obj_set_style_text_font(t, CJK_FONT_SMALL, 0);
-        lv_obj_center(t);
-        lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, &ctx);
-    };
-
-    add_btn("拒绝", c->btn_close, perm_dialog_deny_cb);
-    add_btn("仅本次允许", c->btn_action, perm_dialog_allow_once_cb);
-    add_btn("永久允许", c->btn_add, perm_dialog_allow_persist_cb);
-
-    lv_obj_move_foreground(overlay);
-
-    uint32_t start = GetTickCount();
-    while (decision == 0) {
-        lv_timer_handler();
-        Sleep(16);
-        if (GetTickCount() - start > 120000) { /* hard timeout 2min */
-            decision = 1;
-            break;
-        }
-    }
-
-    if (overlay) lv_obj_del(overlay);
-    if (decision == 2) return 1;
-    if (decision == 3) return 2;
-    return 0;
+    (void)perm_key;
+    (void)target;
+    /*
+     * Hotfix: previous synchronous LVGL modal could deadlock/re-enter UI loop and freeze.
+     * Return -1 so permission flow uses the safe MessageBox fallback path in permissions.cpp.
+     */
+    return -1;
 }
 
 /* ═══ Legal Disclaimer (first launch) ═══ */
@@ -7172,8 +7108,13 @@ void app_ui_init() {
      * inside LV_SIZE_CONTENT parents will get correct pixel widths. */
     lv_obj_update_layout(chat_cont);
 
-    /* Restore chat history from disk (if any) */
-    load_chat_history();
+    /* By default start fresh each launch; optional restore can be enabled by config. */
+    if (g_restore_last_session) {
+        load_chat_history();
+    } else {
+        g_chat_messages.clear();
+        chat_history[0] = '\0';
+    }
 
     /* Show welcome message only if no history was restored */
     if (g_chat_messages.empty()) {
