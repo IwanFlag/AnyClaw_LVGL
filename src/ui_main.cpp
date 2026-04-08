@@ -31,6 +31,8 @@
 #include "session_manager.h"
 #include "boot_check.h"
 #include "tracing.h"
+#include "lan_chat_client.h"
+#include "ftp_client.h"
 #include "cjk_font_data.h"
 #include "markdown.h"
 #include "widgets/aw_form.h"
@@ -48,6 +50,9 @@ lv_font_t* g_cjk_font_small = nullptr;
 lv_font_t* g_cjk_font_chat = nullptr;   /* Chat text: 4/5 of default (13px at 100%) */
 static DWORD g_ui_thread_id = 0;
 static bool g_restore_last_session = false; /* default: start fresh every launch */
+static LanChatClient g_lan_chat_client;
+static std::atomic<bool> g_ftp_running(false);
+static std::atomic<bool> g_ftp_cancel(false);
 
 /* Global startup error title (set by selfcheck, displayed by UI after LVGL init) */
 std::string g_startup_error_title;
@@ -1063,6 +1068,21 @@ static lv_obj_t* mode_ta_trace_recent = nullptr;
 static lv_obj_t* mode_lbl_boot_report_hint = nullptr;
 static lv_obj_t* mode_ta_work_prompt = nullptr;
 static lv_obj_t* mode_lbl_work_md_output = nullptr;
+static lv_obj_t* mode_ta_lan_host = nullptr;
+static lv_obj_t* mode_ta_lan_port = nullptr;
+static lv_obj_t* mode_ta_lan_nick = nullptr;
+static lv_obj_t* mode_ta_lan_to = nullptr;
+static lv_obj_t* mode_ta_lan_group = nullptr;
+static lv_obj_t* mode_ta_lan_msg = nullptr;
+static lv_obj_t* mode_ta_lan_feed = nullptr;
+static lv_obj_t* mode_ta_lan_users = nullptr;
+static lv_obj_t* mode_ta_lan_groups = nullptr;
+static lv_obj_t* mode_ta_ftp_host = nullptr;
+static lv_obj_t* mode_ta_ftp_port = nullptr;
+static lv_obj_t* mode_ta_ftp_user = nullptr;
+static lv_obj_t* mode_ta_ftp_pass = nullptr;
+static lv_obj_t* mode_ta_ftp_remote = nullptr;
+static lv_obj_t* mode_ta_ftp_local = nullptr;
 static lv_obj_t* mode_dd_control = nullptr;
 static lv_obj_t* mode_dd_llm = nullptr;
 static lv_obj_t* mode_lbl_work_hint = nullptr;
@@ -1299,6 +1319,7 @@ struct PendingProgressEvent {
     char step[192];
     char result[192];
 };
+static void wizard_progress_mirror_from_event(const PendingProgressEvent& ev, int pct);
 static std::mutex g_progress_queue_mtx;
 static std::deque<PendingProgressEvent> g_progress_queue;
 
@@ -1354,6 +1375,8 @@ static void ui_log_flush_timer_cb(lv_timer_t* t) {
                     lv_label_set_text(lp_progress_result, "");
                 }
             }
+
+            wizard_progress_mirror_from_event(ev, pct);
         }
     }
 }
@@ -3855,6 +3878,16 @@ static void work_trace_toggle_sort_cb(lv_event_t* e);
 static void work_trace_toggle_fail_filter_cb(lv_event_t* e);
 static void work_retry_failed_attachments_cb(lv_event_t* e);
 static void work_boot_open_report_cb(lv_event_t* e);
+static void work_lan_start_host_cb(lv_event_t* e);
+static void work_lan_connect_cb(lv_event_t* e);
+static void work_lan_send_global_cb(lv_event_t* e);
+static void work_lan_send_private_cb(lv_event_t* e);
+static void work_lan_create_group_cb(lv_event_t* e);
+static void work_lan_join_group_cb(lv_event_t* e);
+static void work_lan_send_group_cb(lv_event_t* e);
+static void work_ftp_upload_cb(lv_event_t* e);
+static void work_ftp_download_cb(lv_event_t* e);
+static void work_ftp_cancel_cb(lv_event_t* e);
 static void enqueue_attachment_card(const char* path, bool is_dir);
 
 /* Reset input box to single-line height after sending */
@@ -4063,6 +4096,141 @@ static void work_boot_open_report_cb(lv_event_t* e) {
     if ((INT_PTR)r <= 32) {
         ui_log("[BootCheck] Failed to open report: %s", report.c_str());
     }
+}
+
+static std::string ta_text(lv_obj_t* ta, const char* fallback = "") {
+    if (!ta) return fallback ? fallback : "";
+    const char* t = lv_textarea_get_text(ta);
+    if (!t) return fallback ? fallback : "";
+    return t;
+}
+
+static void lan_emit_ui(const LanChatEvent& ev) {
+    if (ev.type == LanChatEventType::UserList && mode_ta_lan_users) {
+        lv_textarea_set_text(mode_ta_lan_users, ev.text.c_str());
+    }
+    if (ev.type == LanChatEventType::GroupList && mode_ta_lan_groups) {
+        lv_textarea_set_text(mode_ta_lan_groups, ev.text.c_str());
+    }
+    if (!mode_ta_lan_feed) return;
+    char line[1024] = {0};
+    const char* tag = "[LAN]";
+    if (ev.type == LanChatEventType::PrivateMessage) tag = "[LAN-PM]";
+    else if (ev.type == LanChatEventType::GroupMessage) tag = "[LAN-GRP]";
+    else if (ev.type == LanChatEventType::System) tag = "[LAN-SYS]";
+    snprintf(line, sizeof(line), "%s %s -> %s: %s\n", tag, ev.from.c_str(), ev.target.c_str(), ev.text.c_str());
+    lv_textarea_add_text(mode_ta_lan_feed, line);
+}
+
+static void work_lan_start_host_cb(lv_event_t* e) {
+    (void)e;
+    std::string err;
+    int port = atoi(ta_text(mode_ta_lan_port, "19999").c_str());
+    if (port <= 0) port = 19999;
+    g_lan_chat_client.set_event_callback(lan_emit_ui);
+    if (g_lan_chat_client.start_host((unsigned short)port, err)) {
+        ui_log("[LAN] Host started on 0.0.0.0:%d", port);
+    } else {
+        ui_log("[LAN] Host start failed: %s", err.c_str());
+    }
+}
+
+static void work_lan_connect_cb(lv_event_t* e) {
+    (void)e;
+    std::string err;
+    std::string host = ta_text(mode_ta_lan_host, "127.0.0.1");
+    int port = atoi(ta_text(mode_ta_lan_port, "19999").c_str());
+    std::string nick = ta_text(mode_ta_lan_nick, "user");
+    if (port <= 0) port = 19999;
+    g_lan_chat_client.set_event_callback(lan_emit_ui);
+    if (g_lan_chat_client.connect_server(host, (unsigned short)port, nick, err)) {
+        ui_log("[LAN] Connected to %s:%d as %s", host.c_str(), port, nick.c_str());
+    } else {
+        ui_log("[LAN] Connect failed: %s", err.c_str());
+    }
+}
+
+static void work_lan_send_global_cb(lv_event_t* e) {
+    (void)e;
+    std::string msg = ta_text(mode_ta_lan_msg);
+    if (msg.empty()) return;
+    if (!g_lan_chat_client.send_global(msg)) ui_log("[LAN] Global send failed");
+}
+
+static void work_lan_send_private_cb(lv_event_t* e) {
+    (void)e;
+    std::string to = ta_text(mode_ta_lan_to);
+    std::string msg = ta_text(mode_ta_lan_msg);
+    if (to.empty() || msg.empty()) return;
+    if (!g_lan_chat_client.send_private(to, msg)) ui_log("[LAN] Private send failed");
+}
+
+static void work_lan_create_group_cb(lv_event_t* e) {
+    (void)e;
+    std::string group = ta_text(mode_ta_lan_group);
+    if (group.empty()) return;
+    if (!g_lan_chat_client.create_group(group)) ui_log("[LAN] Create group failed");
+}
+
+static void work_lan_join_group_cb(lv_event_t* e) {
+    (void)e;
+    std::string group = ta_text(mode_ta_lan_group);
+    if (group.empty()) return;
+    if (!g_lan_chat_client.join_group(group)) ui_log("[LAN] Join group failed");
+}
+
+static void work_lan_send_group_cb(lv_event_t* e) {
+    (void)e;
+    std::string group = ta_text(mode_ta_lan_group);
+    std::string msg = ta_text(mode_ta_lan_msg);
+    if (group.empty() || msg.empty()) return;
+    if (!g_lan_chat_client.send_group(group, msg)) ui_log("[LAN] Group send failed");
+}
+
+static void run_ftp_transfer(bool upload) {
+    if (g_ftp_running.exchange(true)) {
+        ui_log("[FTP] Transfer already running");
+        return;
+    }
+    g_ftp_cancel.store(false);
+    FtpTransferConfig cfg;
+    cfg.host = ta_text(mode_ta_ftp_host);
+    cfg.port = atoi(ta_text(mode_ta_ftp_port, "21").c_str());
+    cfg.username = ta_text(mode_ta_ftp_user);
+    cfg.password = ta_text(mode_ta_ftp_pass);
+    cfg.remote_path = ta_text(mode_ta_ftp_remote);
+    cfg.local_path = ta_text(mode_ta_ftp_local);
+    cfg.upload = upload;
+    std::thread([cfg]() {
+        ui_progress_begin("FTP Transfer", cfg.upload ? "Starting upload" : "Starting download", 3);
+        std::string err;
+        bool ok = ftp_transfer_file(cfg, g_ftp_cancel, err, [](int pct, const char* step) {
+            ui_progress_update("FTP Transfer", step ? step : "Running", pct);
+        });
+        if (ok) {
+            ui_progress_finish("FTP Transfer", true, "FTP transfer done");
+            ui_log("[FTP] %s success: %s", cfg.upload ? "Upload" : "Download", cfg.remote_path.c_str());
+        } else {
+            ui_progress_finish("FTP Transfer", false, err.c_str());
+            ui_log("[FTP] %s failed: %s", cfg.upload ? "Upload" : "Download", err.c_str());
+        }
+        g_ftp_running.store(false);
+    }).detach();
+}
+
+static void work_ftp_upload_cb(lv_event_t* e) {
+    (void)e;
+    run_ftp_transfer(true);
+}
+
+static void work_ftp_download_cb(lv_event_t* e) {
+    (void)e;
+    run_ftp_transfer(false);
+}
+
+static void work_ftp_cancel_cb(lv_event_t* e) {
+    (void)e;
+    g_ftp_cancel.store(true);
 }
 
 /* Update send button visual state based on input content */
@@ -5937,12 +6105,14 @@ static lv_obj_t* g_wizard_title = nullptr;
 static lv_obj_t* g_wizard_content = nullptr;
 static lv_obj_t* g_wizard_btn_prev = nullptr;
 static lv_obj_t* g_wizard_btn_next = nullptr;
+static lv_obj_t* g_wizard_btn_close = nullptr;
 static int g_wizard_step = 0;
 
 /* Wizard selections */
 static int g_wizard_lang_sel = (g_lang == Lang::CN) ? 0 : 1;  /* 0=CN, 1=EN, matches system lang */
 static int g_wizard_openclaw_ok = 0;     /* detection result */
 static bool g_wizard_oc_installed_now = false; /* OC was installed during this wizard session */
+static bool g_wizard_session_finished = false;
 static char g_wizard_api_key[256] = {0};
 static int g_wizard_model_sel = 0;
 static char g_wizard_model_name[128] = {0};  /* Stored model name string (survives dropdown deletion) */
@@ -5967,6 +6137,32 @@ static std::atomic<bool> g_wiz_install_running(false);
 static std::atomic<bool> g_wiz_install_result_ready(false);
 static bool g_wiz_install_result_ok = false;
 static char g_wiz_install_result_msg[512] = {0};
+static lv_obj_t* g_wiz_install_progress_panel = nullptr;
+static lv_obj_t* g_wiz_install_progress_task = nullptr;
+static lv_obj_t* g_wiz_install_progress_step = nullptr;
+static lv_obj_t* g_wiz_install_progress_result = nullptr;
+static lv_obj_t* g_wiz_install_progress_bar = nullptr;
+
+static void wizard_progress_mirror_from_event(const PendingProgressEvent& ev, int pct) {
+    if (!g_wizard_modal || g_wizard_step != 1 || !g_wiz_install_progress_panel || !g_wiz_install_progress_bar) return;
+    if (!(strstr(ev.task, "Setup") || strstr(ev.task, "Node.js"))) return;
+    lv_obj_clear_flag(g_wiz_install_progress_panel, LV_OBJ_FLAG_HIDDEN);
+    if (g_wiz_install_progress_task) {
+        lv_label_set_text_fmt(g_wiz_install_progress_task, "Task: %s", ev.task[0] ? ev.task : "Setup");
+    }
+    if (g_wiz_install_progress_step) {
+        lv_label_set_text_fmt(g_wiz_install_progress_step, "Step: %s", ev.step[0] ? ev.step : "Running...");
+    }
+    lv_bar_set_value(g_wiz_install_progress_bar, pct, LV_ANIM_ON);
+    if (g_wiz_install_progress_result) {
+        if (ev.type == 1) {
+            lv_label_set_text(g_wiz_install_progress_result, ev.result[0] ? ev.result : (ev.ok ? "Done" : "Failed"));
+            lv_obj_set_style_text_color(g_wiz_install_progress_result, ev.ok ? lv_color_make(120, 220, 150) : lv_color_make(255, 120, 120), 0);
+        } else {
+            lv_label_set_text(g_wiz_install_progress_result, "");
+        }
+    }
+}
 
 /* Config: check wizard_completed */
 static bool is_wizard_completed() {
@@ -6091,12 +6287,32 @@ static const I18n W_NICK_PH      = {"Your nickname...", "你的昵称..."};
 static const I18n W_NONE         = {"(none)", "（无）"};
 
 static void wizard_update_step();
+static void wizard_close_cb(lv_event_t* e);
+static void wizard_set_next_enabled(bool enabled);
+static void wizard_gemma_skip_cb(lv_event_t* e);
 
 /* Navigate to a specific step */
 static void wizard_go_step(int step) {
     if (step < 0 || step >= WIZARD_STEPS) return;
     g_wizard_step = step;
     wizard_update_step();
+}
+
+static void wizard_set_next_enabled(bool enabled) {
+    if (!g_wizard_btn_next) return;
+    if (enabled) {
+        lv_obj_clear_state(g_wizard_btn_next, LV_STATE_DISABLED);
+        lv_obj_set_style_bg_opa(g_wizard_btn_next, LV_OPA_COVER, 0);
+        if (g_wizard_step == WIZARD_STEPS - 1) {
+            lv_obj_set_style_bg_color(g_wizard_btn_next, lv_color_make(34, 197, 94), 0);
+        } else {
+            lv_obj_set_style_bg_color(g_wizard_btn_next, lv_color_make(59, 130, 246), 0);
+        }
+    } else {
+        lv_obj_add_state(g_wizard_btn_next, LV_STATE_DISABLED);
+        lv_obj_set_style_bg_color(g_wizard_btn_next, lv_color_make(60, 65, 80), 0);
+        lv_obj_set_style_bg_opa(g_wizard_btn_next, LV_OPA_50, 0);
+    }
 }
 
 /* ── Step 1: Language ── */
@@ -6218,10 +6434,7 @@ static void wiz_cancel_install_cb(lv_event_t* e) {
         if (lbl) lv_label_set_text(lbl, "取消中...");
         return;
     }
-    if (g_wizard_modal) {
-        lv_obj_del(g_wizard_modal);
-        g_wizard_modal = nullptr;
-    }
+    wizard_close_cb(nullptr);
 }
 
 static void wiz_install_oc_cb(lv_event_t* e) {
@@ -6251,6 +6464,7 @@ static void wiz_install_oc_cb(lv_event_t* e) {
 
     app_reset_setup_cancel();
     g_wiz_install_running.store(true);
+    wizard_set_next_enabled(false);
     g_wiz_install_result_ready.store(false);
     g_wiz_install_result_ok = false;
     g_wiz_install_result_msg[0] = '\0';
@@ -6339,7 +6553,7 @@ static void wizard_build_step_detect() {
     }
 
     /* ═══ Node.js missing: show download links with fallback ═══ */
-    if (!env.node_ok) {
+    if (!env.node_ok || !env.node_version_ok || !env.npm_ok) {
         lv_obj_t* dl_label = lv_label_create(g_wizard_content);
         lv_label_set_text(dl_label, tr(W_NODE_DL));
         lv_obj_set_style_text_color(dl_label, g_colors->text_dim, 0);
@@ -6359,8 +6573,8 @@ static void wizard_build_step_detect() {
         }
     }
 
-    /* ═══ OpenClaw missing but Node.js + npm OK: show install options ═══ */
-    if (!env.openclaw_ok && env.node_ok && env.node_version_ok && env.npm_ok) {
+    /* ═══ OpenClaw missing: always expose install entry (auto handles Node/npm bootstrapping). ═══ */
+    if (!env.openclaw_ok) {
         lv_obj_t* choose_lbl = lv_label_create(g_wizard_content);
         lv_label_set_text(choose_lbl, tr(W_CHOOSE_INST));
         lv_obj_set_style_text_color(choose_lbl, g_colors->text_dim, 0);
@@ -6381,24 +6595,26 @@ static void wizard_build_step_detect() {
         lv_obj_set_style_pad_gap(btn_row, 10, 0);
         lv_obj_set_flex_align(btn_row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-        /* Network install button (green) */
-        if (net_ok) {
-            lv_obj_t* btn_net = lv_button_create(btn_row);
-            lv_obj_set_size(btn_net, LV_PCT(48), SCALE(44));
-            lv_obj_set_style_bg_color(btn_net, lv_color_make(34, 197, 94), 0);
-            lv_obj_set_style_radius(btn_net, 8, 0);
-            lv_obj_t* lbl = lv_label_create(btn_net);
-            lv_label_set_text(lbl, tr(W_INSTALL_NET));
-            lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
-            lv_obj_center(lbl);
+        /* Auto install button: includes Node/npm bootstrap + OpenClaw install chain. */
+        lv_obj_t* btn_auto = lv_button_create(btn_row);
+        lv_obj_set_size(btn_auto, LV_PCT(48), SCALE(44));
+        lv_obj_set_style_bg_color(btn_auto, lv_color_make(34, 197, 94), 0);
+        lv_obj_set_style_radius(btn_auto, 8, 0);
+        lv_obj_t* lbl_auto = lv_label_create(btn_auto);
+        lv_label_set_text(lbl_auto, "Auto Install");
+        lv_obj_set_style_text_font(lbl_auto, CJK_FONT, 0);
+        lv_obj_center(lbl_auto);
+        g_wiz_btn_install_net = btn_auto;
+        lv_obj_add_event_cb(btn_auto, wiz_install_oc_cb, LV_EVENT_CLICKED, (void*)"auto");
 
-            g_wiz_btn_install_net = btn_net;
-            lv_obj_add_event_cb(btn_net, wiz_install_oc_cb, LV_EVENT_CLICKED, (void*)"network");
+        if (!net_ok) {
+            lv_obj_add_state(btn_auto, LV_STATE_DISABLED);
+            lv_obj_set_style_bg_opa(btn_auto, LV_OPA_50, 0);
         }
 
         /* Local/bundled install button (blue) */
         lv_obj_t* btn_local = lv_button_create(btn_row);
-        lv_obj_set_size(btn_local, LV_PCT(net_ok ? 48 : 100), SCALE(44));
+        lv_obj_set_size(btn_local, LV_PCT(48), SCALE(44));
         lv_obj_set_style_bg_color(btn_local, lv_color_make(59, 130, 246), 0);
         lv_obj_set_style_radius(btn_local, 8, 0);
         lv_obj_t* lbl = lv_label_create(btn_local);
@@ -6420,15 +6636,44 @@ static void wizard_build_step_detect() {
         lv_obj_add_event_cb(btn_cancel, wiz_cancel_install_cb, LV_EVENT_CLICKED, nullptr);
         g_wiz_btn_cancel_install = btn_cancel;
         lv_obj_add_flag(g_wiz_btn_cancel_install, LV_OBJ_FLAG_HIDDEN);
+
+        g_wiz_install_progress_panel = lv_obj_create(g_wizard_content);
+        lv_obj_set_size(g_wiz_install_progress_panel, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_color(g_wiz_install_progress_panel, g_colors->input_bg, 0);
+        lv_obj_set_style_border_color(g_wiz_install_progress_panel, g_colors->panel_border, 0);
+        lv_obj_set_style_border_width(g_wiz_install_progress_panel, 1, 0);
+        lv_obj_set_style_radius(g_wiz_install_progress_panel, 8, 0);
+        lv_obj_set_style_pad_all(g_wiz_install_progress_panel, 8, 0);
+        lv_obj_set_style_pad_gap(g_wiz_install_progress_panel, 6, 0);
+        lv_obj_set_flex_flow(g_wiz_install_progress_panel, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(g_wiz_install_progress_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_clear_flag(g_wiz_install_progress_panel, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(g_wiz_install_progress_panel, LV_OBJ_FLAG_HIDDEN);
+
+        g_wiz_install_progress_task = lv_label_create(g_wiz_install_progress_panel);
+        lv_label_set_text(g_wiz_install_progress_task, "Task: Setup");
+        lv_obj_set_style_text_font(g_wiz_install_progress_task, CJK_FONT_SMALL, 0);
+        lv_obj_set_style_text_color(g_wiz_install_progress_task, g_colors->accent, 0);
+
+        g_wiz_install_progress_step = lv_label_create(g_wiz_install_progress_panel);
+        lv_label_set_text(g_wiz_install_progress_step, "Step: Waiting");
+        lv_obj_set_style_text_font(g_wiz_install_progress_step, CJK_FONT_SMALL, 0);
+        lv_obj_set_style_text_color(g_wiz_install_progress_step, g_colors->text_dim, 0);
+
+        g_wiz_install_progress_bar = lv_bar_create(g_wiz_install_progress_panel);
+        lv_obj_set_width(g_wiz_install_progress_bar, LV_PCT(100));
+        lv_bar_set_range(g_wiz_install_progress_bar, 0, 100);
+        lv_bar_set_value(g_wiz_install_progress_bar, 0, LV_ANIM_OFF);
+
+        g_wiz_install_progress_result = lv_label_create(g_wiz_install_progress_panel);
+        lv_label_set_text(g_wiz_install_progress_result, "");
+        lv_obj_set_style_text_font(g_wiz_install_progress_result, CJK_FONT_SMALL, 0);
+        lv_obj_set_style_text_color(g_wiz_install_progress_result, g_colors->text_dim, 0);
     }
 
     /* ═══ Block Next if any critical check fails ═══ */
     bool all_ok = env.node_ok && env.node_version_ok && net_ok && env.openclaw_ok;
-    if (!all_ok && g_wizard_btn_next) {
-        lv_obj_add_state(g_wizard_btn_next, LV_STATE_DISABLED);
-        lv_obj_set_style_bg_color(g_wizard_btn_next, lv_color_make(60, 65, 80), 0);
-        lv_obj_set_style_bg_opa(g_wizard_btn_next, LV_OPA_50, 0);
-    }
+    wizard_set_next_enabled(all_ok);
 }
 
 /* ── Step 2 (combined): Model + API Key ── */
@@ -6571,6 +6816,25 @@ static void wizard_build_step_model_api() {
     lv_label_set_long_mode(mode_lbl_gemma_recommend, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(mode_lbl_gemma_recommend, LV_PCT(100));
     update_gemma_recommend_visuals();
+
+    lv_obj_t* btn_skip_gemma = lv_button_create(g_wizard_content);
+    lv_obj_set_size(btn_skip_gemma, LV_PCT(100), SCALE(36));
+    lv_obj_set_style_bg_color(btn_skip_gemma, lv_color_make(70, 90, 120), 0);
+    lv_obj_set_style_radius(btn_skip_gemma, 8, 0);
+    lv_obj_t* lbl_skip = lv_label_create(btn_skip_gemma);
+    lv_label_set_text(lbl_skip, "Skip Gemma Install (continue)");
+    lv_obj_set_style_text_font(lbl_skip, CJK_FONT_SMALL, 0);
+    lv_obj_center(lbl_skip);
+    lv_obj_add_event_cb(btn_skip_gemma, wizard_gemma_skip_cb, LV_EVENT_CLICKED, nullptr);
+}
+
+static void wizard_gemma_skip_cb(lv_event_t* e) {
+    (void)e;
+    g_gemma_install_opt_in = false;
+    g_gemma_model_mask = 0;
+    update_gemma_recommend_visuals();
+    ui_log("[Wizard] Gemma install skipped by user");
+    if (g_wizard_step == 2) wizard_go_step(3);
 }
 
 /* ── Step 5: User Profile ── */
@@ -6776,6 +7040,11 @@ static void wizard_update_step() {
     g_wiz_btn_install_net = nullptr;
     g_wiz_btn_install_local = nullptr;
     g_wiz_btn_cancel_install = nullptr;
+    g_wiz_install_progress_panel = nullptr;
+    g_wiz_install_progress_task = nullptr;
+    g_wiz_install_progress_step = nullptr;
+    g_wiz_install_progress_result = nullptr;
+    g_wiz_install_progress_bar = nullptr;
 
     /* Update step indicator */
     char step_text[32];
@@ -6784,6 +7053,7 @@ static void wizard_update_step() {
 
     /* Update title */
     lv_label_set_text(g_wizard_title, tr(wizard_step_titles[g_wizard_step]));
+    wizard_set_next_enabled(true);
 
     /* Build step content */
     switch (g_wizard_step) {
@@ -6800,6 +7070,8 @@ static void wizard_update_step() {
     } else {
         lv_obj_clear_flag(g_wizard_btn_prev, LV_OBJ_FLAG_HIDDEN);
     }
+
+    if (g_wizard_step == 1 && g_wiz_install_running.load()) wizard_set_next_enabled(false);
 
     if (g_wizard_step == WIZARD_STEPS - 1) {
         /* Last step: "Get Started" button */
@@ -6925,6 +7197,7 @@ static void wizard_next_cb(lv_event_t* e) {
             snprintf(g_selected_model, sizeof(g_selected_model), "%s", model_buf);
         }
         save_wizard_completed();
+        g_wizard_session_finished = true;
         save_theme_config();
 
         if (g_gemma_install_opt_in && g_gemma_model_mask != 0) {
@@ -6959,13 +7232,16 @@ static void wizard_next_cb(lv_event_t* e) {
 
 static void wizard_close_cb(lv_event_t* e) {
     (void)e;
+    if (g_wiz_install_running.load()) {
+        app_request_setup_cancel();
+    }
     if (g_wizard_modal) {
         lv_obj_del(g_wizard_modal);
         g_wizard_modal = nullptr;
     }
 
     /* If OpenClaw was installed during this wizard but user didn't finish → full uninstall */
-    if (g_wizard_oc_installed_now && !g_wizard_completed) {
+    if (g_wizard_oc_installed_now && !g_wizard_session_finished) {
         printf("[Wizard] User cancelled after OC install → full uninstall\n");
         ui_log("[Wizard] Cancelling setup, removing OpenClaw...");
         char rm_output[512] = {0};
@@ -6980,6 +7256,7 @@ void ui_show_setup_wizard() {
 
     g_wizard_step = 0;
     g_wizard_oc_installed_now = false; /* Reset install tracking */
+    g_wizard_session_finished = false;
     lv_obj_t* scr = lv_screen_active();
 
     /* Full-screen overlay */
@@ -7033,6 +7310,17 @@ void ui_show_setup_wizard() {
     lv_obj_set_style_text_color(g_wizard_title, g_colors->text, 0);
     lv_obj_set_style_text_font(g_wizard_title, CJK_FONT, 0);
     lv_obj_align(g_wizard_title, LV_ALIGN_LEFT_MID, SCALE(130), 0);
+
+    g_wizard_btn_close = lv_button_create(header);
+    lv_obj_set_size(g_wizard_btn_close, SCALE(98), SCALE(32));
+    lv_obj_set_style_bg_color(g_wizard_btn_close, lv_color_make(220, 80, 80), 0);
+    lv_obj_set_style_radius(g_wizard_btn_close, 8, 0);
+    lv_obj_align(g_wizard_btn_close, LV_ALIGN_RIGHT_MID, -12, 0);
+    lv_obj_add_event_cb(g_wizard_btn_close, wizard_close_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* close_lbl = lv_label_create(g_wizard_btn_close);
+    lv_label_set_text(close_lbl, "退出向导");
+    lv_obj_set_style_text_font(close_lbl, CJK_FONT_SMALL, 0);
+    lv_obj_center(close_lbl);
 
     /* Separator line under header */
     lv_obj_t* sep = lv_obj_create(g_wizard_box);
@@ -7662,6 +7950,80 @@ void app_ui_init() {
         mode_btn_remote_reject = aw_btn_create(remote_btn_row2, "Reject", BTN_SECONDARY, SCALE(120), SCALE(34));
         lv_obj_add_event_cb(mode_btn_remote_reject, remote_reject_cb, LV_EVENT_CLICKED, nullptr);
         update_remote_session_visuals();
+
+        lv_obj_t* sec_lan = aw_form_section_create(mode_panel_work, "LAN Chat (Host/Private/Group)", card_w);
+        mode_ta_lan_host = aw_textarea_create(sec_lan, "LAN host IP, e.g. 192.168.1.10", true, card_w - 24, SCALE(34));
+        lv_textarea_set_text(mode_ta_lan_host, "127.0.0.1");
+        mode_ta_lan_port = aw_textarea_create(sec_lan, "Port", true, card_w - 24, SCALE(34));
+        lv_textarea_set_text(mode_ta_lan_port, "19999");
+        mode_ta_lan_nick = aw_textarea_create(sec_lan, "Nickname", true, card_w - 24, SCALE(34));
+        lv_textarea_set_text(mode_ta_lan_nick, g_profile_user_name[0] ? g_profile_user_name : "user");
+        lv_obj_t* lan_row_a = lv_obj_create(sec_lan);
+        lv_obj_set_width(lan_row_a, card_w - 24);
+        lv_obj_set_height(lan_row_a, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(lan_row_a, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(lan_row_a, 0, 0);
+        lv_obj_set_style_pad_all(lan_row_a, 0, 0);
+        lv_obj_set_style_pad_gap(lan_row_a, 8, 0);
+        lv_obj_set_flex_flow(lan_row_a, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(lan_row_a, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(lan_row_a, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t* lan_btn_host = aw_btn_create(lan_row_a, "Start Host", BTN_SECONDARY, SCALE(120), SCALE(34));
+        lv_obj_add_event_cb(lan_btn_host, work_lan_start_host_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* lan_btn_conn = aw_btn_create(lan_row_a, "Connect", BTN_PRIMARY, SCALE(120), SCALE(34));
+        lv_obj_add_event_cb(lan_btn_conn, work_lan_connect_cb, LV_EVENT_CLICKED, nullptr);
+        mode_ta_lan_to = aw_textarea_create(sec_lan, "Private to user", true, card_w - 24, SCALE(34));
+        mode_ta_lan_group = aw_textarea_create(sec_lan, "Group name", true, card_w - 24, SCALE(34));
+        mode_ta_lan_msg = aw_textarea_create(sec_lan, "LAN message", false, card_w - 24, SCALE(80));
+        lv_obj_t* lan_row_b = lv_obj_create(sec_lan);
+        lv_obj_set_width(lan_row_b, card_w - 24);
+        lv_obj_set_height(lan_row_b, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(lan_row_b, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(lan_row_b, 0, 0);
+        lv_obj_set_style_pad_all(lan_row_b, 0, 0);
+        lv_obj_set_style_pad_gap(lan_row_b, 8, 0);
+        lv_obj_set_flex_flow(lan_row_b, LV_FLEX_FLOW_ROW_WRAP);
+        lv_obj_set_flex_align(lan_row_b, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(lan_row_b, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t* lan_btn_global = aw_btn_create(lan_row_b, "Send Global", BTN_PRIMARY, SCALE(130), SCALE(34));
+        lv_obj_add_event_cb(lan_btn_global, work_lan_send_global_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* lan_btn_pm = aw_btn_create(lan_row_b, "Send Private", BTN_SECONDARY, SCALE(130), SCALE(34));
+        lv_obj_add_event_cb(lan_btn_pm, work_lan_send_private_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* lan_btn_cg = aw_btn_create(lan_row_b, "Create Group", BTN_SECONDARY, SCALE(130), SCALE(34));
+        lv_obj_add_event_cb(lan_btn_cg, work_lan_create_group_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* lan_btn_jg = aw_btn_create(lan_row_b, "Join Group", BTN_SECONDARY, SCALE(120), SCALE(34));
+        lv_obj_add_event_cb(lan_btn_jg, work_lan_join_group_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* lan_btn_sg = aw_btn_create(lan_row_b, "Send Group", BTN_PRIMARY, SCALE(120), SCALE(34));
+        lv_obj_add_event_cb(lan_btn_sg, work_lan_send_group_cb, LV_EVENT_CLICKED, nullptr);
+        mode_ta_lan_users = aw_textarea_create(sec_lan, "Online users (csv)", true, card_w - 24, SCALE(34));
+        mode_ta_lan_groups = aw_textarea_create(sec_lan, "Groups (csv)", true, card_w - 24, SCALE(34));
+        mode_ta_lan_feed = aw_textarea_create(sec_lan, "LAN event feed", false, card_w - 24, SCALE(110));
+        lv_textarea_set_text_selection(mode_ta_lan_feed, true);
+
+        lv_obj_t* sec_ftp = aw_form_section_create(mode_panel_work, "FTP Upload/Download", card_w);
+        mode_ta_ftp_host = aw_textarea_create(sec_ftp, "FTP host", true, card_w - 24, SCALE(34));
+        mode_ta_ftp_port = aw_textarea_create(sec_ftp, "FTP port", true, card_w - 24, SCALE(34));
+        lv_textarea_set_text(mode_ta_ftp_port, "21");
+        mode_ta_ftp_user = aw_textarea_create(sec_ftp, "FTP username", true, card_w - 24, SCALE(34));
+        mode_ta_ftp_pass = aw_textarea_create(sec_ftp, "FTP password", true, card_w - 24, SCALE(34));
+        mode_ta_ftp_remote = aw_textarea_create(sec_ftp, "Remote path", true, card_w - 24, SCALE(34));
+        mode_ta_ftp_local = aw_textarea_create(sec_ftp, "Local file path", true, card_w - 24, SCALE(34));
+        lv_obj_t* ftp_row = lv_obj_create(sec_ftp);
+        lv_obj_set_width(ftp_row, card_w - 24);
+        lv_obj_set_height(ftp_row, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(ftp_row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(ftp_row, 0, 0);
+        lv_obj_set_style_pad_all(ftp_row, 0, 0);
+        lv_obj_set_style_pad_gap(ftp_row, 8, 0);
+        lv_obj_set_flex_flow(ftp_row, LV_FLEX_FLOW_ROW_WRAP);
+        lv_obj_set_flex_align(ftp_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(ftp_row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t* ftp_up = aw_btn_create(ftp_row, "FTP Upload", BTN_PRIMARY, SCALE(120), SCALE(34));
+        lv_obj_add_event_cb(ftp_up, work_ftp_upload_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* ftp_down = aw_btn_create(ftp_row, "FTP Download", BTN_SECONDARY, SCALE(130), SCALE(34));
+        lv_obj_add_event_cb(ftp_down, work_ftp_download_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* ftp_cancel = aw_btn_create(ftp_row, "Cancel FTP", BTN_DANGER, SCALE(120), SCALE(34));
+        lv_obj_add_event_cb(ftp_cancel, work_ftp_cancel_cb, LV_EVENT_CLICKED, nullptr);
     }
 
     /* Cursor-like trace panel (Chat mode): next step + script output */

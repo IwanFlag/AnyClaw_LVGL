@@ -105,6 +105,9 @@ set(APP_SOURCES
     src/boot_check.cpp
     src/feature_flags.cpp
     src/tracing.cpp
+    src/lan_chat_protocol.cpp
+    src/lan_chat_client.cpp
+    src/ftp_client.cpp
 )
 
 set(APP_FONT_SOURCES
@@ -151,7 +154,7 @@ if(MSVC)
         kernel32 user32 gdi32 winmm imm32 ole32 oleaut32 version uuid
         advapi32 setupapi shell32 dinput8
         dwmapi comctl32 dbghelp ws2_32 comdlg32
-        gdiplus winhttp bcrypt
+        gdiplus winhttp wininet bcrypt
     )
 else()
     target_link_libraries(AnyClaw_LVGL PRIVATE
@@ -159,7 +162,7 @@ else()
         kernel32 user32 gdi32 winmm imm32 ole32 oleaut32 version uuid
         advapi32 setupapi shell32 dinput8
         dwmapi comctl32 dbghelp ws2_32 comdlg32
-        gdiplus winhttp bcrypt
+        gdiplus winhttp wininet bcrypt
         -static-libgcc -static-libstdc++
     )
 endif()
