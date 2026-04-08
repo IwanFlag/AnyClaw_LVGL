@@ -39,6 +39,7 @@ extern const lv_font_t lv_font_mshy_16;
 lv_font_t* g_cjk_font = nullptr;
 lv_font_t* g_cjk_font_small = nullptr;
 lv_font_t* g_cjk_font_chat = nullptr;   /* Chat text: 4/5 of default (13px at 100%) */
+static DWORD g_ui_thread_id = 0;
 
 /* Global startup error title (set by selfcheck, displayed by UI after LVGL init) */
 std::string g_startup_error_title;
@@ -1042,6 +1043,11 @@ static lv_obj_t* mode_btn_work = nullptr;
 static lv_obj_t* mode_panel_chat = nullptr;
 static lv_obj_t* mode_panel_voice = nullptr;
 static lv_obj_t* mode_panel_work = nullptr;
+static lv_obj_t* mode_trace_chat_panel = nullptr;
+static lv_obj_t* mode_lbl_chat_next_step = nullptr;
+static lv_obj_t* mode_ta_chat_script = nullptr;
+static lv_obj_t* mode_lbl_work_next_step = nullptr;
+static lv_obj_t* mode_ta_work_script = nullptr;
 static lv_obj_t* mode_dd_control = nullptr;
 static lv_obj_t* mode_dd_llm = nullptr;
 static lv_obj_t* mode_lbl_work_hint = nullptr;
@@ -1071,6 +1077,8 @@ static lv_obj_t* mode_profile_user_avatar_preview = nullptr;
 static lv_obj_t* mode_profile_user_text_preview = nullptr;
 static lv_obj_t* mode_profile_ai_avatar_preview = nullptr;
 static lv_obj_t* mode_profile_ai_text_preview = nullptr;
+static char g_ai_next_step[256] = "Idle";
+static char g_ai_script_log[8192] = "";
 static lv_obj_t* g_remote_arm_modal = nullptr;
 static lv_obj_t* g_remote_arm_confirm_btn = nullptr;
 static lv_obj_t* g_remote_arm_count_label = nullptr;
@@ -1313,6 +1321,11 @@ void ui_log(const char* fmt, ...) {
     else if (strstr(buf, "[WARN]")) level = 2;
     else if (strstr(buf, "[DEBUG]")) level = 0;
 
+    /* LVGL is single-threaded: background workers must not refresh UI logs directly. */
+    if (g_ui_thread_id != 0 && GetCurrentThreadId() != g_ui_thread_id) {
+        return;
+    }
+
     if (log_count >= LOG_MAX_LINES) {
         for (int i = 0; i < LOG_MAX_LINES - 1; i++) log_entries[i] = log_entries[i + 1];
         log_count = LOG_MAX_LINES - 1;
@@ -1380,6 +1393,11 @@ static void update_remote_session_visuals();
 void ui_relayout_all();
 static int mode_content_h() { return std::max(120, PANEL_H - MODE_BAR_H - CHAT_GAP * 3); }
 static int mode_content_w() { return std::max(200, RIGHT_PANEL_W - CHAT_GAP * 2); }
+static int chat_trace_panel_h(int content_w) { return (content_w < SCALE(900)) ? SCALE(128) : SCALE(96); }
+static int chat_top_y_with_trace(int content_w) {
+    if (!mode_trace_chat_panel) return CHAT_GAP;
+    return CHAT_GAP + chat_trace_panel_h(content_w) + CHAT_GAP;
+}
 extern void save_theme_config();
 static const char* profile_user_name() { return g_profile_user_name[0] ? g_profile_user_name : "User"; }
 static const char* profile_ai_name() { return g_profile_ai_name[0] ? g_profile_ai_name : "AI"; }
@@ -1735,6 +1753,31 @@ static void start_gemma_install_async(int model_mask) {
     }).detach();
 }
 
+static void update_agent_trace_views() {
+    if (mode_lbl_chat_next_step) lv_label_set_text_fmt(mode_lbl_chat_next_step, "Next Step: %s", g_ai_next_step);
+    if (mode_ta_chat_script) lv_textarea_set_text(mode_ta_chat_script, g_ai_script_log);
+    if (mode_lbl_work_next_step) lv_label_set_text_fmt(mode_lbl_work_next_step, "Next Step: %s", g_ai_next_step);
+    if (mode_ta_work_script) lv_textarea_set_text(mode_ta_work_script, g_ai_script_log);
+}
+
+static void set_ai_next_step(const char* step) {
+    snprintf(g_ai_next_step, sizeof(g_ai_next_step), "%s", (step && step[0]) ? step : "Idle");
+    update_agent_trace_views();
+}
+
+static void append_ai_script_log(const char* line) {
+    if (!line || !line[0]) return;
+    size_t llen = strlen(line);
+    if (strlen(g_ai_script_log) + llen + 2 >= sizeof(g_ai_script_log)) {
+        /* Drop oldest half to keep UI responsive and log bounded. */
+        memmove(g_ai_script_log, g_ai_script_log + sizeof(g_ai_script_log) / 2, sizeof(g_ai_script_log) / 2);
+        g_ai_script_log[sizeof(g_ai_script_log) / 2] = '\0';
+    }
+    strcat(g_ai_script_log, line);
+    strcat(g_ai_script_log, "\n");
+    update_agent_trace_views();
+}
+
 static void update_work_mode_hint() {
     if (!mode_lbl_work_hint) return;
     const char* control = (g_control_mode == CONTROL_AI) ? "AI controls AnyClaw" : "User controls AnyClaw";
@@ -1880,7 +1923,6 @@ static void mode_work_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_WORK; app
 static lv_obj_t* g_disclaimer_modal = nullptr;
 static lv_obj_t* g_exit_dialog_modal = nullptr;
 static lv_obj_t* g_about_dialog = nullptr;
-static DWORD g_ui_thread_id = 0;
 static bool g_ui_ready = false;
 
 /* Called from main.cpp when OS triggers maximize (double-click title bar, Win+Up, etc.) */
@@ -2056,7 +2098,12 @@ static void relayout_panels() {
 
     /* Re-layout chat mode children */
     int input_h = chat_input ? (int)lv_obj_get_height(chat_input) : 36;
-    int chat_y = CHAT_GAP;
+    if (mode_trace_chat_panel) {
+        int trace_h = chat_trace_panel_h(content_w);
+        lv_obj_set_size(mode_trace_chat_panel, content_w - CHAT_GAP * 2, trace_h);
+        lv_obj_set_pos(mode_trace_chat_panel, CHAT_GAP, CHAT_GAP);
+    }
+    int chat_y = chat_top_y_with_trace(content_w);
     int chat_h = content_h - chat_y - input_h - CHAT_GAP;
     int input_y = content_h - input_h - CHAT_GAP;
 
@@ -2668,7 +2715,7 @@ static void chat_input_resize_cb(lv_event_t* e) {
         }
 
         int panel_h = content_h;
-        int chat_y = GAP;
+        int chat_y = chat_top_y_with_trace(content_w);
         int new_chat_h = panel_h - chat_y - new_h - GAP;
         if (new_chat_h < 50) new_chat_h = 50;
         int32_t saved_scroll = lv_obj_get_scroll_y(chat_cont);
@@ -2902,6 +2949,8 @@ static void chat_add_ai_bubble(const char* text);
 static lv_obj_t* g_stream_bubble = nullptr;
 static lv_obj_t* g_stream_label = nullptr;
 static char g_stream_buffer[16384] = {0};  /* 16KB — doubled for long AI responses */
+static CRITICAL_SECTION g_stream_cs;
+static bool g_stream_cs_ready = false;
 static volatile LONG g_stream_new_data = 0;   /* atomic flag: new data available */
 volatile LONG g_stream_done = 0;        /* atomic flag: stream finished */
 static lv_timer_t* g_stream_timer = nullptr;
@@ -2909,6 +2958,49 @@ static bool g_streaming = false;
 static HANDLE g_stream_thread = nullptr;
 static DWORD g_stream_start_tick = 0;          /* when stream started (GetTickCount) */
 static DWORD g_stream_last_data_tick = 0;      /* last time new data arrived */
+
+static void stream_buf_init_once() {
+    if (!g_stream_cs_ready) {
+        InitializeCriticalSection(&g_stream_cs);
+        g_stream_cs_ready = true;
+    }
+}
+
+static void stream_buf_clear() {
+    stream_buf_init_once();
+    EnterCriticalSection(&g_stream_cs);
+    g_stream_buffer[0] = '\0';
+    LeaveCriticalSection(&g_stream_cs);
+}
+
+static void stream_buf_append_text(const char* value) {
+    if (!value || !value[0]) return;
+    stream_buf_init_once();
+    EnterCriticalSection(&g_stream_cs);
+    LONG buf_len = (LONG)strlen(g_stream_buffer);
+    LONG vi = (LONG)strlen(value);
+    LONG space = (LONG)sizeof(g_stream_buffer) - buf_len - 1;
+    if (space > 0 && vi <= space) {
+        strcat(g_stream_buffer, value);
+    } else if (space > 0) {
+        int safe_len = space;
+        while (safe_len > 0 && (value[safe_len] & 0xC0) == 0x80) safe_len--;
+        if (safe_len > 0) {
+            memcpy(g_stream_buffer + buf_len, value, safe_len);
+            g_stream_buffer[buf_len + safe_len] = '\0';
+        }
+    }
+    LeaveCriticalSection(&g_stream_cs);
+}
+
+static void stream_buf_copy(char* out, size_t out_size) {
+    if (!out || out_size == 0) return;
+    stream_buf_init_once();
+    EnterCriticalSection(&g_stream_cs);
+    strncpy(out, g_stream_buffer, out_size - 1);
+    out[out_size - 1] = '\0';
+    LeaveCriticalSection(&g_stream_cs);
+}
 
 /* Read Gateway auth token from openclaw.json */
 static std::string read_gateway_token() {
@@ -3108,21 +3200,8 @@ static void sse_chunk_cb(const char* chunk, void* ctx) {
             value[vi] = '\0';
 
             if (vi > 0) {
-                LONG buf_len = (LONG)strlen(g_stream_buffer);
-                LONG space = (LONG)sizeof(g_stream_buffer) - buf_len - 1;
-                if (space > 0 && vi <= space) {
-                    strcat(g_stream_buffer, value);
-                    InterlockedExchange(&g_stream_new_data, 1);
-                } else if (space > 0) {
-                    /* Append what fits, ensuring UTF-8 boundary */
-                    int safe_len = space;
-                    while (safe_len > 0 && (value[safe_len] & 0xC0) == 0x80) safe_len--;
-                    if (safe_len > 0) {
-                        memcpy(g_stream_buffer + buf_len, value, safe_len);
-                        g_stream_buffer[buf_len + safe_len] = '\0';
-                        InterlockedExchange(&g_stream_new_data, 1);
-                    }
-                }
+                stream_buf_append_text(value);
+                InterlockedExchange(&g_stream_new_data, 1);
             }
             cp = content_key;
         }
@@ -3175,7 +3254,7 @@ static unsigned __stdcall chat_api_thread(void* arg) {
     ui_log("[Chat] Sending to OpenClaw Gateway...");
 
     /* Initialize stream buffer */
-    g_stream_buffer[0] = '\0';
+    stream_buf_clear();
     InterlockedExchange(&g_stream_new_data, 0);
     InterlockedExchange(&g_stream_done, 0);
 
@@ -3188,20 +3267,21 @@ static unsigned __stdcall chat_api_thread(void* arg) {
     int status = http_post_stream(url, json_body, auth_header, sse_chunk_cb, nullptr, 60);
     DWORD tick_elapsed = GetTickCount() - tick_start;
 
-    printf("[Chat] Gateway response: status=%d, buffer_len=%zu\n", status, strlen(g_stream_buffer));
-    ui_log("[Chat] Gateway response: HTTP %d (%lums)", status, tick_elapsed);
+    char stream_snapshot[16384] = {0};
+    stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
+    printf("[Chat] Gateway response: status=%d, buffer_len=%zu\n", status, strlen(stream_snapshot));
 
     /* Record result for failover health tracking */
     {
         char cur_model[256] = {0};
         app_get_current_model(cur_model, sizeof(cur_model));
         if (cur_model[0]) {
-            failover_record_result(cur_model, (status == 200 && g_stream_buffer[0] != '\0'), tick_elapsed);
+            failover_record_result(cur_model, (status == 200 && stream_snapshot[0] != '\0'), tick_elapsed);
         }
     }
 
     /* If HTTP failed or no data received, try failover */
-    if (status != 200 || g_stream_buffer[0] == '\0') {
+    if (status != 200 || stream_snapshot[0] == '\0') {
         /* Try failover: switch to a healthy backup model */
         if (failover_is_enabled()) {
             char cur_model[256] = {0};
@@ -3212,7 +3292,7 @@ static unsigned __stdcall chat_api_thread(void* arg) {
                 LOG_I("Chat", "Failover: switching from %s to %s", cur_model, backup);
                 if (app_update_model_config(nullptr, backup)) {
                     Sleep(3000); /* wait for gateway restart */
-                    g_stream_buffer[0] = '\0';
+                    stream_buf_clear();
                     InterlockedExchange(&g_stream_new_data, 0);
                     snprintf(json_body, sizeof(json_body),
                         "{\"model\":\"openclaw:main\",\"messages\":[{\"role\":\"user\",\"content\":\"%s\"}],\"stream\":true}",
@@ -3220,34 +3300,37 @@ static unsigned __stdcall chat_api_thread(void* arg) {
                     status = http_post_stream(url, json_body, auth_header, sse_chunk_cb, nullptr, 60);
                     DWORD fe = GetTickCount() - tick_start;
                     ui_log("[Chat] Failover result: HTTP %d (%lums)", status, fe);
-                    failover_record_result(backup, (status == 200 && g_stream_buffer[0] != '\0'), fe);
+                    stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
+                    failover_record_result(backup, (status == 200 && stream_snapshot[0] != '\0'), fe);
                 }
             }
         }
 
-        if (status != 200 || g_stream_buffer[0] == '\0') {
+        if (status != 200 || stream_snapshot[0] == '\0') {
             if (status == 404) {
                 /* Auto-fix: enable chat completions endpoint and retry */
                 ui_log("[Chat] Endpoint 404, auto-enabling chatCompletions...");
                 LOG_W("Chat", "chatCompletions endpoint returned 404, attempting auto-fix");
                 if (app_enable_chat_endpoint()) {
                     Sleep(3000);
-                    g_stream_buffer[0] = '\0';
+                    stream_buf_clear();
                     InterlockedExchange(&g_stream_new_data, 0);
                     status = http_post_stream(url, json_body, auth_header, sse_chunk_cb, nullptr, 60);
-                    ui_log("[Chat] Retry after auto-fix: HTTP %d", status);
+                    stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
                 }
             }
-            if (status != 200 || g_stream_buffer[0] == '\0') {
+            if (status != 200 || stream_snapshot[0] == '\0') {
                 if (status == 0) {
-                    snprintf(g_stream_buffer, sizeof(g_stream_buffer),
-                        "⚠️ Gateway 未响应，请确认 OpenClaw 正在运行。");
+                    stream_buf_clear();
+                    stream_buf_append_text("⚠️ Gateway 未响应，请确认 OpenClaw 正在运行。");
                 } else if (status == 404) {
-                    snprintf(g_stream_buffer, sizeof(g_stream_buffer),
-                        "⚠️ Gateway HTTP API 未开启。\n请执行: openclaw config set gateway.http.endpoints.chatCompletions.enabled true");
+                    stream_buf_clear();
+                    stream_buf_append_text("⚠️ Gateway HTTP API 未开启。\n请执行: openclaw config set gateway.http.endpoints.chatCompletions.enabled true");
                 } else {
-                    snprintf(g_stream_buffer, sizeof(g_stream_buffer),
-                        "⚠️ Gateway 返回错误 (HTTP %d)", status);
+                    char err_msg[128] = {0};
+                    snprintf(err_msg, sizeof(err_msg), "⚠️ Gateway 返回错误 (HTTP %d)", status);
+                    stream_buf_clear();
+                    stream_buf_append_text(err_msg);
                 }
                 InterlockedExchange(&g_stream_new_data, 1);
             }
@@ -3271,16 +3354,22 @@ static void stream_timer_cb(lv_timer_t* timer) {
     if ((idle_ms > 30000 || total_ms > 45000) && !g_stream_done) {
         LOG_W("Chat", "Stream timeout: idle=%lums total=%lums, force-finish", idle_ms, total_ms);
         ui_log("[Chat] Stream timeout (%.0fs), finishing...", total_ms / 1000.0);
-        if (g_stream_buffer[0] == '\0') {
-            snprintf(g_stream_buffer, sizeof(g_stream_buffer),
-                "⚠️ AI 回复超时，请重试。");
+        set_ai_next_step("Timeout, please retry");
+        append_ai_script_log("[error] stream timeout");
+        char stream_snapshot[16384] = {0};
+        stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
+        if (stream_snapshot[0] == '\0') {
+            stream_buf_clear();
+            stream_buf_append_text("⚠️ AI 回复超时，请重试。");
             InterlockedExchange(&g_stream_new_data, 1);
         }
         InterlockedExchange(&g_stream_done, 1);
     }
 
     if (InterlockedCompareExchange(&g_stream_new_data, 0, 1)) {
-        render_markdown_to_label(g_stream_label, g_stream_buffer, CJK_FONT_CHAT);
+        char stream_snapshot[16384] = {0};
+        stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
+        render_markdown_to_label(g_stream_label, stream_snapshot, CJK_FONT_CHAT);
         chat_scroll_to_bottom();
     }
 
@@ -3289,25 +3378,29 @@ static void stream_timer_cb(lv_timer_t* timer) {
         lv_timer_del(g_stream_timer);
         g_stream_timer = nullptr;
         DWORD total_ms = GetTickCount() - g_stream_start_tick;
-        LOG_I("Chat", "Stream finished: total=%lums buf_len=%zu", total_ms, strlen(g_stream_buffer));
-
-        render_markdown_to_label(g_stream_label, g_stream_buffer, CJK_FONT_CHAT);
+        char stream_snapshot[16384] = {0};
+        stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
+        LOG_I("Chat", "Stream finished: total=%lums buf_len=%zu", total_ms, strlen(stream_snapshot));
+        render_markdown_to_label(g_stream_label, stream_snapshot, CJK_FONT_CHAT);
 
         size_t hlen = strlen(chat_history);
-        size_t slen = strlen(g_stream_buffer);
+        size_t slen = strlen(stream_snapshot);
         if (hlen + slen < sizeof(chat_history) - 1) {
-            strcat(chat_history, g_stream_buffer);
+            strcat(chat_history, stream_snapshot);
             strcat(chat_history, "\n");
         }
 
         if (g_stream_thread) {
-            WaitForSingleObject(g_stream_thread, 3000);
-            CloseHandle(g_stream_thread);
-            g_stream_thread = nullptr;
+            DWORD wait = WaitForSingleObject(g_stream_thread, 0);
+            if (wait == WAIT_OBJECT_0) {
+                CloseHandle(g_stream_thread);
+                g_stream_thread = nullptr;
+            }
         }
 
         chat_force_scroll_bottom();
-        ui_log("[Chat] Streaming complete");
+        set_ai_next_step("Completed, waiting next input");
+        append_ai_script_log("[done] stream completed");
     }
 }
 
@@ -3323,12 +3416,13 @@ static void chat_start_stream(const char* user_message) {
             }
             if (g_stream_thread) {
                 /* Thread should have exited since g_stream_done=1 */
-                DWORD wait = WaitForSingleObject(g_stream_thread, 1000);
+                DWORD wait = WaitForSingleObject(g_stream_thread, 0);
                 if (wait == WAIT_TIMEOUT) {
-                    LOG_W("Chat", "Stream thread still alive after done flag, force closing");
+                    LOG_W("Chat", "Stream thread still alive after done flag, keep handle for async cleanup");
+                } else {
+                    CloseHandle(g_stream_thread);
+                    g_stream_thread = nullptr;
                 }
-                CloseHandle(g_stream_thread);
-                g_stream_thread = nullptr;
             }
             /* Fall through to start new stream */
         } else {
@@ -3412,7 +3506,7 @@ static void chat_start_stream(const char* user_message) {
     lv_obj_set_style_text_font(ts_lbl, FONT(10), 0);
 
     /* Streaming text label */
-    g_stream_buffer[0] = '\0';
+    stream_buf_clear();
     g_stream_label = lv_label_create(inner);
     lv_obj_set_style_text_color(g_stream_label, lv_color_make(230, 230, 230), 0);
     lv_obj_set_style_text_font(g_stream_label, CJK_FONT_CHAT, 0);
@@ -3439,7 +3533,8 @@ static void chat_start_stream(const char* user_message) {
     char* msg_copy = _strdup(user_message);
     g_stream_thread = (HANDLE)_beginthreadex(nullptr, 0, chat_api_thread, msg_copy, 0, nullptr);
 
-    ui_log("[Chat] Streaming started (model: %s)", g_selected_model[0] ? g_selected_model : "default");
+    set_ai_next_step("Calling Gateway /v1/chat/completions");
+    append_ai_script_log("[request] POST /v1/chat/completions stream=true");
 }
 
 static void chat_add_ai_bubble(const char* text) {
@@ -3586,7 +3681,8 @@ static void chat_input_reset_height() {
         if (btn_upload_widget) {
             lv_obj_set_pos(btn_upload_widget, content_w - CHAT_GAP - 20 - 6 - 20 - 6, new_input_y + min_h - 20 - 6);
         }
-        int new_chat_h = content_h - GAP - min_h - GAP;
+        int chat_y = chat_top_y_with_trace(content_w);
+        int new_chat_h = content_h - chat_y - min_h - GAP;
         if (new_chat_h > 0) lv_obj_set_height(chat_cont, new_chat_h);
     }
 }
@@ -3597,6 +3693,8 @@ static void chat_send_cb(lv_event_t* e) {
     const char* text = lv_textarea_get_text(chat_input);
     if (!text || !text[0]) return;
     submit_prompt_to_chat(text);
+    set_ai_next_step("Preparing request payload");
+    append_ai_script_log("[input] user prompt submitted");
 
     /* Clear input */
     lv_textarea_set_text(chat_input, "");
@@ -3613,6 +3711,8 @@ static void chat_send_btn_cb(lv_event_t* e) {
     const char* text = lv_textarea_get_text(chat_input);
     if (!text || !text[0]) return;
     submit_prompt_to_chat(text);
+    set_ai_next_step("Preparing request payload");
+    append_ai_script_log("[input] user prompt submitted (button)");
 
     lv_textarea_set_text(chat_input, "");
     chat_input_reset_height();
@@ -6533,6 +6633,7 @@ void ui_show_setup_wizard() {
 void app_ui_init() {
     g_ui_thread_id = GetCurrentThreadId();
     g_ui_ready = false;
+    stream_buf_init_once();
     /* Load Windows system font (微软雅黑) for CJK text */
     init_system_font();
 
@@ -6816,6 +6917,16 @@ void app_ui_init() {
         lv_obj_set_style_text_color(mode_lbl_work_hint, c->text_dim, 0);
         update_work_mode_hint();
 
+        lv_obj_t* sec_trace = aw_form_section_create(mode_panel_work, "Agent Trace", card_w);
+        mode_lbl_work_next_step = aw_label_wrap_create(sec_trace, "", LABEL_HINT, 100);
+        lv_obj_set_style_text_color(mode_lbl_work_next_step, c->accent, 0);
+        mode_ta_work_script = aw_textarea_create(sec_trace, "Agent script output...", false, card_w - 24, SCALE(120));
+        lv_textarea_set_text_selection(mode_ta_work_script, true);
+        lv_obj_set_style_bg_color(mode_ta_work_script, c->panel, 0);
+        lv_obj_set_style_text_color(mode_ta_work_script, c->text, 0);
+        lv_obj_set_style_text_font(mode_ta_work_script, CJK_FONT_SMALL, 0);
+        update_agent_trace_views();
+
         lv_obj_t* sec_gemma = aw_form_section_create(mode_panel_work, "Local Gemma 4 Install", card_w);
         lv_obj_t* row_gemma_sw = lv_obj_create(sec_gemma);
         lv_obj_set_width(row_gemma_sw, card_w - 24);
@@ -6996,9 +7107,42 @@ void app_ui_init() {
         update_remote_session_visuals();
     }
 
+    /* Cursor-like trace panel (Chat mode): next step + script output */
+    {
+        int trace_h = chat_trace_panel_h(content_w);
+        mode_trace_chat_panel = lv_obj_create(mode_panel_chat);
+        lv_obj_set_size(mode_trace_chat_panel, content_w - CHAT_GAP * 2, trace_h);
+        lv_obj_set_pos(mode_trace_chat_panel, CHAT_GAP, CHAT_GAP);
+        lv_obj_set_style_bg_color(mode_trace_chat_panel, c->input_bg, 0);
+        lv_obj_set_style_border_color(mode_trace_chat_panel, c->panel_border, 0);
+        lv_obj_set_style_border_width(mode_trace_chat_panel, 1, 0);
+        lv_obj_set_style_radius(mode_trace_chat_panel, 8, 0);
+        lv_obj_set_style_pad_all(mode_trace_chat_panel, 8, 0);
+        lv_obj_set_style_pad_gap(mode_trace_chat_panel, 6, 0);
+        lv_obj_set_flex_flow(mode_trace_chat_panel, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(mode_trace_chat_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_clear_flag(mode_trace_chat_panel, LV_OBJ_FLAG_SCROLLABLE);
+
+        mode_lbl_chat_next_step = lv_label_create(mode_trace_chat_panel);
+        lv_obj_set_style_text_color(mode_lbl_chat_next_step, c->accent, 0);
+        lv_obj_set_style_text_font(mode_lbl_chat_next_step, CJK_FONT_SMALL, 0);
+
+        mode_ta_chat_script = lv_textarea_create(mode_trace_chat_panel);
+        lv_obj_set_width(mode_ta_chat_script, LV_PCT(100));
+        lv_obj_set_height(mode_ta_chat_script, trace_h - SCALE(42));
+        lv_textarea_set_one_line(mode_ta_chat_script, false);
+        lv_textarea_set_text_selection(mode_ta_chat_script, true);
+        lv_obj_set_style_bg_color(mode_ta_chat_script, c->panel, 0);
+        lv_obj_set_style_text_color(mode_ta_chat_script, c->text, 0);
+        lv_obj_set_style_text_font(mode_ta_chat_script, CJK_FONT_SMALL, 0);
+        lv_obj_set_style_border_color(mode_ta_chat_script, c->panel_border, 0);
+        lv_obj_set_style_border_width(mode_ta_chat_script, 1, 0);
+        lv_obj_set_style_radius(mode_ta_chat_script, 6, 0);
+    }
+
     /* Layout: chat fills space, input pinned to bottom; GAP spacing everywhere */
     int input_h = 96;   /* 默认3行（含LVGL内部padding） */
-    int chat_y = CHAT_GAP;    /* Chat: CHAT_GAP from panel top */
+    int chat_y = chat_top_y_with_trace(content_w);
     /* Chat fills from chat_y down to above input; CHAT_GAP between chat and input */
     int chat_h = content_h - chat_y - input_h - CHAT_GAP;
     chat_cont = lv_obj_create(mode_panel_chat);
