@@ -26,6 +26,7 @@
 #include "license.h"
 #include "session_manager.h"
 #include "cjk_font_data.h"
+#include "markdown.h"
 #include "widgets/aw_form.h"
 
 /* ═══ System Font: TinyTTF embedded data + bitmap fallback ═══ */
@@ -1052,6 +1053,8 @@ static lv_obj_t* mode_lbl_chat_next_step = nullptr;
 static lv_obj_t* mode_ta_chat_script = nullptr;
 static lv_obj_t* mode_lbl_work_next_step = nullptr;
 static lv_obj_t* mode_ta_work_script = nullptr;
+static lv_obj_t* mode_ta_work_prompt = nullptr;
+static lv_obj_t* mode_lbl_work_md_output = nullptr;
 static lv_obj_t* mode_dd_control = nullptr;
 static lv_obj_t* mode_dd_llm = nullptr;
 static lv_obj_t* mode_lbl_work_hint = nullptr;
@@ -1083,6 +1086,9 @@ static lv_obj_t* mode_profile_ai_avatar_preview = nullptr;
 static lv_obj_t* mode_profile_ai_text_preview = nullptr;
 static char g_ai_next_step[256] = "Idle";
 static char g_ai_script_log[8192] = "";
+static char g_work_md_doc[32768] = "";
+static char g_work_last_prompt[2048] = "";
+static bool g_work_waiting_ai = false;
 static lv_obj_t* g_remote_arm_modal = nullptr;
 static lv_obj_t* g_remote_arm_confirm_btn = nullptr;
 static lv_obj_t* g_remote_arm_count_label = nullptr;
@@ -1782,6 +1788,27 @@ static void append_ai_script_log(const char* line) {
     update_agent_trace_views();
 }
 
+static void render_work_md_doc() {
+    if (!mode_lbl_work_md_output) return;
+    render_markdown_to_label(mode_lbl_work_md_output,
+                             g_work_md_doc[0] ? g_work_md_doc : "# Work Output\n\n等待输入...",
+                             CJK_FONT_CHAT);
+}
+
+static void work_append_md_block(const char* title, const char* text) {
+    if (!title || !text || !text[0]) return;
+    char block[4096] = {0};
+    snprintf(block, sizeof(block), "\n## %s\n\n%s\n", title, text);
+    size_t cur = strlen(g_work_md_doc);
+    size_t add = strlen(block);
+    if (cur + add + 1 >= sizeof(g_work_md_doc)) {
+        memmove(g_work_md_doc, g_work_md_doc + sizeof(g_work_md_doc) / 2, sizeof(g_work_md_doc) / 2);
+        g_work_md_doc[sizeof(g_work_md_doc) / 2] = '\0';
+    }
+    strcat(g_work_md_doc, block);
+    render_work_md_doc();
+}
+
 static void update_work_mode_hint() {
     if (!mode_lbl_work_hint) return;
     const char* control = (g_control_mode == CONTROL_AI) ? "AI controls AnyClaw" : "User controls AnyClaw";
@@ -2094,6 +2121,7 @@ static void relayout_panels() {
     if (mode_ta_ai_role) lv_obj_set_width(mode_ta_ai_role, profile_w);
     if (mode_ta_ai_persona) lv_obj_set_width(mode_ta_ai_persona, profile_w);
     if (mode_ta_ai_skills) lv_obj_set_width(mode_ta_ai_skills, profile_w);
+    if (mode_ta_work_prompt) lv_obj_set_width(mode_ta_work_prompt, profile_w);
     if (mode_dd_user_avatar) lv_obj_set_width(mode_dd_user_avatar, profile_w);
     if (mode_dd_ai_avatar) lv_obj_set_width(mode_dd_ai_avatar, profile_w);
     if (mode_ta_voice_input) lv_obj_set_width(mode_ta_voice_input, content_w - 40);
@@ -3394,6 +3422,12 @@ static void stream_timer_cb(lv_timer_t* timer) {
             strcat(chat_history, "\n");
         }
 
+        if (g_work_waiting_ai) {
+            work_append_md_block("AI", stream_snapshot);
+            g_work_waiting_ai = false;
+            g_work_last_prompt[0] = '\0';
+        }
+
         if (g_stream_thread) {
             DWORD wait = WaitForSingleObject(g_stream_thread, 0);
             if (wait == WAIT_OBJECT_0) {
@@ -3723,6 +3757,20 @@ static void chat_send_btn_cb(lv_event_t* e) {
     update_send_button_state();
 
     ui_log("[Chat] Message sent via button, streaming response...");
+}
+
+static void work_send_cb(lv_event_t* e) {
+    (void)e;
+    if (!mode_ta_work_prompt) return;
+    const char* text = lv_textarea_get_text(mode_ta_work_prompt);
+    if (!text || !text[0]) return;
+    snprintf(g_work_last_prompt, sizeof(g_work_last_prompt), "%s", text);
+    g_work_waiting_ai = true;
+    work_append_md_block("User", text);
+    set_ai_next_step("Work mode: executing task");
+    append_ai_script_log("[work] prompt submitted");
+    submit_prompt_to_chat(text);
+    lv_textarea_set_text(mode_ta_work_prompt, "");
 }
 
 /* Update send button visual state based on input content */
@@ -4367,13 +4415,89 @@ static void perm_dialog_allow_persist_cb(lv_event_t* e) {
 }
 
 int ui_permission_confirm(const char* perm_key, const char* target) {
-    (void)perm_key;
-    (void)target;
-    /*
-     * Hotfix: previous synchronous LVGL modal could deadlock/re-enter UI loop and freeze.
-     * Return -1 so permission flow uses the safe MessageBox fallback path in permissions.cpp.
-     */
-    return -1;
+    if (!g_ui_ready || g_ui_thread_id == 0 || GetCurrentThreadId() != g_ui_thread_id) {
+        return -1;
+    }
+    static bool in_dialog = false;
+    if (in_dialog) return 0;
+    in_dialog = true;
+
+    lv_obj_t* scr = lv_screen_active();
+    if (!scr) {
+        in_dialog = false;
+        return -1;
+    }
+
+    lv_obj_t* overlay = nullptr;
+    lv_obj_t* box = create_dialog(scr, "AnyClaw 权限确认", SCALE(620), 0, &overlay);
+    if (!box || !overlay) {
+        in_dialog = false;
+        return -1;
+    }
+
+    const ThemeColors* c = g_colors;
+    char content[1200] = {0};
+    snprintf(content, sizeof(content),
+             "Agent 请求执行命令：\n\n%s\n\n权限项：%s",
+             target ? target : "(unknown)",
+             perm_key ? perm_key : "exec_shell");
+
+    lv_obj_t* lbl = lv_label_create(box);
+    lv_label_set_text(lbl, content);
+    lv_obj_set_style_text_color(lbl, c->text, 0);
+    lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
+    lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(lbl, LV_PCT(100));
+
+    lv_obj_t* btn_row = lv_obj_create(box);
+    lv_obj_set_size(btn_row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(btn_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(btn_row, 0, 0);
+    lv_obj_set_style_pad_all(btn_row, 0, 0);
+    lv_obj_set_style_pad_gap(btn_row, SCALE(8), 0);
+    lv_obj_set_flex_flow(btn_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(btn_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(btn_row, LV_OBJ_FLAG_SCROLLABLE);
+
+    volatile int decision = 0;
+    PermDialogCtx ctx = {&decision, overlay};
+
+    auto add_btn = [&](const char* text, lv_color_t bg, lv_event_cb_t cb) {
+        lv_obj_t* b = lv_button_create(btn_row);
+        lv_obj_set_height(b, SCALE(38));
+        lv_obj_set_flex_grow(b, 1);
+        lv_obj_set_style_bg_color(b, bg, 0);
+        lv_obj_set_style_radius(b, SCALE(8), 0);
+        lv_obj_set_style_border_width(b, 0, 0);
+        lv_obj_t* t = lv_label_create(b);
+        lv_label_set_text(t, text);
+        lv_obj_set_style_text_color(t, lv_color_white(), 0);
+        lv_obj_set_style_text_font(t, CJK_FONT_SMALL, 0);
+        lv_obj_center(t);
+        lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, &ctx);
+    };
+
+    add_btn("拒绝", c->btn_close, perm_dialog_deny_cb);
+    add_btn("此次授权", c->btn_action, perm_dialog_allow_once_cb);
+    add_btn("永久授权", c->btn_add, perm_dialog_allow_persist_cb);
+
+    lv_obj_move_foreground(overlay);
+
+    uint32_t start = GetTickCount();
+    while (decision == 0) {
+        lv_timer_handler();
+        Sleep(16);
+        if (GetTickCount() - start > 60000) {
+            decision = 1;
+            break;
+        }
+    }
+
+    if (overlay) lv_obj_del(overlay);
+    in_dialog = false;
+    if (decision == 2) return 1;
+    if (decision == 3) return 2;
+    return 0;
 }
 
 /* ═══ Legal Disclaimer (first launch) ═══ */
@@ -6862,6 +6986,32 @@ void app_ui_init() {
         lv_obj_set_style_text_color(mode_ta_work_script, c->text, 0);
         lv_obj_set_style_text_font(mode_ta_work_script, CJK_FONT_SMALL, 0);
         update_agent_trace_views();
+
+        lv_obj_t* sec_work_console = aw_form_section_create(mode_panel_work, "Work Console (Markdown)", card_w);
+        lv_obj_t* md_wrap = lv_obj_create(sec_work_console);
+        lv_obj_set_size(md_wrap, card_w - 24, SCALE(180));
+        lv_obj_set_style_bg_color(md_wrap, c->panel, 0);
+        lv_obj_set_style_border_color(md_wrap, c->panel_border, 0);
+        lv_obj_set_style_border_width(md_wrap, 1, 0);
+        lv_obj_set_style_radius(md_wrap, 6, 0);
+        lv_obj_set_style_pad_all(md_wrap, 8, 0);
+        lv_obj_set_scroll_dir(md_wrap, LV_DIR_VER);
+        lv_obj_set_scrollbar_mode(md_wrap, LV_SCROLLBAR_MODE_AUTO);
+        lv_obj_set_flex_flow(md_wrap, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(md_wrap, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+
+        mode_lbl_work_md_output = lv_label_create(md_wrap);
+        lv_obj_set_width(mode_lbl_work_md_output, LV_PCT(100));
+        lv_obj_set_style_text_color(mode_lbl_work_md_output, c->text, 0);
+        lv_obj_set_style_text_font(mode_lbl_work_md_output, CJK_FONT_CHAT, 0);
+        lv_label_set_long_mode(mode_lbl_work_md_output, LV_LABEL_LONG_WRAP);
+        render_work_md_doc();
+
+        mode_ta_work_prompt = aw_textarea_create(sec_work_console, "Work mode input...", false, card_w - 24, SCALE(90));
+        lv_textarea_set_one_line(mode_ta_work_prompt, false);
+        lv_textarea_set_text_selection(mode_ta_work_prompt, true);
+        lv_obj_t* btn_work_send = aw_btn_create(sec_work_console, "Run In Work", BTN_PRIMARY, SCALE(160), SCALE(34));
+        lv_obj_add_event_cb(btn_work_send, work_send_cb, LV_EVENT_CLICKED, nullptr);
 
         lv_obj_t* sec_gemma = aw_form_section_create(mode_panel_work, "Local Gemma 4 Install", card_w);
         lv_obj_t* row_gemma_sw = lv_obj_create(sec_gemma);
