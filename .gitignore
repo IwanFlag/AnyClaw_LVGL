@@ -52,6 +52,12 @@ Thumbs.db
 *.cs
 *.js
 !package.json
+!tools/common/*.ps1
+!tools/common/*.sh
+!tools/windows/*.bat
+!tools/linux/*.sh
+!tools/linux/*.cmake
+tools/windows/.env-path.bat
 
 # Python dev scripts
 *.py
