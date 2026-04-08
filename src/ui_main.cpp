@@ -341,6 +341,8 @@ static void chat_add_user_bubble(const char* text);
 static void chat_add_ai_bubble(const char* text);
 static void chat_force_scroll_bottom();
 static void chat_start_stream(const char* user_message);
+static void update_send_button_state();
+static bool is_streaming_now();
 
 /* ═══ Chat History Persistence ═══ */
 
@@ -1574,6 +1576,10 @@ static const char* profile_ai_avatar_src() {
 
 static void submit_prompt_to_chat(const char* text) {
     if (!text || !text[0]) return;
+    if (is_streaming_now()) {
+        ui_log("[Chat] A response is still streaming, ignore new submit");
+        return;
+    }
     chat_add_user_bubble(text);
     chat_force_scroll_bottom();
     std::string payload = text;
@@ -3226,6 +3232,7 @@ static volatile LONG g_stream_new_data = 0;   /* atomic flag: new data available
 volatile LONG g_stream_done = 0;        /* atomic flag: stream finished */
 static lv_timer_t* g_stream_timer = nullptr;
 static bool g_streaming = false;
+static bool is_streaming_now() { return g_streaming; }
 static HANDLE g_stream_thread = nullptr;
 static DWORD g_stream_start_tick = 0;          /* when stream started (GetTickCount) */
 static DWORD g_stream_last_data_tick = 0;      /* last time new data arrived */
@@ -3648,6 +3655,7 @@ static void stream_timer_cb(lv_timer_t* timer) {
         g_streaming = false;
         lv_timer_del(g_stream_timer);
         g_stream_timer = nullptr;
+        update_send_button_state();
         DWORD total_ms = GetTickCount() - g_stream_start_tick;
         char stream_snapshot[16384] = {0};
         stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
@@ -3798,6 +3806,7 @@ static void chat_start_stream(const char* user_message) {
     chat_force_scroll_bottom();
 
     g_streaming = true;
+    update_send_button_state();
     g_stream_start_tick = GetTickCount();
     g_stream_last_data_tick = GetTickCount();
     InterlockedExchange(&g_stream_new_data, 0);
@@ -4362,12 +4371,25 @@ static void update_send_button_state() {
     const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
     const char* text = lv_textarea_get_text(chat_input);
     bool empty = (!text || !text[0]);
-    if (empty) {
+    bool disabled = g_streaming || empty;
+    if (disabled) {
         lv_obj_set_style_bg_color(btn_send_widget, c->btn_secondary, 0);
         lv_obj_set_style_opa(btn_send_widget, LV_OPA_50, 0);
+        lv_obj_add_state(btn_send_widget, LV_STATE_DISABLED);
     } else {
         lv_obj_set_style_bg_color(btn_send_widget, c->btn_action, 0);
         lv_obj_set_style_opa(btn_send_widget, LV_OPA_COVER, 0);
+        lv_obj_clear_state(btn_send_widget, LV_STATE_DISABLED);
+    }
+    if (btn_upload_widget) {
+        if (g_streaming) lv_obj_add_state(btn_upload_widget, LV_STATE_DISABLED);
+        else lv_obj_clear_state(btn_upload_widget, LV_STATE_DISABLED);
+        lv_obj_set_style_opa(btn_upload_widget, g_streaming ? LV_OPA_40 : LV_OPA_COVER, 0);
+    }
+    if (btn_voice_widget) {
+        if (g_streaming) lv_obj_add_state(btn_voice_widget, LV_STATE_DISABLED);
+        else lv_obj_clear_state(btn_voice_widget, LV_STATE_DISABLED);
+        lv_obj_set_style_opa(btn_voice_widget, g_streaming ? LV_OPA_40 : LV_OPA_COVER, 0);
     }
 }
 

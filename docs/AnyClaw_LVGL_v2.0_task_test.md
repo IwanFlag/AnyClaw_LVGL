@@ -2088,6 +2088,26 @@ chat_cont (消息区域)
 
 ---
 
+## TASK-STABILITY04: 聊天流式期间防重入与按钮状态联动（2026-04-09）
+
+**优先级：** P1  
+**状态：** ✅ 已完成  
+**完成时间：** 2026-04-09
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | 流式回复进行中禁止重复提交新 prompt | `src/ui_main.cpp` | ✅ |
+| 2 | `Send`/`Upload`/`Voice` 按钮状态与 `g_streaming` 联动 | `src/ui_main.cpp` | ✅ |
+| 3 | 流结束自动恢复发送区可交互状态 | `src/ui_main.cpp` | ✅ |
+
+### 验证
+- Windows 原生构建通过（`tools\\windows\\build.bat`）。
+- Lint 检查通过（`src/ui_main.cpp` 无新增告警）。
+
+---
+
 ## TASK-WIZARD-P0-20260409: 向导四项阻塞问题修复
 
 **优先级：** P0  
