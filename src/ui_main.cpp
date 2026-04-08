@@ -8344,8 +8344,20 @@ void app_ui_init() {
     /* Show startup error modal if any (e.g. "Already Running") */
     show_startup_error(scr);
 
-    /* ═══ First-launch setup wizard ═══ */
-    if (!is_wizard_completed()) {
+    /* ═══ Setup wizard gate: first launch OR runtime env broken ═══ */
+    EnvCheckResult wiz_env = app_check_environment();
+    bool wizard_needed = !is_wizard_completed()
+        || !wiz_env.node_ok
+        || !wiz_env.node_version_ok
+        || !wiz_env.npm_ok
+        || !wiz_env.openclaw_ok;
+    if (wizard_needed) {
+        ui_log("[Wizard] Auto-open setup wizard (node=%d node_ver=%d npm=%d oc=%d completed=%d)",
+               wiz_env.node_ok ? 1 : 0,
+               wiz_env.node_version_ok ? 1 : 0,
+               wiz_env.npm_ok ? 1 : 0,
+               wiz_env.openclaw_ok ? 1 : 0,
+               is_wizard_completed() ? 1 : 0);
         ui_show_setup_wizard();
     }
 
