@@ -2108,6 +2108,26 @@ chat_cont (消息区域)
 
 ---
 
+## TASK-REMOTE02: 鉴权强化（令牌随机化/一次性轮换/过期清理）（2026-04-09）
+
+**优先级：** P0  
+**状态：** ✅ 已完成（V1.5）  
+**完成时间：** 2026-04-09
+
+### 实现内容
+
+| # | 功能 | 文件 | 状态 |
+|---|------|------|------|
+| 1 | 会话令牌改为随机混合生成（tick+QPC+mix64） | `src/remote_protocol.cpp` | ✅ |
+| 2 | `pending_accept` 验证通过后令牌一次性轮换，降低重放风险 | `src/remote_protocol.cpp` | ✅ |
+| 3 | 会话存储增加过期回收（create/verify/update/close/recent 全路径） | `src/remote_protocol.cpp` | ✅ |
+| 4 | recent 窗口扩容并保留 `expired` 状态轨迹 | `src/remote_protocol.cpp` | ✅ |
+
+### 验证
+- Windows 原生构建通过（`tools\\windows\\build.bat`）。
+
+---
+
 ## TASK-WIZARD-P0-20260409: 向导四项阻塞问题修复
 
 **优先级：** P0  
