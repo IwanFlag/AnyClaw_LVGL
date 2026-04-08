@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 #include <thread>
+#include <mutex>
+#include <deque>
 #include <fstream>
 #include <filesystem>
 #include <windows.h>
@@ -1263,9 +1265,46 @@ struct UiLogEntry {
 static UiLogEntry log_entries[LOG_MAX_LINES];
 static int  log_count = 0;
 static int  log_filter_level = 0; /* Show all levels >= this (UI filter) */
+struct PendingUiLogEntry {
+    char text[LOG_LINE_LEN];
+    int level;
+};
+static std::mutex g_ui_log_queue_mtx;
+static std::deque<PendingUiLogEntry> g_ui_log_queue;
+static lv_timer_t* g_ui_log_flush_timer = nullptr;
 
 /* Log display refresh (no-op: UI panel not in main view) */
 static void log_refresh_display() { }
+
+static void ui_log_append_entry(const char* timed, int level) {
+    if (!timed) return;
+    if (log_count >= LOG_MAX_LINES) {
+        for (int i = 0; i < LOG_MAX_LINES - 1; i++) log_entries[i] = log_entries[i + 1];
+        log_count = LOG_MAX_LINES - 1;
+    }
+    strncpy(log_entries[log_count].text, timed, LOG_LINE_LEN - 1);
+    log_entries[log_count].text[LOG_LINE_LEN - 1] = 0;
+    log_entries[log_count].level = level;
+    log_count++;
+}
+
+static void ui_log_flush_pending() {
+    std::deque<PendingUiLogEntry> local;
+    {
+        std::lock_guard<std::mutex> lk(g_ui_log_queue_mtx);
+        if (g_ui_log_queue.empty()) return;
+        local.swap(g_ui_log_queue);
+    }
+    for (const auto& it : local) ui_log_append_entry(it.text, it.level);
+    log_refresh_display();
+}
+
+static void ui_log_flush_timer_cb(lv_timer_t* t) {
+    (void)t;
+    if (g_ui_thread_id != 0 && GetCurrentThreadId() == g_ui_thread_id) {
+        ui_log_flush_pending();
+    }
+}
 
 /* Get total log entry count */
 int ui_log_get_count() { return log_count; }
@@ -1331,19 +1370,20 @@ void ui_log(const char* fmt, ...) {
     else if (strstr(buf, "[WARN]")) level = 2;
     else if (strstr(buf, "[DEBUG]")) level = 0;
 
-    /* LVGL is single-threaded: background workers must not refresh UI logs directly. */
+    /* Cross-thread safe: workers enqueue, UI thread flushes periodically. */
     if (g_ui_thread_id != 0 && GetCurrentThreadId() != g_ui_thread_id) {
+        PendingUiLogEntry e{};
+        strncpy(e.text, timed, LOG_LINE_LEN - 1);
+        e.text[LOG_LINE_LEN - 1] = '\0';
+        e.level = level;
+        std::lock_guard<std::mutex> lk(g_ui_log_queue_mtx);
+        if (g_ui_log_queue.size() > 512) g_ui_log_queue.pop_front();
+        g_ui_log_queue.push_back(e);
         return;
     }
 
-    if (log_count >= LOG_MAX_LINES) {
-        for (int i = 0; i < LOG_MAX_LINES - 1; i++) log_entries[i] = log_entries[i + 1];
-        log_count = LOG_MAX_LINES - 1;
-    }
-    strncpy(log_entries[log_count].text, timed, LOG_LINE_LEN - 1);
-    log_entries[log_count].text[LOG_LINE_LEN - 1] = 0;
-    log_entries[log_count].level = level;
-    log_count++;
+    ui_log_flush_pending();
+    ui_log_append_entry(timed, level);
     log_refresh_display();
 }
 
@@ -7494,6 +7534,7 @@ void app_ui_init() {
 
     /* P2-27: Auto-refresh timer (configurable: 15s / 30s / 60s) */
     g_refresh_timer = lv_timer_create(auto_refresh_cb, g_refresh_interval_ms, nullptr);
+    if (!g_ui_log_flush_timer) g_ui_log_flush_timer = lv_timer_create(ui_log_flush_timer_cb, 120, nullptr);
 
     ui_log("[Ready] AnyClaw LVGL v2.0.1 - Bilingual mode");
     ui_log("[Task] Task list initialized");

@@ -787,10 +787,12 @@ static const DownloadSource nodejs_sources[] = {
 #ifdef _WIN32
     {"nodejs.org",       "https://nodejs.org/dist/v22.22.1/node-v22.22.1-x64.msi"},
     {"npmmirror (CN)",   "https://registry.npmmirror.com/-/binary/node/v22.22.1/node-v22.22.1-x64.msi"},
+    {"Tencent mirror",   "https://mirrors.cloud.tencent.com/nodejs-release/v22.22.1/node-v22.22.1-x64.msi"},
     {nullptr, nullptr}
 #else
     {"nodejs.org",       "https://nodejs.org/dist/v22.22.1/node-v22.22.1-linux-x64.tar.xz"},
     {"npmmirror (CN)",   "https://registry.npmmirror.com/-/binary/node/v22.22.1/node-v22.22.1-linux-x64.tar.xz"},
+    {"Tencent mirror",   "https://mirrors.cloud.tencent.com/nodejs-release/v22.22.1/node-v22.22.1-linux-x64.tar.xz"},
     {nullptr, nullptr}
 #endif
 };
@@ -848,6 +850,7 @@ static bool find_bundled_tarball(char* path_out, int out_size) {
 struct GemmaSource {
     const char* name;
     const char* mirror_url;
+    const char* mirror2_url;
     const char* official_url;
     const char* file_name;
 };
@@ -856,18 +859,21 @@ static const GemmaSource kGemmaSources[] = {
     {
         "Gemma 4 2B",
         "https://hf-mirror.com/bartowski/google_gemma-2-2b-it-GGUF/resolve/main/google_gemma-2-2b-it-Q4_K_M.gguf",
+        "https://www.modelscope.cn/models/bartowski/google_gemma-2-2b-it-GGUF/resolve/master/google_gemma-2-2b-it-Q4_K_M.gguf",
         "https://huggingface.co/bartowski/google_gemma-2-2b-it-GGUF/resolve/main/google_gemma-2-2b-it-Q4_K_M.gguf",
         "gemma-2-2b-it-q4_k_m.gguf"
     },
     {
         "Gemma 4 9B",
         "https://hf-mirror.com/bartowski/google_gemma-2-9b-it-GGUF/resolve/main/google_gemma-2-9b-it-Q4_K_M.gguf",
+        "https://www.modelscope.cn/models/bartowski/google_gemma-2-9b-it-GGUF/resolve/master/google_gemma-2-9b-it-Q4_K_M.gguf",
         "https://huggingface.co/bartowski/google_gemma-2-9b-it-GGUF/resolve/main/google_gemma-2-9b-it-Q4_K_M.gguf",
         "gemma-2-9b-it-q4_k_m.gguf"
     },
     {
         "Gemma 4 27B",
         "https://hf-mirror.com/bartowski/google_gemma-2-27b-it-GGUF/resolve/main/google_gemma-2-27b-it-Q4_K_M.gguf",
+        "https://www.modelscope.cn/models/bartowski/google_gemma-2-27b-it-GGUF/resolve/master/google_gemma-2-27b-it-Q4_K_M.gguf",
         "https://huggingface.co/bartowski/google_gemma-2-27b-it-GGUF/resolve/main/google_gemma-2-27b-it-Q4_K_M.gguf",
         "gemma-2-27b-it-q4_k_m.gguf"
     }
@@ -892,27 +898,31 @@ static bool file_size_ok(const std::string& path, uint64_t min_bytes) {
 }
 
 static bool download_file_with_fallback(const char* primary_url,
+                                        const char* secondary_url,
                                         const char* fallback_url,
                                         const char* target_path,
                                         char* output, int out_size) {
-    if (!primary_url || !fallback_url || !target_path) return false;
+    if (!primary_url || !secondary_url || !fallback_url || !target_path) return false;
     if (!ensure_parent_dir(target_path)) {
         snprintf(output, out_size, "Cannot create model directory");
         return false;
     }
 
-    const char* urls[2] = {primary_url, fallback_url};
+    const char* urls[3] = {primary_url, secondary_url, fallback_url};
     char cmd[2048];
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
+        ui_log("[Download] Source %d/3: %s", i + 1, urls[i]);
         snprintf(cmd, sizeof(cmd),
-                 "curl -L --fail --retry 2 --connect-timeout 15 --max-time 0 -o \"%s\" \"%s\"",
+                 "curl -L --fail --retry 1 --connect-timeout 15 --speed-time 30 --speed-limit 1024 --max-time 1800 -o \"%s\" \"%s\"",
                  target_path, urls[i]);
         if (exec_cmd(cmd, output, out_size, 4 * 60 * 60 * 1000)) {
             if (file_size_ok(target_path, 10ull * 1024ull * 1024ull)) {
+                ui_log("[Download] Source %d succeeded", i + 1);
                 return true;
             }
             snprintf(output, out_size, "Downloaded file too small, possible incomplete: %s", target_path);
         }
+        ui_log("[Download] Source %d failed or stalled, switching...", i + 1);
     }
     return false;
 }
@@ -945,15 +955,35 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
     }
     /* Mode: network */
     else if (strcmp(mode, "network") == 0) {
-        snprintf(cmd, sizeof(cmd), "npm install -g openclaw");
-        LOG_I("Setup", "Installing from npm registry...");
-        ok = exec_cmd(cmd, output, out_size, 120000);
+        const char* registries[] = {
+            "https://registry.npmjs.org/",
+            "https://registry.npmmirror.com/",
+            "https://mirrors.cloud.tencent.com/npm/",
+            nullptr
+        };
+        for (int i = 0; registries[i]; i++) {
+            ui_log("[Setup] OpenClaw network source %d/3: %s", i + 1, registries[i]);
+            snprintf(cmd, sizeof(cmd), "set \"npm_config_registry=%s\" && npm install -g openclaw", registries[i]);
+            ok = exec_cmd(cmd, output, out_size, 8 * 60 * 1000);
+            if (ok) break;
+            ui_log("[Setup] Source %d failed/timeout, auto switch next source", i + 1);
+        }
     }
     /* Mode: auto (network first, fallback to local) */
     else {
-        snprintf(cmd, sizeof(cmd), "npm install -g openclaw");
-        LOG_I("Setup", "Trying network install...");
-        ok = exec_cmd(cmd, output, out_size, 120000);
+        const char* registries[] = {
+            "https://registry.npmjs.org/",
+            "https://registry.npmmirror.com/",
+            "https://mirrors.cloud.tencent.com/npm/",
+            nullptr
+        };
+        for (int i = 0; registries[i]; i++) {
+            ui_log("[Setup] OpenClaw network source %d/3: %s", i + 1, registries[i]);
+            snprintf(cmd, sizeof(cmd), "set \"npm_config_registry=%s\" && npm install -g openclaw", registries[i]);
+            ok = exec_cmd(cmd, output, out_size, 8 * 60 * 1000);
+            if (ok) break;
+            ui_log("[Setup] Source %d failed/timeout, auto switch next source", i + 1);
+        }
 
         if (!ok) {
             LOG_W("Setup", "Network install failed, trying bundled...");
@@ -1016,6 +1046,7 @@ bool app_install_gemma_models(int model_mask, char* output, int out_size) {
         char dl_out[512] = {0};
         bool ok = download_file_with_fallback(
             kGemmaSources[i].mirror_url,
+            kGemmaSources[i].mirror2_url,
             kGemmaSources[i].official_url,
             target.c_str(),
             dl_out, sizeof(dl_out)
