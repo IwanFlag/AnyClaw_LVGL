@@ -18,6 +18,7 @@
 #include <deque>
 #include <fstream>
 #include <filesystem>
+#include <algorithm>
 #include <windows.h>
 #include <commdlg.h>
 #include <shlobj.h>
@@ -1059,6 +1060,7 @@ static lv_obj_t* mode_ta_chat_script = nullptr;
 static lv_obj_t* mode_lbl_work_next_step = nullptr;
 static lv_obj_t* mode_ta_work_script = nullptr;
 static lv_obj_t* mode_ta_trace_recent = nullptr;
+static lv_obj_t* mode_lbl_boot_report_hint = nullptr;
 static lv_obj_t* mode_ta_work_prompt = nullptr;
 static lv_obj_t* mode_lbl_work_md_output = nullptr;
 static lv_obj_t* mode_dd_control = nullptr;
@@ -1124,11 +1126,14 @@ struct AttachmentRetryCtx {
 };
 static std::vector<AttachmentQueueItem> g_attachment_queue;
 static lv_timer_t* g_attachment_queue_timer = nullptr;
+static std::vector<AttachmentQueueItem> g_attachment_failed_cache;
 static std::atomic<bool> g_boot_check_running(false);
 static unsigned int g_remote_stub_session_seq = 1;
 static char g_remote_stub_session_id[64] = "";
 static char g_remote_stub_auth_token[64] = "";
 static DWORD g_remote_stub_auth_expire_tick = 0;
+static bool g_trace_sort_latency = false;
+static bool g_trace_fail_only = false;
 
 /* Left panel children that need resize on splitter drag */
 static lv_obj_t* lp_panel_title = nullptr;   /* "Gateway Status" label */
@@ -3846,6 +3851,11 @@ static void test_inject_messages_cb(lv_timer_t* t) {
 static void update_send_button_state();
 static void work_boot_export_report(const std::vector<BootCheckResult>& results);
 static void work_trace_refresh_cb(lv_event_t* e);
+static void work_trace_toggle_sort_cb(lv_event_t* e);
+static void work_trace_toggle_fail_filter_cb(lv_event_t* e);
+static void work_retry_failed_attachments_cb(lv_event_t* e);
+static void work_boot_open_report_cb(lv_event_t* e);
+static void enqueue_attachment_card(const char* path, bool is_dir);
 
 /* Reset input box to single-line height after sending */
 static void chat_input_reset_height() {
@@ -3982,6 +3992,16 @@ static void work_trace_refresh_cb(lv_event_t* e) {
     (void)e;
     if (!mode_ta_trace_recent) return;
     auto evs = TraceManager::instance().get_recent_events(24);
+    if (g_trace_fail_only) {
+        evs.erase(std::remove_if(evs.begin(), evs.end(), [](const TraceEvent& ev) {
+            return ev.outcome == "ok";
+        }), evs.end());
+    }
+    if (g_trace_sort_latency) {
+        std::sort(evs.begin(), evs.end(), [](const TraceEvent& a, const TraceEvent& b) {
+            return a.latency_ms > b.latency_ms;
+        });
+    }
     std::string text;
     text.reserve(2048);
     if (evs.empty()) {
@@ -3993,6 +4013,56 @@ static void work_trace_refresh_cb(lv_event_t* e) {
         }
     }
     lv_textarea_set_text(mode_ta_trace_recent, text.c_str());
+}
+
+static void work_trace_toggle_sort_cb(lv_event_t* e) {
+    (void)e;
+    g_trace_sort_latency = !g_trace_sort_latency;
+    ui_log("[OBS] Trace sort mode: %s", g_trace_sort_latency ? "latency-desc" : "time-desc");
+    work_trace_refresh_cb(nullptr);
+}
+
+static void work_trace_toggle_fail_filter_cb(lv_event_t* e) {
+    (void)e;
+    g_trace_fail_only = !g_trace_fail_only;
+    ui_log("[OBS] Trace filter: %s", g_trace_fail_only ? "fail-only" : "all");
+    work_trace_refresh_cb(nullptr);
+}
+
+static void work_retry_failed_attachments_cb(lv_event_t* e) {
+    (void)e;
+    if (g_attachment_failed_cache.empty()) {
+        ui_log("[Share] No failed attachments to retry");
+        return;
+    }
+    int queued = 0;
+    std::vector<AttachmentQueueItem> failed = g_attachment_failed_cache;
+    g_attachment_failed_cache.clear();
+    for (const auto& it : failed) {
+        if (!it.path.empty()) {
+            enqueue_attachment_card(it.path.c_str(), it.is_dir);
+            queued++;
+        }
+    }
+    ui_log("[Share] Retry queued for %d failed attachments", queued);
+}
+
+static void work_boot_open_report_cb(lv_event_t* e) {
+    (void)e;
+    char appdata[MAX_PATH] = {0};
+    if (SHGetFolderPathA(nullptr, CSIDL_APPDATA, nullptr, 0, appdata) != S_OK) return;
+    std::string report = std::string(appdata) + "\\AnyClaw_LVGL\\bootcheck-last.md";
+    if (!std::filesystem::exists(report)) {
+        ui_log("[BootCheck] Report not found: run health check first");
+        return;
+    }
+    if (mode_lbl_boot_report_hint) {
+        lv_label_set_text_fmt(mode_lbl_boot_report_hint, "Report: %s", report.c_str());
+    }
+    HINSTANCE r = ShellExecuteA(nullptr, "open", report.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    if ((INT_PTR)r <= 32) {
+        ui_log("[BootCheck] Failed to open report: %s", report.c_str());
+    }
 }
 
 /* Update send button visual state based on input content */
@@ -5643,6 +5713,7 @@ static void attachment_queue_timer_cb(lv_timer_t* t) {
             } else {
                 lv_label_set_text(it.status_lbl, "Queue: failed (click to retry)");
                 lv_obj_set_style_text_color(it.status_lbl, lv_color_make(255, 150, 150), 0);
+                g_attachment_failed_cache.push_back(it);
             }
         }
         it.done = true;
@@ -5659,7 +5730,14 @@ static void attachment_queue_timer_cb(lv_timer_t* t) {
             lv_timer_del(g_attachment_queue_timer);
             g_attachment_queue_timer = nullptr;
         }
-        ui_progress_finish("Attachment Queue", true, "Attachment queue done");
+        if (g_attachment_failed_cache.empty()) {
+            ui_progress_finish("Attachment Queue", true, "Attachment queue done");
+        } else {
+            char msg[96] = {0};
+            snprintf(msg, sizeof(msg), "Attachment queue done (%d failed)", (int)g_attachment_failed_cache.size());
+            ui_progress_finish("Attachment Queue", false, msg);
+            ui_log("[Share] %d attachments failed. Use \"Retry Failed Attachments\" in Work mode.", (int)g_attachment_failed_cache.size());
+        }
         g_attachment_queue.clear();
     }
 }
@@ -7349,6 +7427,12 @@ void app_ui_init() {
         update_work_mode_hint();
         lv_obj_t* btn_boot_check = aw_btn_create(sec_runtime, "Run Health Check + Auto Repair", BTN_SECONDARY, SCALE(260), SCALE(34));
         lv_obj_add_event_cb(btn_boot_check, work_boot_check_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* btn_open_boot_report = aw_btn_create(sec_runtime, "Open Last Boot Report", BTN_SECONDARY, SCALE(220), SCALE(34));
+        lv_obj_add_event_cb(btn_open_boot_report, work_boot_open_report_cb, LV_EVENT_CLICKED, nullptr);
+        mode_lbl_boot_report_hint = aw_label_wrap_create(sec_runtime, "Report: (not generated yet)", LABEL_HINT, 100);
+        lv_obj_set_style_text_color(mode_lbl_boot_report_hint, c->text_dim, 0);
+        lv_obj_t* btn_retry_failed_attach = aw_btn_create(sec_runtime, "Retry Failed Attachments", BTN_SECONDARY, SCALE(220), SCALE(34));
+        lv_obj_add_event_cb(btn_retry_failed_attach, work_retry_failed_attachments_cb, LV_EVENT_CLICKED, nullptr);
 
         lv_obj_t* sec_trace = aw_form_section_create(mode_panel_work, "Agent Trace", card_w);
         mode_lbl_work_next_step = aw_label_wrap_create(sec_trace, "", LABEL_HINT, 100);
@@ -7366,8 +7450,12 @@ void app_ui_init() {
         lv_obj_set_style_bg_color(mode_ta_trace_recent, c->panel, 0);
         lv_obj_set_style_text_color(mode_ta_trace_recent, c->text, 0);
         lv_obj_set_style_text_font(mode_ta_trace_recent, CJK_FONT_SMALL, 0);
-        lv_obj_t* btn_trace_refresh = aw_btn_create(sec_obs, "Refresh Traces", BTN_SECONDARY, SCALE(170), SCALE(34));
+        lv_obj_t* btn_trace_refresh = aw_btn_create(sec_obs, "Refresh Traces", BTN_SECONDARY, SCALE(150), SCALE(34));
         lv_obj_add_event_cb(btn_trace_refresh, work_trace_refresh_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* btn_trace_sort = aw_btn_create(sec_obs, "Sort By Latency", BTN_SECONDARY, SCALE(150), SCALE(34));
+        lv_obj_add_event_cb(btn_trace_sort, work_trace_toggle_sort_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* btn_trace_filter = aw_btn_create(sec_obs, "Toggle Fail-Only", BTN_SECONDARY, SCALE(150), SCALE(34));
+        lv_obj_add_event_cb(btn_trace_filter, work_trace_toggle_fail_filter_cb, LV_EVENT_CLICKED, nullptr);
         work_trace_refresh_cb(nullptr);
 
         lv_obj_t* sec_work_console = aw_form_section_create(mode_panel_work, "Work Console (Markdown)", card_w);
