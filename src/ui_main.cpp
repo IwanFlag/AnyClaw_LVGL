@@ -861,18 +861,19 @@ static void theme_dropdown_cb(lv_event_t* e) {
 
 /* Called from settings UI to add theme dropdown */
 lv_obj_t* ui_settings_add_theme_dropdown(lv_obj_t* tab) {
+    const ThemeColors* c = g_colors;
     lv_obj_t* dd = lv_dropdown_create(tab);
     lv_dropdown_set_options(dd, "Dark\nLight\nClassic Dark");
     lv_dropdown_set_selected(dd, (uint16_t)g_theme);
     lv_obj_set_width(dd, SCALE(160));
-    lv_obj_set_style_bg_color(dd, lv_color_make(40, 44, 60), 0);
-    lv_obj_set_style_text_color(dd, lv_color_make(200, 205, 220), 0);
-    lv_obj_set_style_border_color(dd, lv_color_make(60, 65, 90), 0);
+    lv_obj_set_style_bg_color(dd, c->input_bg, 0);
+    lv_obj_set_style_text_color(dd, c->text, 0);
+    lv_obj_set_style_border_color(dd, c->panel_border, 0);
     lv_obj_set_style_text_font(dd, CJK_FONT, 0);
     lv_obj_set_style_text_font(dd, FONT(14), LV_PART_INDICATOR);  /* Symbol font for ▼ */
     lv_obj_set_style_text_font(dd, CJK_FONT, LV_PART_ITEMS);
-    lv_obj_set_style_text_color(dd, lv_color_make(200, 205, 220), LV_PART_ITEMS);
-    lv_obj_set_style_bg_color(dd, lv_color_make(40, 44, 60), LV_PART_ITEMS);
+    lv_obj_set_style_text_color(dd, c->text, LV_PART_ITEMS);
+    lv_obj_set_style_bg_color(dd, c->panel, LV_PART_ITEMS);
     lv_obj_add_event_cb(dd, theme_dropdown_cb, LV_EVENT_VALUE_CHANGED, nullptr);
     return dd;
 }
@@ -1879,6 +1880,8 @@ static void mode_work_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_WORK; app
 static lv_obj_t* g_disclaimer_modal = nullptr;
 static lv_obj_t* g_exit_dialog_modal = nullptr;
 static lv_obj_t* g_about_dialog = nullptr;
+static DWORD g_ui_thread_id = 0;
+static bool g_ui_ready = false;
 
 /* Called from main.cpp when OS triggers maximize (double-click title bar, Win+Up, etc.) */
 void ui_on_window_maximized() {
@@ -1899,6 +1902,8 @@ void ui_on_window_restored() {
 /* ── Window drag ── */
 static void title_drag_cb(lv_event_t* e) {
     lv_event_code_t code = lv_event_get_code(e);
+    /* Ignore bubbled events from window control buttons. */
+    if (lv_event_get_target_obj(e) != title_bar) return;
     if (code == LV_EVENT_PRESSING) {
         /* Don't drag when maximized */
         if (g_maximized) return;
@@ -1955,7 +1960,7 @@ void ui_relayout_all() {
 
     /* Update window control button positions */
     if (btn_minimize && btn_maximize && btn_close && title_bar) {
-        int wc_btn_size = SCALE(28);
+        int wc_btn_size = std::max(SCALE(28), SCALE(32));
         int wc_btn_h = wc_btn_size;
         int wc_btn_gap = 6;
         int wc_btn_margin = 10;
@@ -4167,7 +4172,7 @@ static lv_obj_t* create_dialog(lv_obj_t* parent, const char* title, int w, int h
     lv_obj_add_event_cb(box, dialog_drag_cb, LV_EVENT_PRESSING, nullptr);
     lv_obj_add_event_cb(box, dialog_drag_cb, LV_EVENT_RELEASED, nullptr);
 
-    /* Title row: [title] ←——→ [✕] */
+    /* Title row: only title (no top-right close button) */
     lv_obj_t* title_row = lv_obj_create(box);
     lv_obj_set_size(title_row, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(title_row, LV_OPA_TRANSP, 0);
@@ -4175,35 +4180,12 @@ static lv_obj_t* create_dialog(lv_obj_t* parent, const char* title, int w, int h
     lv_obj_set_style_pad_all(title_row, 0, 0);
     lv_obj_clear_flag(title_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_flex_flow(title_row, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t* lbl_title = lv_label_create(title_row);
     lv_label_set_text(lbl_title, title);
     lv_obj_set_style_text_color(lbl_title, c->accent, 0);
     lv_obj_set_style_text_font(lbl_title, CJK_FONT, 0);
-
-    /* Close button — closes overlay */
-    lv_obj_t* btn_x = lv_button_create(title_row);
-    lv_obj_set_size(btn_x, SCALE(28), SCALE(28));
-    lv_obj_set_style_bg_color(btn_x, c->btn_close, 0);
-    lv_obj_set_style_bg_color(btn_x, lv_color_make(220, 70, 70), LV_STATE_PRESSED);
-    lv_obj_set_style_radius(btn_x, SCALE(6), 0);
-    lv_obj_add_event_cb(btn_x, [](lv_event_t* e) {
-        /* btn_x → title_row → box → overlay */
-        lv_obj_t* btn = lv_event_get_target_obj(e);
-        lv_obj_t* ov = lv_obj_get_parent(lv_obj_get_parent(lv_obj_get_parent(btn)));
-        /* Find and clean up global dialog pointers */
-        extern lv_obj_t* g_about_dialog;
-        extern lv_obj_t* g_exit_dialog_modal;
-        if (ov == g_about_dialog) { lv_obj_del(g_about_dialog); g_about_dialog = nullptr; }
-        else if (ov == g_exit_dialog_modal) { lv_obj_del(g_exit_dialog_modal); g_exit_dialog_modal = nullptr; }
-        else { lv_obj_del(ov); }
-    }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* lbl_x = lv_label_create(btn_x);
-    lv_label_set_text(lbl_x, "X");
-    lv_obj_set_style_text_color(lbl_x, lv_color_make(255, 255, 255), 0);
-    lv_obj_set_style_text_font(lbl_x, FONT(14), 0);
-    lv_obj_center(lbl_x);
 
     if (out_overlay) *out_overlay = overlay;
     return box;
@@ -4255,6 +4237,107 @@ static void add_dialog_buttons(lv_obj_t* box, lv_event_cb_t ok_cb, lv_event_cb_t
     if (ok_cb) {
         lv_obj_add_event_cb(btn_ok, ok_cb, LV_EVENT_CLICKED, user_data);
     }
+}
+
+struct PermDialogCtx {
+    volatile int* decision; /* 0=pending 1=deny 2=allow_once 3=allow_persist */
+    lv_obj_t* overlay;
+};
+
+static void perm_dialog_deny_cb(lv_event_t* e) {
+    PermDialogCtx* ctx = (PermDialogCtx*)lv_event_get_user_data(e);
+    if (!ctx || !ctx->decision) return;
+    *ctx->decision = 1;
+}
+
+static void perm_dialog_allow_once_cb(lv_event_t* e) {
+    PermDialogCtx* ctx = (PermDialogCtx*)lv_event_get_user_data(e);
+    if (!ctx || !ctx->decision) return;
+    *ctx->decision = 2;
+}
+
+static void perm_dialog_allow_persist_cb(lv_event_t* e) {
+    PermDialogCtx* ctx = (PermDialogCtx*)lv_event_get_user_data(e);
+    if (!ctx || !ctx->decision) return;
+    *ctx->decision = 3;
+}
+
+int ui_permission_confirm(const char* perm_key, const char* target) {
+    if (!g_ui_ready || g_ui_thread_id == 0 || GetCurrentThreadId() != g_ui_thread_id) {
+        return -1;
+    }
+    lv_obj_t* scr = lv_screen_active();
+    if (!scr) return -1;
+
+    lv_obj_t* overlay = nullptr;
+    lv_obj_t* box = create_dialog(scr, "AnyClaw 权限确认", SCALE(620), 0, &overlay);
+    if (!box || !overlay) return -1;
+
+    const ThemeColors* c = g_colors;
+    char content[1200] = {0};
+    snprintf(content, sizeof(content),
+             "Agent 请求执行命令：\n\n%s\n\n权限项：%s\n\n"
+             "仅本次允许：只放行这一次\n"
+             "永久允许：后续同类命令不再询问\n"
+             "拒绝：本次不执行",
+             target ? target : "(unknown)",
+             perm_key ? perm_key : "exec_shell");
+
+    lv_obj_t* lbl = lv_label_create(box);
+    lv_label_set_text(lbl, content);
+    lv_obj_set_style_text_color(lbl, c->text, 0);
+    lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
+    lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(lbl, LV_PCT(100));
+
+    lv_obj_t* btn_row = lv_obj_create(box);
+    lv_obj_set_size(btn_row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(btn_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(btn_row, 0, 0);
+    lv_obj_set_style_pad_all(btn_row, 0, 0);
+    lv_obj_set_style_pad_gap(btn_row, SCALE(8), 0);
+    lv_obj_set_flex_flow(btn_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(btn_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(btn_row, LV_OBJ_FLAG_SCROLLABLE);
+
+    volatile int decision = 0;
+    PermDialogCtx ctx = {&decision, overlay};
+
+    auto add_btn = [&](const char* text, lv_color_t bg, lv_event_cb_t cb) {
+        lv_obj_t* b = lv_button_create(btn_row);
+        lv_obj_set_height(b, SCALE(38));
+        lv_obj_set_flex_grow(b, 1);
+        lv_obj_set_style_bg_color(b, bg, 0);
+        lv_obj_set_style_radius(b, SCALE(8), 0);
+        lv_obj_set_style_border_width(b, 0, 0);
+        lv_obj_t* t = lv_label_create(b);
+        lv_label_set_text(t, text);
+        lv_obj_set_style_text_color(t, lv_color_white(), 0);
+        lv_obj_set_style_text_font(t, CJK_FONT_SMALL, 0);
+        lv_obj_center(t);
+        lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, &ctx);
+    };
+
+    add_btn("拒绝", c->btn_close, perm_dialog_deny_cb);
+    add_btn("仅本次允许", c->btn_action, perm_dialog_allow_once_cb);
+    add_btn("永久允许", c->btn_add, perm_dialog_allow_persist_cb);
+
+    lv_obj_move_foreground(overlay);
+
+    uint32_t start = GetTickCount();
+    while (decision == 0) {
+        lv_timer_handler();
+        Sleep(16);
+        if (GetTickCount() - start > 120000) { /* hard timeout 2min */
+            decision = 1;
+            break;
+        }
+    }
+
+    if (overlay) lv_obj_del(overlay);
+    if (decision == 2) return 1;
+    if (decision == 3) return 2;
+    return 0;
 }
 
 /* ═══ Legal Disclaimer (first launch) ═══ */
@@ -5295,8 +5378,11 @@ static void create_title_bar(lv_obj_t* scr) {
         lv_obj_set_style_border_width(btn_minimize, 1, 0);
         lv_obj_set_style_border_color(btn_minimize, lv_color_make(200, 200, 220), 0);
         lv_obj_clear_flag(btn_minimize, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+        lv_obj_clear_flag(btn_minimize, LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_set_ext_click_area(btn_minimize, SCALE(6));
         /* Stop event propagation so title bar drag handler doesn't swallow clicks */
         lv_obj_add_event_cb(btn_minimize, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
+        lv_obj_add_event_cb(btn_minimize, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_CLICKED, nullptr);
         lv_obj_add_event_cb(btn_minimize, btn_minimize_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_t* lbl_min = lv_label_create(btn_minimize);
         lv_label_set_text(lbl_min, "-");
@@ -5313,7 +5399,10 @@ static void create_title_bar(lv_obj_t* scr) {
         lv_obj_set_style_border_width(btn_maximize, 1, 0);
         lv_obj_set_style_border_color(btn_maximize, lv_color_make(100, 160, 255), 0);
         lv_obj_clear_flag(btn_maximize, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+        lv_obj_clear_flag(btn_maximize, LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_set_ext_click_area(btn_maximize, SCALE(6));
         lv_obj_add_event_cb(btn_maximize, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
+        lv_obj_add_event_cb(btn_maximize, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_CLICKED, nullptr);
         lv_obj_add_event_cb(btn_maximize, btn_maximize_cb, LV_EVENT_CLICKED, nullptr);
         lbl_maximize = lv_label_create(btn_maximize);
         lv_label_set_text(lbl_maximize, "[]");
@@ -5330,7 +5419,10 @@ static void create_title_bar(lv_obj_t* scr) {
         lv_obj_set_style_border_width(btn_close, 1, 0);
         lv_obj_set_style_border_color(btn_close, lv_color_make(255, 120, 120), 0);
         lv_obj_clear_flag(btn_close, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+        lv_obj_clear_flag(btn_close, LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_set_ext_click_area(btn_close, SCALE(6));
         lv_obj_add_event_cb(btn_close, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
+        lv_obj_add_event_cb(btn_close, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_CLICKED, nullptr);
         lv_obj_add_event_cb(btn_close, btn_close_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_t* lbl_cls = lv_label_create(btn_close);
         lv_label_set_text(lbl_cls, "X");
@@ -5965,8 +6057,8 @@ static void wizard_build_step_profile() {
     lv_obj_set_style_text_font(g_wiz_tz_dd, CJK_FONT, 0);
     lv_obj_set_style_text_font(g_wiz_tz_dd, FONT(14), LV_PART_INDICATOR);
     lv_obj_set_style_text_font(g_wiz_tz_dd, CJK_FONT, LV_PART_ITEMS);
-    lv_obj_set_style_text_color(g_wiz_tz_dd, lv_color_make(220, 225, 240), LV_PART_ITEMS);
-    lv_obj_set_style_bg_color(g_wiz_tz_dd, lv_color_make(25, 28, 40), LV_PART_ITEMS);
+    lv_obj_set_style_text_color(g_wiz_tz_dd, g_colors->text, LV_PART_ITEMS);
+    lv_obj_set_style_bg_color(g_wiz_tz_dd, g_colors->panel, LV_PART_ITEMS);
 }
 
 /* ── Step 6: Summary ── */
@@ -5979,9 +6071,9 @@ static void wizard_build_step_summary() {
     /* Summary box */
     lv_obj_t* box = lv_obj_create(g_wizard_content);
     lv_obj_set_size(box, LV_PCT(100), LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(box, lv_color_make(25, 28, 40), 0);
+    lv_obj_set_style_bg_color(box, g_colors->input_bg, 0);
     lv_obj_set_style_border_width(box, 1, 0);
-    lv_obj_set_style_border_color(box, lv_color_make(60, 65, 90), 0);
+    lv_obj_set_style_border_color(box, g_colors->panel_border, 0);
     lv_obj_set_style_radius(box, 8, 0);
     lv_obj_set_style_pad_all(box, 16, 0);
     lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
@@ -6372,22 +6464,6 @@ void ui_show_setup_wizard() {
     lv_obj_set_style_text_font(g_wizard_title, CJK_FONT, 0);
     lv_obj_align(g_wizard_title, LV_ALIGN_LEFT_MID, SCALE(130), 0);
 
-    /* Close button (X) */
-    lv_obj_t* btn_x = lv_button_create(header);
-    lv_obj_set_size(btn_x, 30, 30);
-    lv_obj_align(btn_x, LV_ALIGN_RIGHT_MID, -10, 0);
-    lv_obj_set_style_bg_color(btn_x, lv_color_make(80, 40, 40), 0);
-    lv_obj_set_style_bg_color(btn_x, lv_color_make(180, 50, 50), LV_STATE_PRESSED);
-    lv_obj_set_style_radius(btn_x, 6, 0);
-    lv_obj_set_style_border_width(btn_x, 0, 0);
-    lv_obj_clear_flag(btn_x, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(btn_x, wizard_close_cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* x_lbl = lv_label_create(btn_x);
-    lv_label_set_text(x_lbl, "X");
-    lv_obj_set_style_text_font(x_lbl, FONT(12), 0);
-    lv_obj_set_style_text_color(x_lbl, lv_color_make(200, 200, 200), 0);
-    lv_obj_center(x_lbl);
-
     /* Separator line under header */
     lv_obj_t* sep = lv_obj_create(g_wizard_box);
     lv_obj_set_size(sep, box_w, 1);
@@ -6455,6 +6531,8 @@ void ui_show_setup_wizard() {
 }
 
 void app_ui_init() {
+    g_ui_thread_id = GetCurrentThreadId();
+    g_ui_ready = false;
     /* Load Windows system font (微软雅黑) for CJK text */
     init_system_font();
 
@@ -6499,6 +6577,8 @@ void app_ui_init() {
     lv_obj_t* scr = lv_screen_active();
     lv_obj_set_style_bg_color(scr, c->bg, 0);
     lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+    /* Enable unified permission dialog as soon as base screen is available. */
+    g_ui_ready = true;
 
     /* ═══ DIVIDER ═══ */
     lv_obj_t* div1 = lv_obj_create(scr);
@@ -7214,12 +7294,10 @@ void app_ui_init() {
         }
     }
 
-    /* Make all labels selectable for text copy */
-    make_labels_selectable_recursive(scr);
-    make_labels_selectable_recursive(pr);   /* Right panel (chat area) */
-    make_labels_selectable_recursive(pl);   /* Left panel (status) */
+    /* Keep dropdown/item interactions stable: avoid global label-select hook here. */
 
     /* ═══ Test mode (disabled: using direct injection above) ═══ */
     /* lv_timer_create(test_inject_messages_cb, 500, nullptr); */
+    g_ui_ready = true;
 }
 

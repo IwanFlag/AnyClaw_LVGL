@@ -2,7 +2,6 @@
 #include "app.h"
 #include "app_log.h"
 #include "workspace.h"
-#include "tracing.h"
 #include <windows.h>
 #include <cstdio>
 #include <cstring>
@@ -96,23 +95,6 @@ static std::string get_audit_path() {
     return std::string(appdata) + "\\AnyClaw_LVGL\\audit.log";
 }
 
-/* ═══ Audit log chain (FNV-1a integrity hash) ═══ */
-
-static uint32_t g_prev_audit_hash = 0x811c9dc5u; /* FNV-1a offset basis */
-
-static uint32_t fnv1a(const char* data, size_t len) {
-    uint32_t hash = 0x811c9dc5u;
-    for (size_t i = 0; i < len; i++) {
-        hash ^= (uint8_t)data[i];
-        hash *= 0x01000193u;
-    }
-    return hash;
-}
-
-static uint32_t fnv1a_str(const char* s) {
-    return fnv1a(s, strlen(s));
-}
-
 void perm_audit_log(const char* action, const char* target, const char* decision) {
     std::string path = get_audit_path();
     if (path.empty()) return;
@@ -132,114 +114,11 @@ void perm_audit_log(const char* action, const char* target, const char* decision
 
     std::ofstream f(path, std::ios::app);
     if (!f.is_open()) return;
-
-    /* Build log line without chain fields first */
-    char line_buf[1024] = {0};
-    snprintf(line_buf, sizeof(line_buf),
-        "[%s] action=%s target=%s decision=%s",
-        ts,
-        action ? action : "-",
-        target ? target : "-",
-        decision ? decision : "-");
-
-    /* Compute chain hashes */
-    char prev_str[16] = {0};
-    snprintf(prev_str, sizeof(prev_str), "%08x", g_prev_audit_hash);
-
-    /* chain_curr = FNV-1a(chain_prev + content) */
-    std::string chain_input = std::string(prev_str) + line_buf;
-    uint32_t curr_hash = fnv1a_str(chain_input.c_str());
-    g_prev_audit_hash = curr_hash;
-
-    char curr_str[16] = {0};
-    snprintf(curr_str, sizeof(curr_str), "%08x", curr_hash);
-
-    f << line_buf
-      << " chain_prev=" << prev_str
-      << " chain_curr=" << curr_str
+    f << "[" << ts << "]"
+      << " action=" << (action ? action : "-")
+      << " target=" << (target ? target : "-")
+      << " decision=" << (decision ? decision : "-")
       << "\n";
-}
-
-bool perm_audit_verify_chain(std::string* error_out) {
-    std::string path = get_audit_path();
-    if (path.empty()) {
-        if (error_out) *error_out = "Audit log path not available";
-        return false;
-    }
-
-    std::ifstream f(path);
-    if (!f.is_open()) {
-        /* No audit log = vacuously valid */
-        return true;
-    }
-
-    uint32_t expected_prev = 0x811c9dc5u; /* FNV-1a offset basis (initial) */
-    std::string line;
-    int line_num = 0;
-
-    while (std::getline(f, line)) {
-        line_num++;
-        if (line.empty()) continue;
-
-        /* Find chain_prev= and chain_curr= in the line */
-        size_t cp_pos = line.find(" chain_prev=");
-        size_t cc_pos = line.find(" chain_curr=");
-        if (cp_pos == std::string::npos || cc_pos == std::string::npos) {
-            if (error_out) {
-                char buf[128];
-                snprintf(buf, sizeof(buf), "Line %d: missing chain fields", line_num);
-                *error_out = buf;
-            }
-            return false;
-        }
-
-        /* Extract stored hashes */
-        size_t cp_val_start = cp_pos + 12; /* strlen(" chain_prev=") */
-        size_t cp_val_end = cc_pos;
-        std::string stored_prev = line.substr(cp_val_start, cp_val_end - cp_val_start);
-
-        size_t cc_val_start = cc_pos + 12; /* strlen(" chain_curr=") */
-        std::string stored_curr = line.substr(cc_val_start);
-
-        /* Content = everything before chain_prev= */
-        std::string content = line.substr(0, cp_pos);
-
-        /* Verify chain_prev matches expected */
-        char expected_prev_str[16] = {0};
-        snprintf(expected_prev_str, sizeof(expected_prev_str), "%08x", expected_prev);
-        if (stored_prev != expected_prev_str) {
-            if (error_out) {
-                char buf[256];
-                snprintf(buf, sizeof(buf),
-                    "Line %d: chain_prev mismatch (expected %s, got %s)",
-                    line_num, expected_prev_str, stored_prev.c_str());
-                *error_out = buf;
-            }
-            return false;
-        }
-
-        /* Recompute chain_curr */
-        std::string chain_input = std::string(expected_prev_str) + content;
-        uint32_t computed = fnv1a_str(chain_input.c_str());
-        char computed_str[16] = {0};
-        snprintf(computed_str, sizeof(computed_str), "%08x", computed);
-
-        if (stored_curr != computed_str) {
-            if (error_out) {
-                char buf[256];
-                snprintf(buf, sizeof(buf),
-                    "Line %d: chain_curr tampered (expected %s, got %s)",
-                    line_num, computed_str, stored_curr.c_str());
-                *error_out = buf;
-            }
-            return false;
-        }
-
-        /* Advance: current hash becomes next line's expected prev */
-        expected_prev = computed;
-    }
-
-    return true;
 }
 
 /* ═══ Permissions singleton ═══ */
@@ -248,7 +127,6 @@ static Permissions g_perms;
 Permissions& permissions() { return g_perms; }
 
 bool perm_check_exec(PermKey key, const char* target) {
-    TraceSpan span("perm_check_exec", target ? target : "");
     PermValue v = permissions().get(key);
     if (v == PermValue::Allow) {
         perm_audit_log("exec_check", target, "allow");
@@ -256,7 +134,6 @@ bool perm_check_exec(PermKey key, const char* target) {
     }
     if (v == PermValue::Deny || v == PermValue::ReadOnly) {
         perm_audit_log("exec_check", target, "deny");
-        span.set_fail();
         return false;
     }
 
@@ -268,27 +145,40 @@ bool perm_check_exec(PermKey key, const char* target) {
         target ? target : "(unknown)", key_name ? key_name : "exec_shell"
     );
 
-    int r = MessageBoxA(
-        nullptr,
-        msg,
-        "AnyClaw 权限确认",
-        MB_ICONWARNING | MB_YESNOCANCEL | MB_TOPMOST | MB_SETFOREGROUND
-    );
-
-    if (r == IDYES) {
+    int decision = ui_permission_confirm(key_name ? key_name : "exec_shell", target ? target : "(unknown)");
+    if (decision == 1) {
         perm_audit_log("exec_check", target, "allow_once");
         return true;
     }
-    if (r == IDCANCEL) {
+    if (decision == 2) {
         permissions().set(key, PermValue::Allow);
         permissions().save();
         workspace_sync_managed_sections();
         perm_audit_log("exec_check", target, "allow_persist");
         return true;
     }
+    if (decision < 0) {
+        /* Fallback when UI is not ready / not on UI thread. */
+        int r = MessageBoxA(
+            nullptr,
+            msg,
+            "AnyClaw 权限确认",
+            MB_ICONWARNING | MB_YESNOCANCEL | MB_TOPMOST | MB_SETFOREGROUND
+        );
+        if (r == IDYES) {
+            perm_audit_log("exec_check", target, "allow_once");
+            return true;
+        }
+        if (r == IDCANCEL) {
+            permissions().set(key, PermValue::Allow);
+            permissions().save();
+            workspace_sync_managed_sections();
+            perm_audit_log("exec_check", target, "allow_persist");
+            return true;
+        }
+    }
 
     perm_audit_log("exec_check", target, "deny_by_user");
-    span.set_fail();
     return false;
 }
 

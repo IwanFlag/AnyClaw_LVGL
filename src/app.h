@@ -36,6 +36,8 @@ void app_ui_init();
 void app_refresh_status();
 void update_ui_language();  /* Refresh all translatable UI text */
 void ui_log(const char* fmt, ...);  /* Append to log area */
+/* Unified permission prompt: -1 unavailable, 0 deny, 1 allow once, 2 allow persist */
+int ui_permission_confirm(const char* perm_key, const char* target);
 
 /* Manager functions */
 OpenClawInfo app_detect_openclaw();
