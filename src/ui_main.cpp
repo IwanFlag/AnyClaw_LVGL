@@ -28,6 +28,8 @@
 #include "health.h"
 #include "license.h"
 #include "session_manager.h"
+#include "boot_check.h"
+#include "tracing.h"
 #include "cjk_font_data.h"
 #include "markdown.h"
 #include "widgets/aw_form.h"
@@ -1121,6 +1123,9 @@ struct AttachmentRetryCtx {
 };
 static std::vector<AttachmentQueueItem> g_attachment_queue;
 static lv_timer_t* g_attachment_queue_timer = nullptr;
+static std::atomic<bool> g_boot_check_running(false);
+static unsigned int g_remote_stub_session_seq = 1;
+static char g_remote_stub_session_id[64] = "";
 
 /* Left panel children that need resize on splitter drag */
 static lv_obj_t* lp_panel_title = nullptr;   /* "Gateway Status" label */
@@ -1726,14 +1731,17 @@ static void update_remote_session_visuals() {
 
 static void remote_request_cb(lv_event_t* e) {
     (void)e;
+    TraceSpan span("remote_request", "work_mode");
     if (!g_remote_guard_armed) {
+        span.set_fail();
         ui_log("[Remote] Cannot request session: guard is disarmed");
         return;
     }
     if (g_remote_state != REMOTE_IDLE) return;
+    snprintf(g_remote_stub_session_id, sizeof(g_remote_stub_session_id), "stub-%06u", g_remote_stub_session_seq++);
     g_remote_state = REMOTE_REQUESTING;
     update_remote_session_visuals();
-    ui_log("[Remote] Session request sent");
+    ui_log("[Remote] Session request sent (session=%s)", g_remote_stub_session_id);
     g_remote_state = REMOTE_PENDING_ACCEPT;
     g_remote_session_left = 15;
     stop_remote_session_timer();
@@ -1743,27 +1751,32 @@ static void remote_request_cb(lv_event_t* e) {
 
 static void remote_accept_cb(lv_event_t* e) {
     (void)e;
+    TraceSpan span("remote_accept", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "no-session");
     if (g_remote_state != REMOTE_PENDING_ACCEPT) return;
     stop_remote_session_timer();
     g_remote_state = REMOTE_CONNECTED;
-    ui_log("[Remote] Session accepted and connected");
+    ui_log("[Remote] Session accepted and connected (session=%s, channel=stub)", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
     update_remote_session_visuals();
 }
 
 static void remote_reject_cb(lv_event_t* e) {
     (void)e;
+    TraceSpan span("remote_reject", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "no-session");
     if (g_remote_state != REMOTE_PENDING_ACCEPT) return;
     stop_remote_session_timer();
     g_remote_state = REMOTE_IDLE;
-    ui_log("[Remote] Session rejected");
+    ui_log("[Remote] Session rejected (session=%s)", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
+    g_remote_stub_session_id[0] = '\0';
     update_remote_session_visuals();
 }
 
 static void remote_disconnect_cb(lv_event_t* e) {
     (void)e;
+    TraceSpan span("remote_disconnect", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "no-session");
     stop_remote_session_timer();
     g_remote_state = REMOTE_IDLE;
-    ui_log("[Remote] Session disconnected");
+    ui_log("[Remote] Session disconnected (session=%s)", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
+    g_remote_stub_session_id[0] = '\0';
     update_remote_session_visuals();
 }
 
@@ -3881,6 +3894,34 @@ static void work_send_cb(lv_event_t* e) {
     lv_textarea_set_text(mode_ta_work_prompt, "");
 }
 
+static void work_boot_check_cb(lv_event_t* e) {
+    (void)e;
+    if (g_boot_check_running.exchange(true)) {
+        ui_log("[BootCheck] Health check is already running");
+        return;
+    }
+    std::thread([]() {
+        TraceSpan span("boot_check_run_and_fix", "work_mode");
+        ui_progress_begin("Boot Check", "Running environment checks", 5);
+        BootCheckManager mgr;
+        auto results = mgr.run_and_fix();
+        int ok = 0;
+        int warn = 0;
+        int err = 0;
+        for (const auto& r : results) {
+            if (r.status == BootCheckStatus::Ok) ok++;
+            else if (r.status == BootCheckStatus::Warn) warn++;
+            else err++;
+        }
+        char summary[160] = {0};
+        snprintf(summary, sizeof(summary), "BootCheck: %d ok / %d warn / %d error", ok, warn, err);
+        ui_progress_update("Boot Check", summary, 85);
+        ui_progress_finish("Boot Check", err == 0, summary);
+        if (err > 0) span.set_outcome("warn");
+        g_boot_check_running.store(false);
+    }).detach();
+}
+
 /* Update send button visual state based on input content */
 static void update_send_button_state() {
     if (!btn_send_widget || !chat_input) return;
@@ -5506,13 +5547,22 @@ static lv_obj_t* chat_add_attachment_card(const char* path, bool is_dir) {
 static void attachment_queue_timer_cb(lv_timer_t* t) {
     (void)t;
     bool has_pending = false;
+    const int total = (int)g_attachment_queue.size();
     for (auto& it : g_attachment_queue) {
         if (it.done) continue;
         has_pending = true;
+        DWORD t0 = GetTickCount();
         bool ok = false;
         std::error_code ec;
         if (it.is_dir) ok = std::filesystem::is_directory(it.path, ec);
         else ok = std::filesystem::is_regular_file(it.path, ec);
+        DWORD elapsed = GetTickCount() - t0;
+        TraceManager::instance().record_event(
+            TraceManager::instance().start_trace(),
+            "attachment_queue_send",
+            it.path,
+            (int)elapsed,
+            ok ? "ok" : "fail");
         if (it.status_lbl) {
             if (ok) {
                 lv_label_set_text(it.status_lbl, "Queue: sent");
@@ -5523,6 +5573,12 @@ static void attachment_queue_timer_cb(lv_timer_t* t) {
             }
         }
         it.done = true;
+        int done_count = 0;
+        for (const auto& jt : g_attachment_queue) if (jt.done) done_count++;
+        int progress = (total > 0) ? ((done_count * 100) / total) : 100;
+        char step[96] = {0};
+        snprintf(step, sizeof(step), "Attachment queue %d/%d", done_count, total);
+        ui_progress_update("Attachment Queue", step, progress);
         break; /* process one item per tick */
     }
     if (!has_pending) {
@@ -5530,11 +5586,13 @@ static void attachment_queue_timer_cb(lv_timer_t* t) {
             lv_timer_del(g_attachment_queue_timer);
             g_attachment_queue_timer = nullptr;
         }
+        ui_progress_finish("Attachment Queue", true, "Attachment queue done");
         g_attachment_queue.clear();
     }
 }
 
 static void enqueue_attachment_card(const char* path, bool is_dir) {
+    bool was_empty = g_attachment_queue.empty();
     lv_obj_t* status_lbl = chat_add_attachment_card(path, is_dir);
     AttachmentQueueItem item;
     item.path = path ? path : "";
@@ -5542,6 +5600,9 @@ static void enqueue_attachment_card(const char* path, bool is_dir) {
     item.status_lbl = status_lbl;
     item.done = false;
     g_attachment_queue.push_back(item);
+    if (was_empty) {
+        ui_progress_begin("Attachment Queue", "Queued first attachment", 0);
+    }
     if (!g_attachment_queue_timer) {
         g_attachment_queue_timer = lv_timer_create(attachment_queue_timer_cb, 280, nullptr);
     }
@@ -7213,6 +7274,8 @@ void app_ui_init() {
         mode_lbl_work_hint = aw_label_wrap_create(sec_runtime, "", LABEL_HINT, 100);
         lv_obj_set_style_text_color(mode_lbl_work_hint, c->text_dim, 0);
         update_work_mode_hint();
+        lv_obj_t* btn_boot_check = aw_btn_create(sec_runtime, "Run Health Check + Auto Repair", BTN_SECONDARY, SCALE(260), SCALE(34));
+        lv_obj_add_event_cb(btn_boot_check, work_boot_check_cb, LV_EVENT_CLICKED, nullptr);
 
         lv_obj_t* sec_trace = aw_form_section_create(mode_panel_work, "Agent Trace", card_w);
         mode_lbl_work_next_step = aw_label_wrap_create(sec_trace, "", LABEL_HINT, 100);
