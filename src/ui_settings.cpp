@@ -2352,7 +2352,16 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_set_style_text_font(title, CJK_FONT, 0);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 15, 0);
 
-    /* No top-right close button: keep popup behavior consistent with global dialogs. */
+    lv_obj_t* btn_close = lv_button_create(title_bar);
+    lv_obj_set_size(btn_close, SCALE(84), SCALE(32));
+    lv_obj_set_style_bg_color(btn_close, lv_color_make(220, 80, 80), 0);
+    lv_obj_set_style_radius(btn_close, SCALE(8), 0);
+    lv_obj_align(btn_close, LV_ALIGN_RIGHT_MID, -10, 0);
+    lv_obj_add_event_cb(btn_close, settings_close_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_close = lv_label_create(btn_close);
+    lv_label_set_text(lbl_close, tr("关闭", "Close"));
+    lv_obj_set_style_text_font(lbl_close, CJK_FONT, 0);
+    lv_obj_center(lbl_close);
 
     /* Tabview */
     settings_tabs = lv_tabview_create(settings_panel);

@@ -948,6 +948,11 @@ static lv_obj_t* title_label = nullptr;
 static lv_obj_t* btn_minimize = nullptr;
 static lv_obj_t* btn_maximize = nullptr;
 static lv_obj_t* btn_close = nullptr;
+static lv_obj_t* top_mode_chat = nullptr;
+static lv_obj_t* top_mode_voice = nullptr;
+static lv_obj_t* top_mode_work = nullptr;
+static lv_obj_t* top_btn_device = nullptr;
+static lv_obj_t* top_btn_settings = nullptr;
 static lv_obj_t* lbl_maximize = nullptr;  /* Label inside maximize button, for icon swap */
 static bool g_maximized = false;          /* Track maximize state */
 
@@ -1541,7 +1546,7 @@ static void apply_mode_switch_visuals();
 static void update_work_mode_hint();
 static void update_remote_session_visuals();
 void ui_relayout_all();
-static int mode_content_h() { return std::max(120, PANEL_H - MODE_BAR_H - CHAT_GAP * 3); }
+static int mode_content_h() { return std::max(120, PANEL_H - CHAT_GAP * 2); }
 static int mode_content_w() { return std::max(200, RIGHT_PANEL_W - CHAT_GAP * 2); }
 static int chat_trace_panel_h(int content_w) { return (content_w < SCALE(900)) ? SCALE(128) : SCALE(96); }
 static int chat_top_y_with_trace(int content_w) {
@@ -2114,6 +2119,9 @@ static void apply_mode_switch_visuals() {
     paint_btn(mode_btn_chat, g_ui_mode == UI_MODE_CHAT);
     paint_btn(mode_btn_voice, g_ui_mode == UI_MODE_VOICE);
     paint_btn(mode_btn_work, g_ui_mode == UI_MODE_WORK);
+    paint_btn(top_mode_chat, g_ui_mode == UI_MODE_CHAT);
+    paint_btn(top_mode_voice, g_ui_mode == UI_MODE_VOICE);
+    paint_btn(top_mode_work, g_ui_mode == UI_MODE_WORK);
 }
 
 static void mode_chat_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_CHAT; apply_mode_switch_visuals(); relayout_panels(); }
@@ -2211,6 +2219,27 @@ void ui_relayout_all() {
         lv_obj_set_pos(btn_minimize, wc_base_x, wc_btn_y);
         lv_obj_set_pos(btn_maximize, wc_base_x + wc_btn_size + wc_btn_gap, wc_btn_y);
         lv_obj_set_pos(btn_close, wc_base_x + (wc_btn_size + wc_btn_gap) * 2, wc_btn_y);
+
+        int mode_w = SCALE(180);
+        int side_w = SCALE(68);
+        int top_gap = SCALE(6);
+        int top_y = (TITLE_H - wc_btn_h) / 2;
+        int right_x = wc_base_x - top_gap;
+        if (top_btn_settings) {
+            right_x -= side_w;
+            lv_obj_set_size(top_btn_settings, side_w, wc_btn_h);
+            lv_obj_set_pos(top_btn_settings, right_x, top_y);
+        }
+        if (top_btn_device) {
+            right_x -= (side_w + top_gap);
+            lv_obj_set_size(top_btn_device, side_w, wc_btn_h);
+            lv_obj_set_pos(top_btn_device, right_x, top_y);
+        }
+        if (mode_bar) {
+            right_x -= (mode_w + top_gap);
+            lv_obj_set_size(mode_bar, mode_w, wc_btn_h);
+            lv_obj_set_pos(mode_bar, right_x, top_y);
+        }
     }
 
     /* Update panels (left, right, splitter, chat, input, buttons) */
@@ -2263,21 +2292,17 @@ static void relayout_panels() {
     int content_w = mode_content_w();
     int content_h = mode_content_h();
 
-    if (mode_bar) {
-        lv_obj_set_size(mode_bar, content_w, MODE_BAR_H);
-        lv_obj_set_pos(mode_bar, CHAT_GAP, CHAT_GAP);
-    }
     if (mode_panel_chat) {
         lv_obj_set_size(mode_panel_chat, content_w, content_h);
-        lv_obj_set_pos(mode_panel_chat, CHAT_GAP, MODE_BAR_H + CHAT_GAP * 2);
+        lv_obj_set_pos(mode_panel_chat, CHAT_GAP, CHAT_GAP);
     }
     if (mode_panel_voice) {
         lv_obj_set_size(mode_panel_voice, content_w, content_h);
-        lv_obj_set_pos(mode_panel_voice, CHAT_GAP, MODE_BAR_H + CHAT_GAP * 2);
+        lv_obj_set_pos(mode_panel_voice, CHAT_GAP, CHAT_GAP);
     }
     if (mode_panel_work) {
         lv_obj_set_size(mode_panel_work, content_w, content_h);
-        lv_obj_set_pos(mode_panel_work, CHAT_GAP, MODE_BAR_H + CHAT_GAP * 2);
+        lv_obj_set_pos(mode_panel_work, CHAT_GAP, CHAT_GAP);
     }
     if (mode_dd_control) lv_obj_set_width(mode_dd_control, std::min(content_w - 16, SCALE(360)));
     if (mode_dd_llm) lv_obj_set_width(mode_dd_llm, std::min(content_w - 16, SCALE(360)));
@@ -6010,6 +6035,22 @@ static void create_title_bar(lv_obj_t* scr) {
 
     /* EN language toggle button removed - default language is English */
 
+    auto create_top_small_btn = [&](const char* txt, lv_event_cb_t cb) -> lv_obj_t* {
+        lv_obj_t* b = lv_button_create(title_bar);
+        lv_obj_set_style_bg_color(b, c->btn_secondary, 0);
+        lv_obj_set_style_radius(b, 6, 0);
+        lv_obj_set_style_border_width(b, 0, 0);
+        lv_obj_clear_flag(b, LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_add_event_cb(b, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
+        lv_obj_add_event_cb(b, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_CLICKED, nullptr);
+        lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* lbl = lv_label_create(b);
+        lv_label_set_text(lbl, txt);
+        lv_obj_set_style_text_font(lbl, CJK_FONT_SMALL, 0);
+        lv_obj_center(lbl);
+        return b;
+    };
+
     /* ═══ Window control buttons (top-right of title bar) ═══ */
     {
         int wc_btn_size = SCALE(28);  /* Smaller square buttons */
@@ -6025,6 +6066,64 @@ static void create_title_bar(lv_obj_t* scr) {
                 wc_base_x = title_w - wc_btn_size * 3 - wc_btn_gap * 2 - wc_btn_margin;
             }
         }
+
+        /* Right-top quick controls: mode switch + device + settings (left of minimize). */
+        int top_gap = SCALE(6);
+        int mode_w = SCALE(180);
+        int side_w = SCALE(68);
+        int top_y = wc_btn_y;
+        int right_x = wc_base_x - top_gap;
+
+        top_btn_settings = create_top_small_btn("设置", [](lv_event_t* e) {
+            (void)e;
+            ui_settings_open();
+        });
+        right_x -= side_w;
+        lv_obj_set_size(top_btn_settings, side_w, wc_btn_h);
+        lv_obj_set_pos(top_btn_settings, right_x, top_y);
+
+        top_btn_device = create_top_small_btn("设备", [](lv_event_t* e) {
+            (void)e;
+            ui_settings_open();
+            ui_log("[UI] Device shortcut -> Settings");
+        });
+        right_x -= (side_w + top_gap);
+        lv_obj_set_size(top_btn_device, side_w, wc_btn_h);
+        lv_obj_set_pos(top_btn_device, right_x, top_y);
+
+        mode_bar = lv_obj_create(title_bar);
+        lv_obj_set_size(mode_bar, mode_w, wc_btn_h);
+        right_x -= (mode_w + top_gap);
+        lv_obj_set_pos(mode_bar, right_x, top_y);
+        lv_obj_set_style_bg_color(mode_bar, c->input_bg, 0);
+        lv_obj_set_style_border_width(mode_bar, 0, 0);
+        lv_obj_set_style_radius(mode_bar, 6, 0);
+        lv_obj_set_style_pad_all(mode_bar, 2, 0);
+        lv_obj_clear_flag(mode_bar, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(mode_bar, LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_set_flex_flow(mode_bar, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(mode_bar, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(mode_bar, 4, 0);
+        auto create_mode_btn = [&](const char* txt, lv_event_cb_t cb) -> lv_obj_t* {
+            lv_obj_t* b = lv_button_create(mode_bar);
+            lv_obj_set_height(b, wc_btn_h - 4);
+            lv_obj_set_flex_grow(b, 1);
+            lv_obj_set_style_border_width(b, 0, 0);
+            lv_obj_set_style_radius(b, 5, 0);
+            lv_obj_set_style_bg_color(b, c->btn_secondary, 0);
+            lv_obj_clear_flag(b, LV_OBJ_FLAG_EVENT_BUBBLE);
+            lv_obj_add_event_cb(b, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
+            lv_obj_add_event_cb(b, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_CLICKED, nullptr);
+            lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, nullptr);
+            lv_obj_t* lbl = lv_label_create(b);
+            lv_label_set_text(lbl, txt);
+            lv_obj_set_style_text_font(lbl, CJK_FONT_SMALL, 0);
+            lv_obj_center(lbl);
+            return b;
+        };
+        top_mode_chat = create_mode_btn("Chat", mode_chat_cb);
+        top_mode_voice = create_mode_btn("Voice", mode_voice_cb);
+        top_mode_work = create_mode_btn("Work", mode_work_cb);
 
         /* Minimize button - 灰色 */
         btn_minimize = lv_button_create(title_bar);
@@ -7627,42 +7726,14 @@ void app_ui_init() {
     int content_w = mode_content_w();
     int content_h = mode_content_h();
 
-    /* Mode switch bar: Chat / Voice / Work */
-    mode_bar = lv_obj_create(pr);
-    lv_obj_set_size(mode_bar, content_w, MODE_BAR_H);
-    lv_obj_set_pos(mode_bar, CHAT_GAP, CHAT_GAP);
-    lv_obj_set_style_bg_color(mode_bar, c->input_bg, 0);
-    lv_obj_set_style_border_width(mode_bar, 0, 0);
-    lv_obj_set_style_radius(mode_bar, 8, 0);
-    lv_obj_set_style_pad_all(mode_bar, 4, 0);
-    lv_obj_clear_flag(mode_bar, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(mode_bar, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(mode_bar, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_set_style_pad_gap(mode_bar, 6, 0);
-
-    auto create_mode_btn = [&](const char* txt, lv_event_cb_t cb) -> lv_obj_t* {
-        lv_obj_t* b = lv_button_create(mode_bar);
-        lv_obj_set_height(b, MODE_BAR_H - 8);
-        lv_obj_set_flex_grow(b, 1);
-        lv_obj_set_style_border_width(b, 0, 0);
-        lv_obj_set_style_radius(b, 6, 0);
-        lv_obj_set_style_bg_color(b, c->btn_secondary, 0);
-        lv_obj_clear_flag(b, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, nullptr);
-        lv_obj_t* lbl = lv_label_create(b);
-        lv_label_set_text(lbl, txt);
-        lv_obj_set_style_text_color(lbl, c->text, 0);
-        lv_obj_set_style_text_font(lbl, CJK_FONT_SMALL, 0);
-        lv_obj_center(lbl);
-        return b;
-    };
-    mode_btn_chat = create_mode_btn("Chat", mode_chat_cb);
-    mode_btn_voice = create_mode_btn("Voice", mode_voice_cb);
-    mode_btn_work = create_mode_btn("Work", mode_work_cb);
+    /* Mode switch moved to title-bar right side. Keep pointers for visual update logic. */
+    mode_btn_chat = top_mode_chat;
+    mode_btn_voice = top_mode_voice;
+    mode_btn_work = top_mode_work;
 
     mode_panel_chat = lv_obj_create(pr);
     lv_obj_set_size(mode_panel_chat, content_w, content_h);
-    lv_obj_set_pos(mode_panel_chat, CHAT_GAP, MODE_BAR_H + CHAT_GAP * 2);
+    lv_obj_set_pos(mode_panel_chat, CHAT_GAP, CHAT_GAP);
     lv_obj_set_style_bg_opa(mode_panel_chat, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(mode_panel_chat, 0, 0);
     lv_obj_set_style_pad_all(mode_panel_chat, 0, 0);
@@ -7670,7 +7741,7 @@ void app_ui_init() {
 
     mode_panel_voice = lv_obj_create(pr);
     lv_obj_set_size(mode_panel_voice, content_w, content_h);
-    lv_obj_set_pos(mode_panel_voice, CHAT_GAP, MODE_BAR_H + CHAT_GAP * 2);
+    lv_obj_set_pos(mode_panel_voice, CHAT_GAP, CHAT_GAP);
     lv_obj_set_style_bg_opa(mode_panel_voice, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(mode_panel_voice, 0, 0);
     lv_obj_set_style_pad_all(mode_panel_voice, 0, 0);
@@ -7690,7 +7761,7 @@ void app_ui_init() {
 
     mode_panel_work = lv_obj_create(pr);
     lv_obj_set_size(mode_panel_work, content_w, content_h);
-    lv_obj_set_pos(mode_panel_work, CHAT_GAP, MODE_BAR_H + CHAT_GAP * 2);
+    lv_obj_set_pos(mode_panel_work, CHAT_GAP, CHAT_GAP);
     lv_obj_set_style_bg_opa(mode_panel_work, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(mode_panel_work, 0, 0);
     lv_obj_set_style_pad_all(mode_panel_work, 8, 0);
