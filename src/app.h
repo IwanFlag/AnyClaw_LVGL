@@ -62,6 +62,10 @@ bool app_install_openclaw(char* output, int out_size); /* auto: network → loca
 bool app_install_openclaw_ex(char* output, int out_size, const char* mode); /* "network"/"local"/"auto" */
 bool app_init_openclaw(char* output, int out_size); /* gateway start → stop (generate default config) */
 bool app_install_gemma_models(int model_mask, char* output, int out_size); /* bit0=2B bit1=9B bit2=27B */
+/* Setup cancellation control for wizard long tasks */
+void app_request_setup_cancel();
+void app_reset_setup_cancel();
+bool app_is_setup_cancelled();
 bool app_full_setup(const char* install_mode, const char* api_key, const char* model_name,
                     char* output, int out_size); /* install → init → configure → verify */
 bool app_uninstall_openclaw(char* output, int out_size); /* npm uninstall only */

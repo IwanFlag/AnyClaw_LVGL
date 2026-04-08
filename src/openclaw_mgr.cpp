@@ -16,6 +16,7 @@
 #include <sstream>
 
 namespace fs = std::filesystem;
+static volatile LONG g_setup_cancel_requested = 0;
 
 /* ── Helpers ──────────────────────────────────────────────── */
 
@@ -123,6 +124,11 @@ static bool exec_cmd(const char* cmd, char* output, int out_size, DWORD timeout_
     DWORD bytesRead = 0;
     DWORD start_tick = GetTickCount();
     while (true) {
+        if (InterlockedCompareExchange(&g_setup_cancel_requested, 0, 0) != 0) {
+            TerminateProcess(pi.hProcess, 1);
+            if (output && out_size > 0) snprintf(output, out_size, "CANCELLED: setup cancelled by user");
+            break;
+        }
         /* Check if process has exited and pipe is empty */
         DWORD avail = 0;
         if (PeekNamedPipe(hRead, nullptr, 0, nullptr, &avail, nullptr)) {
@@ -907,6 +913,11 @@ static bool install_nodejs_if_missing(char* output, int out_size) {
     char node_ver[64] = {0};
     ui_progress_begin("Node.js Setup", "Node.js missing, starting download", 5);
     for (int i = 0; nodejs_sources[i].name; i++) {
+        if (app_is_setup_cancelled()) {
+            snprintf(output, out_size, "CANCELLED: setup cancelled by user");
+            ui_progress_finish("Node.js Setup", false, output);
+            return false;
+        }
         ui_progress_update("Node.js Setup", nodejs_sources[i].name, 10 + i * 20);
         snprintf(cmd, sizeof(cmd),
                  "curl -L --fail --retry 1 --connect-timeout 15 --speed-time 30 --speed-limit 1024 --max-time 1200 -o \"%s\" \"%s\"",
@@ -972,6 +983,11 @@ static bool download_file_with_fallback(const char* primary_url,
 bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
     if (!output || out_size <= 0) return false;
     output[0] = '\0';
+    if (app_is_setup_cancelled()) {
+        snprintf(output, out_size, "CANCELLED: setup cancelled by user");
+        ui_progress_finish("OpenClaw Setup", false, output);
+        return false;
+    }
 
     ui_progress_begin("OpenClaw Setup", "Pre-check environment", 3);
 
@@ -1061,6 +1077,11 @@ bool app_install_openclaw(char* output, int out_size) {
 bool app_install_gemma_models(int model_mask, char* output, int out_size) {
     if (!output || out_size <= 0) return false;
     output[0] = '\0';
+    if (app_is_setup_cancelled()) {
+        snprintf(output, out_size, "CANCELLED: setup cancelled by user");
+        ui_progress_finish("Gemma Setup", false, output);
+        return false;
+    }
     if (model_mask <= 0 || model_mask > 7) {
         snprintf(output, out_size, "Invalid model mask: %d", model_mask);
         return false;
@@ -1084,6 +1105,11 @@ bool app_install_gemma_models(int model_mask, char* output, int out_size) {
     char last_err[512] = {0};
     ui_progress_begin("Gemma Setup", "Preparing model downloads", 5);
     for (int i = 0; i < 3; i++) {
+        if (app_is_setup_cancelled()) {
+            snprintf(output, out_size, "CANCELLED: setup cancelled by user");
+            ui_progress_finish("Gemma Setup", false, output);
+            return false;
+        }
         int bit = (1 << i);
         if ((model_mask & bit) == 0) continue;
         need_count++;
@@ -1201,6 +1227,10 @@ static bool setup_workspace_template() {
 bool app_init_openclaw(char* output, int out_size) {
     if (!output || out_size <= 0) return false;
     output[0] = '\0';
+    if (app_is_setup_cancelled()) {
+        snprintf(output, out_size, "CANCELLED: setup cancelled by user");
+        return false;
+    }
 
     LOG_I("OpenClaw", "Initializing gateway...");
 
@@ -1305,6 +1335,18 @@ bool app_uninstall_openclaw_full(char* output, int out_size, bool full_cleanup) 
 
 bool app_uninstall_openclaw(char* output, int out_size) {
     return app_uninstall_openclaw_full(output, out_size, false);
+}
+
+void app_request_setup_cancel() {
+    InterlockedExchange(&g_setup_cancel_requested, 1);
+}
+
+void app_reset_setup_cancel() {
+    InterlockedExchange(&g_setup_cancel_requested, 0);
+}
+
+bool app_is_setup_cancelled() {
+    return InterlockedCompareExchange(&g_setup_cancel_requested, 0, 0) != 0;
 }
 
 /* ── Verify OpenClaw is working ────────────────────────────── */

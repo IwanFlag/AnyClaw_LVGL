@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 #include <thread>
+#include <atomic>
 #include <mutex>
 #include <deque>
 #include <fstream>
@@ -5745,6 +5746,15 @@ static lv_obj_t* g_wiz_model_dd = nullptr;
 static lv_obj_t* g_wiz_nick_ta = nullptr;
 static lv_obj_t* g_wiz_tz_dd = nullptr;
 static lv_obj_t* g_wiz_summary_lbl = nullptr;
+static lv_obj_t* g_wiz_btn_install_net = nullptr;
+static lv_obj_t* g_wiz_btn_install_local = nullptr;
+static lv_obj_t* g_wiz_btn_cancel_install = nullptr;
+static lv_obj_t* g_wiz_install_active_label = nullptr;
+static lv_timer_t* g_wiz_install_poll_timer = nullptr;
+static std::atomic<bool> g_wiz_install_running(false);
+static std::atomic<bool> g_wiz_install_result_ready(false);
+static bool g_wiz_install_result_ok = false;
+static char g_wiz_install_result_msg[512] = {0};
 
 /* Config: check wizard_completed */
 static bool is_wizard_completed() {
@@ -5956,58 +5966,112 @@ static lv_obj_t* wizard_add_status_row(lv_obj_t* parent, const char* text, lv_co
     return lbl;
 }
 
-/* Install button callback — mode: "network" or "local" */
-struct WizInstallCtx { const char* mode; lv_obj_t* btn_network; lv_obj_t* btn_local; };
-static WizInstallCtx g_wiz_install_ctx = {nullptr, nullptr, nullptr};
+/* Install button callback — mode: "network" or "local" (async + cancelable) */
+static void wiz_install_poll_cb(lv_timer_t* t) {
+    (void)t;
+    if (!g_wiz_install_result_ready.load()) return;
+
+    g_wiz_install_result_ready.store(false);
+    if (g_wiz_btn_install_net) {
+        lv_obj_clear_state(g_wiz_btn_install_net, LV_STATE_DISABLED);
+        lv_obj_set_style_bg_opa(g_wiz_btn_install_net, LV_OPA_COVER, 0);
+    }
+    if (g_wiz_btn_install_local) {
+        lv_obj_clear_state(g_wiz_btn_install_local, LV_STATE_DISABLED);
+        lv_obj_set_style_bg_opa(g_wiz_btn_install_local, LV_OPA_COVER, 0);
+    }
+    if (g_wiz_btn_cancel_install) {
+        lv_obj_clear_state(g_wiz_btn_cancel_install, LV_STATE_DISABLED);
+        lv_obj_add_flag(g_wiz_btn_cancel_install, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    if (g_wiz_install_active_label) {
+        if (g_wiz_install_result_ok) {
+            lv_label_set_text(g_wiz_install_active_label, tr(W_INSTALLED));
+            lv_obj_set_style_text_color(g_wiz_install_active_label, lv_color_make(0, 220, 60), 0);
+        } else {
+            lv_label_set_text(g_wiz_install_active_label, g_wiz_install_result_msg[0] ? g_wiz_install_result_msg : tr(W_INSTALL_FAIL));
+            lv_obj_set_style_text_color(g_wiz_install_active_label, lv_color_make(220, 80, 80), 0);
+        }
+    }
+    if (g_wiz_install_result_ok) wizard_go_step(g_wizard_step);
+}
+
+static void wiz_cancel_install_cb(lv_event_t* e) {
+    lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
+    if (g_wiz_install_running.load()) {
+        app_request_setup_cancel();
+        lv_obj_add_state(btn, LV_STATE_DISABLED);
+        lv_obj_t* lbl = lv_obj_get_child(btn, 0);
+        if (lbl) lv_label_set_text(lbl, "取消中...");
+        return;
+    }
+    if (g_wizard_modal) {
+        lv_obj_del(g_wizard_modal);
+        g_wizard_modal = nullptr;
+    }
+}
 
 static void wiz_install_oc_cb(lv_event_t* e) {
-    WizInstallCtx* ctx = (WizInstallCtx*)lv_event_get_user_data(e);
+    if (g_wiz_install_running.load()) return;
+    const char* mode = (const char*)lv_event_get_user_data(e);
+    if (!mode || !mode[0]) mode = "network";
+
     lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
-    lv_obj_t* lbl = lv_obj_get_child(btn, 0);
+    g_wiz_install_active_label = lv_obj_get_child(btn, 0);
 
-    /* Disable both buttons */
-    if (ctx->btn_network) {
-        lv_obj_add_state(ctx->btn_network, LV_STATE_DISABLED);
-        lv_obj_set_style_bg_opa(ctx->btn_network, LV_OPA_50, 0);
+    if (g_wiz_btn_install_net) {
+        lv_obj_add_state(g_wiz_btn_install_net, LV_STATE_DISABLED);
+        lv_obj_set_style_bg_opa(g_wiz_btn_install_net, LV_OPA_50, 0);
     }
-    if (ctx->btn_local) {
-        lv_obj_add_state(ctx->btn_local, LV_STATE_DISABLED);
-        lv_obj_set_style_bg_opa(ctx->btn_local, LV_OPA_50, 0);
+    if (g_wiz_btn_install_local) {
+        lv_obj_add_state(g_wiz_btn_install_local, LV_STATE_DISABLED);
+        lv_obj_set_style_bg_opa(g_wiz_btn_install_local, LV_OPA_50, 0);
     }
-
-    if (lbl) lv_label_set_text(lbl, tr(W_INSTALLING));
-    lv_obj_set_style_bg_color(btn, lv_color_make(60, 65, 80), 0);
+    if (g_wiz_btn_cancel_install) {
+        lv_obj_clear_flag(g_wiz_btn_cancel_install, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_state(g_wiz_btn_cancel_install, LV_STATE_DISABLED);
+        lv_obj_t* c = lv_obj_get_child(g_wiz_btn_cancel_install, 0);
+        if (c) lv_label_set_text(c, "退出安装");
+    }
+    if (g_wiz_install_active_label) lv_label_set_text(g_wiz_install_active_label, tr(W_INSTALLING));
     lv_refr_now(NULL);
 
-    char output[1024] = {0};
-    bool ok = app_install_openclaw_ex(output, sizeof(output), ctx->mode);
+    app_reset_setup_cancel();
+    g_wiz_install_running.store(true);
+    g_wiz_install_result_ready.store(false);
+    g_wiz_install_result_ok = false;
+    g_wiz_install_result_msg[0] = '\0';
 
-    /* If network failed, try local fallback */
-    if (!ok && strcmp(ctx->mode, "network") == 0) {
-        ui_log("[Setup] Network failed, auto-fallback to bundled...");
-        ok = app_install_openclaw_ex(output, sizeof(output), "local");
-    }
+    std::string mode_copy(mode);
+    std::thread([mode_copy]() {
+        char output[1024] = {0};
+        bool ok = app_install_openclaw_ex(output, sizeof(output), mode_copy.c_str());
 
-    /* Init gateway after install (generate default config) */
-    if (ok) {
-        if (lbl) lv_label_set_text(lbl, tr(W_INIT_GATEWAY));
-        lv_refr_now(NULL);
-        ui_progress_update("OpenClaw Setup", "Initializing gateway", 88);
-        char init_out[512] = {0};
-        ok = app_init_openclaw(init_out, sizeof(init_out));
-        if (ok) g_wizard_oc_installed_now = true; /* Mark: OC installed this session */
-        ui_progress_finish("OpenClaw Setup", ok, ok ? "OpenClaw ready" : init_out);
-    }
+        if (!ok && mode_copy == "network" && !app_is_setup_cancelled()) {
+            ui_log("[Setup] Network failed, auto-fallback to bundled...");
+            ok = app_install_openclaw_ex(output, sizeof(output), "local");
+        }
 
-    if (ok && lbl) {
-        lv_label_set_text(lbl, tr(W_INSTALLED));
-        lv_obj_set_style_text_color(lbl, lv_color_make(0, 220, 60), 0);
-    } else if (lbl) {
-        lv_label_set_text(lbl, tr(W_INSTALL_FAIL));
-        lv_obj_set_style_text_color(lbl, lv_color_make(220, 80, 80), 0);
-    }
+        if (ok && !app_is_setup_cancelled()) {
+            ui_progress_update("OpenClaw Setup", "Initializing gateway", 88);
+            char init_out[512] = {0};
+            ok = app_init_openclaw(init_out, sizeof(init_out));
+            if (ok) g_wizard_oc_installed_now = true;
+            ui_progress_finish("OpenClaw Setup", ok, ok ? "OpenClaw ready" : init_out);
+            if (!ok) snprintf(output, sizeof(output), "%s", init_out);
+        } else if (app_is_setup_cancelled()) {
+            snprintf(output, sizeof(output), "已取消安装");
+            ui_progress_finish("OpenClaw Setup", false, output);
+        }
 
-    if (ok) wizard_go_step(g_wizard_step);
+        g_wiz_install_result_ok = ok;
+        snprintf(g_wiz_install_result_msg, sizeof(g_wiz_install_result_msg), "%s", output[0] ? output : (ok ? "OK" : "Install failed"));
+        g_wiz_install_running.store(false);
+        g_wiz_install_result_ready.store(true);
+    }).detach();
+
+    if (!g_wiz_install_poll_timer) g_wiz_install_poll_timer = lv_timer_create(wiz_install_poll_cb, 120, nullptr);
 }
 
 /* ── Step 1: Detection (Node.js → npm → Network → OpenClaw) ── */
@@ -6090,7 +6154,9 @@ static void wizard_build_step_detect() {
         lv_obj_set_style_text_color(choose_lbl, g_colors->text_dim, 0);
         lv_obj_set_style_text_font(choose_lbl, CJK_FONT, 0);
 
-        g_wiz_install_ctx = {nullptr, nullptr, nullptr};
+        g_wiz_btn_install_net = nullptr;
+        g_wiz_btn_install_local = nullptr;
+        g_wiz_install_active_label = nullptr;
 
         /* Row: two buttons side by side */
         lv_obj_t* btn_row = lv_obj_create(g_wizard_content);
@@ -6114,9 +6180,8 @@ static void wizard_build_step_detect() {
             lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
             lv_obj_center(lbl);
 
-            g_wiz_install_ctx.mode = "network";
-            g_wiz_install_ctx.btn_network = btn_net;
-            lv_obj_add_event_cb(btn_net, wiz_install_oc_cb, LV_EVENT_CLICKED, &g_wiz_install_ctx);
+            g_wiz_btn_install_net = btn_net;
+            lv_obj_add_event_cb(btn_net, wiz_install_oc_cb, LV_EVENT_CLICKED, (void*)"network");
         }
 
         /* Local/bundled install button (blue) */
@@ -6129,9 +6194,20 @@ static void wizard_build_step_detect() {
         lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
         lv_obj_center(lbl);
 
-        g_wiz_install_ctx.mode = "local";
-        g_wiz_install_ctx.btn_local = btn_local;
-        lv_obj_add_event_cb(btn_local, wiz_install_oc_cb, LV_EVENT_CLICKED, &g_wiz_install_ctx);
+        g_wiz_btn_install_local = btn_local;
+        lv_obj_add_event_cb(btn_local, wiz_install_oc_cb, LV_EVENT_CLICKED, (void*)"local");
+
+        lv_obj_t* btn_cancel = lv_button_create(g_wizard_content);
+        lv_obj_set_size(btn_cancel, LV_PCT(100), SCALE(40));
+        lv_obj_set_style_bg_color(btn_cancel, lv_color_make(220, 80, 80), 0);
+        lv_obj_set_style_radius(btn_cancel, 8, 0);
+        lv_obj_t* lbl_cancel = lv_label_create(btn_cancel);
+        lv_label_set_text(lbl_cancel, "退出安装");
+        lv_obj_set_style_text_font(lbl_cancel, CJK_FONT, 0);
+        lv_obj_center(lbl_cancel);
+        lv_obj_add_event_cb(btn_cancel, wiz_cancel_install_cb, LV_EVENT_CLICKED, nullptr);
+        g_wiz_btn_cancel_install = btn_cancel;
+        lv_obj_add_flag(g_wiz_btn_cancel_install, LV_OBJ_FLAG_HIDDEN);
     }
 
     /* ═══ Block Next if any critical check fails ═══ */
@@ -6485,6 +6561,9 @@ static void wizard_update_step() {
     g_wiz_nick_ta = nullptr;
     g_wiz_tz_dd = nullptr;
     g_wiz_summary_lbl = nullptr;
+    g_wiz_btn_install_net = nullptr;
+    g_wiz_btn_install_local = nullptr;
+    g_wiz_btn_cancel_install = nullptr;
 
     /* Update step indicator */
     char step_text[32];
