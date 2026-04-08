@@ -1058,6 +1058,7 @@ static lv_obj_t* mode_lbl_chat_next_step = nullptr;
 static lv_obj_t* mode_ta_chat_script = nullptr;
 static lv_obj_t* mode_lbl_work_next_step = nullptr;
 static lv_obj_t* mode_ta_work_script = nullptr;
+static lv_obj_t* mode_ta_trace_recent = nullptr;
 static lv_obj_t* mode_ta_work_prompt = nullptr;
 static lv_obj_t* mode_lbl_work_md_output = nullptr;
 static lv_obj_t* mode_dd_control = nullptr;
@@ -1126,6 +1127,8 @@ static lv_timer_t* g_attachment_queue_timer = nullptr;
 static std::atomic<bool> g_boot_check_running(false);
 static unsigned int g_remote_stub_session_seq = 1;
 static char g_remote_stub_session_id[64] = "";
+static char g_remote_stub_auth_token[64] = "";
+static DWORD g_remote_stub_auth_expire_tick = 0;
 
 /* Left panel children that need resize on splitter drag */
 static lv_obj_t* lp_panel_title = nullptr;   /* "Gateway Status" label */
@@ -1729,6 +1732,13 @@ static void update_remote_session_visuals() {
     }
 }
 
+static void remote_stub_prepare_auth_token() {
+    unsigned int now = (unsigned int)GetTickCount();
+    snprintf(g_remote_stub_auth_token, sizeof(g_remote_stub_auth_token), "tok-%08X-%04X",
+             now, (unsigned int)(g_remote_stub_session_seq & 0xFFFF));
+    g_remote_stub_auth_expire_tick = GetTickCount() + 120000; /* 2 minutes */
+}
+
 static void remote_request_cb(lv_event_t* e) {
     (void)e;
     TraceSpan span("remote_request", "work_mode");
@@ -1739,9 +1749,11 @@ static void remote_request_cb(lv_event_t* e) {
     }
     if (g_remote_state != REMOTE_IDLE) return;
     snprintf(g_remote_stub_session_id, sizeof(g_remote_stub_session_id), "stub-%06u", g_remote_stub_session_seq++);
+    remote_stub_prepare_auth_token();
     g_remote_state = REMOTE_REQUESTING;
     update_remote_session_visuals();
-    ui_log("[Remote] Session request sent (session=%s)", g_remote_stub_session_id);
+    ui_log("[Remote] Session request sent (session=%s, token=%s, ttl=120s)",
+           g_remote_stub_session_id, g_remote_stub_auth_token);
     g_remote_state = REMOTE_PENDING_ACCEPT;
     g_remote_session_left = 15;
     stop_remote_session_timer();
@@ -1753,9 +1765,19 @@ static void remote_accept_cb(lv_event_t* e) {
     (void)e;
     TraceSpan span("remote_accept", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "no-session");
     if (g_remote_state != REMOTE_PENDING_ACCEPT) return;
+    if (!g_remote_stub_auth_token[0] || GetTickCount() > g_remote_stub_auth_expire_tick) {
+        span.set_fail();
+        ui_log("[Remote] Session accept failed: auth token expired");
+        g_remote_state = REMOTE_IDLE;
+        g_remote_stub_session_id[0] = '\0';
+        g_remote_stub_auth_token[0] = '\0';
+        update_remote_session_visuals();
+        return;
+    }
     stop_remote_session_timer();
     g_remote_state = REMOTE_CONNECTED;
-    ui_log("[Remote] Session accepted and connected (session=%s, channel=stub)", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
+    ui_log("[Remote] Session accepted and connected (session=%s, auth=ok, channel=stub)",
+           g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
     update_remote_session_visuals();
 }
 
@@ -1767,6 +1789,7 @@ static void remote_reject_cb(lv_event_t* e) {
     g_remote_state = REMOTE_IDLE;
     ui_log("[Remote] Session rejected (session=%s)", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
     g_remote_stub_session_id[0] = '\0';
+    g_remote_stub_auth_token[0] = '\0';
     update_remote_session_visuals();
 }
 
@@ -1777,6 +1800,7 @@ static void remote_disconnect_cb(lv_event_t* e) {
     g_remote_state = REMOTE_IDLE;
     ui_log("[Remote] Session disconnected (session=%s)", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
     g_remote_stub_session_id[0] = '\0';
+    g_remote_stub_auth_token[0] = '\0';
     update_remote_session_visuals();
 }
 
@@ -3820,6 +3844,8 @@ static void test_inject_messages_cb(lv_timer_t* t) {
 }
 
 static void update_send_button_state();
+static void work_boot_export_report(const std::vector<BootCheckResult>& results);
+static void work_trace_refresh_cb(lv_event_t* e);
 
 /* Reset input box to single-line height after sending */
 static void chat_input_reset_height() {
@@ -3905,6 +3931,7 @@ static void work_boot_check_cb(lv_event_t* e) {
         ui_progress_begin("Boot Check", "Running environment checks", 5);
         BootCheckManager mgr;
         auto results = mgr.run_and_fix();
+        work_boot_export_report(results);
         int ok = 0;
         int warn = 0;
         int err = 0;
@@ -3920,6 +3947,52 @@ static void work_boot_check_cb(lv_event_t* e) {
         if (err > 0) span.set_outcome("warn");
         g_boot_check_running.store(false);
     }).detach();
+}
+
+static void work_boot_export_report(const std::vector<BootCheckResult>& results) {
+    char appdata[MAX_PATH] = {0};
+    if (SHGetFolderPathA(nullptr, CSIDL_APPDATA, nullptr, 0, appdata) != S_OK) return;
+    std::string dir = std::string(appdata) + "\\AnyClaw_LVGL";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    std::string report = dir + "\\bootcheck-last.md";
+    std::ofstream out(report, std::ios::trunc);
+    if (!out.is_open()) return;
+    SYSTEMTIME st{};
+    GetLocalTime(&st);
+    char time_buf[64] = {0};
+    snprintf(time_buf, sizeof(time_buf), "%04d-%02d-%02d %02d:%02d:%02d",
+             st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+    out << "# BootCheck Report\n\n";
+    out << "- Generated: " << time_buf << "\n";
+    out << "- Summary: " << BootCheckManager::summarize(results) << "\n\n";
+    out << "| Check | Status | Message | AutoFix |\n";
+    out << "|---|---|---|---|\n";
+    for (const auto& r : results) {
+        const char* s = (r.status == BootCheckStatus::Ok) ? "OK" :
+                        (r.status == BootCheckStatus::Warn) ? "WARN" : "ERROR";
+        out << "| " << r.check_name << " | " << s << " | " << r.message << " | "
+            << (r.auto_fix_available ? "yes" : "no") << " |\n";
+    }
+    out.close();
+    ui_log("[BootCheck] Report exported: %s", report.c_str());
+}
+
+static void work_trace_refresh_cb(lv_event_t* e) {
+    (void)e;
+    if (!mode_ta_trace_recent) return;
+    auto evs = TraceManager::instance().get_recent_events(24);
+    std::string text;
+    text.reserve(2048);
+    if (evs.empty()) {
+        text = "No trace events yet.";
+    } else {
+        for (const auto& ev : evs) {
+            text += ev.ts + " | " + ev.action + " | " + ev.outcome + " | "
+                + std::to_string(ev.latency_ms) + "ms\n";
+        }
+    }
+    lv_textarea_set_text(mode_ta_trace_recent, text.c_str());
 }
 
 /* Update send button visual state based on input content */
@@ -7286,6 +7359,16 @@ void app_ui_init() {
         lv_obj_set_style_text_color(mode_ta_work_script, c->text, 0);
         lv_obj_set_style_text_font(mode_ta_work_script, CJK_FONT_SMALL, 0);
         update_agent_trace_views();
+
+        lv_obj_t* sec_obs = aw_form_section_create(mode_panel_work, "Observability (Recent Traces)", card_w);
+        mode_ta_trace_recent = aw_textarea_create(sec_obs, "Trace timeline...", false, card_w - 24, SCALE(120));
+        lv_textarea_set_text_selection(mode_ta_trace_recent, true);
+        lv_obj_set_style_bg_color(mode_ta_trace_recent, c->panel, 0);
+        lv_obj_set_style_text_color(mode_ta_trace_recent, c->text, 0);
+        lv_obj_set_style_text_font(mode_ta_trace_recent, CJK_FONT_SMALL, 0);
+        lv_obj_t* btn_trace_refresh = aw_btn_create(sec_obs, "Refresh Traces", BTN_SECONDARY, SCALE(170), SCALE(34));
+        lv_obj_add_event_cb(btn_trace_refresh, work_trace_refresh_cb, LV_EVENT_CLICKED, nullptr);
+        work_trace_refresh_cb(nullptr);
 
         lv_obj_t* sec_work_console = aw_form_section_create(mode_panel_work, "Work Console (Markdown)", card_w);
         lv_obj_t* md_wrap = lv_obj_create(sec_work_console);
