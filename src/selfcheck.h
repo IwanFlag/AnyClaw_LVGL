@@ -1,6 +1,8 @@
 #ifndef SELFCHECK_H
 #define SELFCHECK_H
 
+#include <string>
+
 /* Self-check result for a single item */
 struct SelfCheckItem {
     bool ok;

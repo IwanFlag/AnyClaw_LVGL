@@ -102,6 +102,8 @@ set(APP_SOURCES
     src/session_manager.cpp
     src/workspace.cpp
     src/permissions.cpp
+    src/boot_check.cpp
+    src/feature_flags.cpp
     src/tracing.cpp
 )
 

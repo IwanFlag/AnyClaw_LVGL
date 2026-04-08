@@ -7,6 +7,7 @@
 #include "app.h"
 #include "app_config.h"
 #include "app_log.h"
+#include "paths.h"
 #include "permissions.h"
 #include <windows.h>
 #include <cstdio>
