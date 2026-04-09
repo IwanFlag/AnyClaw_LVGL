@@ -34,6 +34,7 @@
 #include "lan_chat_client.h"
 #include "ftp_client.h"
 #include "remote_protocol.h"
+#include "remote_tcp_channel.h"
 #include "kb_store.h"
 #include "cjk_font_data.h"
 #include "markdown.h"
@@ -1118,6 +1119,8 @@ static lv_obj_t* mode_remote_warning_bar = nullptr;
 static lv_obj_t* mode_sw_remote_guard = nullptr;
 static lv_obj_t* mode_lbl_remote_state = nullptr;
 static lv_obj_t* mode_lbl_remote_session_state = nullptr;
+static lv_obj_t* mode_ta_remote_host = nullptr;
+static lv_obj_t* mode_ta_remote_port = nullptr;
 static lv_obj_t* mode_btn_remote_request = nullptr;
 static lv_obj_t* mode_btn_remote_accept = nullptr;
 static lv_obj_t* mode_btn_remote_reject = nullptr;
@@ -1779,7 +1782,10 @@ static void update_remote_session_visuals() {
             snprintf(buf, sizeof(buf), "Remote session: awaiting acceptance (%ds)", g_remote_session_left);
             text = buf;
         } else if (g_remote_state == REMOTE_CONNECTED) {
-            text = "Remote session: CONNECTED (desktop+voice+control)";
+            static char buf[128] = {0};
+            snprintf(buf, sizeof(buf), "Remote session: CONNECTED (tcp=%s)",
+                     RemoteTcpChannel::instance().is_connected() ? "up" : "down");
+            text = buf;
         }
         lv_label_set_text(mode_lbl_remote_session_state, text);
     }
@@ -1886,8 +1892,29 @@ static void remote_accept_cb(lv_event_t* e) {
         update_remote_session_visuals();
         return;
     }
-    ui_log("[Remote] Session accepted and connected (session=%s, auth=ok, channel=stub)",
-           g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
+    RemoteTcpConfig tcp_cfg;
+    if (mode_ta_remote_host) {
+        const char* host = lv_textarea_get_text(mode_ta_remote_host);
+        if (host && host[0]) tcp_cfg.host = host;
+    }
+    if (mode_ta_remote_port) {
+        int p = atoi(lv_textarea_get_text(mode_ta_remote_port));
+        if (p > 0 && p < 65536) tcp_cfg.port = p;
+    }
+    if (!RemoteTcpChannel::instance().start(tcp_cfg)) {
+        span.set_fail();
+        ui_log("[Remote] TCP channel start failed: %s",
+               RemoteTcpChannel::instance().last_error().c_str());
+        g_remote_state = REMOTE_IDLE;
+        RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
+        g_remote_stub_session_id[0] = '\0';
+        g_remote_stub_auth_token[0] = '\0';
+        update_remote_session_visuals();
+        return;
+    }
+    ui_log("[Remote] Session accepted and connected (session=%s, auth=ok, tcp=%s:%d)",
+           g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a",
+           tcp_cfg.host.c_str(), tcp_cfg.port);
     update_remote_session_visuals();
 }
 
@@ -1897,6 +1924,7 @@ static void remote_reject_cb(lv_event_t* e) {
     if (g_remote_state != REMOTE_PENDING_ACCEPT) return;
     stop_remote_session_timer();
     g_remote_state = REMOTE_IDLE;
+    RemoteTcpChannel::instance().stop();
     RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
     ui_log("[Remote] Session rejected (session=%s)", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
     g_remote_stub_session_id[0] = '\0';
@@ -1909,6 +1937,7 @@ static void remote_disconnect_cb(lv_event_t* e) {
     TraceSpan span("remote_disconnect", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "no-session");
     stop_remote_session_timer();
     g_remote_state = REMOTE_IDLE;
+    RemoteTcpChannel::instance().stop();
     RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
     ui_log("[Remote] Session disconnected (session=%s)", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
     g_remote_stub_session_id[0] = '\0';
@@ -2149,6 +2178,7 @@ static void work_remote_disconnect_cb(lv_event_t* e) {
     (void)e;
     close_remote_arm_modal();
     stop_remote_session_timer();
+    RemoteTcpChannel::instance().stop();
     g_remote_state = REMOTE_IDLE;
     g_remote_guard_armed = false;
     if (mode_sw_remote_guard) lv_obj_clear_state(mode_sw_remote_guard, LV_STATE_CHECKED);
@@ -8234,6 +8264,10 @@ void app_ui_init() {
         update_remote_guard_visuals();
 
         lv_obj_t* sec_remote_flow = aw_form_section_create(mode_panel_work, "Remote Collaboration", card_w);
+        mode_ta_remote_host = aw_textarea_create(sec_remote_flow, "Remote host", true, card_w - 24, SCALE(34));
+        lv_textarea_set_text(mode_ta_remote_host, "127.0.0.1");
+        mode_ta_remote_port = aw_textarea_create(sec_remote_flow, "Remote port", true, card_w - 24, SCALE(34));
+        lv_textarea_set_text(mode_ta_remote_port, "21999");
         mode_lbl_remote_session_state = aw_label_wrap_create(sec_remote_flow, "", LABEL_HINT, 100);
         lv_obj_set_style_text_color(mode_lbl_remote_session_state, c->text_dim, 0);
 

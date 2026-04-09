@@ -2713,6 +2713,13 @@ chat_cont (消息区域)
   - 远程请求链路抽象为 `remote_begin_request()`，统一初次请求与重试请求。
   - `pending_accept` 超时后自动重试（最多 2 次），失败后回落 `idle`。
   - 保留安全闸门前提（guard disarmed 不发起请求）。
+  - 接入 TCP 真通道 MVP（`remote_tcp_channel`）：连接、心跳、断线重连、失败回退。
+- `src/remote_tcp_channel.h`, `src/remote_tcp_channel.cpp`
+  - 新增远程 TCP 控制通道模块。
+- `src/ui_main.cpp`
+  - Remote 区新增 `Remote host/Remote port` 配置输入；
+  - Accept 时启动 TCP 通道，Disconnect/Reject/Emergency 时统一停止通道；
+  - 会话状态增加 `tcp=up/down` 可视化。
 
 ### 验证
 - Windows 原生构建通过（`tools\\windows\\build.bat`）。

@@ -109,6 +109,7 @@ set(APP_SOURCES
     src/lan_chat_client.cpp
     src/ftp_client.cpp
     src/remote_protocol.cpp
+    src/remote_tcp_channel.cpp
     src/kb_store.cpp
 )
 
