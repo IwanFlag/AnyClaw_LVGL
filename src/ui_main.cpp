@@ -1145,6 +1145,8 @@ enum RemoteSessionState { REMOTE_IDLE = 0, REMOTE_REQUESTING = 1, REMOTE_PENDING
 static RemoteSessionState g_remote_state = REMOTE_IDLE;
 static lv_timer_t* g_remote_session_timer = nullptr;
 static int g_remote_session_left = 0;
+static int g_remote_retry_attempt = 0;
+static const int REMOTE_RETRY_MAX = 2;
 static int MODE_BAR_H = 36;
 enum UiMainMode { UI_MODE_CHAT = 0, UI_MODE_VOICE = 1, UI_MODE_WORK = 2 };
 static UiMainMode g_ui_mode = UI_MODE_CHAT;
@@ -1560,6 +1562,8 @@ static void relayout_panels();
 static void apply_mode_switch_visuals();
 static void update_work_mode_hint();
 static void update_remote_session_visuals();
+static void stop_remote_session_timer();
+static bool remote_begin_request(bool retry_mode);
 void ui_relayout_all();
 static int mode_content_h() { return std::max(120, PANEL_H - CHAT_GAP * 2); }
 static int mode_content_w() { return std::max(200, RIGHT_PANEL_W - CHAT_GAP * 2); }
@@ -1742,12 +1746,19 @@ static void remote_session_timer_cb(lv_timer_t* t) {
     if (g_remote_state != REMOTE_PENDING_ACCEPT) return;
     g_remote_session_left--;
     if (g_remote_session_left <= 0) {
-        g_remote_state = REMOTE_IDLE;
-        if (g_remote_session_timer) {
-            lv_timer_del(g_remote_session_timer);
-            g_remote_session_timer = nullptr;
+        stop_remote_session_timer();
+        if (g_remote_guard_armed && g_remote_retry_attempt < REMOTE_RETRY_MAX) {
+            g_remote_retry_attempt++;
+            ui_log("[Remote] Request timed out, auto-retry %d/%d", g_remote_retry_attempt, REMOTE_RETRY_MAX);
+            g_remote_state = REMOTE_IDLE;
+            if (!remote_begin_request(true)) {
+                g_remote_state = REMOTE_IDLE;
+                ui_log("[Remote] Auto-retry failed, back to idle");
+            }
+        } else {
+            g_remote_state = REMOTE_IDLE;
+            ui_log("[Remote] Request timed out");
         }
-        ui_log("[Remote] Request timed out");
     }
     update_remote_session_visuals();
 }
@@ -1797,6 +1808,37 @@ static void remote_stub_prepare_auth_token() {
     g_remote_stub_auth_expire_tick = (DWORD)rec.expire_tick;
 }
 
+static bool remote_begin_request(bool retry_mode) {
+    remote_stub_prepare_auth_token();
+    const char* reason = nullptr;
+    if (!RemoteProtocolManager::instance().try_update_state(g_remote_stub_session_id, "requesting", &reason)) {
+        ui_log("[Remote] Request rejected by protocol manager: %s", reason ? reason : "unknown");
+        return false;
+    }
+    g_remote_state = REMOTE_REQUESTING;
+    update_remote_session_visuals();
+    ui_log("[Remote] Session request sent (%s, session=%s)",
+           retry_mode ? "retry" : "initial",
+           g_remote_stub_session_id);
+
+    g_remote_state = REMOTE_PENDING_ACCEPT;
+    reason = nullptr;
+    if (!RemoteProtocolManager::instance().try_update_state(g_remote_stub_session_id, "pending_accept", &reason)) {
+        ui_log("[Remote] Failed to enter pending_accept: %s", reason ? reason : "unknown");
+        g_remote_state = REMOTE_IDLE;
+        RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
+        g_remote_stub_session_id[0] = '\0';
+        g_remote_stub_auth_token[0] = '\0';
+        update_remote_session_visuals();
+        return false;
+    }
+    g_remote_session_left = 15;
+    stop_remote_session_timer();
+    g_remote_session_timer = lv_timer_create(remote_session_timer_cb, 1000, nullptr);
+    update_remote_session_visuals();
+    return true;
+}
+
 static void remote_request_cb(lv_event_t* e) {
     (void)e;
     TraceSpan span("remote_request", "work_mode");
@@ -1806,32 +1848,8 @@ static void remote_request_cb(lv_event_t* e) {
         return;
     }
     if (g_remote_state != REMOTE_IDLE) return;
-    remote_stub_prepare_auth_token();
-    const char* reason = nullptr;
-    if (!RemoteProtocolManager::instance().try_update_state(g_remote_stub_session_id, "requesting", &reason)) {
-        span.set_fail();
-        ui_log("[Remote] Request rejected by protocol manager: %s", reason ? reason : "unknown");
-        return;
-    }
-    g_remote_state = REMOTE_REQUESTING;
-    update_remote_session_visuals();
-    ui_log("[Remote] Session request sent (session=%s, token=%s, ttl=120s)",
-           g_remote_stub_session_id, g_remote_stub_auth_token);
-    g_remote_state = REMOTE_PENDING_ACCEPT;
-    reason = nullptr;
-    if (!RemoteProtocolManager::instance().try_update_state(g_remote_stub_session_id, "pending_accept", &reason)) {
-        span.set_fail();
-        ui_log("[Remote] Failed to enter pending_accept: %s", reason ? reason : "unknown");
-        g_remote_state = REMOTE_IDLE;
-        RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
-        g_remote_stub_session_id[0] = '\0';
-        g_remote_stub_auth_token[0] = '\0';
-        return;
-    }
-    g_remote_session_left = 15;
-    stop_remote_session_timer();
-    g_remote_session_timer = lv_timer_create(remote_session_timer_cb, 1000, nullptr);
-    update_remote_session_visuals();
+    g_remote_retry_attempt = 0;
+    if (!remote_begin_request(false)) span.set_fail();
 }
 
 static void remote_accept_cb(lv_event_t* e) {
@@ -2153,6 +2171,20 @@ static void voice_send_cb(lv_event_t* e) {
     apply_mode_switch_visuals();
     relayout_panels();
     LOG_I("VOICE", "Voice panel prompt sent to chat pipeline");
+}
+
+static void voice_send_to_work_cb(lv_event_t* e) {
+    (void)e;
+    if (!mode_ta_voice_input || !mode_ta_work_prompt) return;
+    const char* text = lv_textarea_get_text(mode_ta_voice_input);
+    if (!text || !text[0]) return;
+    lv_textarea_set_text(mode_ta_work_prompt, text);
+    lv_textarea_set_text(mode_ta_voice_input, "");
+    g_ui_mode = UI_MODE_WORK;
+    apply_mode_switch_visuals();
+    relayout_panels();
+    ui_log("[Voice] Transcript moved to Work prompt");
+    LOG_I("VOICE", "Voice panel prompt moved to work mode");
 }
 
 static void apply_mode_switch_visuals() {
@@ -7959,8 +7991,20 @@ void app_ui_init() {
         lv_obj_set_style_text_color(hint, c->text_dim, 0);
         mode_ta_voice_input = aw_textarea_create(sec_voice, "Type voice transcript...", false, content_w - 40, SCALE(120));
         lv_textarea_set_one_line(mode_ta_voice_input, false);
-        lv_obj_t* btn_voice_send = aw_btn_create(sec_voice, "Send To Chat", BTN_PRIMARY, SCALE(150), SCALE(34));
+        lv_obj_t* voice_btn_row = lv_obj_create(sec_voice);
+        lv_obj_set_width(voice_btn_row, content_w - 40);
+        lv_obj_set_height(voice_btn_row, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(voice_btn_row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(voice_btn_row, 0, 0);
+        lv_obj_set_style_pad_all(voice_btn_row, 0, 0);
+        lv_obj_set_style_pad_gap(voice_btn_row, 8, 0);
+        lv_obj_set_flex_flow(voice_btn_row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(voice_btn_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(voice_btn_row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t* btn_voice_send = aw_btn_create(voice_btn_row, "Send To Chat", BTN_PRIMARY, SCALE(150), SCALE(34));
         lv_obj_add_event_cb(btn_voice_send, voice_send_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* btn_voice_send_work = aw_btn_create(voice_btn_row, "Send To Work", BTN_SECONDARY, SCALE(150), SCALE(34));
+        lv_obj_add_event_cb(btn_voice_send_work, voice_send_to_work_cb, LV_EVENT_CLICKED, nullptr);
     }
 
     mode_panel_work = lv_obj_create(pr);

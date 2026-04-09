@@ -965,9 +965,16 @@ static bool download_file_with_fallback(const char* primary_url,
     char cmd[2048];
     for (int i = 0; i < 3; i++) {
         ui_log("[Download] Source %d/3: %s", i + 1, urls[i]);
+        unsigned long long existing = 0;
+        try {
+            if (fs::exists(target_path)) existing = (unsigned long long)fs::file_size(target_path);
+        } catch (...) {
+            existing = 0;
+        }
+        const char* resume_opt = existing > 0 ? "-C -" : "";
         snprintf(cmd, sizeof(cmd),
-                 "curl -L --fail --retry 1 --connect-timeout 15 --speed-time 30 --speed-limit 1024 --max-time 1800 -o \"%s\" \"%s\"",
-                 target_path, urls[i]);
+                 "curl -L --fail --retry 1 --connect-timeout 15 --speed-time 30 --speed-limit 1024 --max-time 1800 %s -o \"%s\" \"%s\"",
+                 resume_opt, target_path, urls[i]);
         if (exec_cmd(cmd, output, out_size, 4 * 60 * 60 * 1000)) {
             if (file_size_ok(target_path, 10ull * 1024ull * 1024ull)) {
                 ui_log("[Download] Source %d succeeded", i + 1);
@@ -1187,9 +1194,21 @@ bool app_install_gemma_models(int model_mask, char* output, int out_size) {
     }
 
     if (ok_count == need_count) {
-        snprintf(output, out_size, "Gemma download complete: %d/%d at %s", ok_count, need_count, model_root.c_str());
-        ui_progress_finish("Gemma Setup", true, output);
-        return true;
+        int verified = 0;
+        for (int i = 0; i < 3; i++) {
+            int bit = (1 << i);
+            if ((model_mask & bit) == 0) continue;
+            std::string target = model_root + "\\" + kGemmaSources[i].file_name;
+            if (file_size_ok(target, 10ull * 1024ull * 1024ull)) verified++;
+        }
+        if (verified == need_count) {
+            snprintf(output, out_size, "Gemma download+verify complete: %d/%d at %s", verified, need_count, model_root.c_str());
+            ui_progress_finish("Gemma Setup", true, output);
+            return true;
+        }
+        snprintf(output, out_size, "Gemma verify failed: %d/%d valid model files at %s", verified, need_count, model_root.c_str());
+        ui_progress_finish("Gemma Setup", false, output);
+        return false;
     }
 
     snprintf(output, out_size, "Gemma partial/failed: %d/%d success, last_error=%s", ok_count, need_count, last_err);
