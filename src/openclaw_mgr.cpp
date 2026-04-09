@@ -1188,6 +1188,12 @@ bool app_install_gemma_models(int model_mask, char* output, int out_size) {
             LOG_I("GEMMA", "Downloaded %s", kGemmaSources[i].name);
             ui_progress_update("Gemma Setup", "Downloaded one model", base_pct + 25);
         } else {
+            try {
+                if (fs::exists(target)) {
+                    fs::remove(target);
+                    LOG_W("GEMMA", "Removed partial file after failed download: %s", target.c_str());
+                }
+            } catch (...) {}
             snprintf(last_err, sizeof(last_err), "%s", dl_out[0] ? dl_out : "download failed");
             LOG_E("GEMMA", "Download failed %s: %s", kGemmaSources[i].name, last_err);
         }
