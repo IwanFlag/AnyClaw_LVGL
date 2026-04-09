@@ -10,6 +10,20 @@
 
 /* Global flag: set by UI watchdog to abort streaming (atomic) */
 extern volatile LONG g_stream_done;
+static DWORD g_last_winhttp_err = 0;
+static DWORD g_last_winhttp_err_tick = 0;
+
+static void log_winhttp_error_throttled(const char* stage, DWORD err) {
+    DWORD now = GetTickCount();
+    bool same_recent = (err == g_last_winhttp_err) && (now - g_last_winhttp_err_tick < 60000);
+    if (same_recent) {
+        LOG_W("HTTP", "%s failed (repeated): err=%lu", stage, err);
+    } else {
+        LOG_E("HTTP", "%s failed: err=%lu", stage, err);
+        g_last_winhttp_err = err;
+        g_last_winhttp_err_tick = now;
+    }
+}
 
 /* ── Internal: perform HTTP request and return status code ── */
 static int http_request(const char* method, const char* url,
@@ -77,9 +91,9 @@ static int http_request(const char* method, const char* url,
     if (!WinHttpSendRequest(hRequest, hdrs, hdrs_len,
                            (LPVOID)body, body ? body_len : 0,
                            body ? body_len : 0, 0)) {
-        LOG_E("HTTP", "WinHttpSendRequest failed: err=%lu", GetLastError());
+        log_winhttp_error_throttled("WinHttpSendRequest", GetLastError());
     } else if (!WinHttpReceiveResponse(hRequest, nullptr)) {
-        LOG_E("HTTP", "WinHttpReceiveResponse failed: err=%lu", GetLastError());
+        log_winhttp_error_throttled("WinHttpReceiveResponse", GetLastError());
     } else {
         DWORD statusCode = 0;
         DWORD size = sizeof(statusCode);

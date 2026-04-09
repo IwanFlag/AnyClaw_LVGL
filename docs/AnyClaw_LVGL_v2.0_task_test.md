@@ -2752,6 +2752,22 @@ chat_cont (消息区域)
 
 ---
 
+## TASK-STABILITY06: HTTP 重复错误日志节流（2026-04-09）
+
+**优先级：** P1  
+**状态：** ✅ 已完成  
+**完成时间：** 2026-04-09
+
+### 实现内容
+- `src/http_client.cpp`
+  - 增加 WinHTTP 错误节流函数 `log_winhttp_error_throttled()`。
+  - 对 1 分钟内重复相同错误码（如 12029）降噪处理，减少日志刷屏。
+
+### 验证
+- Windows 原生构建通过（`tools\\windows\\build.bat`）。
+
+---
+
 ## TASK-INSTALL01: 向导安装进度可视化与可取消机制（2026-04-08）
 
 **优先级：** P0  
