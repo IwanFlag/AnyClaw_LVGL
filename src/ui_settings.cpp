@@ -39,6 +39,8 @@ static const lv_font_t* FONT(int base_px) {
 #include "SDL.h"
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <thread>
 #include <windows.h>
@@ -74,6 +76,9 @@ static lv_obj_t* gen_close_gateway_sw = nullptr; /* Close Gateway on exit */
 static lv_obj_t* gen_lang_dropdown = nullptr;
 static lv_obj_t* gen_refresh_dropdown = nullptr;
 static lv_obj_t* perm_status_label = nullptr;
+static lv_obj_t* gen_security_led = nullptr;
+static lv_obj_t* gen_security_label = nullptr;
+static lv_obj_t* gen_security_detail_label = nullptr;
 
 /* ── Account tab widgets ── */
 static lv_obj_t* acc_apikey_ta = nullptr;
@@ -169,6 +174,67 @@ static lv_obj_t* add_divider(lv_obj_t* parent) {
     lv_obj_set_style_border_width(d, 0, 0);
     lv_obj_clear_flag(d, LV_OBJ_FLAG_SCROLLABLE);
     return d;
+}
+
+static bool is_config_dir_writable() {
+    char appdata[MAX_PATH] = {0};
+    if (SHGetFolderPathA(nullptr, CSIDL_APPDATA, nullptr, 0, appdata) != S_OK) return false;
+    std::filesystem::path dir = std::filesystem::path(appdata) / "AnyClaw_LVGL";
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    if (ec) return false;
+    std::filesystem::path fp = dir / ".__sec_write_test.tmp";
+    std::ofstream out(fp.string(), std::ios::trunc);
+    if (!out.is_open()) return false;
+    out << "ok";
+    out.close();
+    std::filesystem::remove(fp, ec);
+    return true;
+}
+
+static const char* infer_provider_from_model(const char* model) {
+    if (!model || !model[0]) return "openrouter";
+    if (strncmp(model, "openrouter/", 11) == 0) return "openrouter";
+    if (strncmp(model, "xiaomi/", 7) == 0) return "xiaomi";
+    if (strncmp(model, "gemini/", 7) == 0) return "gemini";
+    if (strncmp(model, "deepseek/", 9) == 0) return "deepseek";
+    if (strncmp(model, "qwen/", 5) == 0) return "qwen";
+    return "openrouter";
+}
+
+static void refresh_security_status_ui() {
+    if (!gen_security_label || !gen_security_detail_label || !gen_security_led) return;
+
+    OpenClawInfo info = app_detect_openclaw();
+    char model[256] = {0};
+    app_get_current_model(model, sizeof(model));
+    const char* provider = infer_provider_from_model(model);
+    char key[256] = {0};
+    bool api_ok = app_get_provider_api_key(provider, key, sizeof(key)) && key[0];
+    bool cfg_ok = is_config_dir_writable();
+    bool port_ok = (info.gateway_port > 0 && info.gateway_port < 65536);
+
+    const char* sec_text = "Risk";
+    lv_color_t sec_color = lv_color_make(220, 80, 80);
+    if (api_ok && cfg_ok && port_ok) {
+        sec_text = "Good";
+        sec_color = lv_color_make(100, 200, 100);
+    } else if ((api_ok && cfg_ok) || (api_ok && port_ok) || (cfg_ok && port_ok)) {
+        sec_text = "Warning";
+        sec_color = lv_color_make(230, 180, 80);
+    }
+
+    lv_led_set_color(gen_security_led, sec_color);
+    lv_led_on(gen_security_led);
+    lv_label_set_text(gen_security_label, sec_text);
+    lv_obj_set_style_text_color(gen_security_label, sec_color, 0);
+
+    lv_label_set_text_fmt(gen_security_detail_label,
+                          "API Key: %s(%s) | Port: %d | Config: %s",
+                          api_ok ? "OK" : "Missing",
+                          provider,
+                          info.gateway_port,
+                          cfg_ok ? "Writable" : "ReadOnly");
 }
 
 static void build_general_tab(lv_obj_t* tab) {
@@ -493,23 +559,22 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_set_style_pad_gap(sec_right, 8, 0);
     lv_obj_set_size(sec_right, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
 
-    lv_obj_t* sec_green = lv_led_create(sec_right);
-    lv_obj_set_size(sec_green, 10, 10);
-    lv_led_set_color(sec_green, lv_color_make(0, 220, 60));
-    lv_led_on(sec_green);
+    gen_security_led = lv_led_create(sec_right);
+    lv_obj_set_size(gen_security_led, 10, 10);
+    lv_led_set_color(gen_security_led, lv_color_make(0, 220, 60));
+    lv_led_on(gen_security_led);
 
-    lv_obj_t* sec_label = lv_label_create(sec_right);
-    lv_label_set_text(sec_label, "Good");
-    lv_obj_set_style_text_color(sec_label, lv_color_make(100, 200, 100), 0);
-    lv_obj_set_style_text_font(sec_label, CJK_FONT, 0);
-    lv_obj_set_style_text_color(sec_label, lv_color_make(200, 205, 220), 0);
-    lv_obj_set_style_text_font(sec_label, CJK_FONT, 0);
+    gen_security_label = lv_label_create(sec_right);
+    lv_label_set_text(gen_security_label, "Checking...");
+    lv_obj_set_style_text_color(gen_security_label, lv_color_make(200, 205, 220), 0);
+    lv_obj_set_style_text_font(gen_security_label, CJK_FONT, 0);
 
     /* Security detail items */
-    lv_obj_t* lbl_sec_detail = lv_label_create(tab);
-    lv_label_set_text(lbl_sec_detail, "API Key: OK | Port: 18789 | Config: Writable");
-    apply_hint_label(lbl_sec_detail);
-    lv_label_set_long_mode(lbl_sec_detail, LV_LABEL_LONG_WRAP);
+    gen_security_detail_label = lv_label_create(tab);
+    lv_label_set_text(gen_security_detail_label, "API Key: Checking | Port: -- | Config: Checking");
+    apply_hint_label(gen_security_detail_label);
+    lv_label_set_long_mode(gen_security_detail_label, LV_LABEL_LONG_WRAP);
+    refresh_security_status_ui();
 
     /* Divider */
     lv_obj_t* div3 = lv_obj_create(tab);
@@ -2200,6 +2265,7 @@ void ui_settings_open() {
         OpenClawInfo info = app_detect_openclaw();
         lv_label_set_text(gen_path_label, info.executable[0] ? info.executable : "--");
     }
+    refresh_security_status_ui();
 
     /* Sync model from OpenClaw config (handles manual edits) */
     ui_settings_sync_model();

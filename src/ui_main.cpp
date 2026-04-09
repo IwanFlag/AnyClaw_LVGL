@@ -4642,6 +4642,7 @@ static void update_task_list(ClawStatus status) {
     static const I18n S_CHECKING = {"Checking", "检测中"};
     static const I18n S_DETECTED = {"Detected", "已检测"};
     static const I18n S_MONITOR  = {"Health Monitor", "健康监控"};
+    static const I18n S_SCHED    = {"Scheduler", "调度器"};
     static const I18n S_AGENT    = {"Agent", "Agent"};
     static const I18n S_ERROR    = {"Error", "异常"};
     static const I18n S_SESSION  = {"Session", "会话"};
@@ -4651,7 +4652,12 @@ static void update_task_list(ClawStatus status) {
 
     /* Get active session data from SessionManager */
     SessionManager& sm = session_mgr();
-    int session_count = sm.active_count();
+    auto active_sessions = sm.active_sessions();
+    int session_count = (int)active_sessions.size();
+    int cron_active_count = 0;
+    for (const auto& s : active_sessions) {
+        if (s.isCron) cron_active_count++;
+    }
 
     /* Update count badge */
     if (lp_task_count) {
@@ -4674,14 +4680,27 @@ static void update_task_list(ClawStatus status) {
         case ClawStatus::Ready:
             task_add("Gateway Service", tr(S_READY), gw_detail);
             task_add(tr(S_MONITOR), tr(S_RUNNING), "Interval: 30s\nChecks: Gateway + Sessions");
+            {
+                char cron_detail[160] = {0};
+                snprintf(cron_detail, sizeof(cron_detail),
+                         "Active sessions: %d\nActive cron sessions: %d",
+                         session_count, cron_active_count);
+                task_add(tr(S_SCHED), tr(S_RUNNING), cron_detail);
+            }
             break;
         case ClawStatus::Busy:
             task_add("Gateway Service", tr(S_READY), gw_detail);
+            {
+                char cron_detail[160] = {0};
+                snprintf(cron_detail, sizeof(cron_detail),
+                         "Active sessions: %d\nActive cron sessions: %d",
+                         session_count, cron_active_count);
+                task_add(tr(S_SCHED), tr(S_RUNNING), cron_detail);
+            }
             /* Show each active session with abort button */
             if (session_count > 0) {
-                auto active = sm.active_sessions();
-                for (size_t i = 0; i < active.size() && (int)i < MAX_TASK_WIDGETS - 2; i++) {
-                    const auto& s = active[i];
+                for (size_t i = 0; i < active_sessions.size() && (int)i < MAX_TASK_WIDGETS - 3; i++) {
+                    const auto& s = active_sessions[i];
 
                     /* Format: "channel · agentId (age)" */
                     char task_name[128];
