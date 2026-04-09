@@ -283,9 +283,13 @@ void health_start() {
 void health_stop() {
     if (!g_hThread) return;
     g_running = false;
-    WaitForSingleObject(g_hThread, 5000);
+    DWORD wr = WaitForSingleObject(g_hThread, 5000);
+    if (wr == WAIT_TIMEOUT) {
+        LOG_W("HEALTH", "Monitoring thread did not exit in 5s, closing handle anyway");
+    }
     CloseHandle(g_hThread);
     g_hThread = nullptr;
+    g_callback = nullptr;
     LOG_I("HEALTH", "Monitoring stopped");
 }
 

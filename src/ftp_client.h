@@ -15,6 +15,7 @@ struct FtpTransferConfig {
     bool upload = false;
     bool use_ftps = false;
     bool recursive_upload = false;
+    bool resume_download = true;
 };
 
 using FtpProgressCallback = std::function<void(int percent, const char* step)>;

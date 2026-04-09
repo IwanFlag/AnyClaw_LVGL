@@ -111,14 +111,45 @@ bool RemoteProtocolManager::verify_token(const char* session_id, const char* tok
 }
 
 void RemoteProtocolManager::update_state(const char* session_id, const char* new_state) {
+    const char* ignore_reason = nullptr;
+    try_update_state(session_id, new_state, &ignore_reason);
+}
+
+bool RemoteProtocolManager::try_update_state(const char* session_id, const char* new_state, const char** reason) {
     std::lock_guard<std::mutex> lk(g_remote_mtx);
     prune_expired_locked();
-    if (!session_id || !new_state) return;
+    if (reason) *reason = "ok";
+    if (!session_id || !new_state) {
+        if (reason) *reason = "invalid_input";
+        return false;
+    }
     auto it = g_sessions.find(session_id);
-    if (it == g_sessions.end()) return;
-    it->second.state = new_state;
+    if (it == g_sessions.end()) {
+        if (reason) *reason = "session_not_found";
+        return false;
+    }
+    const std::string cur = it->second.state;
+    const std::string next = new_state;
+    auto allow = [&](const char* from, const char* to) {
+        return cur == from && next == to;
+    };
+    bool valid =
+        allow("pending", "requesting") ||
+        allow("requesting", "pending_accept") ||
+        allow("pending_accept", "connected") ||
+        allow("pending_accept", "closed") ||
+        allow("connected", "closed") ||
+        allow("pending", "closed") ||
+        allow("requesting", "closed");
+    if (!valid && cur == next) valid = true;
+    if (!valid) {
+        if (reason) *reason = "invalid_transition";
+        return false;
+    }
+    it->second.state = next;
     g_recent.push_back(it->second);
     if (g_recent.size() > 64) g_recent.erase(g_recent.begin(), g_recent.end() - 64);
+    return true;
 }
 
 void RemoteProtocolManager::close_session(const char* session_id) {

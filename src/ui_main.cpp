@@ -55,6 +55,9 @@ static bool g_restore_last_session = false; /* default: start fresh every launch
 static LanChatClient g_lan_chat_client;
 static std::atomic<bool> g_ftp_running(false);
 static std::atomic<bool> g_ftp_cancel(false);
+static std::mutex g_ftp_last_mtx;
+static bool g_ftp_has_last = false;
+static FtpTransferConfig g_ftp_last_cfg;
 
 /* Global startup error title (set by selfcheck, displayed by UI after LVGL init) */
 std::string g_startup_error_title;
@@ -1098,6 +1101,7 @@ static lv_obj_t* mode_ta_kb_result = nullptr;
 static lv_obj_t* mode_btn_ftp_upload = nullptr;
 static lv_obj_t* mode_btn_ftp_download = nullptr;
 static lv_obj_t* mode_btn_ftp_cancel = nullptr;
+static lv_obj_t* mode_btn_ftp_retry = nullptr;
 static lv_obj_t* mode_dd_control = nullptr;
 static lv_obj_t* mode_dd_llm = nullptr;
 static lv_obj_t* mode_lbl_work_hint = nullptr;
@@ -1803,13 +1807,27 @@ static void remote_request_cb(lv_event_t* e) {
     }
     if (g_remote_state != REMOTE_IDLE) return;
     remote_stub_prepare_auth_token();
-    RemoteProtocolManager::instance().update_state(g_remote_stub_session_id, "requesting");
+    const char* reason = nullptr;
+    if (!RemoteProtocolManager::instance().try_update_state(g_remote_stub_session_id, "requesting", &reason)) {
+        span.set_fail();
+        ui_log("[Remote] Request rejected by protocol manager: %s", reason ? reason : "unknown");
+        return;
+    }
     g_remote_state = REMOTE_REQUESTING;
     update_remote_session_visuals();
     ui_log("[Remote] Session request sent (session=%s, token=%s, ttl=120s)",
            g_remote_stub_session_id, g_remote_stub_auth_token);
     g_remote_state = REMOTE_PENDING_ACCEPT;
-    RemoteProtocolManager::instance().update_state(g_remote_stub_session_id, "pending_accept");
+    reason = nullptr;
+    if (!RemoteProtocolManager::instance().try_update_state(g_remote_stub_session_id, "pending_accept", &reason)) {
+        span.set_fail();
+        ui_log("[Remote] Failed to enter pending_accept: %s", reason ? reason : "unknown");
+        g_remote_state = REMOTE_IDLE;
+        RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
+        g_remote_stub_session_id[0] = '\0';
+        g_remote_stub_auth_token[0] = '\0';
+        return;
+    }
     g_remote_session_left = 15;
     stop_remote_session_timer();
     g_remote_session_timer = lv_timer_create(remote_session_timer_cb, 1000, nullptr);
@@ -1839,7 +1857,17 @@ static void remote_accept_cb(lv_event_t* e) {
     }
     stop_remote_session_timer();
     g_remote_state = REMOTE_CONNECTED;
-    RemoteProtocolManager::instance().update_state(g_remote_stub_session_id, "connected");
+    const char* reason = nullptr;
+    if (!RemoteProtocolManager::instance().try_update_state(g_remote_stub_session_id, "connected", &reason)) {
+        span.set_fail();
+        ui_log("[Remote] Cannot enter connected state: %s", reason ? reason : "unknown");
+        g_remote_state = REMOTE_IDLE;
+        RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
+        g_remote_stub_session_id[0] = '\0';
+        g_remote_stub_auth_token[0] = '\0';
+        update_remote_session_visuals();
+        return;
+    }
     ui_log("[Remote] Session accepted and connected (session=%s, auth=ok, channel=stub)",
            g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
     update_remote_session_visuals();
@@ -3964,6 +3992,7 @@ static void work_lan_discover_cb(lv_event_t* e);
 static void work_ftp_upload_cb(lv_event_t* e);
 static void work_ftp_download_cb(lv_event_t* e);
 static void work_ftp_cancel_cb(lv_event_t* e);
+static void work_ftp_retry_cb(lv_event_t* e);
 static void work_kb_add_source_cb(lv_event_t* e);
 static void work_kb_search_cb(lv_event_t* e);
 static void enqueue_attachment_card(const char* path, bool is_dir);
@@ -3999,6 +4028,10 @@ static void chat_input_reset_height() {
 static void chat_send_cb(lv_event_t* e) {
     (void)e;
     if (!chat_input) return;
+    if (is_streaming_now()) {
+        ui_log("[Chat] AI is still replying, wait before sending next message");
+        return;
+    }
     const char* text = lv_textarea_get_text(chat_input);
     if (!text || !text[0]) return;
     submit_prompt_to_chat(text);
@@ -4017,6 +4050,10 @@ static void chat_send_cb(lv_event_t* e) {
 static void chat_send_btn_cb(lv_event_t* e) {
     (void)e;
     if (!chat_input) return;
+    if (is_streaming_now()) {
+        ui_log("[Chat] AI is still replying, send button is temporarily disabled");
+        return;
+    }
     const char* text = lv_textarea_get_text(chat_input);
     if (!text || !text[0]) return;
     submit_prompt_to_chat(text);
@@ -4033,6 +4070,10 @@ static void chat_send_btn_cb(lv_event_t* e) {
 static void work_send_cb(lv_event_t* e) {
     (void)e;
     if (!mode_ta_work_prompt) return;
+    if (is_streaming_now()) {
+        ui_log("[Work] Wait for current AI reply to finish");
+        return;
+    }
     const char* text = lv_textarea_get_text(mode_ta_work_prompt);
     if (!text || !text[0]) return;
     snprintf(g_work_last_prompt, sizeof(g_work_last_prompt), "%s", text);
@@ -4285,7 +4326,7 @@ static void work_lan_discover_cb(lv_event_t* e) {
     ui_log("[LAN] Discovered hosts: %s", merged.c_str());
 }
 
-static void run_ftp_transfer(bool upload) {
+static void run_ftp_transfer_config(const FtpTransferConfig& cfg) {
     if (g_ftp_running.exchange(true)) {
         ui_log("[FTP] Transfer already running");
         return;
@@ -4293,17 +4334,13 @@ static void run_ftp_transfer(bool upload) {
     if (mode_btn_ftp_upload) lv_obj_add_state(mode_btn_ftp_upload, LV_STATE_DISABLED);
     if (mode_btn_ftp_download) lv_obj_add_state(mode_btn_ftp_download, LV_STATE_DISABLED);
     if (mode_btn_ftp_cancel) lv_obj_clear_state(mode_btn_ftp_cancel, LV_STATE_DISABLED);
+    if (mode_btn_ftp_retry) lv_obj_add_state(mode_btn_ftp_retry, LV_STATE_DISABLED);
     g_ftp_cancel.store(false);
-    FtpTransferConfig cfg;
-    cfg.host = ta_text(mode_ta_ftp_host);
-    cfg.port = atoi(ta_text(mode_ta_ftp_port, "21").c_str());
-    cfg.username = ta_text(mode_ta_ftp_user);
-    cfg.password = ta_text(mode_ta_ftp_pass);
-    cfg.remote_path = ta_text(mode_ta_ftp_remote);
-    cfg.local_path = ta_text(mode_ta_ftp_local);
-    cfg.upload = upload;
-    cfg.use_ftps = mode_sw_ftp_ftps && lv_obj_has_state(mode_sw_ftp_ftps, LV_STATE_CHECKED);
-    cfg.recursive_upload = upload && mode_sw_ftp_recursive && lv_obj_has_state(mode_sw_ftp_recursive, LV_STATE_CHECKED);
+    {
+        std::lock_guard<std::mutex> lk(g_ftp_last_mtx);
+        g_ftp_last_cfg = cfg;
+        g_ftp_has_last = true;
+    }
     std::thread([cfg]() {
         ui_progress_begin("FTP Transfer", cfg.upload ? "Starting upload" : "Starting download", 3);
         std::string err;
@@ -4321,7 +4358,26 @@ static void run_ftp_transfer(bool upload) {
         if (mode_btn_ftp_upload) lv_obj_clear_state(mode_btn_ftp_upload, LV_STATE_DISABLED);
         if (mode_btn_ftp_download) lv_obj_clear_state(mode_btn_ftp_download, LV_STATE_DISABLED);
         if (mode_btn_ftp_cancel) lv_obj_add_state(mode_btn_ftp_cancel, LV_STATE_DISABLED);
+        if (mode_btn_ftp_retry) {
+            if (ok) lv_obj_add_state(mode_btn_ftp_retry, LV_STATE_DISABLED);
+            else lv_obj_clear_state(mode_btn_ftp_retry, LV_STATE_DISABLED);
+        }
     }).detach();
+}
+
+static void run_ftp_transfer(bool upload) {
+    FtpTransferConfig cfg;
+    cfg.host = ta_text(mode_ta_ftp_host);
+    cfg.port = atoi(ta_text(mode_ta_ftp_port, "21").c_str());
+    cfg.username = ta_text(mode_ta_ftp_user);
+    cfg.password = ta_text(mode_ta_ftp_pass);
+    cfg.remote_path = ta_text(mode_ta_ftp_remote);
+    cfg.local_path = ta_text(mode_ta_ftp_local);
+    cfg.upload = upload;
+    cfg.use_ftps = mode_sw_ftp_ftps && lv_obj_has_state(mode_sw_ftp_ftps, LV_STATE_CHECKED);
+    cfg.recursive_upload = upload && mode_sw_ftp_recursive && lv_obj_has_state(mode_sw_ftp_recursive, LV_STATE_CHECKED);
+    cfg.resume_download = !upload;
+    run_ftp_transfer_config(cfg);
 }
 
 static void work_ftp_upload_cb(lv_event_t* e) {
@@ -4337,6 +4393,21 @@ static void work_ftp_download_cb(lv_event_t* e) {
 static void work_ftp_cancel_cb(lv_event_t* e) {
     (void)e;
     g_ftp_cancel.store(true);
+}
+
+static void work_ftp_retry_cb(lv_event_t* e) {
+    (void)e;
+    FtpTransferConfig cfg;
+    {
+        std::lock_guard<std::mutex> lk(g_ftp_last_mtx);
+        if (!g_ftp_has_last) {
+            ui_log("[FTP] No previous transfer to retry");
+            return;
+        }
+        cfg = g_ftp_last_cfg;
+    }
+    ui_log("[FTP] Retrying last %s task", cfg.upload ? "upload" : "download");
+    run_ftp_transfer_config(cfg);
 }
 
 static void work_kb_add_source_cb(lv_event_t* e) {
@@ -8215,6 +8286,9 @@ void app_ui_init() {
         lv_obj_add_event_cb(mode_btn_ftp_upload, work_ftp_upload_cb, LV_EVENT_CLICKED, nullptr);
         mode_btn_ftp_download = aw_btn_create(ftp_row, "FTP Download", BTN_SECONDARY, SCALE(130), SCALE(34));
         lv_obj_add_event_cb(mode_btn_ftp_download, work_ftp_download_cb, LV_EVENT_CLICKED, nullptr);
+        mode_btn_ftp_retry = aw_btn_create(ftp_row, "Retry Last", BTN_SECONDARY, SCALE(120), SCALE(34));
+        lv_obj_add_event_cb(mode_btn_ftp_retry, work_ftp_retry_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_add_state(mode_btn_ftp_retry, LV_STATE_DISABLED);
         mode_btn_ftp_cancel = aw_btn_create(ftp_row, "Cancel FTP", BTN_DANGER, SCALE(120), SCALE(34));
         lv_obj_add_event_cb(mode_btn_ftp_cancel, work_ftp_cancel_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_add_state(mode_btn_ftp_cancel, LV_STATE_DISABLED);

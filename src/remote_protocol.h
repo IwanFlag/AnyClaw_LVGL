@@ -17,6 +17,7 @@ public:
 
     RemoteSessionRecord create_session(const char* seed_hint, unsigned int ttl_ms);
     bool verify_token(const char* session_id, const char* token, const char* expected_state, bool* expired = nullptr);
+    bool try_update_state(const char* session_id, const char* new_state, const char** reason = nullptr);
     void update_state(const char* session_id, const char* new_state);
     void close_session(const char* session_id);
     std::vector<RemoteSessionRecord> recent_records(int max_count) const;

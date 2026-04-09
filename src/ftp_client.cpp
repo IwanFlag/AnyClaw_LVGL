@@ -112,18 +112,76 @@ bool ftp_transfer_file(const FtpTransferConfig& cfg,
             remote_total = li.QuadPart;
             InternetCloseHandle(hFind);
         }
+        uint64_t local_exist_size = 0;
+        bool resume_mode = false;
+        if (cfg.resume_download) {
+            local_exist_size = file_size_u64(cfg.local_path);
+            if (local_exist_size > 0 && (remote_total == 0 || local_exist_size < remote_total)) {
+                resume_mode = true;
+            }
+            if (remote_total > 0 && local_exist_size >= remote_total) {
+                if (on_progress) on_progress(100, "Already downloaded");
+                InternetCloseHandle(hFtp);
+                InternetCloseHandle(hInet);
+                return true;
+            }
+        }
+
+        bool rest_ok = false;
+        if (resume_mode) {
+            char cmd[96] = {0};
+            snprintf(cmd, sizeof(cmd), "REST %llu", (unsigned long long)local_exist_size);
+            HINTERNET hCmd = nullptr;
+            BOOL cmd_ok = FtpCommandA(hFtp, FALSE, INTERNET_FLAG_TRANSFER_BINARY, cmd, 0, &hCmd);
+            if (cmd_ok) {
+                rest_ok = true;
+                if (hCmd) InternetCloseHandle(hCmd);
+            }
+        }
+
         HINTERNET hRemote = FtpOpenFileA(hFtp, cfg.remote_path.c_str(), GENERIC_READ,
                                          FTP_TRANSFER_TYPE_BINARY | (cfg.use_ftps ? INTERNET_FLAG_SECURE : 0), 0);
         if (!hRemote) {
             error_out = "FtpOpenFile download failed";
             ok = false;
         } else {
-            HANDLE hLocal = CreateFileA(cfg.local_path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            DWORD create_mode = (resume_mode ? OPEN_ALWAYS : CREATE_ALWAYS);
+            HANDLE hLocal = CreateFileA(cfg.local_path.c_str(), GENERIC_WRITE, FILE_SHARE_READ, nullptr, create_mode, FILE_ATTRIBUTE_NORMAL, nullptr);
             if (hLocal == INVALID_HANDLE_VALUE) {
                 error_out = "Cannot open local output file";
                 ok = false;
             } else {
-                uint64_t recv_total = 0;
+                uint64_t recv_total = local_exist_size;
+                if (resume_mode && local_exist_size > 0) {
+                    SetFilePointer(hLocal, (LONG)local_exist_size, nullptr, FILE_BEGIN);
+                    if (on_progress) {
+                        char step[96] = {0};
+                        snprintf(step, sizeof(step), "Resuming from %llu KB", (unsigned long long)(local_exist_size / 1024));
+                        on_progress(22, step);
+                    }
+                }
+
+                // Fallback for servers that do not support REST in current session.
+                if (resume_mode && local_exist_size > 0 && !rest_ok) {
+                    uint64_t skipped = 0;
+                    char discard[32768];
+                    while (ok && skipped < local_exist_size && !cancel_flag.load()) {
+                        DWORD got = 0;
+                        DWORD need = (DWORD)std::min<uint64_t>(sizeof(discard), local_exist_size - skipped);
+                        if (!InternetReadFile(hRemote, discard, need, &got)) {
+                            error_out = "Resume skip failed";
+                            ok = false;
+                            break;
+                        }
+                        if (got == 0) {
+                            error_out = "Remote shorter than local partial file";
+                            ok = false;
+                            break;
+                        }
+                        skipped += got;
+                    }
+                }
+
                 char buf[32768];
                 while (ok && !cancel_flag.load()) {
                     DWORD got = 0;
