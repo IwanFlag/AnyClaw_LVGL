@@ -37,11 +37,23 @@ bash tools/linux/build.sh
 bash tools/linux/run-wine.sh
 ```
 
-### Windows 原生编译（MSYS2）
+### Windows 原生编译（推荐）
 
 ```cmd
-tools\windows\build.bat
+:: 默认静默模式（推荐）
+tools\windows\build-package.bat
+
+:: 详细日志模式
+tools\windows\build-package.bat --verbose
+
+:: 查看参数说明
+tools\windows\build-package.bat --help
 ```
+
+说明：
+- `build-package.bat` 会自动尝试加载 VS Build Tools 开发环境（优先 `C:\VSBuildTools\Common7\Tools\VsDevCmd.bat`）。
+- `build.bat` / `build-package.bat` 均支持 `--help`。
+- `build.bat` 默认也是静默模式，可用 `--verbose` 切换全量输出。
 
 ### tools/ 目录
 
@@ -54,7 +66,10 @@ tools/
 │   ├── build.sh                ← 一键编译
 │   └── run-wine.sh             ← Wine 测试
 └── windows/
-    └── build.bat               ← Windows 原生编译
+    ├── setup-env.bat           ← 环境检查
+    ├── build.bat               ← Windows 原生编译（支持 --quiet/--verbose/--help）
+    ├── fetch-runtime-deps.bat  ← 拉取 SDL2 运行时依赖
+    └── build-package.bat       ← 一键编译+打包（默认静默，支持 --verbose/--help）
 ```
 
 ---
