@@ -1,8 +1,11 @@
 # Build directories
 build/
 build-mingw/
+build-windows/
 build_mingw/
 cmake-build-*/
+!build-windows/README.md
+!build-mingw/README.md
 
 # IDE
 .vs/
