@@ -342,8 +342,10 @@ BootCheckResult check_network() {
     r.check_name = "Network";
 
     /* Test OpenRouter (primary API endpoint) */
-    std::string resp_buf(256, '\0');
-    int code = http_get("https://openrouter.ai/api/v1/models", resp_buf.data(), (int)resp_buf.size(), 5);
+    /* FIX Bug 6: Use fixed-size buffer with proper size instead of std::string::size()
+     * which could cause UB if http_get writes to a zero-capacity-backed pointer. */
+    char resp_buf[256] = {0};
+    int code = http_get("https://openrouter.ai/api/v1/models", resp_buf, sizeof(resp_buf), 5);
 
     if (code > 0) {
         r.status = BootCheckStatus::Ok;
@@ -353,8 +355,8 @@ BootCheckResult check_network() {
     }
 
     /* Fallback: try google.com */
-    resp_buf.assign(256, '\0');
-    code = http_get("https://www.google.com", resp_buf.data(), (int)resp_buf.size(), 5);
+    memset(resp_buf, 0, sizeof(resp_buf));
+    code = http_get("https://www.google.com", resp_buf, sizeof(resp_buf), 5);
 
     if (code > 0) {
         r.status = BootCheckStatus::Warn;

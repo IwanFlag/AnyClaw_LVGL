@@ -50,6 +50,20 @@ int json_extract_int(const char* json, const char* key, int default_val) {
     return neg ? -result : result;
 }
 
+/* Extract int64 value (for large timestamps like license_expiry) */
+int64_t json_extract_int64(const char* json, const char* key, int64_t default_val) {
+    const char* val = json_find_key(json, key);
+    if (!val) return default_val;
+    bool neg = false;
+    if (*val == '-') { neg = true; val++; }
+    int64_t result = 0;
+    while (*val >= '0' && *val <= '9') {
+        result = result * 10 + (*val - '0');
+        val++;
+    }
+    return neg ? -result : result;
+}
+
 bool json_extract_string(const char* json, const char* key, char* out, int out_size) {
     if (!out || out_size <= 0) return false;
     out[0] = '\0';

@@ -115,21 +115,8 @@ void license_init() {
     f.close();
 
     g_license_seq = json_extract_int(content.c_str(), "license_seq", 0);
-    /* license_expiry is stored as a large number (Unix timestamp) */
-    /* json_extract_int only handles int, so we parse manually */
-    size_t pos = content.find("\"license_expiry\"");
-    if (pos != std::string::npos) {
-        pos = content.find(':', pos);
-        if (pos != std::string::npos) {
-            pos++;
-            while (pos < content.size() && (content[pos] == ' ' || content[pos] == '"')) pos++;
-            g_license_expiry = 0;
-            while (pos < content.size() && content[pos] >= '0' && content[pos] <= '9') {
-                g_license_expiry = g_license_expiry * 10 + (content[pos] - '0');
-                pos++;
-            }
-        }
-    }
+    /* FIX Bug 7: Use json_extract_int64 instead of manual parsing */
+    g_license_expiry = json_extract_int64(content.c_str(), "license_expiry", 0);
 
     g_license_loaded = true;
     LOG_I("License", "Loaded: seq=%d expiry=%lld", g_license_seq, (long long)g_license_expiry);

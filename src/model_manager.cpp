@@ -876,17 +876,19 @@ void failover_save_config() {
     /* Remove old failover entries if present */
     auto remove_key = [](std::string& s, const char* key) {
         size_t pos = s.find(key);
-        if (pos != std::string::npos) {
-            size_t end = s.find('\n', pos);
-            if (end != std::string::npos) {
-                s.erase(pos, end - pos + 1);
-                /* Remove trailing comma if present */
-                size_t comma = s.rfind(',', pos);
-                if (comma != std::string::npos && s.find_first_not_of(" \t\n\r", comma + 1) == pos) {
-                    /* The comma before this line */
-                }
-            }
+        if (pos == std::string::npos) return;
+        size_t end = s.find('\n', pos);
+        if (end == std::string::npos) end = s.size();
+        else end++; /* include newline */
+        /* FIX Bug 9: Also remove preceding comma+whitespace to avoid double commas */
+        size_t start = pos;
+        /* Walk back over whitespace */
+        while (start > 0 && (s[start - 1] == ' ' || s[start - 1] == '\t')) start--;
+        /* If there's a comma before this key, remove from the comma */
+        if (start > 0 && s[start - 1] == ',') {
+            start--;
         }
+        s.erase(start, end - start);
     };
     remove_key(content, "\"failover_enabled\"");
     remove_key(content, "\"failover_models\"");

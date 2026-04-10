@@ -63,6 +63,8 @@ static FtpTransferConfig g_ftp_last_cfg;
 /* Global startup error title (set by selfcheck, displayed by UI after LVGL init) */
 std::string g_startup_error_title;
 std::string g_status_reason;  /* Failure reason shown when status == Error */
+/* FIX Bug 8: Mutex for cross-thread access to startup error strings */
+std::mutex g_startup_error_mtx;
 
 static void init_system_font() {
     int dpi = app_get_dpi_scale();
@@ -5402,7 +5404,14 @@ static void startup_error_ok_cb(lv_event_t* e) {
 }
 
 static void show_startup_error(lv_obj_t* parent) {
-    if (g_startup_error.empty()) return;
+    /* FIX Bug 8: Lock before reading cross-thread strings */
+    std::string local_title, local_msg;
+    {
+        std::lock_guard<std::mutex> lk(g_startup_error_mtx);
+        local_title = g_startup_error_title;
+        local_msg = g_startup_error;
+    }
+    if (local_msg.empty()) return;
 
     /* Full-screen dark overlay */
     lv_obj_t* modal = lv_obj_create(parent);
@@ -5435,8 +5444,8 @@ static void show_startup_error(lv_obj_t* parent) {
 
     /* Title - use custom title if set, yellow for warnings */
     lv_obj_t* lbl_title = lv_label_create(box);
-    bool is_warning = !g_startup_error_title.empty();
-    const char* title_text = is_warning ? g_startup_error_title.c_str() : "AnyClaw - Already Running";
+    bool is_warning = !local_title.empty();
+    const char* title_text = is_warning ? local_title.c_str() : "AnyClaw - Already Running";
     lv_label_set_text(lbl_title, title_text);
     lv_obj_set_style_text_color(lbl_title,
         is_warning ? lv_color_make(255, 200, 100) : lv_color_make(100, 160, 255), 0);
@@ -5444,7 +5453,7 @@ static void show_startup_error(lv_obj_t* parent) {
 
     /* Message */
     lv_obj_t* lbl_msg = lv_label_create(box);
-    lv_label_set_text(lbl_msg, g_startup_error.c_str());
+    lv_label_set_text(lbl_msg, local_msg.c_str());
     lv_obj_set_style_text_color(lbl_msg, lv_color_make(200, 205, 220), 0);
     lv_obj_set_style_text_font(lbl_msg, CJK_FONT, 0);
     lv_label_set_long_mode(lbl_msg, LV_LABEL_LONG_WRAP);
@@ -5470,7 +5479,7 @@ static void show_startup_error(lv_obj_t* parent) {
     lv_obj_set_style_text_font(lbl_ok, CJK_FONT, 0);
     lv_obj_center(lbl_ok);
 
-    ui_log("[Startup] Showing error: %s", g_startup_error.c_str());
+    ui_log("[Startup] Showing error: %s", local_msg.c_str());
 }
 
 /* ═══ Exit Confirmation Dialog (LVGL modal) ═══ */
@@ -6541,51 +6550,9 @@ static bool is_wizard_completed() {
 
 static void save_wizard_completed() {
     g_wizard_completed = true;
-
-    /* Read existing config, add/update wizard_completed */
-    std::string config_path = get_config_path();
-    std::ifstream fin(config_path);
-    std::string content;
-    if (fin.is_open()) {
-        content.assign((std::istreambuf_iterator<char>(fin)), std::istreambuf_iterator<char>());
-        fin.close();
-    }
-
-    /* If wizard_completed already exists, update it */
-    size_t pos = content.find("\"wizard_completed\"");
-    if (pos != std::string::npos) {
-        /* Replace existing value */
-        size_t colon = content.find(':', pos);
-        if (colon != std::string::npos) {
-            size_t val_start = colon + 1;
-            while (val_start < content.size() && (content[val_start] == ' ' || content[val_start] == '\t')) val_start++;
-            size_t val_end = val_start;
-            while (val_end < content.size() && (content[val_end] >= 'a' && content[val_end] <= 'z')) val_end++;
-            content.replace(val_start, val_end - val_start, "true");
-        }
-    } else {
-        /* Insert before closing brace */
-        size_t last_brace = content.rfind('}');
-        if (last_brace != std::string::npos) {
-            /* Check if we need a comma on the previous line */
-            size_t last_newline = content.rfind('\n', last_brace);
-            if (last_newline != std::string::npos) {
-                /* Find last non-whitespace char before closing brace */
-                size_t scan = last_brace;
-                while (scan > 0 && (content[scan-1] == ' ' || content[scan-1] == '\n' || content[scan-1] == '\r' || content[scan-1] == '\t')) scan--;
-                if (scan > 0 && content[scan-1] != ',' && content[scan-1] != '{') {
-                    content.insert(scan, ",");
-                }
-            }
-            content.insert(last_brace, "  \"wizard_completed\": true\n");
-        }
-    }
-
-    std::ofstream fout(config_path);
-    if (fout.is_open()) {
-        fout << content;
-        fout.close();
-    }
+    /* FIX Bug 1+2: Delegate to save_theme_config() which already serializes
+     * wizard_completed correctly. No more fragile manual JSON editing. */
+    save_theme_config();
 }
 
 /* Step title strings */
@@ -6762,6 +6729,13 @@ static lv_obj_t* wizard_add_status_row(lv_obj_t* parent, const char* text, lv_co
 /* Install button callback — mode: "network" or "local" (async + cancelable) */
 static void wiz_install_poll_cb(lv_timer_t* t) {
     (void)t;
+    /* FIX Bug 3: Only process if wizard is still on the detect step.
+     * User might have navigated away or closed the wizard. */
+    if (!g_wizard_modal || g_wizard_step != 1) {
+        g_wiz_install_result_ready.store(false);
+        g_wiz_install_running.store(false);
+        return;
+    }
     if (!g_wiz_install_result_ready.load()) return;
 
     g_wiz_install_result_ready.store(false);
@@ -6787,7 +6761,10 @@ static void wiz_install_poll_cb(lv_timer_t* t) {
             lv_obj_set_style_text_color(g_wiz_install_active_label, lv_color_make(220, 80, 80), 0);
         }
     }
-    if (g_wiz_install_result_ok) wizard_go_step(g_wizard_step);
+    if (g_wiz_install_result_ok) {
+        wizard_set_next_enabled(true);
+        wizard_go_step(g_wizard_step);
+    }
 }
 
 static void wiz_cancel_install_cb(lv_event_t* e) {
@@ -7125,6 +7102,10 @@ static void wizard_build_step_model_api() {
     lv_textarea_set_one_line(g_wiz_api_ta, true);
     lv_textarea_set_password_mode(g_wiz_api_ta, true);
     lv_textarea_set_placeholder_text(g_wiz_api_ta, "sk-or-...");
+    /* FIX Bug 4: Restore API key from saved state on step re-entry */
+    if (g_wizard_api_key[0]) {
+        lv_textarea_set_text(g_wiz_api_ta, g_wizard_api_key);
+    }
     lv_obj_set_width(g_wiz_api_ta, LV_PCT(100));
     lv_obj_set_height(g_wiz_api_ta, SCALE(34));
     lv_obj_set_style_bg_color(g_wiz_api_ta, g_colors->input_bg, 0);

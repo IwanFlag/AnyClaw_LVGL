@@ -146,6 +146,7 @@ void ui_show_setup_wizard();
 
 /* JSON utility: extract integer/string from simple JSON (handles whitespace, nesting level 1) */
 int json_extract_int(const char* json, const char* key, int default_val = 0);
+int64_t json_extract_int64(const char* json, const char* key, int64_t default_val = 0);
 bool json_extract_string(const char* json, const char* key, char* out, int out_size);
 
 /* UTF-8 utility */

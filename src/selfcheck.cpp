@@ -14,6 +14,10 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
+#include <mutex>
+
+/* FIX Bug 8: Cross-thread mutex for startup error strings */
+extern std::mutex g_startup_error_mtx;
 
 namespace fs = std::filesystem;
 
@@ -219,11 +223,14 @@ bool selfcheck_fix(SelfCheckResult& result) {
         ui_log("[SelfCheck] Node.js missing - cannot auto-fix, user must install");
         LOG_W("SELF", "Node.js missing - cannot auto-fix, user must install");
         /* Store error for LVGL popup (shown after UI init) */
-        g_startup_error_title = "AnyClaw - Node.js Required";
-        g_startup_error = "Node.js is not installed or not in PATH.\n\n"
-                          "Install from: https://github.com/IwanFlag/AnyClaw_Tools/releases\n"
-                          "Or: https://nodejs.org/\n"
-                          "Then restart AnyClaw.";
+        {
+            std::lock_guard<std::mutex> lk(g_startup_error_mtx);
+            g_startup_error_title = "AnyClaw - Node.js Required";
+            g_startup_error = "Node.js is not installed or not in PATH.\n\n"
+                              "Install from: https://github.com/IwanFlag/AnyClaw_Tools/releases\n"
+                              "Or: https://nodejs.org/\n"
+                              "Then restart AnyClaw.";
+        }
         fixed = false;
     }
 
