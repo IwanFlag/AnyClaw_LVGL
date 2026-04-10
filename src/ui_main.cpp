@@ -6516,6 +6516,10 @@ static lv_obj_t* g_wiz_install_progress_task = nullptr;
 static lv_obj_t* g_wiz_install_progress_step = nullptr;
 static lv_obj_t* g_wiz_install_progress_result = nullptr;
 static lv_obj_t* g_wiz_install_progress_bar = nullptr;
+/* Offline package download state */
+static std::atomic<bool> g_wiz_dl_running(false);
+static lv_obj_t* g_wiz_dl_node_btn = nullptr;
+static lv_obj_t* g_wiz_dl_oc_btn = nullptr;
 
 static void wizard_progress_mirror_from_event(const PendingProgressEvent& ev, int pct) {
     if (!g_wizard_modal || g_wizard_step != 1 || !g_wiz_install_progress_panel || !g_wiz_install_progress_bar) return;
@@ -6779,6 +6783,156 @@ static void wiz_cancel_install_cb(lv_event_t* e) {
     wizard_close_cb(nullptr);
 }
 
+/* ═══ Offline Package Download (async via PowerShell) ═══ */
+
+static std::string get_download_dir() {
+    const char* userprofile = std::getenv("USERPROFILE");
+    if (userprofile) {
+        std::string dir = std::string(userprofile) + "\\Downloads\\AnyClaw";
+        std::filesystem::create_directories(dir);
+        return dir;
+    }
+    return ".\\downloads";
+}
+
+/* Run a system command and capture output (similar to boot_run_cmd but available here) */
+static bool wiz_run_cmd(const char* cmd, std::string& output, DWORD timeout_ms = 60000) {
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+    HANDLE hRead = nullptr, hWrite = nullptr;
+    if (!CreatePipe(&hRead, &hWrite, &sa, 0)) return false;
+    SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
+    STARTUPINFOA si{};
+    si.cb = sizeof(si);
+    si.hStdOutput = hWrite;
+    si.hStdError  = hWrite;
+    si.dwFlags |= STARTF_USESTDHANDLES;
+    PROCESS_INFORMATION pi{};
+    std::string full = std::string("cmd /C \"") + cmd + "\"";
+    std::vector<char> buf(full.begin(), full.end());
+    buf.push_back('\0');
+    if (!CreateProcessA(nullptr, buf.data(), nullptr, nullptr, TRUE,
+                        CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
+        CloseHandle(hRead); CloseHandle(hWrite); return false;
+    }
+    CloseHandle(hWrite);
+    output.clear();
+    char readBuf[4096];
+    DWORD bytesRead = 0;
+    while (ReadFile(hRead, readBuf, sizeof(readBuf), &bytesRead, nullptr) && bytesRead > 0) {
+        output.append(readBuf, bytesRead);
+    }
+    WaitForSingleObject(pi.hProcess, timeout_ms);
+    DWORD exitCode = 1;
+    GetExitCodeProcess(pi.hProcess, &exitCode);
+    CloseHandle(pi.hProcess); CloseHandle(pi.hThread); CloseHandle(hRead);
+    while (!output.empty() && (output.back() == '\r' || output.back() == '\n' || output.back() == ' '))
+        output.pop_back();
+    return exitCode == 0;
+}
+
+/* Async download: downloads a URL to a local file via PowerShell Invoke-WebRequest */
+static void wiz_download_async(const char* url, const char* dest_path,
+                                const char* task_name, const char* btn_label_key) {
+    if (g_wiz_dl_running.load()) {
+        ui_log("[DL] Download already running");
+        return;
+    }
+    g_wiz_dl_running.store(true);
+
+    /* Disable both download buttons */
+    if (g_wiz_dl_node_btn) lv_obj_add_state(g_wiz_dl_node_btn, LV_STATE_DISABLED);
+    if (g_wiz_dl_oc_btn) lv_obj_add_state(g_wiz_dl_oc_btn, LV_STATE_DISABLED);
+
+    ui_progress_begin(task_name, "Starting download...", 0);
+    ui_log("[DL] Downloading: %s -> %s", url, dest_path);
+
+    std::string url_copy(url);
+    std::string dest_copy(dest_path);
+    std::string task_copy(task_name);
+
+    std::thread([url_copy, dest_copy, task_copy]() {
+        /* Build PowerShell download command */
+        char cmd[2048];
+        snprintf(cmd, sizeof(cmd),
+            "powershell -NoProfile -Command \""
+            "$ProgressPreference='SilentlyContinue';"
+            "try { Invoke-WebRequest -Uri '%s' -OutFile '%s' -UseBasicParsing -TimeoutSec 120; "
+            "if(Test-Path '%s'){ Write-Output 'OK' } else { Write-Output 'FAIL' } "
+            "} catch { Write-Output $_.Exception.Message }\"",
+            url_copy.c_str(), dest_copy.c_str(), dest_copy.c_str());
+
+        ui_progress_update(task_copy.c_str(), "Downloading...", 10);
+        std::string output;
+        bool ok = wiz_run_cmd(cmd, output, 180000); /* 3min timeout */
+
+        bool file_ok = ok && (output.find("OK") != std::string::npos);
+
+        if (file_ok) {
+            /* Verify file exists and has size > 0 */
+            std::error_code ec;
+            auto sz = std::filesystem::file_size(dest_copy, ec);
+            file_ok = !ec && sz > 0;
+            if (file_ok) {
+                char size_str[64];
+                if (sz > 1024*1024) snprintf(size_str, sizeof(size_str), "%.1f MB", sz / (1024.0*1024.0));
+                else snprintf(size_str, sizeof(size_str), "%.0f KB", sz / 1024.0);
+                ui_progress_finish(task_copy.c_str(), true, size_str);
+                ui_log("[DL] Download complete: %s (%s)", dest_copy.c_str(), size_str);
+            } else {
+                ui_progress_finish(task_copy.c_str(), false, "File empty or missing");
+                ui_log("[DL] Download file missing: %s", dest_copy.c_str());
+            }
+        } else {
+            ui_progress_finish(task_copy.c_str(), false, output.substr(0, 120).c_str());
+            ui_log("[DL] Download failed: %s", output.c_str());
+        }
+
+        g_wiz_dl_running.store(false);
+        /* Re-enable buttons */
+        if (g_wiz_dl_node_btn) lv_obj_clear_state(g_wiz_dl_node_btn, LV_STATE_DISABLED);
+        if (g_wiz_dl_oc_btn) lv_obj_clear_state(g_wiz_dl_oc_btn, LV_STATE_DISABLED);
+    }).detach();
+}
+
+static void wiz_dl_node_cb(lv_event_t* e) {
+    (void)e;
+    std::string dl_dir = get_download_dir();
+    std::string dest = dl_dir + "\\node-v22.14.0-x64.msi";
+    /* Node.js LTS v22.14.0 x64 MSI (official) */
+    wiz_download_async(
+        "https://nodejs.org/dist/v22.14.0/node-v22.14.0-x64.msi",
+        dest.c_str(),
+        "Node.js LTS Download",
+        "Download Node.js"
+    );
+    /* Also offer to open folder when done */
+    ui_log("[DL] Node.js will be saved to: %s", dest.c_str());
+    ui_log("[DL] After download, run the .msi to install, then restart AnyClaw.");
+}
+
+static void wiz_dl_oc_cb(lv_event_t* e) {
+    (void)e;
+    std::string dl_dir = get_download_dir();
+    std::string dest = dl_dir + "\\openclaw-latest.tgz";
+    /* OpenClaw latest from npm registry */
+    wiz_download_async(
+        "https://registry.npmjs.org/openclaw/-/openclaw-latest.tgz",
+        dest.c_str(),
+        "OpenClaw Download",
+        "Download OpenClaw"
+    );
+    ui_log("[DL] OpenClaw will be saved to: %s", dest.c_str());
+    ui_log("[DL] After download, install via: npm install -g \"%s\"", dest.c_str());
+}
+
+static void wiz_dl_open_folder_cb(lv_event_t* e) {
+    (void)e;
+    std::string dl_dir = get_download_dir();
+    ShellExecuteA(nullptr, "open", dl_dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+}
+
 static void wiz_install_oc_cb(lv_event_t* e) {
     if (g_wiz_install_running.load()) return;
     const char* mode = (const char*)lv_event_get_user_data(e);
@@ -6894,14 +7048,45 @@ static void wizard_build_step_detect() {
         wizard_add_status_row(g_wizard_content, tr(W_OC_NOT_INST), lv_color_make(220, 40, 40));
     }
 
-    /* ═══ Node.js missing: show download links with fallback ═══ */
+    /* ═══ Node.js missing: offline download + links ═══ */
     if (!env.node_ok || !env.node_version_ok || !env.npm_ok) {
         lv_obj_t* dl_label = lv_label_create(g_wizard_content);
         lv_label_set_text(dl_label, tr(W_NODE_DL));
         lv_obj_set_style_text_color(dl_label, g_colors->text_dim, 0);
         lv_obj_set_style_text_font(dl_label, CJK_FONT, 0);
 
-        /* Show both download sources */
+        /* One-click download button (Node.js LTS x64 MSI) */
+        lv_obj_t* dl_row = lv_obj_create(g_wizard_content);
+        lv_obj_set_size(dl_row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(dl_row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(dl_row, 0, 0);
+        lv_obj_set_style_pad_all(dl_row, 0, 0);
+        lv_obj_set_style_pad_gap(dl_row, 10, 0);
+        lv_obj_set_flex_flow(dl_row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(dl_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(dl_row, LV_OBJ_FLAG_SCROLLABLE);
+
+        g_wiz_dl_node_btn = lv_button_create(dl_row);
+        lv_obj_set_size(g_wiz_dl_node_btn, SCALE(240), SCALE(38));
+        lv_obj_set_style_bg_color(g_wiz_dl_node_btn, lv_color_make(168, 85, 247), 0); /* Purple */
+        lv_obj_set_style_radius(g_wiz_dl_node_btn, 8, 0);
+        lv_obj_t* dl_node_lbl = lv_label_create(g_wiz_dl_node_btn);
+        lv_label_set_text(dl_node_lbl, "Download Node.js LTS (.msi)");
+        lv_obj_set_style_text_font(dl_node_lbl, CJK_FONT_SMALL, 0);
+        lv_obj_center(dl_node_lbl);
+        lv_obj_add_event_cb(g_wiz_dl_node_btn, wiz_dl_node_cb, LV_EVENT_CLICKED, nullptr);
+
+        lv_obj_t* open_dl_btn = lv_button_create(dl_row);
+        lv_obj_set_size(open_dl_btn, SCALE(120), SCALE(38));
+        lv_obj_set_style_bg_color(open_dl_btn, lv_color_make(80, 85, 100), 0);
+        lv_obj_set_style_radius(open_dl_btn, 8, 0);
+        lv_obj_t* open_lbl = lv_label_create(open_dl_btn);
+        lv_label_set_text(open_lbl, "Open Folder");
+        lv_obj_set_style_text_font(open_lbl, CJK_FONT_SMALL, 0);
+        lv_obj_center(open_lbl);
+        lv_obj_add_event_cb(open_dl_btn, wiz_dl_open_folder_cb, LV_EVENT_CLICKED, nullptr);
+
+        /* Show download URLs as well */
         const char* urls[] = {
             "https://nodejs.org/",
             "https://registry.npmmirror.com/-/binary/node/",
@@ -6966,6 +7151,41 @@ static void wizard_build_step_detect() {
 
         g_wiz_btn_install_local = btn_local;
         lv_obj_add_event_cb(btn_local, wiz_install_oc_cb, LV_EVENT_CLICKED, (void*)"local");
+
+        /* OpenClaw offline download row */
+        lv_obj_t* oc_dl_row = lv_obj_create(g_wizard_content);
+        lv_obj_set_size(oc_dl_row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(oc_dl_row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(oc_dl_row, 0, 0);
+        lv_obj_set_style_pad_all(oc_dl_row, 0, 0);
+        lv_obj_set_style_pad_gap(oc_dl_row, 10, 0);
+        lv_obj_set_flex_flow(oc_dl_row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(oc_dl_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(oc_dl_row, LV_OBJ_FLAG_SCROLLABLE);
+
+        g_wiz_dl_oc_btn = lv_button_create(oc_dl_row);
+        lv_obj_set_size(g_wiz_dl_oc_btn, SCALE(240), SCALE(38));
+        lv_obj_set_style_bg_color(g_wiz_dl_oc_btn, lv_color_make(168, 85, 247), 0); /* Purple */
+        lv_obj_set_style_radius(g_wiz_dl_oc_btn, 8, 0);
+        lv_obj_t* dl_oc_lbl = lv_label_create(g_wiz_dl_oc_btn);
+        lv_label_set_text(dl_oc_lbl, "Download OpenClaw (.tgz)");
+        lv_obj_set_style_text_font(dl_oc_lbl, CJK_FONT_SMALL, 0);
+        lv_obj_center(dl_oc_lbl);
+        lv_obj_add_event_cb(g_wiz_dl_oc_btn, wiz_dl_oc_cb, LV_EVENT_CLICKED, nullptr);
+        if (!net_ok) {
+            lv_obj_add_state(g_wiz_dl_oc_btn, LV_STATE_DISABLED);
+            lv_obj_set_style_bg_opa(g_wiz_dl_oc_btn, LV_OPA_50, 0);
+        }
+
+        lv_obj_t* open_oc_dl = lv_button_create(oc_dl_row);
+        lv_obj_set_size(open_oc_dl, SCALE(120), SCALE(38));
+        lv_obj_set_style_bg_color(open_oc_dl, lv_color_make(80, 85, 100), 0);
+        lv_obj_set_style_radius(open_oc_dl, 8, 0);
+        lv_obj_t* open_oc_lbl = lv_label_create(open_oc_dl);
+        lv_label_set_text(open_oc_lbl, "Open Folder");
+        lv_obj_set_style_text_font(open_oc_lbl, CJK_FONT_SMALL, 0);
+        lv_obj_center(open_oc_lbl);
+        lv_obj_add_event_cb(open_oc_dl, wiz_dl_open_folder_cb, LV_EVENT_CLICKED, nullptr);
 
         lv_obj_t* btn_cancel = lv_button_create(g_wizard_content);
         lv_obj_set_size(btn_cancel, LV_PCT(100), SCALE(40));
