@@ -1,6 +1,6 @@
 # AnyClaw LVGL — 产品需求文档 (PRD)
 
-> 版本：v2.0.4 | 最后更新：2026-04-11
+> 版本：v2.0.5 | 最后更新：2026-04-11
 
 ---
 
@@ -1308,7 +1308,7 @@ AnyClaw 区别于普通局域网聊天工具的差异化能力。
 
 ### A.8 竞品功能吸收（2026-04-11）
 
-对 Ollama、LM Studio、Cursor、Claude 四个产品的横向对比，筛选 AnyClaw 应当吸收的功能方向。
+对 Ollama、LM Studio、Cursor、Claude、Hermes Agent 五个产品的横向对比，筛选 AnyClaw 应当吸收的功能方向。
 
 #### 总览
 
@@ -1325,6 +1325,9 @@ AnyClaw 区别于普通局域网聊天工具的差异化能力。
 | 9 | 模型格式兼容（GGUF/MLX） | LM Studio | 🟢 低 | LM Studio |
 | 10 | 多模态能力 | Claude | 🟢 低 | Claude |
 | 11 | 模型社区生态 | Ollama | 🟢 低 | Ollama |
+| 12 | Docker 安全沙箱 | Hermes Agent | 🔴 高 | Hermes Agent |
+| 13 | 自动技能创建 + 开放标准 | Hermes Agent | 🟡 中 | Hermes Agent |
+| 14 | 一键安装体验 | Hermes Agent | 🟡 中 | Hermes Agent |
 
 #### 1. MCP Client（Model Context Protocol）
 
@@ -1458,6 +1461,56 @@ AnyClaw 区别于普通局域网聊天工具的差异化能力。
 - 一键流程：选中模型 → 自动检测 Provider → 引导填 Key → 可用
 - 本地模型：类似 Ollama 的体验，选中即下载+加载+可用
 - 模型推荐：根据用户硬件（RAM/GPU）推荐合适模型
+
+#### 12. Docker 安全沙箱
+
+**来源：** Hermes Agent（Nous Research）提供容器化安全加固——只读根目录、权限降级、PID 限制。
+
+**现状：** OpenClaw 的 exec 工具直接在宿主机执行命令，无沙箱隔离。AnyClaw 的权限系统只做"允许/禁止/询问"，不做执行隔离。
+
+**吸收价值：**
+- 当前架构下 Agent 执行的任何命令都在宿主机上跑——用户最大的安全顾虑
+- Docker 沙箱 = 即使命令有恶意或误操作，也只影响容器，不波及宿主
+- 对"数据不离开本地"的核心价值是重要补充——不仅要数据安全，还要执行安全
+
+**设计方向：**
+- Agent 执行命令时可选沙箱模式：宿主机执行 / Docker 容器执行
+- 沙箱默认策略：宽松模式 = 可选沙箱；严格模式 = 默认沙箱
+- 沙箱配置：只读挂载工作区目录、网络隔离、CPU/内存限制
+- 容器镜像预置常用工具链（Python、Node、Git），避免用户自建
+- Settings 中提供沙箱开关和资源限制配置
+
+#### 13. 自动技能创建 + 开放标准
+
+**来源：** Hermes Agent 自动将解决问题的方案写为可复用的 Skill（SKILL.md 格式），并支持 agentskills.io 社区标准。
+
+**现状：** OpenClaw 的 Skill 需要用户手动安装（ClawHub / 手动放置）。Agent 解决了问题不会自动沉淀为 Skill。AnyClaw 无自动技能创建能力。
+
+**吸收价值：**
+- "越用越聪明"的关键机制——Agent 遇到新问题 → 解决 → 自动记录为 Skill → 下次直接复用
+- 开放标准（agentskills.io）意味着 AnyClaw 的 Skill 也能分享给其他 Agent 平台
+- 降低 Skill 生态建设的冷启动问题
+
+**设计方向：**
+- Agent 执行完复杂操作后，自动提示"是否将此操作保存为 Skill？"
+- 自动生成 SKILL.md（包含问题描述、解决步骤、所需权限）
+- 支持导出/导入 Skill 包，兼容开放标准
+- Skill 冲突检测：同名 Skill 更新时提示用户选择
+
+#### 14. 一键安装体验
+
+**来源：** Hermes Agent 一条 `curl | bash` 命令完成全部安装（uv + Python 3.11 + 克隆仓库 + 配置）。
+
+**现状：** AnyClaw 的安装需要：下载 exe + SDL2.dll → 安装 Node.js → 安装 OpenClaw → 配置 API Key。向导虽有，但步骤多、依赖链长。
+
+**吸收价值：**
+- 学生用户看到 5 步安装向导就走了——必须做到"下载即用"
+- Hermes 的做法是把所有依赖打包进一个安装脚本，用户体验是"一行命令搞定"
+
+**设计方向：**
+- AnyClaw 的 Launcher（计划中的单文件部署）应内嵌 Node.js 运行时
+- 首次启动：检测 + 自动安装 OpenClaw + 引导填 API Key，三步以内
+- 目标：下载 AnyClaw.exe → 双击 → 向导填 Key → 开始用，全程不超过 2 分钟
 
 ### A.9 v3.0 三层权限模型详细设计
 
