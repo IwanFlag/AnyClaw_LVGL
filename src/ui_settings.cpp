@@ -352,7 +352,7 @@ static void refresh_dropdown_cb(lv_event_t* e) {
 static lv_obj_t* add_divider(lv_obj_t* parent) {
     lv_obj_t* d = lv_obj_create(parent);
     lv_obj_set_size(d, LV_PCT(100), 2);
-    lv_obj_set_style_bg_color(d, lv_color_make(40, 90, 200), 0); /* 深蓝色 */
+    lv_obj_set_style_bg_color(d, g_colors ? g_colors->panel_border : lv_color_make(90, 110, 145), 0);
     lv_obj_set_style_bg_opa(d, LV_OPA_70, 0);
     lv_obj_set_style_border_width(d, 0, 0);
     lv_obj_clear_flag(d, LV_OBJ_FLAG_SCROLLABLE);
@@ -3128,12 +3128,13 @@ void ui_settings_init(lv_obj_t* parent) {
 
     lv_obj_t* btn_close = lv_button_create(title_bar);
     lv_obj_set_size(btn_close, SCALE(84), SCALE(32));
-    lv_obj_set_style_bg_color(btn_close, lv_color_make(220, 80, 80), 0);
+    lv_obj_set_style_bg_color(btn_close, g_colors->btn_close, 0);
     lv_obj_set_style_radius(btn_close, SCALE(8), 0);
     lv_obj_align(btn_close, LV_ALIGN_RIGHT_MID, -10, 0);
     lv_obj_add_event_cb(btn_close, settings_close_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_close = lv_label_create(btn_close);
     lv_label_set_text(lbl_close, tr("关闭", "Close"));
+    lv_obj_set_style_text_color(lbl_close, lv_color_white(), 0);
     lv_obj_set_style_text_font(lbl_close, CJK_FONT, 0);
     lv_obj_center(lbl_close);
 
