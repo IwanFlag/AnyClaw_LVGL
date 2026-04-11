@@ -11745,7 +11745,11 @@ void app_ui_init() {
     }
 
     /* ═══ Settings UI ═══ */
-    ui_settings_init(scr);
+    lv_timer_create([](lv_timer_t* t) {
+        lv_obj_t* root = (lv_obj_t*)t->user_data;
+        if (root) ui_settings_init(root);
+        lv_timer_del(t);
+    }, 260, scr);
 
     /* Initial refresh - populates task list */
     run_proactive_startup_once();
