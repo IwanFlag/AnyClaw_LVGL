@@ -67,10 +67,15 @@ static bool exec_cmd(const char* cmd, char* output, int out_size, DWORD timeout_
     if (!CreatePipe(&hRead, &hWrite, &sa, 0)) return false;
     SetHandleInformation(hRead, HANDLE_FLAG_INHERIT, 0);
 
+    /* FIX: Redirect stdin to NUL to prevent child processes from blocking on interactive prompts */
+    HANDLE hNul = CreateFileA("NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                              nullptr, OPEN_EXISTING, 0, nullptr);
+
     STARTUPINFOA si{};
     si.cb = sizeof(si);
     si.hStdOutput = hWrite;
     si.hStdError  = hWrite;
+    si.hStdInput  = hNul ? hNul : GetStdHandle(STD_INPUT_HANDLE);
     si.dwFlags |= STARTF_USESTDHANDLES;
 
     PROCESS_INFORMATION pi{};
@@ -166,6 +171,7 @@ static bool exec_cmd(const char* cmd, char* output, int out_size, DWORD timeout_
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
     CloseHandle(hRead);
+    if (hNul) CloseHandle(hNul);
     if (hJob) CloseHandle(hJob);
 
     /* Trim */
@@ -175,6 +181,65 @@ static bool exec_cmd(const char* cmd, char* output, int out_size, DWORD timeout_
     strncpy(output, result.c_str(), out_size - 1);
     output[out_size - 1] = '\0';
     return exitCode == 0;
+}
+
+/* FIX: Check if running with admin privileges */
+static bool is_running_as_admin() {
+    BOOL isAdmin = FALSE;
+    PSID adminGroup = nullptr;
+    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_SID_AUTHORITY;
+    if (AllocateAndInitializeSid(&ntAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID,
+                                 DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &adminGroup)) {
+        CheckTokenMembership(nullptr, adminGroup, &isAdmin);
+        FreeSid(adminGroup);
+    }
+    return isAdmin != FALSE;
+}
+
+/* FIX: Check if a command exists in PATH */
+static bool command_exists(const char* cmd_name) {
+    char tmp[512] = {0};
+    std::string check = std::string("where ") + cmd_name;
+    return exec_cmd(check.c_str(), tmp, sizeof(tmp), 5000);
+}
+
+/* FIX: Download file with curl, fallback to PowerShell if curl unavailable */
+static bool download_file(const char* url, const char* dest_path,
+                          char* output, int out_size, DWORD timeout_ms = 600000,
+                          bool resume = false) {
+    char cmd[2048];
+
+    /* Try curl first */
+    if (command_exists("curl")) {
+        const char* resume_opt = "";
+        char resume_buf[32] = {0};
+        if (resume) {
+            try {
+                if (fs::exists(dest_path) && fs::file_size(dest_path) > 0) {
+                    snprintf(resume_buf, sizeof(resume_buf), "-C - ");
+                }
+            } catch (...) {}
+            resume_opt = resume_buf;
+        }
+        snprintf(cmd, sizeof(cmd),
+                 "curl -L --fail --retry 1 --connect-timeout 15 --speed-time 30 "
+                 "--speed-limit 1024 --max-time %lu %s-o \"%s\" \"%s\"",
+                 (unsigned long)(timeout_ms / 1000), resume_opt, dest_path, url);
+        if (exec_cmd(cmd, output, out_size, timeout_ms + 5000)) return true;
+        ui_log("[Download] curl failed, trying PowerShell fallback...");
+    }
+
+    /* Fallback: PowerShell Invoke-WebRequest (no resume support) */
+    snprintf(cmd, sizeof(cmd),
+             "powershell -NoProfile -Command \""
+             "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; "
+             "try { Invoke-WebRequest -Uri '%s' -OutFile '%s' -UseBasicParsing -TimeoutSec %lu; "
+             "Write-Output 'OK' } catch { Write-Error $_.Exception.Message; exit 1 }\"",
+             url, dest_path, (unsigned long)(timeout_ms / 1000));
+    if (exec_cmd(cmd, output, out_size, timeout_ms + 10000)) return true;
+
+    snprintf(output, out_size, "Download failed: both curl and PowerShell failed");
+    return false;
 }
 
 static bool is_process_running(const char* process_name) {
@@ -913,6 +978,8 @@ static bool install_nodejs_if_missing(char* output, int out_size) {
     std::string installer = std::string(temp ? temp : ".") + "\\anyclaw_nodejs_installer.msi";
     char cmd[2048];
     char node_ver[64] = {0};
+    bool admin = is_running_as_admin();
+    ui_log("[Setup] Running as admin: %s", admin ? "yes" : "no");
     ui_progress_begin("Node.js Setup", "Node.js missing, starting download", 5);
     for (int i = 0; nodejs_sources[i].name; i++) {
         if (app_is_setup_cancelled()) {
@@ -921,20 +988,37 @@ static bool install_nodejs_if_missing(char* output, int out_size) {
             return false;
         }
         ui_progress_update("Node.js Setup", nodejs_sources[i].name, 10 + i * 20);
-        snprintf(cmd, sizeof(cmd),
-                 "curl -L --fail --retry 1 --connect-timeout 15 --speed-time 30 --speed-limit 1024 --max-time 1200 -o \"%s\" \"%s\"",
-                 installer.c_str(), nodejs_sources[i].url);
-        if (!exec_cmd(cmd, output, out_size, 25 * 60 * 1000) || !file_size_ok(installer, 5ull * 1024ull * 1024ull)) {
+        /* FIX: Use download_file() which handles curl fallback to PowerShell */
+        if (!download_file(nodejs_sources[i].url, installer.c_str(), output, out_size, 25 * 60 * 1000)
+            || !file_size_ok(installer, 5ull * 1024ull * 1024ull)) {
             ui_log("[Setup] Node source %d failed/stalled, switching...", i + 1);
             continue;
         }
         ui_progress_update("Node.js Setup", "Installing Node.js", 70);
-        snprintf(cmd, sizeof(cmd), "msiexec /i \"%s\" /qn /norestart", installer.c_str());
+        /* FIX: msiexec UAC handling — non-admin uses per-user install */
+        if (admin) {
+            snprintf(cmd, sizeof(cmd), "msiexec /i \"%s\" /qn /norestart", installer.c_str());
+        } else {
+            /* Per-user install: set ALLUSERS="" and INSTALLDIR to user-local path */
+            const char* localappdata = std::getenv("LOCALAPPDATA");
+            if (localappdata) {
+                std::string user_dir = std::string(localappdata) + "\\Programs\\NodeJS";
+                snprintf(cmd, sizeof(cmd),
+                         "msiexec /i \"%s\" /qn /norestart ALLUSERS=\"\" INSTALLDIR=\"%s\"",
+                         installer.c_str(), user_dir.c_str());
+            } else {
+                /* Fallback: try ALLUSERS="" which triggers per-user without custom dir */
+                snprintf(cmd, sizeof(cmd), "msiexec /i \"%s\" /qn /norestart ALLUSERS=\"\"", installer.c_str());
+            }
+        }
         if (!exec_cmd(cmd, output, out_size, 20 * 60 * 1000)) {
-            ui_log("[Setup] Node installer failed on source %d", i + 1);
+            ui_log("[Setup] Node installer failed on source %d: %s", i + 1,
+                   output[0] ? output : "(timeout or error)");
             continue;
         }
         ui_progress_update("Node.js Setup", "Verifying node --version", 90);
+        /* Refresh PATH so newly installed node is found */
+        exec_cmd("set PATH=%PATH%", output, sizeof(output), 3000);
         if (app_check_nodejs(node_ver, sizeof(node_ver))) {
             ui_progress_finish("Node.js Setup", true, "Node.js installed");
             return true;
@@ -962,20 +1046,10 @@ static bool download_file_with_fallback(const char* primary_url,
     }
 
     const char* urls[3] = {primary_url, secondary_url, fallback_url};
-    char cmd[2048];
     for (int i = 0; i < 3; i++) {
         ui_log("[Download] Source %d/3: %s", i + 1, urls[i]);
-        unsigned long long existing = 0;
-        try {
-            if (fs::exists(target_path)) existing = (unsigned long long)fs::file_size(target_path);
-        } catch (...) {
-            existing = 0;
-        }
-        const char* resume_opt = existing > 0 ? "-C -" : "";
-        snprintf(cmd, sizeof(cmd),
-                 "curl -L --fail --retry 1 --connect-timeout 15 --speed-time 30 --speed-limit 1024 --max-time 1800 %s -o \"%s\" \"%s\"",
-                 resume_opt, target_path, urls[i]);
-        if (exec_cmd(cmd, output, out_size, 4 * 60 * 60 * 1000)) {
+        /* FIX: Use download_file() with resume support, handles curl/PowerShell fallback */
+        if (download_file(urls[i], target_path, output, out_size, 4 * 60 * 60 * 1000, true)) {
             if (file_size_ok(target_path, 10ull * 1024ull * 1024ull)) {
                 ui_log("[Download] Source %d succeeded", i + 1);
                 return true;
@@ -1033,11 +1107,9 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
         {
             const char* temp = std::getenv("TEMP");
             std::string tgz_path = std::string(temp ? temp : ".") + "\\anyclaw_openclaw.tgz";
-            char dl_cmd[1024];
-            snprintf(dl_cmd, sizeof(dl_cmd),
-                     "curl -L --fail --retry 1 --connect-timeout 15 --max-time 600 -o \"%s\" \"%s\"",
-                     tgz_path.c_str(), github_openclaw_url);
-            if (exec_cmd(dl_cmd, output, out_size, 10 * 60 * 1000) && file_size_ok(tgz_path, 1ull * 1024ull * 1024ull)) {
+            /* FIX: Use download_file() which handles curl fallback to PowerShell */
+            if (download_file(github_openclaw_url, tgz_path.c_str(), output, out_size, 10 * 60 * 1000)
+                && file_size_ok(tgz_path, 1ull * 1024ull * 1024ull)) {
                 snprintf(cmd, sizeof(cmd), "npm install -g \"%s\"", tgz_path.c_str());
                 ok = exec_cmd(cmd, output, out_size, 120000);
                 if (ok) ui_log("[Setup] OpenClaw installed from GitHub release");
@@ -1069,11 +1141,9 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
         {
             const char* temp = std::getenv("TEMP");
             std::string tgz_path = std::string(temp ? temp : ".") + "\\anyclaw_openclaw.tgz";
-            char dl_cmd[1024];
-            snprintf(dl_cmd, sizeof(dl_cmd),
-                     "curl -L --fail --retry 1 --connect-timeout 15 --max-time 600 -o \"%s\" \"%s\"",
-                     tgz_path.c_str(), github_openclaw_url);
-            if (exec_cmd(dl_cmd, output, out_size, 10 * 60 * 1000) && file_size_ok(tgz_path, 1ull * 1024ull * 1024ull)) {
+            /* FIX: Use download_file() which handles curl fallback to PowerShell */
+            if (download_file(github_openclaw_url, tgz_path.c_str(), output, out_size, 10 * 60 * 1000)
+                && file_size_ok(tgz_path, 1ull * 1024ull * 1024ull)) {
                 snprintf(cmd, sizeof(cmd), "npm install -g \"%s\"", tgz_path.c_str());
                 ok = exec_cmd(cmd, output, out_size, 120000);
                 if (ok) ui_log("[Setup] OpenClaw installed from GitHub release");
@@ -1307,8 +1377,10 @@ bool app_init_openclaw(char* output, int out_size) {
 
     char tmp[512] = {0};
 
-    /* 1. Start gateway to generate default config */
-    bool start_ok = exec_cmd("openclaw gateway start", tmp, sizeof(tmp), 15000);
+    /* 1. Start gateway to generate default config (--yes skips any interactive prompts) */
+    /* FIX: stdin redirected to NUL in exec_cmd, --yes as belt-and-suspenders */
+    bool start_ok = exec_cmd("openclaw gateway start --yes 2>nul || openclaw gateway start",
+                             tmp, sizeof(tmp), 15000);
 
     /* 2. Verify config file was created */
     bool config_ok = openclaw_config_exists();
