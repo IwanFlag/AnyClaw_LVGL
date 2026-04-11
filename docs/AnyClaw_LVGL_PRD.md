@@ -1,6 +1,6 @@
 # AnyClaw LVGL — 产品需求文档 (PRD)
 
-> 版本：v2.0.3 | 最后更新：2026-04-11
+> 版本：v2.0.4 | 最后更新：2026-04-11
 
 ---
 
@@ -547,140 +547,61 @@ D:\MyAIWorkspace\
 
 - **功能编号：** PERM-01 **优先级：** P0 **状态：** 🔧 核心已实现
 
-### 9.1 三层权限模型
+### 9.1 v2.0 简化权限模型（两档制）
+
+面向学生和职场用户，权限系统必须**零配置即可用**。v2.0 不暴露 12+ 个权限键，用两档模式覆盖绝大多数场景。
+
+| 模式 | 适用人群 | 核心规则 |
+|------|---------|---------|
+| **宽松模式**（默认） | 普通用户 / 学生 | 工作区内自由操作；外部操作（写外部文件、安装软件、删除系统文件）弹窗询问 |
+| **严格模式** | 安全敏感用户 / 企业 | 所有操作均弹窗确认；工作区内写操作也需确认 |
+
+**两档对比：**
+
+| 操作 | 宽松模式 | 严格模式 |
+|------|---------|---------|
+| 读工作区文件 | ✅ 直接允许 | ✅ 直接允许 |
+| 写工作区文件 | ✅ 直接允许 | ⚠️ 询问 |
+| 读外部文件 | ⚠️ 询问 | ⚠️ 询问 |
+| 写外部文件 | ⚠️ 询问 | ❌ 禁止（需手动升级） |
+| 执行 shell 命令 | ⚠️ 询问 | ⚠️ 询问 |
+| 安装软件 | ⚠️ 询问 | ❌ 禁止 |
+| 删除文件 | ⚠️ 询问 | ⚠️ 询问 |
+| 出站网络 | ✅ 直接允许 | ⚠️ 询问 |
+| 剪贴板 | ✅ 直接允许 | ⚠️ 询问 |
+| 设备访问 | ⚠️ 询问 | ❌ 禁止 |
+
+**首次启动：** 向导中让用户选择模式（默认宽松），一行选择，不展开细项。
+
+**Settings 中切换：** General Tab 底部提供模式切换开关，切换即时生效。
+
+### 9.2 工作区边界（始终生效）
+
+无论哪种模式，工作区边界始终强制：
+
+1. Agent 文件操作限定在工作区根目录内
+2. 路径穿越（`../`）拒绝
+3. 系统目录（`C:\Windows\`、`C:\Program Files\`）始终禁止写入
+
+### 9.3 弹窗确认机制
+
+当 Agent 请求超出当前模式允许的操作时：
 
 ```
-┌──────────────────────────────────────────────┐
-│  第 1 层：工作区边界 (Workspace Boundary)      │
-│  → Agent 能在哪个目录树下活动                  │
-├──────────────────────────────────────────────┤
-│  第 2 层：操作权限 (Operation Permissions)     │
-│  → 文件读/写、命令执行、网络、设备              │
-├──────────────────────────────────────────────┤
-│  第 3 层：资源上限 (Resource Limits)           │
-│  → 磁盘占用、超时、请求频率、并发数             │
-└──────────────────────────────────────────────┘
+🔒 Agent 请求权限
+操作: 执行命令
+命令: pip install pandas
+当前模式: 宽松
+
+○ 允许（仅本次）  ○ 拒绝
 ```
 
-### 9.2 第 1 层：工作区边界
+- **宽松模式：** 工作区内操作直接放行，外部/高危操作弹窗
+- **严格模式：** 所有非读操作弹窗
+- 弹窗在 AnyClaw GUI 内显示（LVGL 模态弹窗）
+- 用户未响应 60 秒自动拒绝
 
-Agent 的所有文件操作限定在工作区根目录内。
-
-**路径校验逻辑：**
-1. 检查是否在 `denied_paths` → 命中则拒绝
-2. 检查是否在 `workspace_root` 下 → 命中则允许
-3. 检查是否在 `extra_allowed_paths` → 命中则按 mode 处理
-4. 都不命中 → 默认拒绝（白名单模式）
-
-### 9.3 第 2 层：操作权限
-
-每种操作类型独立授权，四种取值：`allow`（允许）、`deny`（禁止）、`ask`（每次询问）、`read_only`（仅读）。
-
-**文件系统权限：**
-
-| 权限键 | 默认值 | 说明 |
-|--------|--------|------|
-| `fs_read_workspace` | `allow` | 读取工作区内文件 |
-| `fs_write_workspace` | `allow` | 写入工作区内文件 |
-| `fs_read_external` | `deny` | 读取外部目录 |
-| `fs_write_external` | `deny` | 写入外部目录 |
-
-**命令执行权限：**
-
-| 权限键 | 默认值 | 说明 |
-|--------|--------|------|
-| `exec_shell` | `ask` | 执行 shell 命令（高危） |
-| `exec_install` | `deny` | 安装软件（apt/npm/pip） |
-| `exec_delete` | `ask` | 删除文件（rm/del） |
-
-**网络权限：**
-
-| 权限键 | 默认值 | 说明 |
-|--------|--------|------|
-| `net_outbound` | `allow` | 出站 HTTP/HTTPS |
-| `net_inbound` | `deny` | 入站连接（监听端口） |
-| `net_intranet` | `deny` | 访问内网 IP 段 |
-
-**设备权限：**
-
-| 权限键 | 默认值 | 说明 |
-|--------|--------|------|
-| `device_camera` | `deny` | 摄像头 |
-| `device_mic` | `deny` | 麦克风 |
-| `device_screen` | `ask` | 屏幕截图/录屏 |
-| `device_usb_storage` | `ask` | USB 存储设备 |
-| `device_remote_node` | `ask` | 远程 OpenClaw 节点 |
-| `device_ssh_host` | `ask` | SSH 远程主机 |
-| `device_new_device` | `ask` | 新插入设备（默认策略） |
-
-**系统权限：**
-
-| 权限键 | 默认值 | 说明 |
-|--------|--------|------|
-| `clipboard_read` | `allow` | 读取剪贴板 |
-| `clipboard_write` | `allow` | 写入剪贴板 |
-| `system_modify` | `deny` | 修改系统设置 |
-
-### 9.4 第 3 层：资源上限
-
-| 资源键 | 默认值 | 说明 |
-|--------|--------|------|
-| `max_disk_mb` | 2048 | 工作区最大磁盘占用 |
-| `cmd_timeout_sec` | 30 | 单条命令超时（超时自动 kill） |
-| `net_rpm` | 60 | 网络请求频率上限（次/分钟） |
-| `max_subagents` | 5 | 最大并发子代理数 |
-| `max_file_read_kb` | 500 | 单次文件读取上限 |
-| `max_remote_connections` | 3 | 最大远程设备连接数 |
-
-### 9.5 设备管理
-
-**设备分类：**
-
-```
-设备 (Devices)
-├── 本地外设：摄像头、麦克风、屏幕截图、扬声器
-├── 本地存储：内置磁盘、USB 移动硬盘/U盘、SD 卡、网络映射驱动器
-├── 远程设备：已配对 OpenClaw 节点、SSH 远程主机、云服务器实例、IoT 设备
-└── 新插入设备：USB 存储/外设、蓝牙、Thunderbolt
-```
-
-**新插入设备默认策略：** 一律询问，不自动放行。
-
-**设备信任表：** 用户选择"记住此设备"后，设备信息写入 `trusted_devices`，用序列号/硬件 ID 做唯一标识。
-
-### 9.6 运行时强制执行
-
-```
-Agent 调用工具（read / write / exec / web_fetch ...）
-         │
-         ▼
-OpenClaw Runtime 读取 workspace.json
-         │
-         ├── 路径在允许范围内？  → ✅ 放行
-         ├── 路径在禁止列表？    → ❌ 拦截，返回错误
-         ├── 操作权限 = allow？  → ✅ 放行
-         ├── 操作权限 = deny？   → ❌ 拦截
-         ├── 操作权限 = ask？    → 🔔 弹窗 → 用户决定
-         └── 不在任何列表？      → 默认拒绝（白名单模式）
-```
-
-### 9.7 权限升级（单次放行）
-
-Agent 偶尔需要越权操作，弹窗确认：
-
-```
-🔒 Agent 请求临时权限
-操作: 安装软件
-命令: apt install ffmpeg
-当前权限: ❌ 禁止
-
-○ 允许（仅本次）  ○ 允许（永久开启此权限）  ○ 拒绝
-```
-
-- 单次放行不过夜——下次启动仍按 permissions.json 配置
-- 永久开启 → 更新 permissions.json + 同步到 AGENTS.md/TOOLS.md 的 MANAGED 区域
-
-### 9.8 AGENTS.md / TOOLS.md 双向同步
+### 9.4 AGENTS.md / TOOLS.md 双向同步
 
 **MANAGED 区域机制：**
 
@@ -688,73 +609,71 @@ Agent 偶尔需要越权操作，弹窗确认：
 ## 用户自由区域（随便写，AnyClaw 不动）
 
 <!-- ANYCLAW_MANAGED_START -->
-## 工作区边界
-- 根目录: D:\MyAIWorkspace\
-
-## 权限规则
-- 命令执行: ⚠️ 每次询问
+## 权限模式: 宽松
 <!-- ANYCLAW_MANAGED_END -->
 
 ## 更多自由区域
 ```
 
-- `permissions.json` 是唯一权限真相（Source of Truth）
-- AGENTS.md/TOOLS.md 的 MANAGED 区域是其"可读投影"
+- 模式切换时自动更新 MANAGED 区域
 - 写入前自动备份到 `.backups/`，保留最近 10 份
 
-### 9.9 审计日志
+### 9.5 审计日志
 
-所有权限决策记录到 `%APPDATA%\AnyClaw_LVGL\audit.log`：
+权限决策记录到 `%APPDATA%\AnyClaw_LVGL\audit.log`：
 
 ```
-[2026-04-07 19:20:01] action=perm_load target=permissions.json decision=ok
-[2026-04-07 19:20:05] action=exec_check target=openclaw gateway start decision=allow_once
-[2026-04-07 19:20:07] action=path_check target=C:\Windows\system32\hosts decision=deny:external_default
+[2026-04-07 19:20:05] mode=permissive action=exec cmd=pip install pandas decision=allow_once
+[2026-04-07 19:20:07] mode=strict action=write target=C:\Windows\system32\hosts decision=deny:system_dir
 ```
 
-**规划中：**
-- 审计日志增加完整性字段（链式 hash）用于追溯校验
-- 权限历史可视化面板
+### 9.6 权限配置存储
 
-### 9.10 权限配置存储
-
-**`permissions.json`**（`%APPDATA%\AnyClaw_LVGL\`）— Source of Truth：
+**`config.json`** 中新增字段：
 
 ```json
 {
-  "version": 1,
-  "workspace_root": "D:\\MyAIWorkspace\\",
-  "extra_allowed_paths": [],
-  "denied_paths": ["C:\\Windows\\", "C:\\Program Files\\"],
-  "permissions": { "fs_read_workspace": "allow", "exec_shell": "ask", "...": "..." },
-  "trusted_devices": [],
-  "limits": { "max_disk_mb": 2048, "cmd_timeout_sec": 30, "...": "..." }
+  "permission_mode": "permissive"
 }
 ```
 
-**`workspace.json`**（工作区根目录）— 运行时投影。
+`permission_mode` 取值：`permissive`（宽松）/ `strict`（严格）。
 
-**配置优先级：** `permissions.json`（主配置）→ `workspace.json`（运行时投影）→ AGENTS.md（可读投影）。启动时自动做一致性校验，不一致则重建 workspace.json。
+**`workspace.json`**（工作区根目录）— 运行时投影，包含边界和模式信息。
 
-### 9.11 Settings 权限管理面板
+### 9.7 Settings 权限管理
 
-AnyClaw Settings 已新增 **Permissions** Tab（v1）：
-- 核心权限项下拉编辑（allow/deny/ask/read_only）
-- 保存后写入 `permissions.json`
-- 启动时自动初始化权限（首启写默认配置）
+General Tab 中提供：
+- 权限模式切换（宽松 / 严格 单选）
+- 切换即时生效，无需重启
 
-**规划中：**
-- 设备信任表管理
-- 资源上限编辑
-- 权限历史可视化与筛选
-- 权限导入/导出
+### 9.8 v3.0+ 三层权限模型（高级模式）
 
-### 9.12 Skill 安装与权限交互
+v2.0 的两档模式是面向普通用户的简化版。v3.0 引入完整的三层权限模型作为"高级模式"，面向企业用户和安全敏感场景：
 
-安装 Skill 时检查权限冲突：
-- 权限充足 → 直接安装
-- 权限不足 → 提示需开启的权限 → 用户确认后更新
-- 用户拒绝 → 取消安装
+```
+┌──────────────────────────────────────────────┐
+│  第 1 层：工作区边界 (Workspace Boundary)      │
+│  → Agent 能在哪个目录树下活动                  │
+├──────────────────────────────────────────────┤
+│  第 2 层：操作权限 (Operation Permissions)     │
+│  → 每种操作独立授权（allow/deny/ask）          │
+├──────────────────────────────────────────────┤
+│  第 3 层：资源上限 (Resource Limits)           │
+│  → 磁盘占用、超时、请求频率、并发数             │
+└──────────────────────────────────────────────┘
+```
+
+| 维度 | v2.0（两档） | v3.0+（三层高级） |
+|------|------------|-----------------|
+| 配置方式 | 一行选择 | 12+ 权限键逐项配置 |
+| 设备管理 | 无 | 设备信任表 + 新设备默认策略 |
+| 资源上限 | 内置安全默认值 | 用户可自定义 |
+| 审计 | 基础日志 | 链式 hash 完整性校验 + 可视化面板 |
+| 权限导入/导出 | 无 | 支持 |
+| Skill 权限交互 | 无 | 安装时检查权限冲突 |
+
+详见附录 A.9（v3.0 三层权限模型详细设计）。
 
 ---
 
@@ -1421,7 +1340,7 @@ AnyClaw 区别于普通局域网聊天工具的差异化能力。
 **设计方向：**
 - AnyClaw 内置 MCP Client，支持配置 MCP Server 列表
 - MCP Server 的工具注册到 Agent 工具池，与现有 Skill 并行
-- MCP Server 的权限纳入 AnyClaw 三层权限体系管控（§9）
+- MCP Server 的权限纳入 AnyClaw 权限体系管控（§9，v2.0 两档；v3.0 三层高级模式见 §9.8）
 - 安装/卸载 MCP Server 可通过 GUI 完成
 
 #### 2. 本地模型推理引擎
@@ -1539,4 +1458,108 @@ AnyClaw 区别于普通局域网聊天工具的差异化能力。
 - 一键流程：选中模型 → 自动检测 Provider → 引导填 Key → 可用
 - 本地模型：类似 Ollama 的体验，选中即下载+加载+可用
 - 模型推荐：根据用户硬件（RAM/GPU）推荐合适模型
+
+### A.9 v3.0 三层权限模型详细设计
+
+> 本节为 v3.0 高级模式的完整设计，v2.0 使用简化两档模型（§9.1）。
+
+#### 三层架构
+
+```
+┌──────────────────────────────────────────────┐
+│  第 1 层：工作区边界 (Workspace Boundary)      │
+│  → Agent 能在哪个目录树下活动                  │
+├──────────────────────────────────────────────┤
+│  第 2 层：操作权限 (Operation Permissions)     │
+│  → 文件读/写、命令执行、网络、设备              │
+├──────────────────────────────────────────────┤
+│  第 3 层：资源上限 (Resource Limits)           │
+│  → 磁盘占用、超时、请求频率、并发数             │
+└──────────────────────────────────────────────┘
+```
+
+#### 第 1 层：工作区边界
+
+**路径校验逻辑：**
+1. 检查是否在 `denied_paths` → 命中则拒绝
+2. 检查是否在 `workspace_root` 下 → 命中则允许
+3. 检查是否在 `extra_allowed_paths` → 命中则按 mode 处理
+4. 都不命中 → 默认拒绝（白名单模式）
+
+#### 第 2 层：操作权限
+
+每种操作类型独立授权，四种取值：`allow` / `deny` / `ask` / `read_only`。
+
+**文件系统：** `fs_read_workspace`（allow）、`fs_write_workspace`（allow）、`fs_read_external`（deny）、`fs_write_external`（deny）
+
+**命令执行：** `exec_shell`（ask）、`exec_install`（deny）、`exec_delete`（ask）
+
+**网络：** `net_outbound`（allow）、`net_inbound`（deny）、`net_intranet`（deny）
+
+**设备：** `device_camera`（deny）、`device_mic`（deny）、`device_screen`（ask）、`device_usb_storage`（ask）、`device_remote_node`（ask）、`device_ssh_host`（ask）、`device_new_device`（ask）
+
+**系统：** `clipboard_read`（allow）、`clipboard_write`（allow）、`system_modify`（deny）
+
+#### 第 3 层：资源上限
+
+| 资源键 | 默认值 | 说明 |
+|--------|--------|------|
+| `max_disk_mb` | 2048 | 工作区最大磁盘占用 |
+| `cmd_timeout_sec` | 30 | 单条命令超时 |
+| `net_rpm` | 60 | 网络请求频率上限（次/分钟） |
+| `max_subagents` | 5 | 最大并发子代理数 |
+| `max_file_read_kb` | 500 | 单次文件读取上限 |
+| `max_remote_connections` | 3 | 最大远程设备连接数 |
+
+#### 设备管理
+
+```
+设备 (Devices)
+├── 本地外设：摄像头、麦克风、屏幕截图、扬声器
+├── 本地存储：内置磁盘、USB 移动硬盘/U盘、SD 卡、网络映射驱动器
+├── 远程设备：已配对 OpenClaw 节点、SSH 远程主机、云服务器实例、IoT 设备
+└── 新插入设备：USB 存储/外设、蓝牙、Thunderbolt
+```
+
+- 新插入设备默认策略：一律询问，不自动放行
+- 设备信任表：用户选择"记住此设备"后写入 `trusted_devices`，用序列号/硬件 ID 做唯一标识
+
+#### 运行时强制执行
+
+```
+Agent 调用工具
+    │
+    ▼
+读取 workspace.json
+    │
+    ├── 路径在允许范围内？  → ✅ 放行
+    ├── 路径在禁止列表？    → ❌ 拦截
+    ├── 操作权限 = allow？  → ✅ 放行
+    ├── 操作权限 = deny？   → ❌ 拦截
+    ├── 操作权限 = ask？    → 🔔 弹窗 → 用户决定
+    └── 不在任何列表？      → 默认拒绝
+```
+
+#### 权限配置存储
+
+**`permissions.json`**（`%APPDATA%\AnyClaw_LVGL\`）— Source of Truth：
+
+```json
+{
+  "version": 1,
+  "mode": "advanced",
+  "workspace_root": "D:\\MyAIWorkspace\\",
+  "extra_allowed_paths": [],
+  "denied_paths": ["C:\\Windows\\", "C:\\Program Files\\"],
+  "permissions": { "fs_read_workspace": "allow", "exec_shell": "ask", "..." : "..." },
+  "trusted_devices": [],
+  "limits": { "max_disk_mb": 2048, "cmd_timeout_sec": 30, "..." : "..." }
+}
+```
+
+**配置优先级：** `permissions.json` → `workspace.json` → AGENTS.md MANAGED 区域。
+
+#### 审计日志
+
+链式 hash 完整性校验 + 权限历史可视化面板 + 权限导入/导出。
 
