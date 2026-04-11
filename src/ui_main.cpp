@@ -1108,15 +1108,36 @@ static void loading_timer_cb(lv_timer_t* t) {
     if (g_loading_label) {
         DWORD elapsed = GetTickCount() - g_loading_start_tick;
         char buf[192];
+        float elapsed_s = (elapsed <= 0) ? 0.0f : (elapsed / 1000.0f);
+        const char* eta_text = "ETA: calculating...";
+        const char* speed_text = "Speed: estimating...";
+        char eta_buf[48] = {0};
+        char speed_buf[48] = {0};
+        int eta_sec = -1;
+        float rate = 0.0f;
+        int pct_for_eta = (live_pct < 0) ? 0 : live_pct;
+        if (elapsed_s > 0.2f && pct_for_eta > 0) {
+            rate = (float)pct_for_eta / elapsed_s;
+            if (rate > 0.01f && pct_for_eta < 100) {
+                eta_sec = (int)((100.0f - (float)pct_for_eta) / rate);
+                if (eta_sec < 0) eta_sec = 0;
+                snprintf(eta_buf, sizeof(eta_buf), "ETA: %ds", eta_sec);
+                eta_text = eta_buf;
+            } else if (pct_for_eta >= 100) {
+                eta_text = "ETA: done";
+            }
+            snprintf(speed_buf, sizeof(speed_buf), "Speed: %.1f%%/s", rate);
+            speed_text = speed_buf;
+        }
         if (!live_step.empty()) {
             int pct = (live_pct < 0) ? 0 : live_pct;
-            snprintf(buf, sizeof(buf), "%s (%d%%)\nUI is ready. Finishing background startup.", live_step.c_str(), pct);
+            snprintf(buf, sizeof(buf), "%s (%d%%)\n%s  |  %s", live_step.c_str(), pct, speed_text, eta_text);
         } else {
             int dots = (int)((elapsed / 500) % 4);
             const char* phase = "Starting OpenClaw";
             if (elapsed > 9000) phase = "Checking Gateway status";
             else if (elapsed > 3000) phase = "Initializing runtime modules";
-            snprintf(buf, sizeof(buf), "%s%.*s\nUI is ready. Finishing background startup.", phase, dots, "...");
+            snprintf(buf, sizeof(buf), "%s%.*s\n%s  |  %s", phase, dots, "...", speed_text, eta_text);
         }
         lv_label_set_text(g_loading_label, buf);
     }
