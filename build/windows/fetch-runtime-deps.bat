@@ -3,13 +3,10 @@ setlocal EnableDelayedExpansion
 for %%I in ("%~dp0..\..") do set "PROJECT_DIR=%%~fI"
 set "BUILD_ROOT=%PROJECT_DIR%\build\windows"
 set "RUNTIME_ROOT=%BUILD_ROOT%\tools\runtime"
-set "SDL_ROOT=%RUNTIME_ROOT%\SDL2"
-set "SDL_DLL=%SDL_ROOT%\lib\x64\SDL2.dll"
+set "SDL_DLL="
 set "OUT_DLL=%BUILD_ROOT%\out\bin\Release\SDL2.dll"
-set "SDL_ZIP=%RUNTIME_ROOT%\SDL2-devel-2.30.11-VC.zip"
-set "SDL_URL=https://github.com/libsdl-org/SDL/releases/download/release-2.30.11/SDL2-devel-2.30.11-VC.zip"
-
-if exist "%SDL_DLL%" goto copy_dll
+set "SDL_ZIP=%RUNTIME_ROOT%\SDL2-2.30.11-win32-x64.zip"
+set "SDL_URL=https://github.com/libsdl-org/SDL/releases/download/release-2.30.11/SDL2-2.30.11-win32-x64.zip"
 
 echo [AnyClaw] Preparing runtime deps in %RUNTIME_ROOT%
 if not exist "%RUNTIME_ROOT%" mkdir "%RUNTIME_ROOT%"
@@ -29,7 +26,6 @@ if not exist "%SDL_ZIP%" (
   )
 )
 
-if not exist "%SDL_ROOT%" mkdir "%SDL_ROOT%"
 echo [UNZIP] Extracting SDL2...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Path '%SDL_ZIP%' -DestinationPath '%RUNTIME_ROOT%' -Force"
 if errorlevel 1 (
@@ -37,12 +33,12 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist "%SDL_DLL%" (
+for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Get-ChildItem -Path '%RUNTIME_ROOT%' -Recurse -Filter SDL2.dll -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName; if($p){Write-Output $p}"`) do set "SDL_DLL=%%I"
+if not defined SDL_DLL (
   echo [ERR] SDL2.dll not found after extraction.
   exit /b 1
 )
 
-:copy_dll
 for %%I in ("%OUT_DLL%") do if not exist "%%~dpI" mkdir "%%~dpI"
 copy /y "%SDL_DLL%" "%OUT_DLL%" >nul
 if errorlevel 1 (

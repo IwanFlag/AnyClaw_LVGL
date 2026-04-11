@@ -15,17 +15,28 @@ set(SDL2_INCLUDE_DIRS "")
 set(SDL2_LIB_DIR "")
 set(SDL2_DLL_PATH "")
 
-if(EXISTS "${SDL2_CROSS_PREFIX}/include/SDL2/SDL.h")
-    list(APPEND SDL2_INCLUDE_DIRS
-        "${SDL2_CROSS_PREFIX}/include"
-        "${SDL2_CROSS_PREFIX}/include/SDL2"
-    )
-endif()
-
-if(EXISTS "${SDL2_BUNDLED_PREFIX}/include/SDL.h")
-    list(APPEND SDL2_INCLUDE_DIRS
-        "${SDL2_BUNDLED_PREFIX}/include"
-    )
+if(MSVC)
+    if(EXISTS "${SDL2_BUNDLED_PREFIX}/include/SDL.h")
+        list(APPEND SDL2_INCLUDE_DIRS
+            "${SDL2_BUNDLED_PREFIX}/include"
+        )
+    elseif(EXISTS "${SDL2_CROSS_PREFIX}/include/SDL2/SDL.h")
+        list(APPEND SDL2_INCLUDE_DIRS
+            "${SDL2_CROSS_PREFIX}/include"
+            "${SDL2_CROSS_PREFIX}/include/SDL2"
+        )
+    endif()
+else()
+    if(EXISTS "${SDL2_CROSS_PREFIX}/include/SDL2/SDL.h")
+        list(APPEND SDL2_INCLUDE_DIRS
+            "${SDL2_CROSS_PREFIX}/include"
+            "${SDL2_CROSS_PREFIX}/include/SDL2"
+        )
+    elseif(EXISTS "${SDL2_BUNDLED_PREFIX}/include/SDL.h")
+        list(APPEND SDL2_INCLUDE_DIRS
+            "${SDL2_BUNDLED_PREFIX}/include"
+        )
+    endif()
 endif()
 
 if(MSVC)
