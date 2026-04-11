@@ -1324,6 +1324,10 @@ static std::vector<AttachmentQueueItem> g_attachment_failed_cache;
 static std::vector<SentAttachmentItem> g_sent_attachments;
 static std::vector<AppliedWriteBackup> g_step_write_backups;
 static std::atomic<bool> g_boot_check_running(false);
+static std::atomic<bool> g_wizard_gate_running(false);
+static std::atomic<bool> g_wizard_gate_ready(false);
+static std::mutex g_wizard_gate_mtx;
+static EnvCheckResult g_wizard_gate_env{};
 static std::mutex g_boot_detail_mtx;
 static std::string g_boot_detail_text;
 static std::atomic<bool> g_boot_detail_dirty(false);
@@ -10296,6 +10300,20 @@ void ui_show_setup_wizard() {
     ui_log("[Wizard] Setup wizard opened");
 }
 
+static void start_wizard_gate_async_check() {
+    if (g_wizard_gate_running.exchange(true)) return;
+    g_wizard_gate_ready.store(false);
+    std::thread([]() {
+        EnvCheckResult env = app_check_environment();
+        {
+            std::lock_guard<std::mutex> lk(g_wizard_gate_mtx);
+            g_wizard_gate_env = env;
+        }
+        g_wizard_gate_ready.store(true);
+        g_wizard_gate_running.store(false);
+    }).detach();
+}
+
 void app_ui_init() {
     g_ui_thread_id = GetCurrentThreadId();
     g_ui_ready = false;
@@ -11547,22 +11565,31 @@ void app_ui_init() {
     /* Show startup error modal if any (e.g. "Already Running") */
     show_startup_error(scr);
 
-    /* ═══ Setup wizard gate: first launch OR runtime env broken ═══ */
-    EnvCheckResult wiz_env = app_check_environment();
-    bool wizard_needed = !is_wizard_completed()
-        || !wiz_env.node_ok
-        || !wiz_env.node_version_ok
-        || !wiz_env.npm_ok
-        || !wiz_env.openclaw_ok;
-    if (wizard_needed) {
-        ui_log("[Wizard] Auto-open setup wizard (node=%d node_ver=%d npm=%d oc=%d completed=%d)",
-               wiz_env.node_ok ? 1 : 0,
-               wiz_env.node_version_ok ? 1 : 0,
-               wiz_env.npm_ok ? 1 : 0,
-               wiz_env.openclaw_ok ? 1 : 0,
-               is_wizard_completed() ? 1 : 0);
-        ui_show_setup_wizard();
-    }
+    /* ═══ Setup wizard gate: async env check to avoid startup blocking ═══ */
+    start_wizard_gate_async_check();
+    lv_timer_create([](lv_timer_t* t) {
+        if (!g_wizard_gate_ready.load()) return;
+        EnvCheckResult wiz_env{};
+        {
+            std::lock_guard<std::mutex> lk(g_wizard_gate_mtx);
+            wiz_env = g_wizard_gate_env;
+        }
+        bool wizard_needed = !is_wizard_completed()
+            || !wiz_env.node_ok
+            || !wiz_env.node_version_ok
+            || !wiz_env.npm_ok
+            || !wiz_env.openclaw_ok;
+        if (wizard_needed) {
+            ui_log("[Wizard] Auto-open setup wizard (node=%d node_ver=%d npm=%d oc=%d completed=%d)",
+                   wiz_env.node_ok ? 1 : 0,
+                   wiz_env.node_version_ok ? 1 : 0,
+                   wiz_env.npm_ok ? 1 : 0,
+                   wiz_env.openclaw_ok ? 1 : 0,
+                   is_wizard_completed() ? 1 : 0);
+            ui_show_setup_wizard();
+        }
+        lv_timer_del(t);
+    }, 200, nullptr);
 
     /* Create user_data.txt marker for uninstaller */
     {
