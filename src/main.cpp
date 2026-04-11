@@ -630,18 +630,17 @@ int main(int argc, char* argv[]) {
             /* OpenClaw single-instance + auto-start */
             {
                 int node_count = app_count_node_processes();
-                if (node_count > 0) {
-                    LOG_W("MAIN", "Found %d node.exe, cleaning up for single-instance", node_count);
-                    app_kill_duplicate_openclaw();
-                    Sleep(500);
-                }
-
-                if (app_count_node_processes() == 0) {
-                    LOG_I("MAIN", "OpenClaw not running, auto-starting Gateway...");
-                    if (app_start_gateway()) LOG_I("MAIN", "Gateway started successfully");
-                    else LOG_W("MAIN", "Failed to auto-start Gateway");
+                char health_buf[128] = {0};
+                bool gateway_alive = (http_get(GATEWAY_HEALTH_URL, health_buf, sizeof(health_buf), 1) == 200);
+                if (gateway_alive) {
+                    LOG_I("MAIN", "Gateway already healthy, skipping startup (node_count=%d)", node_count);
                 } else {
-                    LOG_I("MAIN", "OpenClaw already running, skipping auto-start");
+                    LOG_I("MAIN", "Gateway offline, trying auto-start (node_count=%d)", node_count);
+                    if (app_start_gateway()) {
+                        LOG_I("MAIN", "Gateway started successfully");
+                    } else {
+                        LOG_W("MAIN", "Failed to auto-start Gateway (skip aggressive node cleanup)");
+                    }
                 }
             }
 
