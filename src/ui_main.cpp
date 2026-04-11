@@ -6471,7 +6471,7 @@ static void create_title_bar(lv_obj_t* scr) {
  *  Setup Wizard — First-launch 6-step onboarding
  * ═══════════════════════════════════════════════════════════════ */
 
-#define WIZARD_STEPS 6
+#define WIZARD_STEPS 5
 static lv_obj_t* g_wizard_modal = nullptr;
 static lv_obj_t* g_wizard_box = nullptr;
 static lv_obj_t* g_wizard_step_label = nullptr;
@@ -6565,8 +6565,7 @@ static const I18n wizard_step_titles[WIZARD_STEPS] = {
     {"OpenClaw Detection", "OpenClaw 检测"},       /* Step 1 */
     {"Model & API Key", "模型 & API 密钥"},        /* Step 2 */
     {"Local Models (Optional)", "本地模型（可选）"}, /* Step 3 */
-    {"User Profile", "用户画像"},                   /* Step 4 */
-    {"Confirmation", "确认"}                        /* Step 5 */
+    {"Profile & Confirm", "个人信息 & 确认"}       /* Step 4 */
 };
 
 /* Wizard text strings — bilingual */
@@ -7490,7 +7489,7 @@ static void wizard_gemma_skip_cb(lv_event_t* e) {
     wizard_go_step(g_wizard_step + 1);
 }
 
-/* ── Step 4: User Profile ── */
+/* ── Step 4: Profile & Confirm ── */
 static const char* tz_options =
     "UTC-12\nUTC-11\nUTC-10\nUTC-9\nUTC-8 (PST)\nUTC-7 (MST)\n"
     "UTC-6 (CST-US)\nUTC-5 (EST)\nUTC-4\nUTC-3\nUTC-2\nUTC-1\n"
@@ -7498,7 +7497,36 @@ static const char* tz_options =
     "UTC+5\nUTC+5:30 (IST)\nUTC+6\nUTC+7\nUTC+8 (Asia/Shanghai)\n"
     "UTC+9 (JST)\nUTC+10 (AEST)\nUTC+11\nUTC+12 (NZST)";
 
+/* Build summary text from current wizard state */
+static void wizard_build_summary_text(char* buf, int buf_size) {
+    const char* lang_str = (g_wizard_lang_sel == 0) ? tr(W_CN) : tr(W_EN);
+    const char* detect_str = g_wizard_openclaw_ok ? tr(W_DETECTED) : tr(W_NOTFOUND);
+    const char* api_str = (g_wizard_api_key[0]) ? "****" : tr(W_NOTSET);
+    const char* model_str = g_wizard_model_name[0] ? g_wizard_model_name : "N/A";
+    const char* nick_str = g_wizard_nickname[0] ? g_wizard_nickname : tr(W_ANONYMOUS);
+
+    static char tz_str[64];
+    if (g_wiz_tz_dd) {
+        lv_dropdown_get_selected_str(g_wiz_tz_dd, tz_str, sizeof(tz_str));
+    } else {
+        snprintf(tz_str, sizeof(tz_str), "UTC+8 (Asia/Shanghai)");
+    }
+
+    const char* gemma_sw = g_gemma_install_opt_in ? "enabled" : "disabled";
+    const char* gemma_models = gemma_mask_to_text(g_gemma_model_mask);
+    snprintf(buf, buf_size,
+        "%s %s\n%s %s\n%s %s\n%s %s\n%s %s\n%s %s\nGemma Local %s\nGemma Models %s",
+        tr(W_LANG_LABEL), lang_str,
+        tr(W_OC_LABEL), detect_str,
+        tr(W_APIK_LABEL), api_str,
+        tr(W_MODEL_LABEL), model_str,
+        tr(W_NAME_LABEL), nick_str,
+        tr(W_TZ_HINT), tz_str,
+        gemma_sw, gemma_models);
+}
+
 static void wizard_build_step_profile() {
+    /* ── Nickname ── */
     lv_obj_t* hint = lv_label_create(g_wizard_content);
     lv_label_set_text(hint, tr(W_NICK_HINT));
     lv_obj_set_style_text_color(hint, g_colors->text_dim, 0);
@@ -7522,13 +7550,12 @@ static void wizard_build_step_profile() {
     lv_obj_set_style_pad_all(g_wiz_nick_ta, 8, 0);
     lv_group_add_obj(lv_group_get_default(), g_wiz_nick_ta);
 
-    /* Timezone label */
+    /* ── Timezone ── */
     lv_obj_t* tz_hint = lv_label_create(g_wizard_content);
     lv_label_set_text(tz_hint, tr(W_TZ_HINT));
     lv_obj_set_style_text_color(tz_hint, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(tz_hint, CJK_FONT, 0);
 
-    /* Timezone dropdown */
     g_wiz_tz_dd = lv_dropdown_create(g_wizard_content);
     lv_dropdown_set_options(g_wiz_tz_dd, tz_options);
     lv_dropdown_set_selected(g_wiz_tz_dd, g_wizard_tz_sel);
@@ -7543,16 +7570,20 @@ static void wizard_build_step_profile() {
     lv_obj_set_style_text_font(g_wiz_tz_dd, CJK_FONT, LV_PART_ITEMS);
     lv_obj_set_style_text_color(g_wiz_tz_dd, g_colors->text, LV_PART_ITEMS);
     lv_obj_set_style_bg_color(g_wiz_tz_dd, g_colors->panel, LV_PART_ITEMS);
-}
 
-/* ── Step 5: Summary ── */
-static void wizard_build_step_summary() {
-    lv_obj_t* hint = lv_label_create(g_wizard_content);
-    lv_label_set_text(hint, tr(W_SUMMARY));
-    lv_obj_set_style_text_color(hint, lv_color_make(100, 160, 255), 0);
-    lv_obj_set_style_text_font(hint, CJK_FONT, 0);
+    /* ── Divider ── */
+    lv_obj_t* div = lv_obj_create(g_wizard_content);
+    lv_obj_set_size(div, LV_PCT(100), 1);
+    lv_obj_set_style_bg_color(div, lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_border_width(div, 0, 0);
+    lv_obj_clear_flag(div, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Summary box */
+    /* ── Summary ── */
+    lv_obj_t* summary_hint = lv_label_create(g_wizard_content);
+    lv_label_set_text(summary_hint, tr(W_SUMMARY));
+    lv_obj_set_style_text_color(summary_hint, lv_color_make(100, 160, 255), 0);
+    lv_obj_set_style_text_font(summary_hint, CJK_FONT, 0);
+
     lv_obj_t* box = lv_obj_create(g_wizard_content);
     lv_obj_set_size(box, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(box, g_colors->input_bg, 0);
@@ -7564,38 +7595,8 @@ static void wizard_build_step_summary() {
     lv_obj_set_style_pad_gap(box, 8, 0);
     lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Build summary text */
     static char summary_buf[1280];
-
-    const char* lang_str = (g_wizard_lang_sel == 0) ? tr(W_CN) : tr(W_EN);
-    const char* detect_str = g_wizard_openclaw_ok ? tr(W_DETECTED) : tr(W_NOTFOUND);
-    const char* api_str = (g_wizard_api_key[0]) ? "****" : tr(W_NOTSET);
-
-    /* Model name — use stored string (dropdown may have been deleted) */
-    const char* model_str = g_wizard_model_name[0] ? g_wizard_model_name : "N/A";
-
-    /* Nickname */
-    const char* nick_str = g_wizard_nickname[0] ? g_wizard_nickname : tr(W_ANONYMOUS);
-
-    /* Timezone */
-    static char tz_str[64];
-    if (g_wiz_tz_dd) {
-        lv_dropdown_get_selected_str(g_wiz_tz_dd, tz_str, sizeof(tz_str));
-    } else {
-        snprintf(tz_str, sizeof(tz_str), "UTC+8 (Asia/Shanghai)");
-    }
-
-    const char* gemma_sw = g_gemma_install_opt_in ? "enabled" : "disabled";
-    const char* gemma_models = gemma_mask_to_text(g_gemma_model_mask);
-    snprintf(summary_buf, sizeof(summary_buf),
-        "%s %s\n%s %s\n%s %s\n%s %s\n%s %s\n%s %s\nGemma Local %s\nGemma Models %s",
-        tr(W_LANG_LABEL), lang_str,
-        tr(W_OC_LABEL), detect_str,
-        tr(W_APIK_LABEL), api_str,
-        tr(W_MODEL_LABEL), model_str,
-        tr(W_NAME_LABEL), nick_str,
-        tr(W_TZ_HINT), tz_str,
-        gemma_sw, gemma_models);
+    wizard_build_summary_text(summary_buf, sizeof(summary_buf));
 
     g_wiz_summary_lbl = lv_label_create(box);
     lv_label_set_text(g_wiz_summary_lbl, summary_buf);
@@ -7606,55 +7607,6 @@ static void wizard_build_step_summary() {
 }
 
 /* Refresh summary text when returning to step 6 */
-static void wizard_refresh_summary() {
-    if (!g_wiz_summary_lbl) return;
-
-    /* Save current values from inputs */
-    if (g_wiz_api_ta) {
-        const char* t = lv_textarea_get_text(g_wiz_api_ta);
-        if (t) snprintf(g_wizard_api_key, sizeof(g_wizard_api_key), "%s", t);
-    }
-    if (g_wiz_nick_ta) {
-        const char* t = lv_textarea_get_text(g_wiz_nick_ta);
-        if (t) snprintf(g_wizard_nickname, sizeof(g_wizard_nickname), "%s", t);
-    }
-    if (g_wiz_model_dd) {
-        g_wizard_model_sel = lv_dropdown_get_selected(g_wiz_model_dd);
-    }
-    if (g_wiz_tz_dd) {
-        g_wizard_tz_sel = lv_dropdown_get_selected(g_wiz_tz_dd);
-    }
-
-    const char* lang_str = (g_wizard_lang_sel == 0) ? tr(W_CN) : tr(W_EN);
-    const char* detect_str = g_wizard_openclaw_ok ? tr(W_DETECTED) : tr(W_NOTFOUND);
-    const char* api_str = g_wizard_api_key[0] ? "****" : tr(W_NOTSET);
-
-    const char* model_str = g_wizard_model_name[0] ? g_wizard_model_name : "N/A";
-
-    const char* nick_str = g_wizard_nickname[0] ? g_wizard_nickname : tr(W_ANONYMOUS);
-
-    static char tz_str[64];
-    if (g_wiz_tz_dd) {
-        lv_dropdown_get_selected_str(g_wiz_tz_dd, tz_str, sizeof(tz_str));
-    } else {
-        snprintf(tz_str, sizeof(tz_str), "UTC+8 (Asia/Shanghai)");
-    }
-
-    static char buf[1280];
-    const char* gemma_sw = g_gemma_install_opt_in ? "enabled" : "disabled";
-    const char* gemma_models = gemma_mask_to_text(g_gemma_model_mask);
-    snprintf(buf, sizeof(buf),
-        "%s %s\n%s %s\n%s %s\n%s %s\n%s %s\n%s %s\nGemma Local %s\nGemma Models %s",
-        tr(W_LANG_LABEL), lang_str,
-        tr(W_OC_LABEL), detect_str,
-        tr(W_APIK_LABEL), api_str,
-        tr(W_MODEL_LABEL), model_str,
-        tr(W_NAME_LABEL), nick_str,
-        tr(W_TZ_HINT), tz_str,
-        gemma_sw, gemma_models);
-    lv_label_set_text(g_wiz_summary_lbl, buf);
-}
-
 /* ── Build step content ── */
 static void wizard_update_step() {
     if (!g_wizard_content || !g_wizard_step_label || !g_wizard_title) return;
@@ -7714,8 +7666,7 @@ static void wizard_update_step() {
         case 1: wizard_build_step_detect(); break;       /* May override: wizard_set_next_enabled(critical_ok) */
         case 2: wizard_build_step_model_api(); break;    /* Model + API Key */
         case 3: wizard_build_step_gemma(); break;        /* Local Gemma models (optional) */
-        case 4: wizard_build_step_profile(); break;      /* Nickname + timezone */
-        case 5: wizard_build_step_summary(); break;      /* Confirmation */
+        case 4: wizard_build_step_profile(); break;      /* Nickname + timezone + summary */
     }
 
     /* Update buttons */
@@ -7770,13 +7721,7 @@ static void wizard_next_cb(lv_event_t* e) {
     }
 
     if (g_wizard_step < WIZARD_STEPS - 1) {
-        /* Refresh summary before showing it */
-        if (g_wizard_step == WIZARD_STEPS - 2) {
-            wizard_go_step(g_wizard_step + 1);
-            wizard_refresh_summary();
-        } else {
-            wizard_go_step(g_wizard_step + 1);
-        }
+        wizard_go_step(g_wizard_step + 1);
     } else {
         /* P0: Warn if API key is empty before finishing */
         if (!g_wizard_api_key[0]) {
