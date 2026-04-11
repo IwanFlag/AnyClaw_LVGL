@@ -1160,14 +1160,18 @@ static void loading_show() {
     if (!g_loading_overlay) {
         lv_obj_t* scr = lv_screen_active();
         g_loading_overlay = lv_obj_create(scr);
-        lv_obj_set_size(g_loading_overlay, lv_obj_get_width(scr), lv_obj_get_height(scr));
-        lv_obj_set_pos(g_loading_overlay, 0, 0);
+        lv_obj_set_size(g_loading_overlay, SCALE(460), SCALE(300));
+        lv_obj_align(g_loading_overlay, LV_ALIGN_TOP_RIGHT, -SCALE(16), TITLE_H + SCALE(8));
         lv_obj_set_style_bg_color(g_loading_overlay, lv_color_make(15, 18, 28), 0);
-        lv_obj_set_style_bg_opa(g_loading_overlay, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(g_loading_overlay, 0, 0);
-        lv_obj_set_style_radius(g_loading_overlay, 0, 0);
-        lv_obj_set_style_pad_all(g_loading_overlay, 0, 0);
+        lv_obj_set_style_bg_opa(g_loading_overlay, 220, 0);
+        lv_obj_set_style_border_width(g_loading_overlay, 1, 0);
+        lv_obj_set_style_border_color(g_loading_overlay, lv_color_make(58, 64, 86), 0);
+        lv_obj_set_style_radius(g_loading_overlay, SCALE(12), 0);
+        lv_obj_set_style_pad_all(g_loading_overlay, SCALE(14), 0);
+        lv_obj_set_style_pad_gap(g_loading_overlay, SCALE(8), 0);
         lv_obj_clear_flag(g_loading_overlay, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(g_loading_overlay, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(g_loading_overlay, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
         lv_obj_move_foreground(g_loading_overlay);
 
         /* Garlic icon centered */
@@ -1175,7 +1179,7 @@ static void loading_show() {
         lv_image_set_src(g_loading_icon, "A:assets/garlic_48.png");
         lv_obj_set_size(g_loading_icon, 64, 64);
         lv_image_set_scale(g_loading_icon, 256); /* 100% */
-        lv_obj_align(g_loading_icon, LV_ALIGN_CENTER, 0, -30);
+        lv_obj_align(g_loading_icon, LV_ALIGN_TOP_MID, 0, 0);
 
         /* Loading text */
         g_loading_label = lv_label_create(g_loading_overlay);
@@ -1183,25 +1187,24 @@ static void loading_show() {
         lv_obj_set_style_text_color(g_loading_label, lv_color_make(180, 185, 200), 0);
         lv_obj_set_style_text_font(g_loading_label, CJK_FONT_SMALL, 0);
         lv_label_set_long_mode(g_loading_label, LV_LABEL_LONG_WRAP);
-        lv_obj_set_width(g_loading_label, SCALE(420));
-        lv_obj_align(g_loading_label, LV_ALIGN_CENTER, 0, 30);
+        lv_obj_set_width(g_loading_label, LV_PCT(100));
 
         g_loading_bar = lv_bar_create(g_loading_overlay);
-        lv_obj_set_size(g_loading_bar, SCALE(360), SCALE(8));
+        lv_obj_set_size(g_loading_bar, LV_PCT(100), SCALE(8));
         lv_bar_set_range(g_loading_bar, 0, 100);
         lv_bar_set_value(g_loading_bar, 2, LV_ANIM_OFF);
         lv_obj_set_style_radius(g_loading_bar, 999, 0);
         lv_obj_set_style_bg_color(g_loading_bar, lv_color_make(45, 50, 64), LV_PART_MAIN);
         lv_obj_set_style_bg_color(g_loading_bar, lv_color_make(104, 188, 132), LV_PART_INDICATOR);
-        lv_obj_align(g_loading_bar, LV_ALIGN_CENTER, 0, 82);
 
         g_loading_stage_list = lv_label_create(g_loading_overlay);
         lv_label_set_text(g_loading_stage_list, "○ Gateway\n○ License\n○ Workspace\n○ Feature flags\n○ Finalize");
         lv_obj_set_style_text_color(g_loading_stage_list, lv_color_make(150, 160, 185), 0);
         lv_obj_set_style_text_font(g_loading_stage_list, CJK_FONT_SMALL, 0);
-        lv_obj_align(g_loading_stage_list, LV_ALIGN_CENTER, 0, 160);
+        lv_obj_set_width(g_loading_stage_list, LV_PCT(100));
     } else {
         lv_obj_clear_flag(g_loading_overlay, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_align(g_loading_overlay, LV_ALIGN_TOP_RIGHT, -SCALE(16), TITLE_H + SCALE(8));
         lv_obj_move_foreground(g_loading_overlay);
     }
 
