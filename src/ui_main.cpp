@@ -6471,7 +6471,7 @@ static void create_title_bar(lv_obj_t* scr) {
  *  Setup Wizard — First-launch 6-step onboarding
  * ═══════════════════════════════════════════════════════════════ */
 
-#define WIZARD_STEPS 5
+#define WIZARD_STEPS 6
 static lv_obj_t* g_wizard_modal = nullptr;
 static lv_obj_t* g_wizard_box = nullptr;
 static lv_obj_t* g_wizard_step_label = nullptr;
@@ -6561,11 +6561,12 @@ static void save_wizard_completed() {
 
 /* Step title strings */
 static const I18n wizard_step_titles[WIZARD_STEPS] = {
-    {"Language", "语言"},
-    {"OpenClaw Detection", "OpenClaw 检测"},
-    {"Model & API Key", "模型 & API 密钥"},
-    {"User Profile", "用户画像"},
-    {"Confirmation", "确认"}
+    {"Language", "语言"},                         /* Step 0 */
+    {"OpenClaw Detection", "OpenClaw 检测"},       /* Step 1 */
+    {"Model & API Key", "模型 & API 密钥"},        /* Step 2 */
+    {"Local Models (Optional)", "本地模型（可选）"}, /* Step 3 */
+    {"User Profile", "用户画像"},                   /* Step 4 */
+    {"Confirmation", "确认"}                        /* Step 5 */
 };
 
 /* Wizard text strings — bilingual */
@@ -6657,7 +6658,7 @@ static void wizard_set_next_enabled(bool enabled) {
     }
 }
 
-/* ── Step 1: Language ── */
+/* ── Step 0: Language ── */
 static void wiz_lang_cn_cb(lv_event_t* e) {
     (void)e;
     g_wizard_lang_sel = 0;
@@ -6711,7 +6712,7 @@ static void wizard_build_step_lang() {
     lv_obj_center(lbl_en);
 }
 
-/* ── Step 2: OpenClaw Detection ── */
+/* ── Step 1: OpenClaw Detection ── */
 /* ── Helper: add a LED + label status row ── */
 static lv_obj_t* wizard_add_status_row(lv_obj_t* parent, const char* text, lv_color_t color) {
     lv_obj_t* row = lv_obj_create(parent);
@@ -7050,7 +7051,7 @@ static void wiz_install_oc_cb(lv_event_t* e) {
     if (!g_wiz_install_poll_timer) g_wiz_install_poll_timer = lv_timer_create(wiz_install_poll_cb, 120, nullptr);
 }
 
-/* ── Step 1: Detection (Node.js → npm → Network → OpenClaw) ── */
+/* ── Step 1: Detection (Node.js → npm → Network → OpenClaw → Gateway) ── */
 static void wizard_build_step_detect() {
     lv_obj_t* hint = lv_label_create(g_wizard_content);
     lv_label_set_text(hint, tr(W_DETECT_HINT));
@@ -7309,12 +7310,23 @@ static void wizard_build_step_detect() {
         lv_obj_set_style_text_color(g_wiz_install_progress_result, g_colors->text_dim, 0);
     }
 
-    /* ═══ Block Next if any critical check fails ═══ */
-    bool all_ok = env.node_ok && env.node_version_ok && net_ok && env.openclaw_ok && env.gateway_ok;
-    wizard_set_next_enabled(all_ok);
+    /* ═══ Block Next only if critical checks fail ═══
+     * Network is NOT required — offline users should still be able to proceed
+     * if Node.js + OpenClaw are already installed. */
+    bool critical_ok = env.node_ok && env.node_version_ok && env.openclaw_ok && env.gateway_ok;
+    wizard_set_next_enabled(critical_ok);
+
+    if (!net_ok) {
+        lv_obj_t* warn = lv_label_create(g_wizard_content);
+        lv_label_set_text(warn, g_lang == Lang::CN
+            ? "⚠ 网络不可达，安装/下载功能将不可用"
+            : "⚠ Network unreachable — install/download features unavailable");
+        lv_obj_set_style_text_color(warn, lv_color_make(220, 180, 40), 0);
+        lv_obj_set_style_text_font(warn, CJK_FONT_SMALL, 0);
+    }
 }
 
-/* ── Step 2 (combined): Model + API Key ── */
+/* ── Step 2: Model + API Key ── */
 static lv_obj_t* g_wiz_provider_hint = nullptr; /* Dynamic provider hint label */
 
 /* Update provider hint when model dropdown changes */
@@ -7412,16 +7424,14 @@ static void wizard_build_step_model_api() {
     lv_obj_set_style_text_font(g_wiz_api_ta, CJK_FONT, 0);
     lv_obj_set_style_pad_all(g_wiz_api_ta, 8, 0);
     lv_group_add_obj(lv_group_get_default(), g_wiz_api_ta);
+}
 
-    /* ── Local Gemma 4 Installer Options (L3) ── */
-    lv_obj_t* div2 = lv_obj_create(g_wizard_content);
-    lv_obj_set_size(div2, LV_PCT(100), 1);
-    lv_obj_set_style_bg_color(div2, lv_color_make(50, 55, 75), 0);
-    lv_obj_set_style_border_width(div2, 0, 0);
-    lv_obj_clear_flag(div2, LV_OBJ_FLAG_SCROLLABLE);
-
+/* ── Step 3: Local Gemma Models (Optional) ── */
+static void wizard_build_step_gemma() {
     lv_obj_t* gemma_hint = lv_label_create(g_wizard_content);
-    lv_label_set_text(gemma_hint, "Optional: Install local Gemma 4 models");
+    lv_label_set_text(gemma_hint, g_lang == Lang::CN
+        ? "可选：安装本地 Gemma 4 模型（需要较大磁盘空间）"
+        : "Optional: Install local Gemma 4 models (requires disk space)");
     lv_obj_set_style_text_color(gemma_hint, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(gemma_hint, CJK_FONT, 0);
 
@@ -7435,7 +7445,7 @@ static void wizard_build_step_model_api() {
     lv_obj_set_flex_align(gemma_sw_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(gemma_sw_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t* gemma_sw_label = lv_label_create(gemma_sw_row);
-    lv_label_set_text(gemma_sw_label, "Enable Gemma local install");
+    lv_label_set_text(gemma_sw_label, g_lang == Lang::CN ? "启用 Gemma 本地安装" : "Enable Gemma local install");
     lv_obj_set_style_text_color(gemma_sw_label, g_colors->text, 0);
     lv_obj_set_style_text_font(gemma_sw_label, CJK_FONT_SMALL, 0);
 
@@ -7459,12 +7469,13 @@ static void wizard_build_step_model_api() {
     lv_obj_set_width(mode_lbl_gemma_recommend, LV_PCT(100));
     update_gemma_recommend_visuals();
 
+    /* Skip button — Gemma is optional, always allow Next */
     lv_obj_t* btn_skip_gemma = lv_button_create(g_wizard_content);
     lv_obj_set_size(btn_skip_gemma, LV_PCT(100), SCALE(36));
     lv_obj_set_style_bg_color(btn_skip_gemma, lv_color_make(70, 90, 120), 0);
     lv_obj_set_style_radius(btn_skip_gemma, 8, 0);
     lv_obj_t* lbl_skip = lv_label_create(btn_skip_gemma);
-    lv_label_set_text(lbl_skip, "Skip Gemma Install (continue)");
+    lv_label_set_text(lbl_skip, g_lang == Lang::CN ? "跳过（继续）" : "Skip (continue)");
     lv_obj_set_style_text_font(lbl_skip, CJK_FONT_SMALL, 0);
     lv_obj_center(lbl_skip);
     lv_obj_add_event_cb(btn_skip_gemma, wizard_gemma_skip_cb, LV_EVENT_CLICKED, nullptr);
@@ -7476,11 +7487,10 @@ static void wizard_gemma_skip_cb(lv_event_t* e) {
     g_gemma_model_mask = 0;
     update_gemma_recommend_visuals();
     ui_log("[Wizard] Gemma install skipped by user");
-    /* FIX P6: Use relative step instead of hardcoded indices */
-    if (g_wizard_step == 2) wizard_go_step(g_wizard_step + 1);
+    wizard_go_step(g_wizard_step + 1);
 }
 
-/* ── Step 5: User Profile ── */
+/* ── Step 4: User Profile ── */
 static const char* tz_options =
     "UTC-12\nUTC-11\nUTC-10\nUTC-9\nUTC-8 (PST)\nUTC-7 (MST)\n"
     "UTC-6 (CST-US)\nUTC-5 (EST)\nUTC-4\nUTC-3\nUTC-2\nUTC-1\n"
@@ -7535,7 +7545,7 @@ static void wizard_build_step_profile() {
     lv_obj_set_style_bg_color(g_wiz_tz_dd, g_colors->panel, LV_PART_ITEMS);
 }
 
-/* ── Step 6: Summary ── */
+/* ── Step 5: Summary ── */
 static void wizard_build_step_summary() {
     lv_obj_t* hint = lv_label_create(g_wizard_content);
     lv_label_set_text(hint, tr(W_SUMMARY));
@@ -7660,11 +7670,11 @@ static void wizard_update_step() {
         char* free_tag = strstr(g_wizard_model_name, " [free]");
         if (free_tag) *free_tag = '\0';
     }
-    if (g_wizard_step == 3 && g_wiz_nick_ta) {
+    if (g_wizard_step == 4 && g_wiz_nick_ta) {
         const char* t = lv_textarea_get_text(g_wiz_nick_ta);
         if (t) snprintf(g_wizard_nickname, sizeof(g_wizard_nickname), "%s", t);
     }
-    if (g_wizard_step == 3 && g_wiz_tz_dd) {
+    if (g_wizard_step == 4 && g_wiz_tz_dd) {
         g_wizard_tz_sel = lv_dropdown_get_selected(g_wiz_tz_dd);
     }
 
@@ -7701,10 +7711,11 @@ static void wizard_update_step() {
     wizard_set_next_enabled(true);
     switch (g_wizard_step) {
         case 0: wizard_build_step_lang(); break;
-        case 1: wizard_build_step_detect(); break;     /* May override: wizard_set_next_enabled(all_ok) */
-        case 2: wizard_build_step_model_api(); break;  /* Combined Model + API Key */
-        case 3: wizard_build_step_profile(); break;
-        case 4: wizard_build_step_summary(); break;
+        case 1: wizard_build_step_detect(); break;       /* May override: wizard_set_next_enabled(critical_ok) */
+        case 2: wizard_build_step_model_api(); break;    /* Model + API Key */
+        case 3: wizard_build_step_gemma(); break;        /* Local Gemma models (optional) */
+        case 4: wizard_build_step_profile(); break;      /* Nickname + timezone */
+        case 5: wizard_build_step_summary(); break;      /* Confirmation */
     }
 
     /* Update buttons */
@@ -7750,11 +7761,11 @@ static void wizard_next_cb(lv_event_t* e) {
         char* free_tag = strstr(g_wizard_model_name, " [free]");
         if (free_tag) *free_tag = '\0';
     }
-    if (g_wizard_step == 3 && g_wiz_nick_ta) {
+    if (g_wizard_step == 4 && g_wiz_nick_ta) {
         const char* t = lv_textarea_get_text(g_wiz_nick_ta);
         if (t) snprintf(g_wizard_nickname, sizeof(g_wizard_nickname), "%s", t);
     }
-    if (g_wizard_step == 3 && g_wiz_tz_dd) {
+    if (g_wizard_step == 4 && g_wiz_tz_dd) {
         g_wizard_tz_sel = lv_dropdown_get_selected(g_wiz_tz_dd);
     }
 
@@ -7767,6 +7778,13 @@ static void wizard_next_cb(lv_event_t* e) {
             wizard_go_step(g_wizard_step + 1);
         }
     } else {
+        /* P0: Warn if API key is empty before finishing */
+        if (!g_wizard_api_key[0]) {
+            /* Show native-style confirmation — user can still proceed */
+            ui_log("[Wizard] Warning: API key is empty. Some features will not work.");
+            /* Log warning but don't block — free models or local Gemma may suffice */
+        }
+
         /* Last step: finish wizard */
         /* Apply language */
         g_lang = (g_wizard_lang_sel == 0) ? Lang::CN : Lang::EN;

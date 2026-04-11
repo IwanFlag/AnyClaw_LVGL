@@ -2917,3 +2917,47 @@ chat_cont (消息区域)
 ### 验证
 - Windows 原生构建通过（`tools\\windows\\build.bat`）。
 
+---
+
+## TASK-WIZ01: 安装向导重构（步骤拆分 + 逻辑修正）
+
+**优先级：** P0
+**状态：** ✅ 已完成
+**完成时间：** 2026-04-11
+
+### 变更概述
+
+将 5 步安装向导重构为 6 步，拆分 Gemma 本地模型安装为独立步骤，修正阻塞逻辑和硬编码问题。
+
+### 步骤对比
+
+| 旧步骤 | 新步骤 | 变更 |
+|--------|--------|------|
+| Step 0: Language | Step 0: Language | 不变 |
+| Step 1: OpenClaw Detection | Step 1: OpenClaw Detection | **P0 修复**：`all_ok` 不再要求 network，离线用户可继续 |
+| Step 2: Model & API Key + Gemma | Step 2: Model & API Key | **P1 拆分**：移除 Gemma 选项，专注模型/Key 输入 |
+| _(Gemma 在 Step 2 内)_ | Step 3: Local Models (Optional) | **新增**：独立的 Gemma 本地模型安装步骤 |
+| Step 3: User Profile | Step 4: User Profile | 步骤号更新 |
+| Step 4: Confirmation | Step 5: Confirmation | **P0 增强**：空 API Key 时输出警告日志 |
+
+### 修复清单
+
+| # | 问题 | 严重度 | 修复方式 |
+|---|------|--------|----------|
+| 1 | `all_ok` 包含 `net_ok`，网络不通时无法 Next | P0 | 改为 `critical_ok = node && npm && OC && GW`，网络不通仅显示黄色警告 |
+| 2 | 空 API Key 无拦截直接完成向导 | P0 | Step 5 finish 前检查 `g_wizard_api_key[0]`，空则记录警告日志 |
+| 3 | Gemma 选项和 Model/API 同一步骤，信息密度过高 | P1 | 拆为独立 Step 3，有 Skip 按钮 |
+| 4 | `wizard_gemma_skip_cb` 硬编码 `g_wizard_step == 2` | P2 | 改为无条件 `wizard_go_step(g_wizard_step + 1)` |
+| 5 | 注释步骤号混乱（1-based 与 0-based 混用） | P2 | 统一为 0-based，与 `wizard_step_titles` 数组对齐 |
+
+### 影响文件
+
+- `src/ui_main.cpp` (+53 / -35 行)
+
+### 验证
+
+- 注释步骤号全部 0-based 对齐（grep 确认无残留）
+- `WIZARD_STEPS` = 6，`wizard_step_titles` 有 6 个条目
+- `wizard_update_step()` switch 有 6 个 case
+- 保存索引正确：Step 2 保存 api_ta/model_dd，Step 4 保存 nick_ta/tz_dd
+
