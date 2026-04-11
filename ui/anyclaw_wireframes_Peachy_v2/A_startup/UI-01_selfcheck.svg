@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap');
+  t{font-family:'Noto Sans SC','SF Pro Display','PingFang SC',sans-serif}
+  .t{fill:#2D1B14;font-weight:700}.t2{fill:#2D1B14;font-weight:600}
+  .s{fill:#8B7355;font-size:12px}.s2{fill:#C4A882;font-size:11px}
+  .l{fill:#2D1B14;font-size:14px}.l2{fill:#2D1B14;font-size:13px}
+  .a{fill:#FF7F50}.a2{fill:#FFB347}.p{fill:#FF6B8A}
+  .g{fill:#7ECFB3}.lv{fill:#B8A9E8}
+  .w{fill:#FFFFFF}.dim{fill:#C4A882}
+</style>
+<defs>
+  <filter id="shadow" x="-8%" y="-8%" width="116%" height="120%">
+    <feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#D4A574" flood-opacity="0.15"/>
+  </filter>
+  <filter id="shadow2" x="-5%" y="-5%" width="110%" height="115%">
+    <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#D4A574" flood-opacity="0.12"/>
+  </filter>
+  <linearGradient id="accentGrad" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#FF7F50"/><stop offset="100%" stop-color="#FFB347"/>
+  </linearGradient>
+  <linearGradient id="peachGrad" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#FFF8F3"/><stop offset="100%" stop-color="#FFE8D6"/>
+  </linearGradient>
+  <linearGradient id="cardGrad" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#FFFFFF"/><stop offset="100%" stop-color="#FFF8F3"/>
+  </linearGradient>
+  <linearGradient id="pinkGrad" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#FF6B8A"/><stop offset="100%" stop-color="#FFB347"/>
+  </linearGradient>
+  <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#7ECFB3"/><stop offset="100%" stop-color="#B8E8D0"/>
+  </linearGradient>
+</defs>
+<rect width="900" height="600" fill="#FFF8F3"/>
+
+<!-- 品牌区域 -->
+<text x="450" y="70" text-anchor="40" class="start">🧄</text>
+<text x="450" y="75" text-anchor="start" class="t" font-size="24">AnyClaw</text>
+<text x="450" y="95" text-anchor="start" class="s" font-size="13">你的 AI 桌面管家  ✨</text>
+
+<!-- 检查卡片 -->
+<rect x="250" y="120" width="400" height="280" rx="24" fill="#FFFFFF" filter="url(#shadow2)" stroke="#F0E0D0" stroke-width="1"/>
+
+<!-- 检查项 -->
+<circle cx="280" cy="162" r="8" fill="#7ECFB3"/><text x="298" y="167" text-anchor="start" class="l">Node.js</text><text x="580" y="167" text-anchor="end" class="g" font-size="12">v22.14.0  ✓</text>
+<circle cx="280" cy="200" r="8" fill="#7ECFB3"/><text x="298" y="205" text-anchor="start" class="l">npm</text><text x="580" y="205" text-anchor="end" class="g" font-size="12">v10.8.0  ✓</text>
+<circle cx="280" cy="238" r="8" fill="#7ECFB3"/><text x="298" y="243" text-anchor="start" class="l">网络连接</text><text x="580" y="243" text-anchor="end" class="g" font-size="12">已连接  ✓</text>
+<circle cx="280" cy="276" r="8" fill="#7ECFB3"/><text x="298" y="281" text-anchor="start" class="l">OpenClaw</text><text x="580" y="281" text-anchor="end" class="g" font-size="12">v2.1.0  ✓</text>
+
+<!-- 萌系加载 -->
+<circle cx="420" cy="350" r="6" fill="#FF7F50"><animate attributeName="opacity" values="0.2;1;0.2" dur="1s" repeatCount="indefinite"/></circle>
+<circle cx="440" cy="350" r="6" fill="#FFB347"><animate attributeName="opacity" values="0.2;1;0.2" dur="1s" begin="0.2s" repeatCount="indefinite"/></circle>
+<circle cx="460" cy="350" r="6" fill="#FF6B8A"><animate attributeName="opacity" values="0.2;1;0.2" dur="1s" begin="0.4s" repeatCount="indefinite"/></circle>
+<text x="450" y="375" text-anchor="middle" class="s">正在启动中...</text>
+
+<!-- 装饰圆点 -->
+<circle cx="120" cy="150" r="3" fill="#FFDAB9"/><circle cx="780" cy="200" r="4" fill="#FF6B8A"/><circle cx="150" cy="400" r="5" fill="#B8A9E8"/>
+<circle cx="750" cy="420" r="3" fill="#7ECFB3"/>
+
+</svg>

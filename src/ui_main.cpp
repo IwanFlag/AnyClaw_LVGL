@@ -229,6 +229,7 @@ static bool g_gemma_install_opt_in = false;
 /* bit0=2B, bit1=9B, bit2=27B (multi-select) */
 static int g_gemma_model_mask = 0;
 static std::atomic<bool> g_gemma_install_started(false);
+static uint32_t g_wiz_gemma_progress_start_ms = 0;
 
 /* ═══ Theme System (P2-4) ═══ */
 Theme g_theme = Theme::Dark;
@@ -2435,6 +2436,8 @@ static void start_gemma_install_async(int model_mask) {
         ui_log("[Gemma] Installer already running, skip duplicate start");
         return;
     }
+    app_reset_setup_cancel();
+    g_wiz_gemma_progress_start_ms = 0;
     std::thread([model_mask]() {
         char out[1024] = {0};
         ui_log("[Gemma] Installer started. mask=%d", model_mask);
@@ -8526,6 +8529,10 @@ static lv_obj_t* g_wiz_install_progress_task = nullptr;
 static lv_obj_t* g_wiz_install_progress_step = nullptr;
 static lv_obj_t* g_wiz_install_progress_result = nullptr;
 static lv_obj_t* g_wiz_install_progress_bar = nullptr;
+static lv_obj_t* g_wiz_install_progress_source = nullptr;
+static lv_obj_t* g_wiz_install_progress_speed = nullptr;
+static lv_obj_t* g_wiz_install_progress_eta = nullptr;
+static lv_obj_t* g_wiz_install_progress_cancel_btn = nullptr;
 /* Offline package download state */
 static std::atomic<bool> g_wiz_dl_running(false);
 static lv_obj_t* g_wiz_dl_node_btn = nullptr;
@@ -8551,6 +8558,37 @@ static void wizard_progress_mirror_from_event(const PendingProgressEvent& ev, in
             lv_obj_set_style_text_color(g_wiz_install_progress_result, ev.ok ? lv_color_make(120, 220, 150) : lv_color_make(255, 120, 120), 0);
         } else {
             lv_label_set_text(g_wiz_install_progress_result, "");
+        }
+    }
+    if (is_gemma_task) {
+        if (g_wiz_gemma_progress_start_ms == 0 || pct <= 5) g_wiz_gemma_progress_start_ms = lv_tick_get();
+        const char* src = "Source: Auto fallback";
+        if (strstr(ev.step, "mirror") || strstr(ev.step, "Mirror")) src = "Source: Mirror";
+        else if (strstr(ev.step, "ModelScope")) src = "Source: ModelScope";
+        else if (strstr(ev.step, "HuggingFace")) src = "Source: HuggingFace";
+        else if (strstr(ev.step, "official")) src = "Source: Official";
+        if (g_wiz_install_progress_source) lv_label_set_text(g_wiz_install_progress_source, src);
+
+        if (g_wiz_install_progress_speed || g_wiz_install_progress_eta) {
+            uint32_t now = lv_tick_get();
+            float elapsed_s = (now - g_wiz_gemma_progress_start_ms) / 1000.0f;
+            float rate = (elapsed_s > 0.1f) ? ((float)pct / elapsed_s) : 0.0f;
+            char speed_buf[96] = {0};
+            char eta_buf[96] = {0};
+            if (rate > 0.01f && pct > 0 && pct < 100) {
+                float eta = (100.0f - (float)pct) / rate;
+                snprintf(speed_buf, sizeof(speed_buf), "Speed: %.1f%%/s", rate);
+                snprintf(eta_buf, sizeof(eta_buf), "ETA: %.0fs", eta);
+            } else {
+                snprintf(speed_buf, sizeof(speed_buf), "Speed: estimating...");
+                snprintf(eta_buf, sizeof(eta_buf), "ETA: calculating...");
+            }
+            if (g_wiz_install_progress_speed) lv_label_set_text(g_wiz_install_progress_speed, speed_buf);
+            if (g_wiz_install_progress_eta) lv_label_set_text(g_wiz_install_progress_eta, eta_buf);
+        }
+        if (g_wiz_install_progress_cancel_btn) {
+            if (ev.type == 1) lv_obj_add_state(g_wiz_install_progress_cancel_btn, LV_STATE_DISABLED);
+            else lv_obj_clear_state(g_wiz_install_progress_cancel_btn, LV_STATE_DISABLED);
         }
     }
 }
@@ -9532,6 +9570,37 @@ static void wizard_build_step_gemma() {
     lv_label_set_text(g_wiz_install_progress_result, "");
     lv_obj_set_style_text_font(g_wiz_install_progress_result, CJK_FONT_SMALL, 0);
     lv_obj_set_style_text_color(g_wiz_install_progress_result, g_colors->text_dim, 0);
+
+    g_wiz_install_progress_source = lv_label_create(g_wiz_install_progress_panel);
+    lv_label_set_text(g_wiz_install_progress_source, "Source: Auto fallback");
+    lv_obj_set_style_text_font(g_wiz_install_progress_source, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_color(g_wiz_install_progress_source, g_colors->text_dim, 0);
+
+    g_wiz_install_progress_speed = lv_label_create(g_wiz_install_progress_panel);
+    lv_label_set_text(g_wiz_install_progress_speed, "Speed: estimating...");
+    lv_obj_set_style_text_font(g_wiz_install_progress_speed, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_color(g_wiz_install_progress_speed, g_colors->text_dim, 0);
+
+    g_wiz_install_progress_eta = lv_label_create(g_wiz_install_progress_panel);
+    lv_label_set_text(g_wiz_install_progress_eta, "ETA: calculating...");
+    lv_obj_set_style_text_font(g_wiz_install_progress_eta, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_color(g_wiz_install_progress_eta, g_colors->text_dim, 0);
+
+    g_wiz_install_progress_cancel_btn = lv_button_create(g_wiz_install_progress_panel);
+    lv_obj_set_size(g_wiz_install_progress_cancel_btn, SCALE(140), SCALE(32));
+    lv_obj_set_style_bg_color(g_wiz_install_progress_cancel_btn, g_colors->btn_close, 0);
+    lv_obj_set_style_radius(g_wiz_install_progress_cancel_btn, SCALE(8), 0);
+    lv_obj_add_event_cb(g_wiz_install_progress_cancel_btn, [](lv_event_t* e) {
+        (void)e;
+        app_request_setup_cancel();
+        ui_log("[Gemma] Cancel requested by user");
+        if (g_wiz_install_progress_step) lv_label_set_text(g_wiz_install_progress_step, "Step: Cancel requested...");
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_cancel_dl = lv_label_create(g_wiz_install_progress_cancel_btn);
+    lv_label_set_text(lbl_cancel_dl, g_lang == Lang::CN ? "取消下载" : "Cancel Download");
+    lv_obj_set_style_text_font(lbl_cancel_dl, CJK_FONT_SMALL, 0);
+    lv_obj_center(lbl_cancel_dl);
+    lv_obj_add_state(g_wiz_install_progress_cancel_btn, LV_STATE_DISABLED);
 
     /* Skip button — Gemma is optional, always allow Next */
     lv_obj_t* btn_skip_gemma = lv_button_create(g_wizard_content);

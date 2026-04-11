@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="950" height="720" viewBox="0 0 950 720">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+      text{font-family:'Inter','Segoe UI',sans-serif;fill:#E8ECF4}
+      .t2{fill:#8B92A8} .t3{fill:#6B7280} .accent{fill:#3DD68C} .danger{fill:#FF6B6B} .warning{fill:#FFBE3D} .info{fill:#6C9FFF}
+    </style>
+  </defs>
+  <!-- Background -->
+  <rect width="950" height="720" rx="12" fill="#0F1117"/>
+  <!-- Tab Bar -->
+  <rect x="0" y="0" width="950" height="44" rx="12" fill="#13151E"/>
+  <rect x="0" y="32" width="950" height="12" fill="#13151E"/>
+  <text x="30" y="28" font-size="13" font-weight="600" class="accent">General</text>
+  <rect x="26" y="40" width="52" height="2" rx="1" fill="#3DD68C"/>
+  <text x="100" y="28" font-size="13" fill="#8B92A8">Permissions</text>
+  <text x="200" y="28" font-size="13" fill="#8B92A8">Model</text>
+  <text x="275" y="28" font-size="13" fill="#8B92A8">Feature</text>
+  <text x="355" y="28" font-size="13" fill="#8B92A8">Tracing</text>
+  <text x="435" y="28" font-size="13" fill="#8B92A8">Log</text>
+  <text x="485" y="28" font-size="13" fill="#8B92A8">KB</text>
+  <text x="525" y="28" font-size="13" fill="#8B92A8">About</text>
+  <!-- Separator -->
+  <line x1="0" y1="44" x2="950" y2="44" stroke="#1E2230" stroke-width="1"/>
+  <!-- Content Area -->
+  <!-- Gateway Status -->
+  <rect x="24" y="60" width="902" height="56" rx="8" fill="#1A1D27"/>
+  <text x="40" y="82" font-size="11" class="t2">Gateway Status</text>
+  <circle cx="44" cy="100" r="5" fill="#3DD68C"/>
+  <text x="56" y="104" font-size="14" font-weight="600">Ready</text>
+  <text x="130" y="104" font-size="13" class="t2">Port:</text>
+  <text x="165" y="104" font-size="13">18789</text>
+  <!-- Install Path -->
+  <rect x="24" y="128" width="902" height="56" rx="8" fill="#1A1D27"/>
+  <text x="40" y="150" font-size="11" class="t2">Install Path</text>
+  <text x="40" y="170" font-size="13" font-family="monospace">/opt/anyclaw/gateway</text>
+  <!-- Workspace Path -->
+  <rect x="24" y="196" width="902" height="56" rx="8" fill="#1A1D27"/>
+  <text x="40" y="218" font-size="11" class="t2">Workspace Path</text>
+  <text x="40" y="238" font-size="13" font-family="monospace">/root/.openclaw/workspace</text>
+  <!-- Boot Behavior -->
+  <rect x="24" y="268" width="440" height="100" rx="8" fill="#1A1D27"/>
+  <text x="40" y="292" font-size="13" font-weight="600">Startup Behavior</text>
+  <!-- Boot Start ON -->
+  <text x="40" y="318" font-size="12" class="t2">Boot Start</text>
+  <rect x="140" y="306" width="36" height="20" rx="10" fill="#3DD68C"/>
+  <circle cx="166" cy="316" r="8" fill="#fff"/>
+  <!-- Auto Restart OFF -->
+  <text x="40" y="352" font-size="12" class="t2">Auto Restart</text>
+  <rect x="160" y="340" width="36" height="20" rx="10" fill="#3C3F50"/>
+  <circle cx="170" cy="350" r="8" fill="#8B92A8"/>
+  <!-- Appearance -->
+  <rect x="480" y="268" width="446" height="100" rx="8" fill="#1A1D27"/>
+  <text x="496" y="292" font-size="13" font-weight="600">Appearance</text>
+  <!-- Dark selected -->
+  <rect x="496" y="304" width="120" height="50" rx="6" fill="#1E2230" stroke="#3DD68C" stroke-width="1.5"/>
+  <rect x="506" y="314" width="100" height="24" rx="4" fill="#0F1117"/>
+  <circle cx="518" cy="326" r="4" fill="#3DD68C"/>
+  <text x="526" y="330" font-size="10" class="accent">Dark</text>
+  <!-- Light -->
+  <rect x="626" y="304" width="120" height="50" rx="6" fill="#1E2230" stroke="#3C3F50" stroke-width="1"/>
+  <rect x="636" y="314" width="100" height="24" rx="4" fill="#F5F7FA"/>
+  <text x="660" y="330" font-size="10" fill="#1A1D27">Light</text>
+  <!-- Classic -->
+  <rect x="756" y="304" width="120" height="50" rx="6" fill="#1E2230" stroke="#3C3F50" stroke-width="1"/>
+  <rect x="766" y="314" width="100" height="24" rx="4" fill="#2D2D2D"/>
+  <text x="788" y="330" font-size="10" fill="#FFFFFF">Classic</text>
+  <!-- Language -->
+  <rect x="24" y="384" width="440" height="56" rx="8" fill="#1A1D27"/>
+  <text x="40" y="408" font-size="12" class="t2">Language</text>
+  <rect x="130" y="392" width="80" height="28" rx="6" fill="#1E2230" stroke="#3C3F50" stroke-width="1"/>
+  <text x="148" y="411" font-size="12">CN ▾</text>
+  <!-- Exit Confirm -->
+  <rect x="480" y="384" width="446" height="56" rx="8" fill="#1A1D27"/>
+  <text x="496" y="408" font-size="12" class="t2">Exit Confirmation</text>
+  <rect x="640" y="396" width="36" height="20" rx="10" fill="#3DD68C"/>
+  <circle cx="666" cy="406" r="8" fill="#fff"/>
+  <!-- Security Status -->
+  <rect x="24" y="456" width="902" height="100" rx="8" fill="#1A1D27"/>
+  <text x="40" y="480" font-size="13" font-weight="600">Security Status</text>
+  <circle cx="44" cy="504" r="4" fill="#3DD68C"/>
+  <text x="56" y="508" font-size="12" class="t2">API Key:</text>
+  <text x="130" y="508" font-size="12" class="accent">● Configured</text>
+  <circle cx="280" cy="504" r="4" fill="#3DD68C"/>
+  <text x="292" y="508" font-size="12" class="t2">Port:</text>
+  <text x="330" y="508" font-size="12">18789</text>
+  <circle cx="410" cy="504" r="4" fill="#3DD68C"/>
+  <text x="422" y="508" font-size="12" class="t2">Config Dir:</text>
+  <text x="510" y="508" font-size="12" class="accent">Writable ✓</text>
+  <!-- Reconfigure Button -->
+  <rect x="24" y="580" width="902" height="48" rx="8" fill="#1A1D27"/>
+  <rect x="380" y="588" width="190" height="32" rx="6" fill="#1E2230" stroke="#3C3F50" stroke-width="1"/>
+  <text x="410" y="609" font-size="13">🔧 Reconfigure Wizard</text>
+</svg>

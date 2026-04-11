@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500"><style>text{font-family:"Noto Sans SC","PingFang SC",sans-serif}
+.t{fill:#2D1B14;font-weight:700}.t2{fill:#2D1B14;font-weight:600}
+.s{fill:#8B7355;font-size:12px}.s2{fill:#C4A882;font-size:11px}
+.l{fill:#2D1B14;font-size:14px}.l2{fill:#2D1B14;font-size:13px}
+.a{fill:#FF7F50}.g{fill:#7ECFB3}.w{fill:#FFF}.dim{fill:#C4A882}</style><defs>
+  <filter id="s"><feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#D4A574" flood-opacity="0.15"/></filter>
+  <filter id="s2"><feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#D4A574" flood-opacity="0.12"/></filter>
+  <linearGradient id="ag"><stop offset="0%" stop-color="#FF7F50"/><stop offset="100%" stop-color="#FFB347"/></linearGradient>
+  <linearGradient id="pg"><stop offset="0%" stop-color="#FFF8F3"/><stop offset="100%" stop-color="#FFE8D6"/></linearGradient>
+  <linearGradient id="mg"><stop offset="0%" stop-color="#7ECFB3"/><stop offset="100%" stop-color="#B8E8D0"/></linearGradient>
+  <linearGradient id="pk"><stop offset="0%" stop-color="#FF6B8A"/><stop offset="100%" stop-color="#FFB347"/></linearGradient>
+</defs><rect width="900" height="500" fill="#FFF8F3"/>
+<text x="40" y="60" text-anchor="start" class="t" font-size="18">系统托盘菜单</text><rect x="500" y="80" width="260" height="340" rx="16" fill="#FFFFFF" filter="url(#s2)" stroke="#F0E0D0" stroke-width="1"/><text x="520" y="110" text-anchor="start" class="g" font-size="12">🟢 Gateway: Ready</text><line x1="515" y1="120" x2="745" y2="120" stroke="#F0E0D0" stroke-width="1"/><text x="520" y="145" text-anchor="start" class="l2">▶ Start Gateway</text><text x="520" y="175" text-anchor="start" class="l2">⏹ Stop Gateway</text><text x="520" y="205" text-anchor="start" class="l2">🔄 Restart OpenClaw</text><text x="520" y="235" text-anchor="start" class="l2">🔃 Refresh Status</text><line x1="515" y1="250" x2="745" y2="250" stroke="#F0E0D0" stroke-width="1"/><text x="520" y="280" text-anchor="start" class="l2">☑ Boot Start</text><line x1="515" y1="295" x2="745" y2="295" stroke="#F0E0D0" stroke-width="1"/><text x="520" y="325" text-anchor="start" class="l2">⚙️ Open Settings</text><text x="520" y="355" text-anchor="start" class="l2">ℹ️ About</text><text x="520" y="385" text-anchor="start" class="a" font-size="13">🚪 Exit</text></svg>

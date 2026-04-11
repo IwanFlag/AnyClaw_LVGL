@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+  <rect width="800" height="600" fill="#000" opacity="0.6"/>
+  <!-- Modal 500x250 centered -->
+  <rect x="150" y="175" width="500" height="250" rx="14" fill="#1A1D27" filter="url(#shadow)"/>
+  <!-- Title -->
+  <text x="400" y="220" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="bold" fill="#E8ECF4">添加自定义模型</text>
+  <!-- Input label -->
+  <text x="180" y="258" font-family="Arial,sans-serif" font-size="13" fill="#8B92A8">模型名称：</text>
+  <!-- Input box -->
+  <rect x="180" y="266" width="440" height="40" rx="8" fill="#13151E" stroke="#6B7280" stroke-width="1.2"/>
+  <text x="196" y="292" font-family="Arial,sans-serif" font-size="14" fill="#6B7280">例如: my-custom-model-v1</text>
+  <!-- Buttons -->
+  <rect x="180" y="330" width="100" height="40" rx="8" fill="#3DD68C"/>
+  <text x="230" y="356" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#fff">确认</text>
+  <rect x="295" y="330" width="100" height="40" rx="8" fill="#1E2230" stroke="#6B7280" stroke-width="1"/>
+  <text x="345" y="356" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" fill="#8B92A8">取消</text>
+</svg>

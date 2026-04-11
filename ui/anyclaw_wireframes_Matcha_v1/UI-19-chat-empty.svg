@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="500" height="350" viewBox="0 0 500 350">
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="500" height="350" fill="#0F1117" rx="8"/>
+  <!-- Center icon -->
+  <text x="250" y="120" font-family="sans-serif" font-size="48" text-anchor="middle" filter="url(#glow)">🧄🦞</text>
+  <!-- Main text -->
+  <text x="250" y="175" font-family="sans-serif" font-size="18" font-weight="bold" fill="#E8ECF4" text-anchor="middle">龙虾要吃蒜蓉的</text>
+  <text x="250" y="205" font-family="sans-serif" font-size="14" fill="#8B92A8" text-anchor="middle">有什么我能帮你？</text>
+  <!-- Suggestion capsule 1 -->
+  <rect x="100" y="240" width="140" height="36" rx="18" fill="#1E2230" stroke="#2A2D3A" stroke-width="1"/>
+  <text x="170" y="263" font-family="sans-serif" font-size="12" fill="#8B92A8" text-anchor="middle">💡 帮我写一段代码</text>
+  <!-- Suggestion capsule 2 -->
+  <rect x="260" y="240" width="140" height="36" rx="18" fill="#1E2230" stroke="#2A2D3A" stroke-width="1"/>
+  <text x="330" y="263" font-family="sans-serif" font-size="12" fill="#8B92A8" text-anchor="middle">📖 解释一个概念</text>
+  <!-- Subtle hint -->
+  <text x="250" y="310" font-family="sans-serif" font-size="11" fill="#6B7280" text-anchor="middle">在下方输入框开始对话</text>
+</svg>

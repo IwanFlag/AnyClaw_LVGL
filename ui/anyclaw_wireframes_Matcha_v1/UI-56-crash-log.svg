@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="620" height="420" viewBox="0 0 620 420">
+  <defs>
+    <style>
+      .bg { fill: #0F1117; }
+      .panel { fill: #1A1D27; rx: 8; }
+      .raised { fill: #1E2230; }
+      .surface { fill: #13151E; }
+      .text { fill: #E8ECF4; font-family: 'Segoe UI', sans-serif; font-size: 14px; }
+      .text2 { fill: #8B92A8; font-family: 'Segoe UI', sans-serif; font-size: 12px; }
+      .text3 { fill: #6B7280; font-family: 'Segoe UI', sans-serif; font-size: 11px; }
+      .mono { fill: #E8ECF4; font-family: 'Consolas', 'Courier New', monospace; font-size: 11px; }
+      .title { fill: #E8ECF4; font-family: 'Segoe UI', sans-serif; font-size: 16px; font-weight: 600; }
+      .accent { fill: #3DD68C; }
+      .danger { fill: #FF6B6B; }
+      .warning { fill: #FFBE3D; }
+      .btn-text { fill: #E8ECF4; font-family: 'Segoe UI', sans-serif; font-size: 12px; }
+      .btn-accent-text { fill: #0F1117; font-family: 'Segoe UI', sans-serif; font-size: 12px; font-weight: 600; }
+    </style>
+    <linearGradient id="btnExport" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3DD68C"/>
+      <stop offset="100%" stop-color="#2BB876"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect class="bg" width="620" height="420" rx="12"/>
+  <!-- Title bar -->
+  <text class="title" x="20" y="36">崩溃日志查看</text>
+  <!-- Export button -->
+  <rect x="440" y="18" width="72" height="30" rx="6" fill="url(#btnExport)"/>
+  <text class="btn-accent-text" x="453" y="38">📤 导出</text>
+  <!-- Clear button -->
+  <rect x="520" y="18" width="72" height="30" rx="6" fill="#1E2230" stroke="#6B7280" stroke-width="1"/>
+  <text class="btn-text" x="537" y="38">🗑 清空</text>
+  <!-- Log list -->
+  <!-- Log entry 1 - Fatal -->
+  <rect class="panel" x="20" y="60" width="580" height="52" rx="8"/>
+  <circle cx="40" cy="86" r="6" fill="#FF6B6B"/>
+  <text class="text2" x="56" y="82">2024-12-15 14:23:07</text>
+  <text class="text" x="56" y="100">Fatal Exception — Segmentation Fault</text>
+  <text class="text3" x="480" y="82" text-anchor="end">已展开 ▼</text>
+  <!-- Expanded detail -->
+  <rect class="surface" x="20" y="112" width="580" height="110" rx="0" ry="8"/>
+  <text class="text2" x="36" y="132">异常类型: SIGSEGV (Segmentation Fault)</text>
+  <text class="text2" x="36" y="150">崩溃地址: 0x00007FF8A3B2C0E4</text>
+  <text class="text2" x="36" y="168">线程 ID: Thread-0x1A2B (Main Thread)</text>
+  <text class="mono" x="36" y="190">Stack Trace:</text>
+  <text class="mono" x="36" y="206">  #0  libcore.so: gateway_handle_msg+0x4C</text>
+  <text class="mono" x="340" y="206">#1  libcore.so: event_loop_run+0x1A8</text>
+  <!-- Log entry 2 - Warning -->
+  <rect class="panel" x="20" y="232" width="580" height="52" rx="8"/>
+  <circle cx="40" cy="258" r="6" fill="#FFBE3D"/>
+  <text class="text2" x="56" y="254">2024-12-15 13:45:22</text>
+  <text class="text" x="56" y="272">Warning — Memory allocation failed</text>
+  <text class="text3" x="480" y="254" text-anchor="end">展开 ▶</text>
+  <!-- Log entry 3 - Warning -->
+  <rect class="panel" x="20" y="294" width="580" height="52" rx="8"/>
+  <circle cx="40" cy="320" r="6" fill="#FFBE3D"/>
+  <text class="text2" x="56" y="316">2024-12-15 12:08:55</text>
+  <text class="text" x="56" y="334">Warning — Connection timeout (retry 3/3)</text>
+  <text class="text3" x="480" y="316" text-anchor="end">展开 ▶</text>
+  <!-- Footer -->
+  <text class="text3" x="310" y="370" text-anchor="middle">共 3 条日志 · 最后更新 14:23:07</text>
+  <rect class="raised" x="20" y="388" width="580" height="20" rx="4"/>
+</svg>

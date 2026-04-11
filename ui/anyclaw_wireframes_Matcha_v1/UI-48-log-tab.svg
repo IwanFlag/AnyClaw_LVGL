@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="950" height="620" viewBox="0 0 950 620">
+  <defs>
+    <style>
+      text{font-family:'Inter','Segoe UI',sans-serif;fill:#E8ECF4}
+      .t2{fill:#8B92A8} .t3{fill:#6B7280} .accent{fill:#3DD68C} .danger{fill:#FF6B6B} .warning{fill:#FFBE3D} .info{fill:#6C9FFF}
+    </style>
+  </defs>
+  <rect width="950" height="620" rx="12" fill="#0F1117"/>
+  <!-- Tab Bar -->
+  <rect x="0" y="0" width="950" height="44" rx="12" fill="#13151E"/>
+  <rect x="0" y="32" width="950" height="12" fill="#13151E"/>
+  <text x="30" y="28" font-size="13" fill="#8B92A8">General</text>
+  <text x="100" y="28" font-size="13" fill="#8B92A8">Permissions</text>
+  <text x="200" y="28" font-size="13" fill="#8B92A8">Model</text>
+  <text x="275" y="28" font-size="13" fill="#8B92A8">Feature</text>
+  <text x="355" y="28" font-size="13" fill="#8B92A8">Tracing</text>
+  <text x="435" y="28" font-size="13" font-weight="600" class="accent">Log</text>
+  <rect x="431" y="40" width="28" height="2" rx="1" fill="#3DD68C"/>
+  <text x="485" y="28" font-size="13" fill="#8B92A8">KB</text>
+  <text x="525" y="28" font-size="13" fill="#8B92A8">About</text>
+  <line x1="0" y1="44" x2="950" y2="44" stroke="#1E2230" stroke-width="1"/>
+
+  <!-- Filter Switches -->
+  <rect x="24" y="56" width="902" height="48" rx="8" fill="#1A1D27"/>
+  <text x="40" y="82" font-size="12" class="t2">Filter:</text>
+  <!-- DEBUG -->
+  <rect x="100" y="66" width="36" height="20" rx="10" fill="#6B7280"/>
+  <circle cx="126" cy="76" r="8" fill="#fff"/>
+  <text x="142" y="80" font-size="11" class="t3">DEBUG</text>
+  <!-- INFO ON -->
+  <rect x="220" y="66" width="36" height="20" rx="10" fill="#6C9FFF"/>
+  <circle cx="246" cy="76" r="8" fill="#fff"/>
+  <text x="262" y="80" font-size="11" class="info">INFO</text>
+  <!-- WARN ON -->
+  <rect x="320" y="66" width="36" height="20" rx="10" fill="#FFBE3D"/>
+  <circle cx="346" cy="76" r="8" fill="#fff"/>
+  <text x="362" y="80" font-size="11" class="warning">WARN</text>
+  <!-- ERROR ON -->
+  <rect x="430" y="66" width="36" height="20" rx="10" fill="#FF6B6B"/>
+  <circle cx="456" cy="76" r="8" fill="#fff"/>
+  <text x="472" y="80" font-size="11" class="danger">ERROR</text>
+
+  <!-- Log Entries -->
+  <rect x="24" y="114" width="902" height="440" rx="8" fill="#1A1D27"/>
+  <!-- 1 - INFO -->
+  <rect x="32" y="122" width="886" height="36" rx="4" fill="#1E2230"/>
+  <text x="40" y="145" font-size="11" font-family="monospace" class="t3">02:45:12</text>
+  <rect x="120" y="132" width="36" height="16" rx="8" fill="#6C9FFF30"/>
+  <text x="127" y="144" font-size="9" class="info">INFO</text>
+  <text x="164" y="145" font-size="11">Gateway started on port 18789</text>
+  <!-- 2 - INFO -->
+  <rect x="32" y="162" width="886" height="36" rx="4" fill="#13151E"/>
+  <text x="40" y="185" font-size="11" font-family="monospace" class="t3">02:45:13</text>
+  <rect x="120" y="172" width="36" height="16" rx="8" fill="#6C9FFF30"/>
+  <text x="127" y="184" font-size="9" class="info">INFO</text>
+  <text x="164" y="185" font-size="11">Model mimo-v2-pro loaded successfully</text>
+  <!-- 3 - WARN -->
+  <rect x="32" y="202" width="886" height="36" rx="4" fill="#1E2230"/>
+  <text x="40" y="225" font-size="11" font-family="monospace" class="t3">02:45:18</text>
+  <rect x="120" y="212" width="40" height="16" rx="8" fill="#FFBE3D30"/>
+  <text x="125" y="224" font-size="9" class="warning">WARN</text>
+  <text x="168" y="225" font-size="11">API rate limit approaching (80%)</text>
+  <!-- 4 - INFO -->
+  <rect x="32" y="242" width="886" height="36" rx="4" fill="#13151E"/>
+  <text x="40" y="265" font-size="11" font-family="monospace" class="t3">02:45:20</text>
+  <rect x="120" y="252" width="36" height="16" rx="8" fill="#6C9FFF30"/>
+  <text x="127" y="264" font-size="9" class="info">INFO</text>
+  <text x="164" y="265" font-size="11">Session initialized for user</text>
+  <!-- 5 - ERROR -->
+  <rect x="32" y="282" width="886" height="36" rx="4" fill="#1E2230"/>
+  <text x="40" y="305" font-size="11" font-family="monospace" class="t3">02:45:25</text>
+  <rect x="120" y="292" width="42" height="16" rx="8" fill="#FF6B6B30"/>
+  <text x="125" y="304" font-size="9" class="danger">ERROR</text>
+  <text x="170" y="305" font-size="11">Failed to connect to knowledge base</text>
+  <!-- 6 - INFO -->
+  <rect x="32" y="322" width="886" height="36" rx="4" fill="#13151E"/>
+  <text x="40" y="345" font-size="11" font-family="monospace" class="t3">02:45:30</text>
+  <rect x="120" y="332" width="36" height="16" rx="8" fill="#6C9FFF30"/>
+  <text x="127" y="344" font-size="9" class="info">INFO</text>
+  <text x="164" y="345" font-size="11">Health check passed</text>
+  <!-- 7 - WARN -->
+  <rect x="32" y="362" width="886" height="36" rx="4" fill="#1E2230"/>
+  <text x="40" y="385" font-size="11" font-family="monospace" class="t3">02:45:35</text>
+  <rect x="120" y="372" width="40" height="16" rx="8" fill="#FFBE3D30"/>
+  <text x="125" y="384" font-size="9" class="warning">WARN</text>
+  <text x="168" y="385" font-size="11">Memory usage above 75%</text>
+  <!-- 8 - INFO -->
+  <rect x="32" y="402" width="886" height="36" rx="4" fill="#13151E"/>
+  <text x="40" y="425" font-size="11" font-family="monospace" class="t3">02:45:40</text>
+  <rect x="120" y="412" width="36" height="16" rx="8" fill="#6C9FFF30"/>
+  <text x="127" y="424" font-size="9" class="info">INFO</text>
+  <text x="164" y="425" font-size="11">Config reloaded from disk</text>
+  <!-- 9 - INFO -->
+  <rect x="32" y="442" width="886" height="36" rx="4" fill="#1E2230"/>
+  <text x="40" y="465" font-size="11" font-family="monospace" class="t3">02:45:45</text>
+  <rect x="120" y="452" width="36" height="16" rx="8" fill="#6C9FFF30"/>
+  <text x="127" y="464" font-size="9" class="info">INFO</text>
+  <text x="164" y="465" font-size="11">Permissions validated for session</text>
+  <!-- 10 - ERROR -->
+  <rect x="32" y="482" width="886" height="36" rx="4" fill="#13151E"/>
+  <text x="40" y="505" font-size="11" font-family="monospace" class="t3">02:45:50</text>
+  <rect x="120" y="492" width="42" height="16" rx="8" fill="#FF6B6B30"/>
+  <text x="125" y="504" font-size="9" class="danger">ERROR</text>
+  <text x="170" y="505" font-size="11">Timeout waiting for model response</text>
+
+  <!-- Buttons -->
+  <rect x="24" y="568" width="100" height="32" rx="6" fill="#1E2230" stroke="#3C3F50" stroke-width="1"/>
+  <text x="46" y="589" font-size="12">Export</text>
+  <rect x="134" y="568" width="100" height="32" rx="6" fill="#1E2230" stroke="#FF6B6B40" stroke-width="1"/>
+  <text x="160" y="589" font-size="12" class="danger">Clear</text>
+</svg>

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="500" viewBox="0 0 700 500">
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+  <!-- Background overlay -->
+  <rect width="700" height="500" fill="#0F1117"/>
+  <rect width="700" height="500" fill="#000000" opacity="0.6"/>
+  <!-- Dialog -->
+  <rect x="50" y="30" width="600" height="440" rx="12" fill="#1E2530" stroke="#3DD68C20" stroke-width="1" filter="url(#shadow)"/>
+  <!-- Title -->
+  <text x="350" y="72" text-anchor="middle" font-family="Inter, sans-serif" font-size="18" font-weight="700" fill="#E8ECF4">创建工作区</text>
+  <!-- Template cards row 1 -->
+  <!-- Card 1: Agent -->
+  <rect x="80" y="95" width="250" height="110" rx="10" fill="#1A1D27" stroke="#3DD68C20" stroke-width="1"/>
+  <text x="105" y="130" font-size="28">🤖</text>
+  <text x="145" y="125" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#E8ECF4">AI Agent</text>
+  <text x="105" y="155" font-family="Inter, sans-serif" font-size="12" fill="#8B92A8">智能代理工作区，支持多模态</text>
+  <text x="105" y="175" font-family="Inter, sans-serif" font-size="12" fill="#8B92A8">推理和工具调用</text>
+  <!-- Card 2: Code -->
+  <rect x="370" y="95" width="250" height="110" rx="10" fill="#1A1D27" stroke="#3DD68C40" stroke-width="1.5"/>
+  <text x="395" y="130" font-size="28">💻</text>
+  <text x="435" y="125" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#E8ECF4">Code Dev</text>
+  <text x="395" y="155" font-family="Inter, sans-serif" font-size="12" fill="#8B92A8">代码开发工作区，集成Git</text>
+  <text x="395" y="175" font-family="Inter, sans-serif" font-size="12" fill="#8B92A8">和终端调试环境</text>
+  <!-- Template cards row 2 -->
+  <!-- Card 3: Writing -->
+  <rect x="80" y="220" width="250" height="110" rx="10" fill="#1A1D27" stroke="#3DD68C0A" stroke-width="1"/>
+  <text x="105" y="255" font-size="28">✍️</text>
+  <text x="145" y="250" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#E8ECF4">Writing</text>
+  <text x="105" y="280" font-family="Inter, sans-serif" font-size="12" fill="#8B92A8">写作工作区，支持Markdown</text>
+  <text x="105" y="300" font-family="Inter, sans-serif" font-size="12" fill="#8B92A8">和文档协作</text>
+  <!-- Card 4: Data -->
+  <rect x="370" y="220" width="250" height="110" rx="10" fill="#1A1D27" stroke="#3DD68C0A" stroke-width="1"/>
+  <text x="395" y="255" font-size="28">📊</text>
+  <text x="435" y="250" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#E8ECF4">Data Analysis</text>
+  <text x="395" y="280" font-family="Inter, sans-serif" font-size="12" fill="#8B92A8">数据分析工作区，包含</text>
+  <text x="395" y="300" font-family="Inter, sans-serif" font-size="12" fill="#8B92A8">Jupyter和可视化工具</text>
+  <!-- Path input -->
+  <text x="80" y="360" font-family="Inter, sans-serif" font-size="13" fill="#8B92A8">工作区路径</text>
+  <rect x="80" y="368" width="540" height="38" rx="8" fill="#1A1D27" stroke="#3DD68C20" stroke-width="1"/>
+  <text x="95" y="392" font-family="JetBrains Mono, monospace" font-size="13" fill="#8B92A8">~/anyclaw-workspaces/my-project</text>
+  <!-- Confirm button -->
+  <rect x="260" y="425" width="180" height="38" rx="8" fill="#3DD68C"/>
+  <text x="350" y="449" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#0F1117">确认创建</text>
+</svg>

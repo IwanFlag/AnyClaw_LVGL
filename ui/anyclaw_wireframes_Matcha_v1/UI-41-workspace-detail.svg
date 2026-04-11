@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+  <rect width="800" height="600" fill="#000" opacity="0.6"/>
+  <!-- Modal 520x310 -->
+  <rect x="140" y="145" width="520" height="310" rx="14" fill="#1A1D27" filter="url(#shadow)"/>
+  <!-- Title -->
+  <text x="400" y="190" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="bold" fill="#E8ECF4">📁 工作区详情</text>
+  <!-- Info rows -->
+  <rect x="170" y="205" width="460" height="130" rx="10" fill="#13151E"/>
+  <!-- Name -->
+  <text x="195" y="232" font-family="Arial,sans-serif" font-size="13" fill="#8B92A8">名称:</text>
+  <text x="370" y="232" font-family="Arial,sans-serif" font-size="13" fill="#E8ECF4" text-anchor="end">anyclaw-workspace</text>
+  <!-- Path -->
+  <text x="195" y="256" font-family="Arial,sans-serif" font-size="13" fill="#8B92A8">路径:</text>
+  <text x="370" y="256" font-family="monospace" font-size="12" fill="#E8ECF4" text-anchor="end">/home/user/.openclaw/workspace</text>
+  <!-- Disk -->
+  <text x="195" y="280" font-family="Arial,sans-serif" font-size="13" fill="#8B92A8">磁盘:</text>
+  <text x="370" y="280" font-family="Arial,sans-serif" font-size="13" fill="#E8ECF4" text-anchor="end">85 GB 可用</text>
+  <!-- Health -->
+  <text x="195" y="304" font-family="Arial,sans-serif" font-size="13" fill="#8B92A8">健康:</text>
+  <text x="370" y="304" font-family="Arial,sans-serif" font-size="13" fill="#3DD68C" text-anchor="end">✓ 正常</text>
+  <!-- File list -->
+  <text x="400" y="355" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#8B92A8">AGENTS.md · SOUL.md · MEMORY.md</text>
+  <!-- Close button -->
+  <rect x="350" y="375" width="100" height="38" rx="8" fill="#1E2230" stroke="#6B7280" stroke-width="1"/>
+  <text x="400" y="400" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" fill="#8B92A8">关闭</text>
+</svg>

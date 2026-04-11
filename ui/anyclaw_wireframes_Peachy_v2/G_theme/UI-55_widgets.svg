@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500">
+<style>text{font-family:"Noto Sans SC","PingFang SC",sans-serif}.t{fill:#2D1B14;font-weight:700}.t2{fill:#2D1B14;font-weight:600}.s{fill:#8B7355;font-size:12px}.s2{fill:#C4A882;font-size:11px}.l{fill:#2D1B14;font-size:14px}.l2{fill:#2D1B14;font-size:13px}.dim{fill:#C4A882}</style><defs><filter id="s2"><feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#D4A574" flood-opacity="0.12"/></filter><linearGradient id="ag"><stop offset="0%" stop-color="#FF7F50"/><stop offset="100%" stop-color="#FFB347"/></linearGradient></defs>
+<rect width="900" height="500" fill="#FFF8F3"/>
+<text x="40" y="50" class="t" font-size="18">通用控件体系 🧩</text>
+<text x="40" y="80" class="s">按钮:</text>
+<rect x="40" y="90" width="120" height="36" rx="18" fill="url(#ag)"/><text x="100" y="113" fill="white" text-anchor="middle" font-size="13">Primary</text>
+<rect x="175" y="90" width="100" height="36" rx="18" fill="#7ECFB3"/><text x="225" y="113" fill="white" text-anchor="middle" font-size="13">Secondary</text>
+<rect x="290" y="90" width="80" height="36" rx="18" fill="#FFF1E8" stroke="#F0E0D0"/><text x="330" y="113" fill="#2D1B14" text-anchor="middle" font-size="13">Ghost</text>
+<rect x="385" y="90" width="80" height="36" rx="18" fill="#FF5C5C"/><text x="425" y="113" fill="white" text-anchor="middle" font-size="13">Danger</text>
+<text x="40" y="155" class="s">输入框:</text>
+<rect x="40" y="165" width="300" height="40" rx="12" fill="#FFF1E8" stroke="#F0E0D0"/><text x="55" y="191" fill="#C4A882" font-size="13">输入消息...</text>
+<text x="40" y="235" class="s">开关:</text>
+<rect x="40" y="245" width="48" height="26" rx="13" fill="#F0E0D0"/><circle cx="55" cy="258" r="10" fill="#C4A882"/>
+<rect x="100" y="245" width="48" height="26" rx="13" fill="#FF7F50"/><circle cx="135" cy="258" r="10" fill="white"/>
+<text x="40" y="300" class="s">复选框:</text>
+<rect x="40" y="310" width="22" height="22" rx="6" fill="#FFF1E8" stroke="#F0E0D0"/>
+<rect x="75" y="310" width="22" height="22" rx="6" fill="#FF7F50"/><text x="80" y="327" fill="white" font-size="12">✓</text>
+<text x="40" y="365" class="s">进度条:</text>
+<rect x="40" y="375" width="300" height="8" rx="4" fill="#FFF1E8"/><rect x="40" y="375" width="200" height="8" rx="4" fill="url(#ag)"/>
+<text x="350" y="383" class="s">66%</text>
+<text x="40" y="420" class="s">状态胶囊:</text>
+<rect x="40" y="430" width="80" height="22" rx="11" fill="#E8FFE8"/><text x="80" y="446" fill="#7ECFB3" text-anchor="middle" font-size="10" font-weight="600">RUNNING</text>
+<rect x="130" y="430" width="60" height="22" rx="11" fill="#FFF3E0"/><text x="160" y="446" fill="#FFB347" text-anchor="middle" font-size="10" font-weight="600">BUSY</text>
+<rect x="200" y="430" width="60" height="22" rx="11" fill="#FFE8E8"/><text x="230" y="446" fill="#FF5C5C" text-anchor="middle" font-size="10" font-weight="600">ERROR</text>
+</svg>

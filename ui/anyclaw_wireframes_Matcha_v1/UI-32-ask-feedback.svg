@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+  <rect width="800" height="600" fill="#000" opacity="0.6"/>
+  <!-- Modal 700x460 -->
+  <rect x="50" y="70" width="700" height="460" rx="14" fill="#1A1D27" filter="url(#shadow)"/>
+  <!-- Title -->
+  <text x="400" y="118" text-anchor="middle" font-family="Arial,sans-serif" font-size="22" font-weight="bold" fill="#E8ECF4">🤔 AI 需要你的决定</text>
+  <!-- Description box -->
+  <rect x="80" y="140" width="640" height="100" rx="10" fill="#13151E"/>
+  <text x="400" y="168" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" fill="#E8ECF4">建议将当前模型从 GPT-4o 切换到 Claude Sonnet</text>
+  <text x="400" y="192" text-anchor="middle" font-family="Arial,sans-serif" font-size="13" fill="#8B92A8">原因：当前任务涉及长文本推理，Claude 在该场景下表现更优</text>
+  <text x="400" y="212" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#6B7280">置信度: 85%</text>
+  <!-- Preset option buttons -->
+  <rect x="80" y="260" width="310" height="46" rx="8" fill="#3DD68C" opacity="0.12" stroke="#3DD68C" stroke-width="1"/>
+  <text x="235" y="288" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" font-weight="bold" fill="#3DD68C">✅ 同意切换</text>
+  <rect x="410" y="260" width="310" height="46" rx="8" fill="#FF6B6B" opacity="0.12" stroke="#FF6B6B" stroke-width="1"/>
+  <text x="565" y="288" text-anchor="middle" font-family="Arial,sans-serif" font-size="15" font-weight="bold" fill="#FF6B6B">❌ 保持当前</text>
+  <!-- Custom reply input -->
+  <text x="80" y="338" font-family="Arial,sans-serif" font-size="13" fill="#8B92A8">自定义回复：</text>
+  <rect x="80" y="348" width="530" height="42" rx="8" fill="#13151E" stroke="#6B7280" stroke-width="1"/>
+  <text x="96" y="374" font-family="Arial,sans-serif" font-size="14" fill="#6B7280">输入你的决定...</text>
+  <!-- Send button -->
+  <rect x="620" y="348" width="90" height="42" rx="8" fill="#6C9FFF"/>
+  <text x="665" y="375" text-anchor="middle" font-family="Arial,sans-serif" font-size="14" font-weight="bold" fill="#fff">发送</text>
+  <!-- Tips -->
+  <text x="400" y="420" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" fill="#6B7280">提示：不回复将在 120 秒后使用默认建议</text>
+</svg>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500"><style>text{font-family:"Noto Sans SC","PingFang SC",sans-serif}
+.t{fill:#2D1B14;font-weight:700}.t2{fill:#2D1B14;font-weight:600}
+.s{fill:#8B7355;font-size:12px}.s2{fill:#C4A882;font-size:11px}
+.l{fill:#2D1B14;font-size:14px}.l2{fill:#2D1B14;font-size:13px}
+.a{fill:#FF7F50}.g{fill:#7ECFB3}.w{fill:#FFF}.dim{fill:#C4A882}</style><defs>
+  <filter id="s"><feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#D4A574" flood-opacity="0.15"/></filter>
+  <filter id="s2"><feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#D4A574" flood-opacity="0.12"/></filter>
+  <linearGradient id="ag"><stop offset="0%" stop-color="#FF7F50"/><stop offset="100%" stop-color="#FFB347"/></linearGradient>
+  <linearGradient id="pg"><stop offset="0%" stop-color="#FFF8F3"/><stop offset="100%" stop-color="#FFE8D6"/></linearGradient>
+  <linearGradient id="mg"><stop offset="0%" stop-color="#7ECFB3"/><stop offset="100%" stop-color="#B8E8D0"/></linearGradient>
+  <linearGradient id="pk"><stop offset="0%" stop-color="#FF6B8A"/><stop offset="100%" stop-color="#FFB347"/></linearGradient>
+</defs><rect width="900" height="500" fill="#FFF8F3"/>
+<rect width="900" height="500" fill="#FFF8F3" opacity="0.92"/>
+<rect x="230" y="100" width="440" height="280" rx="24" fill="#FFFFFF" filter="url(#s2)" stroke="#F0E0D0" stroke-width="1"/><text x="450" y="140" text-anchor="middle" class="t" font-size="18">🔒 工作区已被占用</text><text x="270" y="175" text-anchor="start" class="l">另一个实例正在使用此工作区:</text><text x="270" y="200" text-anchor="start" class="a" font-size="12">D:\Projects\AnyClaw</text><text x="270" y="230" text-anchor="start" class="s">PID: 12345 (存活中)</text><rect x="270" y="265" width="160" height="40" rx="20" fill="url(#ag)"/><text x="350" y="290" text-anchor="middle" class="w" font-size="13">选择其他目录</text><rect x="450" y="265" width="120" height="40" rx="20" fill="#FF5C5C"/><text x="510" y="290" text-anchor="middle" fill="#FFF" font-size="13">退出程序</text></svg>
