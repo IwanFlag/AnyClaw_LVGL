@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="260" viewBox="0 0 420 260">
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="420" height="260" fill="#0F1117" rx="8"/>
+  <!-- Center icon -->
+  <text x="210" y="90" font-family="sans-serif" font-size="48" text-anchor="middle" filter="url(#glow)">⚡</text>
+  <!-- Main text -->
+  <text x="210" y="135" font-family="sans-serif" font-size="18" font-weight="bold" fill="#E8ECF4" text-anchor="middle">AI工作台已就绪</text>
+  <text x="210" y="165" font-family="sans-serif" font-size="13" fill="#8B92A8" text-anchor="middle">在Chat中发送任务</text>
+  <!-- CTA button -->
+  <rect x="135" y="195" width="150" height="36" rx="18" fill="#1E2230" stroke="#3DD68C" stroke-width="1"/>
+  <text x="210" y="218" font-family="sans-serif" font-size="12" fill="#3DD68C" text-anchor="middle">查看示例任务</text>
+</svg>

@@ -16,24 +16,24 @@ static PermValue default_value(PermKey key) {
     switch (key) {
         case PermKey::FS_READ_WORKSPACE:   return PermValue::Allow;
         case PermKey::FS_WRITE_WORKSPACE:  return PermValue::Allow;
-        case PermKey::FS_READ_EXTERNAL:    return PermValue::Allow;
-        case PermKey::FS_WRITE_EXTERNAL:   return PermValue::Allow;
-        case PermKey::EXEC_SHELL:          return PermValue::Allow;
-        case PermKey::EXEC_INSTALL:        return PermValue::Allow;
-        case PermKey::EXEC_DELETE:         return PermValue::Allow;
+        case PermKey::FS_READ_EXTERNAL:    return PermValue::Ask;
+        case PermKey::FS_WRITE_EXTERNAL:   return PermValue::Ask;
+        case PermKey::EXEC_SHELL:          return PermValue::Ask;
+        case PermKey::EXEC_INSTALL:        return PermValue::Deny;
+        case PermKey::EXEC_DELETE:         return PermValue::Deny;
         case PermKey::NET_OUTBOUND:        return PermValue::Allow;
-        case PermKey::NET_INBOUND:         return PermValue::Allow;
-        case PermKey::NET_INTRANET:        return PermValue::Allow;
-        case PermKey::DEVICE_CAMERA:       return PermValue::Allow;
-        case PermKey::DEVICE_MIC:          return PermValue::Allow;
-        case PermKey::DEVICE_SCREEN:       return PermValue::Allow;
-        case PermKey::DEVICE_USB_STORAGE:  return PermValue::Allow;
-        case PermKey::DEVICE_REMOTE_NODE:  return PermValue::Allow;
-        case PermKey::DEVICE_NEW_DEVICE:   return PermValue::Allow;
+        case PermKey::NET_INBOUND:         return PermValue::Ask;
+        case PermKey::NET_INTRANET:        return PermValue::Ask;
+        case PermKey::DEVICE_CAMERA:       return PermValue::Ask;
+        case PermKey::DEVICE_MIC:          return PermValue::Ask;
+        case PermKey::DEVICE_SCREEN:       return PermValue::Ask;
+        case PermKey::DEVICE_USB_STORAGE:  return PermValue::Deny;
+        case PermKey::DEVICE_REMOTE_NODE:  return PermValue::Ask;
+        case PermKey::DEVICE_NEW_DEVICE:   return PermValue::Ask;
         case PermKey::CLIPBOARD_READ:      return PermValue::Allow;
         case PermKey::CLIPBOARD_WRITE:     return PermValue::Allow;
-        case PermKey::SYSTEM_MODIFY:       return PermValue::Allow;
-        default: return PermValue::Allow;
+        case PermKey::SYSTEM_MODIFY:       return PermValue::Deny;
+        default: return PermValue::Deny;
     }
 }
 
@@ -154,6 +154,7 @@ bool perm_check_exec(PermKey key, const char* target) {
         permissions().set(key, PermValue::Allow);
         permissions().save();
         workspace_sync_managed_sections();
+        workspace_sync_runtime_config_from_permissions();
         perm_audit_log("exec_check", target, "allow_persist");
         return true;
     }
@@ -173,6 +174,7 @@ bool perm_check_exec(PermKey key, const char* target) {
             permissions().set(key, PermValue::Allow);
             permissions().save();
             workspace_sync_managed_sections();
+            workspace_sync_runtime_config_from_permissions();
             perm_audit_log("exec_check", target, "allow_persist");
             return true;
         }
@@ -211,12 +213,12 @@ bool Permissions::load() {
         }
     }
 
-    /* Migration: old schema may cause frequent ask popups; upgrade to full-allow defaults once. */
-    if (schema < 2) {
+    /* Migration: v3 baseline uses secure defaults for risky operations. */
+    if (schema < 3) {
         for (int i = 0; i < (int)PermKey::COUNT; i++) {
-            values_[i] = PermValue::Allow;
+            values_[i] = default_value((PermKey)i);
         }
-        perm_audit_log("perm_migrate", "permission_schema", "upgrade_to_v2_full_allow");
+        perm_audit_log("perm_migrate", "permission_schema", "upgrade_to_v3_secure_defaults");
         save();
     }
 
@@ -251,7 +253,7 @@ bool Permissions::save() const {
 
     f << "{\n"
       << "  \"version\": 1,\n"
-      << "  \"permission_schema\": 2,\n"
+      << "  \"permission_schema\": 3,\n"
       << "  \"workspace_root\": \"" << workspace_root_ << "\",\n"
       << "  \"permissions\": {\n";
 

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="100" viewBox="0 0 420 100">
+  <defs>
+    <style>
+      .panel { fill: #1A1D27; }
+      .text { fill: #E8ECF4; font-family: 'Segoe UI', sans-serif; font-size: 13px; }
+      .text2 { fill: #8B92A8; font-family: 'Segoe UI', sans-serif; font-size: 11px; }
+      .text3 { fill: #6B7280; font-family: 'Segoe UI', sans-serif; font-size: 10px; }
+    </style>
+    <filter id="shadow"><feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#000" flood-opacity="0.3"/></filter>
+  </defs>
+  <!-- Bubble background -->
+  <rect class="panel" x="0" y="0" width="420" height="100" rx="8" filter="url(#shadow)"/>
+  <!-- Left accent bar -->
+  <rect x="0" y="8" width="3" height="84" rx="1.5" fill="#3DD68C"/>
+  <!-- Content -->
+  <text class="text" x="20" y="36">🟢 Gateway 已启动</text>
+  <text class="text2" x="20" y="58">OpenClaw Gateway 运行正常，所有服务已就绪</text>
+  <text class="text3" x="20" y="80">2024-12-15 14:23:07</text>
+  <!-- Close button -->
+  <text class="text3" x="400" y="24" text-anchor="end">✕</text>
+</svg>

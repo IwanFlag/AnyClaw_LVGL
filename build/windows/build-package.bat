@@ -4,10 +4,11 @@ for %%I in ("%~dp0..\..") do set "PROJECT_DIR=%%~fI"
 set "VSDEVCMD="
 set "QUIET_ARG=--quiet"
 set "SHOW_HELP=0"
-set "ARTIFACTS_DIR=%PROJECT_DIR%\artifacts\windows-native"
-set "EXE_PATH=%PROJECT_DIR%\out\windows\bin\Release\AnyClaw_LVGL.exe"
-set "SDL_PATH=%PROJECT_DIR%\out\windows\bin\Release\SDL2.dll"
-set "SDL_CACHE_PATH=%PROJECT_DIR%\thirdparty\sdl2-windows\lib\x64\SDL2.dll"
+set "BUILD_ROOT=%PROJECT_DIR%\build\windows"
+set "ARTIFACTS_DIR=%BUILD_ROOT%\artifacts"
+set "EXE_PATH=%BUILD_ROOT%\out\bin\Release\AnyClaw_LVGL.exe"
+set "SDL_PATH=%BUILD_ROOT%\out\bin\Release\SDL2.dll"
+set "SDL_CACHE_PATH=%BUILD_ROOT%\tools\runtime\SDL2\lib\x64\SDL2.dll"
 
 for %%A in (%*) do (
   if /I "%%~A"=="--quiet" set "QUIET_ARG=--quiet"
@@ -50,14 +51,14 @@ call "%~dp0build.bat" %QUIET_ARG% || exit /b 1
 
 REM Normalize output paths for both VS multi-config and NMake single-config.
 if not exist "%EXE_PATH%" (
-  if exist "%PROJECT_DIR%\out\windows\bin\AnyClaw_LVGL.exe" (
-    set "EXE_PATH=%PROJECT_DIR%\out\windows\bin\AnyClaw_LVGL.exe"
-    set "SDL_PATH=%PROJECT_DIR%\out\windows\bin\SDL2.dll"
+  if exist "%BUILD_ROOT%\out\bin\AnyClaw_LVGL.exe" (
+    set "EXE_PATH=%BUILD_ROOT%\out\bin\AnyClaw_LVGL.exe"
+    set "SDL_PATH=%BUILD_ROOT%\out\bin\SDL2.dll"
   )
 )
 if not exist "%SDL_PATH%" (
-  if exist "%PROJECT_DIR%\out\windows\bin\SDL2.dll" (
-    set "SDL_PATH=%PROJECT_DIR%\out\windows\bin\SDL2.dll"
+  if exist "%BUILD_ROOT%\out\bin\SDL2.dll" (
+    set "SDL_PATH=%BUILD_ROOT%\out\bin\SDL2.dll"
   )
 )
 

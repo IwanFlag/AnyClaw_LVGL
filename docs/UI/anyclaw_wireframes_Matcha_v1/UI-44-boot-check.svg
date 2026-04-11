@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+    <linearGradient id="progress" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3DD68C"/>
+      <stop offset="100%" stop-color="#6C9FFF"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="#000" opacity="0.6"/>
+  <!-- Modal 520x440 (expanded for 9 items) -->
+  <rect x="140" y="80" width="520" height="440" rx="14" fill="#1A1D27" filter="url(#shadow)"/>
+  <!-- Title -->
+  <text x="400" y="118" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="bold" fill="#E8ECF4">环境体检</text>
+  <!-- Progress bar -->
+  <rect x="170" y="130" width="460" height="8" rx="4" fill="#13151E"/>
+  <rect x="170" y="130" width="307" height="8" rx="4" fill="url(#progress)"/>
+  <text x="400" y="155" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" fill="#8B92A8">6 / 9 完成</text>
+  <!-- Check items list -->
+  <!-- 1. Done -->
+  <rect x="165" y="165" width="470" height="28" rx="6" fill="#13151E"/>
+  <circle cx="182" cy="179" r="5" fill="#3DD68C"/>
+  <text x="196" y="183" font-family="Arial,sans-serif" font-size="12" fill="#E8ECF4">Node.js</text>
+  <text x="440" y="183" font-family="monospace" font-size="11" fill="#8B92A8">v22.22.1</text>
+  <text x="620" y="183" text-anchor="end" font-family="Arial,sans-serif" font-size="12" fill="#3DD68C">✓</text>
+  <!-- 2. Done -->
+  <rect x="165" y="197" width="470" height="28" rx="6" fill="#13151E"/>
+  <circle cx="182" cy="211" r="5" fill="#3DD68C"/>
+  <text x="196" y="215" font-family="Arial,sans-serif" font-size="12" fill="#E8ECF4">Python</text>
+  <text x="440" y="215" font-family="monospace" font-size="11" fill="#8B92A8">3.12.3</text>
+  <text x="620" y="215" text-anchor="end" font-family="Arial,sans-serif" font-size="12" fill="#3DD68C">✓</text>
+  <!-- 3. Done -->
+  <rect x="165" y="229" width="470" height="28" rx="6" fill="#13151E"/>
+  <circle cx="182" cy="243" r="5" fill="#3DD68C"/>
+  <text x="196" y="247" font-family="Arial,sans-serif" font-size="12" fill="#E8ECF4">Git</text>
+  <text x="440" y="247" font-family="monospace" font-size="11" fill="#8B92A8">2.43.0</text>
+  <text x="620" y="247" text-anchor="end" font-family="Arial,sans-serif" font-size="12" fill="#3DD68C">✓</text>
+  <!-- 4. Done -->
+  <rect x="165" y="261" width="470" height="28" rx="6" fill="#13151E"/>
+  <circle cx="182" cy="275" r="5" fill="#3DD68C"/>
+  <text x="196" y="279" font-family="Arial,sans-serif" font-size="12" fill="#E8ECF4">Network</text>
+  <text x="440" y="279" font-family="monospace" font-size="11" fill="#8B92A8">OK</text>
+  <text x="620" y="279" text-anchor="end" font-family="Arial,sans-serif" font-size="12" fill="#3DD68C">✓</text>
+  <!-- 5. Done -->
+  <rect x="165" y="293" width="470" height="28" rx="6" fill="#13151E"/>
+  <circle cx="182" cy="307" r="5" fill="#3DD68C"/>
+  <text x="196" y="311" font-family="Arial,sans-serif" font-size="12" fill="#E8ECF4">Disk Space</text>
+  <text x="440" y="311" font-family="monospace" font-size="11" fill="#8B92A8">85 GB free</text>
+  <text x="620" y="311" text-anchor="end" font-family="Arial,sans-serif" font-size="12" fill="#3DD68C">✓</text>
+  <!-- 6. Done -->
+  <rect x="165" y="325" width="470" height="28" rx="6" fill="#13151E"/>
+  <circle cx="182" cy="339" r="5" fill="#3DD68C"/>
+  <text x="196" y="343" font-family="Arial,sans-serif" font-size="12" fill="#E8ECF4">Config</text>
+  <text x="440" y="343" font-family="monospace" font-size="11" fill="#8B92A8">valid</text>
+  <text x="620" y="343" text-anchor="end" font-family="Arial,sans-serif" font-size="12" fill="#3DD68C">✓</text>
+  <!-- 7. In progress (yellow spinner) -->
+  <rect x="165" y="357" width="470" height="28" rx="6" fill="#13151E"/>
+  <circle cx="182" cy="371" r="5" fill="#FFBE3D"/>
+  <text x="196" y="375" font-family="Arial,sans-serif" font-size="12" fill="#E8ECF4">Model Download</text>
+  <text x="440" y="375" font-family="monospace" font-size="11" fill="#8B92A8">62%</text>
+  <text x="620" y="375" text-anchor="end" font-family="Arial,sans-serif" font-size="14" fill="#FFBE3D">⟳</text>
+  <!-- 8. Waiting (gray) -->
+  <rect x="165" y="389" width="470" height="28" rx="6" fill="#13151E"/>
+  <circle cx="182" cy="403" r="5" fill="#6B7280"/>
+  <text x="196" y="407" font-family="Arial,sans-serif" font-size="12" fill="#E8ECF4">API Keys</text>
+  <text x="440" y="407" font-family="monospace" font-size="11" fill="#6B7280">pending</text>
+  <text x="620" y="407" text-anchor="end" font-family="Arial,sans-serif" font-size="12" fill="#6B7280">⏳</text>
+  <!-- 9. Waiting (gray) -->
+  <rect x="165" y="421" width="470" height="28" rx="6" fill="#13151E"/>
+  <circle cx="182" cy="435" r="5" fill="#6B7280"/>
+  <text x="196" y="439" font-family="Arial,sans-serif" font-size="12" fill="#E8ECF4">Workspace</text>
+  <text x="440" y="439" font-family="monospace" font-size="11" fill="#6B7280">pending</text>
+  <text x="620" y="439" text-anchor="end" font-family="Arial,sans-serif" font-size="12" fill="#6B7280">⏳</text>
+</svg>

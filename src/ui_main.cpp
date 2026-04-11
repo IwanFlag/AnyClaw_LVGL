@@ -19,6 +19,7 @@
 #include <fstream>
 #include <filesystem>
 #include <algorithm>
+#include <unordered_set>
 #include <windows.h>
 #include <commdlg.h>
 #include <shlobj.h>
@@ -36,6 +37,9 @@
 #include "remote_protocol.h"
 #include "remote_tcp_channel.h"
 #include "kb_store.h"
+#include "output_renderer.h"
+#include "workspace.h"
+#include "permissions.h"
 #include "cjk_font_data.h"
 #include "markdown.h"
 #include "widgets/aw_form.h"
@@ -196,8 +200,19 @@ char g_selected_model[256] = {0};   /* Currently selected model name */
 char g_api_key[256] = {0};          /* OpenRouter API key */
 enum ControlMode { CONTROL_USER = 0, CONTROL_AI = 1 };
 enum LlmAccessMode { LLM_GATEWAY = 0, LLM_DIRECT_API = 1 };
+enum AiInteractionMode { AIMODE_AUTONOMOUS = 0, AIMODE_ASK = 1, AIMODE_PLAN = 2 };
 static ControlMode g_control_mode = CONTROL_USER;
 static LlmAccessMode g_llm_access_mode = LLM_GATEWAY;
+static AiInteractionMode g_ai_interaction_mode = AIMODE_AUTONOMOUS;
+static bool g_proactive_startup_enabled = true;
+static bool g_proactive_idle_enabled = true;
+static bool g_proactive_memory_enabled = true;
+static bool g_proactive_summary_enabled = true;
+static DWORD g_proactive_last_idle_action_tick = 0;
+static int g_proactive_idle_threshold_minutes = 30;
+static int g_proactive_last_summary_yday = -1;
+static int g_proactive_last_memory_yday = -1;
+static bool g_work_show_advanced = false;
 static char g_profile_user_name[64] = "User";
 static char g_profile_user_role[64] = "Owner";
 static char g_profile_user_persona[128] = "";
@@ -207,47 +222,52 @@ static char g_profile_ai_persona[128] = "";
 static char g_profile_ai_skills[192] = "";
 static char g_profile_user_avatar[64] = "garlic";
 static bool g_remote_guard_armed = false;
+bool g_app_auth_email = false;
+bool g_app_auth_calendar = false;
 static char g_profile_ai_avatar[64] = "lobster";
 static bool g_gemma_install_opt_in = false;
 /* bit0=2B, bit1=9B, bit2=27B (multi-select) */
 static int g_gemma_model_mask = 0;
+static std::atomic<bool> g_gemma_install_started(false);
 
 /* ═══ Theme System (P2-4) ═══ */
 Theme g_theme = Theme::Dark;
 static const ThemeColors THEME_DARK = {
-    /* bg */          {0x1A, 0x1E, 0x2E},
-    /* panel */       {0x23, 0x28, 0x38},
-    /* panel_border */{0x37, 0x3C, 0x55},
-    /* input_bg */    {0x19, 0x1C, 0x26},
-    /* text */        {0xE0, 0xE0, 0xE0},    /* 白字 on 黑底 */
-    /* text_dim */    {0x90, 0x95, 0xB0},
-    /* text_hint */   {0x60, 0x65, 0x80},
-    /* accent */      {0x82, 0xAA, 0xF0},
-    /* section_label*/{0x82, 0xAA, 0xF0},
-    /* btn_action */  {0x40, 0x70, 0xC0},
-    /* btn_secondary*/{0x50, 0x55, 0x68},
-    /* btn_close */   {0xA0, 0x28, 0x28},
-    /* btn_add */     {0x28, 0x8C, 0x46},
-    /* log_bg */      {0x14, 0x14, 0x1C},
-    /* log_text */    {0x78, 0xFF, 0x78},
+    /* Matcha_v1 (default) */
+    /* bg */          {0x0F, 0x11, 0x17},
+    /* panel */       {0x1A, 0x1D, 0x27},
+    /* panel_border */{0x2A, 0x30, 0x3D},
+    /* input_bg */    {0x13, 0x15, 0x1E},
+    /* text */        {0xE8, 0xEC, 0xF4},
+    /* text_dim */    {0x8B, 0x92, 0xA8},
+    /* text_hint */   {0x6B, 0x72, 0x80},
+    /* accent */      {0x3D, 0xD6, 0x8C},
+    /* section_label*/{0x3D, 0xD6, 0x8C},
+    /* btn_action */  {0x3D, 0xD6, 0x8C},
+    /* btn_secondary*/{0x2B, 0x31, 0x40},
+    /* btn_close */   {0xFF, 0x6B, 0x6B},
+    /* btn_add */     {0x2B, 0xB6, 0x73},
+    /* log_bg */      {0x12, 0x14, 0x1B},
+    /* log_text */    {0xB6, 0xF2, 0xCC},
 };
 
 static const ThemeColors THEME_LIGHT = {
-    /* bg */          {0xF5, 0xF5, 0xF5},
+    /* Peachy_v2 */
+    /* bg */          {0xFF, 0xF7, 0xF2},
     /* panel */       {0xFF, 0xFF, 0xFF},
-    /* panel_border */{0xDD, 0xDD, 0xDD},
-    /* input_bg */    {0xFA, 0xFA, 0xFA},
-    /* text */        {0x22, 0x22, 0x22},    /* 黑字 on 白底 */
-    /* text_dim */    {0x66, 0x66, 0x66},
-    /* text_hint */   {0x99, 0x99, 0x99},
-    /* accent */      {0x22, 0x55, 0xBB},
-    /* section_label*/{0x22, 0x55, 0xBB},
-    /* btn_action */  {0x22, 0x66, 0xCC},
-    /* btn_secondary*/{0xCC, 0xCC, 0xCC},
-    /* btn_close */   {0xDD, 0x33, 0x33},
-    /* btn_add */     {0x22, 0x88, 0x33},
-    /* log_bg */      {0xF0, 0xF0, 0xF0},
-    /* log_text */    {0x22, 0x88, 0x22},
+    /* panel_border */{0xF1, 0xD9, 0xCA},
+    /* input_bg */    {0xFF, 0xFB, 0xF8},
+    /* text */        {0x2A, 0x1F, 0x1A},
+    /* text_dim */    {0x8A, 0x6E, 0x62},
+    /* text_hint */   {0xB3, 0x9D, 0x93},
+    /* accent */      {0xFF, 0x9F, 0x7A},
+    /* section_label*/{0xF5, 0x8A, 0x62},
+    /* btn_action */  {0xFF, 0x9F, 0x7A},
+    /* btn_secondary*/{0xF7, 0xE8, 0xDF},
+    /* btn_close */   {0xE5, 0x64, 0x64},
+    /* btn_add */     {0xF5, 0x8A, 0x62},
+    /* log_bg */      {0xFF, 0xF1, 0xE8},
+    /* log_text */    {0x9A, 0x4E, 0x32},
 };
 
 static const ThemeColors THEME_CLASSIC = {
@@ -310,9 +330,13 @@ static Lang detect_system_lang() {
     wchar_t buf[LOCALE_NAME_MAX_LENGTH] = {};
     if (GetSystemDefaultLocaleName(buf, LOCALE_NAME_MAX_LENGTH)) {
         if (wcsncmp(buf, L"zh", 2) == 0) return Lang::CN;
+        if (wcsncmp(buf, L"ko", 2) == 0) return Lang::KR;
+        if (wcsncmp(buf, L"ja", 2) == 0) return Lang::JP;
     }
     LANGID lid = GetSystemDefaultUILanguage();
     if (PRIMARYLANGID(lid) == LANG_CHINESE) return Lang::CN;
+    if (PRIMARYLANGID(lid) == LANG_KOREAN) return Lang::KR;
+    if (PRIMARYLANGID(lid) == LANG_JAPANESE) return Lang::JP;
     return Lang::EN;
 }
 Lang g_lang = detect_system_lang();
@@ -378,6 +402,39 @@ static void search_execute_cb(lv_event_t* e);   /* Forward */
 static void search_prev_cb(lv_event_t* e);      /* Forward */
 static void search_next_cb(lv_event_t* e);      /* Forward */
 static void relayout_panels();                  /* Forward */
+static void apply_mode_switch_visuals();
+static void work_send_cb(lv_event_t* e);
+static void chat_send_cb(lv_event_t* e);
+static void work_chat_toggle_cb(lv_event_t* e);
+static void work_chat_send_cb(lv_event_t* e);
+static void work_trace_refresh_cb(lv_event_t* e);
+static void work_trace_toggle_sort_cb(lv_event_t* e);
+static void work_trace_toggle_fail_filter_cb(lv_event_t* e);
+static void work_retry_failed_attachments_cb(lv_event_t* e);
+static void work_boot_open_report_cb(lv_event_t* e);
+static void work_remote_disconnect_cb(lv_event_t* e);
+static void work_lan_start_host_cb(lv_event_t* e);
+static void work_lan_connect_cb(lv_event_t* e);
+static void work_lan_discover_cb(lv_event_t* e);
+static void work_lan_send_global_cb(lv_event_t* e);
+static void work_lan_send_private_cb(lv_event_t* e);
+static void work_lan_create_group_cb(lv_event_t* e);
+static void work_lan_join_group_cb(lv_event_t* e);
+static void work_lan_send_group_cb(lv_event_t* e);
+static void work_ftp_upload_cb(lv_event_t* e);
+static void work_ftp_download_cb(lv_event_t* e);
+static void work_ftp_cancel_cb(lv_event_t* e);
+static void work_ftp_retry_cb(lv_event_t* e);
+static void work_kb_add_source_cb(lv_event_t* e);
+static void work_kb_import_dir_cb(lv_event_t* e);
+static void work_kb_export_manifest_cb(lv_event_t* e);
+static void work_kb_search_cb(lv_event_t* e);
+static void work_cron_refresh_cb(lv_event_t* e);
+static void work_cron_run_cb(lv_event_t* e);
+static void work_cron_enable_cb(lv_event_t* e);
+static void work_cron_disable_cb(lv_event_t* e);
+static void work_cron_delete_cb(lv_event_t* e);
+static lv_obj_t* create_dialog(lv_obj_t* parent, const char* title, int w, int h, lv_obj_t** out_overlay);
 
 /* Escape a string for JSON (handles \, ", newlines) */
 static std::string json_escape(const char* s) {
@@ -735,6 +792,13 @@ void save_theme_config() {
         f << "  \"wizard_completed\": " << (g_wizard_completed ? "true" : "false") << ",\n";
         f << "  \"control_mode\": " << (int)g_control_mode << ",\n";
         f << "  \"llm_access_mode\": " << (int)g_llm_access_mode << ",\n";
+        f << "  \"ai_interaction_mode\": " << (int)g_ai_interaction_mode << ",\n";
+        f << "  \"proactive_startup_enabled\": " << (g_proactive_startup_enabled ? 1 : 0) << ",\n";
+        f << "  \"proactive_idle_enabled\": " << (g_proactive_idle_enabled ? 1 : 0) << ",\n";
+        f << "  \"proactive_memory_enabled\": " << (g_proactive_memory_enabled ? 1 : 0) << ",\n";
+        f << "  \"proactive_summary_enabled\": " << (g_proactive_summary_enabled ? 1 : 0) << ",\n";
+        f << "  \"proactive_idle_threshold_minutes\": " << g_proactive_idle_threshold_minutes << ",\n";
+        f << "  \"work_show_advanced\": " << (g_work_show_advanced ? 1 : 0) << ",\n";
         f << "  \"profile_user_name\": \"" << json_escape(g_profile_user_name) << "\",\n";
         f << "  \"profile_user_role\": \"" << json_escape(g_profile_user_role) << "\",\n";
         f << "  \"profile_user_persona\": \"" << json_escape(g_profile_user_persona) << "\",\n";
@@ -747,6 +811,8 @@ void save_theme_config() {
         f << "  \"gemma_install_opt_in\": " << (g_gemma_install_opt_in ? 1 : 0) << ",\n";
         f << "  \"gemma_model_mask\": " << g_gemma_model_mask << ",\n";
         f << "  \"remote_guard_armed\": " << (g_remote_guard_armed ? 1 : 0) << ",\n";
+        f << "  \"app_auth_email\": " << (g_app_auth_email ? 1 : 0) << ",\n";
+        f << "  \"app_auth_calendar\": " << (g_app_auth_calendar ? 1 : 0) << ",\n";
         f << "  \"model_name\": \"" << json_escape(g_selected_model) << "\",\n";
         f << "  \"api_key\": \"" << json_escape(g_api_key) << "\",\n";
         f << "  \"restore_last_session\": " << (g_restore_last_session ? 1 : 0) << "\n";
@@ -772,7 +838,7 @@ void load_theme_config() {
         }
     }
     int lang = json_extract_int(content.c_str(), "language", -1);
-    if (lang >= 0 && lang <= 2) {
+    if (lang >= 0 && lang <= 3) {
         g_lang = (Lang)lang;
     }
 
@@ -830,6 +896,20 @@ void load_theme_config() {
     if (cm >= 0 && cm <= 1) g_control_mode = (ControlMode)cm;
     int lm = json_extract_int(content.c_str(), "llm_access_mode", -1);
     if (lm >= 0 && lm <= 1) g_llm_access_mode = (LlmAccessMode)lm;
+    int aim = json_extract_int(content.c_str(), "ai_interaction_mode", -1);
+    if (aim >= 0 && aim <= 2) g_ai_interaction_mode = (AiInteractionMode)aim;
+    int ps = json_extract_int(content.c_str(), "proactive_startup_enabled", -1);
+    if (ps >= 0) g_proactive_startup_enabled = (ps == 1);
+    int pi = json_extract_int(content.c_str(), "proactive_idle_enabled", -1);
+    if (pi >= 0) g_proactive_idle_enabled = (pi == 1);
+    int pm = json_extract_int(content.c_str(), "proactive_memory_enabled", -1);
+    if (pm >= 0) g_proactive_memory_enabled = (pm == 1);
+    int psm = json_extract_int(content.c_str(), "proactive_summary_enabled", -1);
+    if (psm >= 0) g_proactive_summary_enabled = (psm == 1);
+    int pit = json_extract_int(content.c_str(), "proactive_idle_threshold_minutes", -1);
+    if (pit >= 5 && pit <= 240) g_proactive_idle_threshold_minutes = pit;
+    int wsa = json_extract_int(content.c_str(), "work_show_advanced", -1);
+    if (wsa >= 0) g_work_show_advanced = (wsa == 1);
     if (g_llm_access_mode == LLM_DIRECT_API) {
         /* User requested Direct API mode to be paused for now. */
         g_llm_access_mode = LLM_GATEWAY;
@@ -849,6 +929,10 @@ void load_theme_config() {
     if (gmm >= 0 && gmm <= 7) g_gemma_model_mask = gmm;
     int rg = json_extract_int(content.c_str(), "remote_guard_armed", -1);
     if (rg >= 0) g_remote_guard_armed = (rg == 1);
+    int ae = json_extract_int(content.c_str(), "app_auth_email", -1);
+    if (ae >= 0) g_app_auth_email = (ae == 1);
+    int ac = json_extract_int(content.c_str(), "app_auth_calendar", -1);
+    if (ac >= 0) g_app_auth_calendar = (ac == 1);
 
     /* Restore wizard_completed flag */
     g_wizard_completed = is_wizard_completed();
@@ -859,10 +943,10 @@ void load_theme_config() {
     int rls = json_extract_int(content.c_str(), "restore_last_session", -1);
     if (rls >= 0) g_restore_last_session = (rls == 1);
 
-    LOG_I("CONFIG", "log_enabled=%d log_level=%d model=%s control=%d llm=%d remote_guard=%d",
+    LOG_I("CONFIG", "log_enabled=%d log_level=%d model=%s control=%d llm=%d ai_mode=%d remote_guard=%d",
           g_log_enabled, g_log_level,
           g_selected_model[0] ? g_selected_model : "(none)",
-          (int)g_control_mode, (int)g_llm_access_mode, g_remote_guard_armed ? 1 : 0);
+          (int)g_control_mode, (int)g_llm_access_mode, (int)g_ai_interaction_mode, g_remote_guard_armed ? 1 : 0);
 }
 
 /* Forward declaration for title bar creation (called last for z-order) */
@@ -883,14 +967,14 @@ static void theme_dropdown_cb(lv_event_t* e) {
     }
     save_theme_config();
     apply_theme_to_all();
-    ui_log("[Theme] Switched to %s", sel == 0 ? "Dark" : (sel == 1 ? "Light" : "Classic"));
+    ui_log("[Theme] Switched to %s", sel == 0 ? "Matcha_v1" : (sel == 1 ? "Peachy_v2" : "Classic"));
 }
 
 /* Called from settings UI to add theme dropdown */
 lv_obj_t* ui_settings_add_theme_dropdown(lv_obj_t* tab) {
     const ThemeColors* c = g_colors;
     lv_obj_t* dd = lv_dropdown_create(tab);
-    lv_dropdown_set_options(dd, "Dark\nLight\nClassic Dark");
+    lv_dropdown_set_options(dd, "Matcha_v1\nPeachy_v2\nClassic");
     lv_dropdown_set_selected(dd, (uint16_t)g_theme);
     lv_obj_set_width(dd, SCALE(160));
     lv_obj_set_style_bg_color(dd, c->input_bg, 0);
@@ -1070,7 +1154,6 @@ static lv_obj_t* mode_btn_chat = nullptr;
 static lv_obj_t* mode_btn_voice = nullptr;
 static lv_obj_t* mode_btn_work = nullptr;
 static lv_obj_t* mode_panel_chat = nullptr;
-static lv_obj_t* mode_panel_voice = nullptr;
 static lv_obj_t* mode_panel_work = nullptr;
 static lv_obj_t* mode_trace_chat_panel = nullptr;
 static lv_obj_t* mode_lbl_chat_next_step = nullptr;
@@ -1081,6 +1164,23 @@ static lv_obj_t* mode_ta_trace_recent = nullptr;
 static lv_obj_t* mode_lbl_boot_report_hint = nullptr;
 static lv_obj_t* mode_ta_work_prompt = nullptr;
 static lv_obj_t* mode_lbl_work_md_output = nullptr;
+static lv_obj_t* mode_lbl_work_renderer = nullptr;
+static lv_obj_t* mode_lbl_work_output_title = nullptr;
+static lv_obj_t* mode_work_step_stream = nullptr;
+static lv_obj_t* mode_chat_empty_card = nullptr;
+static lv_obj_t* mode_work_empty_card = nullptr;
+static lv_obj_t* mode_sec_step_stream = nullptr;
+static lv_obj_t* mode_sec_work_console = nullptr;
+static lv_obj_t* mode_work_output_wrap = nullptr;
+static lv_obj_t* mode_work_splitter = nullptr;
+static lv_obj_t* mode_work_chat_panel = nullptr;
+static lv_obj_t* mode_lbl_work_chat_state = nullptr;
+static lv_obj_t* mode_ta_work_chat_feed = nullptr;
+static lv_obj_t* mode_ta_work_chat_input = nullptr;
+static lv_obj_t* mode_btn_work_chat_toggle = nullptr;
+static bool g_work_chat_collapsed = false;
+static int g_work_step_stream_h = 160;
+static int g_work_output_h = 180;
 static lv_obj_t* mode_ta_lan_host = nullptr;
 static lv_obj_t* mode_ta_lan_port = nullptr;
 static lv_obj_t* mode_ta_lan_nick = nullptr;
@@ -1101,13 +1201,22 @@ static lv_obj_t* mode_sw_ftp_recursive = nullptr;
 static lv_obj_t* mode_ta_kb_source = nullptr;
 static lv_obj_t* mode_ta_kb_keyword = nullptr;
 static lv_obj_t* mode_ta_kb_result = nullptr;
+static lv_obj_t* mode_ta_cron_list = nullptr;
+static lv_obj_t* mode_ta_cron_id = nullptr;
+static lv_obj_t* mode_sec_lan = nullptr;
+static lv_obj_t* mode_sec_ftp = nullptr;
+static lv_obj_t* mode_sec_kb = nullptr;
+static lv_obj_t* mode_sw_work_advanced = nullptr;
 static lv_obj_t* mode_btn_ftp_upload = nullptr;
 static lv_obj_t* mode_btn_ftp_download = nullptr;
 static lv_obj_t* mode_btn_ftp_cancel = nullptr;
 static lv_obj_t* mode_btn_ftp_retry = nullptr;
 static lv_obj_t* mode_dd_control = nullptr;
 static lv_obj_t* mode_dd_llm = nullptr;
+static lv_obj_t* mode_dd_ai_mode = nullptr;
 static lv_obj_t* mode_lbl_work_hint = nullptr;
+static lv_obj_t* mode_dd_chat_ai_mode = nullptr;
+static lv_obj_t* mode_lbl_chat_status = nullptr;
 static lv_obj_t* mode_ta_user_name = nullptr;
 static lv_obj_t* mode_ta_user_role = nullptr;
 static lv_obj_t* mode_ta_ai_name = nullptr;
@@ -1116,7 +1225,6 @@ static lv_obj_t* mode_ta_ai_persona = nullptr;
 static lv_obj_t* mode_ta_ai_skills = nullptr;
 static lv_obj_t* mode_dd_user_avatar = nullptr;
 static lv_obj_t* mode_dd_ai_avatar = nullptr;
-static lv_obj_t* mode_ta_voice_input = nullptr;
 static lv_obj_t* mode_remote_warning_bar = nullptr;
 static lv_obj_t* mode_sw_remote_guard = nullptr;
 static lv_obj_t* mode_lbl_remote_state = nullptr;
@@ -1136,6 +1244,23 @@ static lv_obj_t* mode_profile_user_avatar_preview = nullptr;
 static lv_obj_t* mode_profile_user_text_preview = nullptr;
 static lv_obj_t* mode_profile_ai_avatar_preview = nullptr;
 static lv_obj_t* mode_profile_ai_text_preview = nullptr;
+static lv_obj_t* g_voice_input_overlay = nullptr;
+static lv_obj_t* g_voice_input_ta = nullptr;
+static HANDLE g_voice_stt_thread = nullptr;
+static lv_timer_t* g_voice_stt_poll_timer = nullptr;
+static volatile LONG g_voice_stt_running = 0;
+static volatile LONG g_voice_stt_done = 0;
+static volatile LONG g_voice_stt_active_token = 0;
+static DWORD g_voice_stt_start_tick = 0;
+static bool g_voice_stt_ok = false;
+static char g_voice_stt_text[2048] = {0};
+static char g_voice_stt_err[128] = {0};
+static volatile LONG g_ask_feedback_pending = 0;
+static char g_ask_feedback_reason[256] = {0};
+static char g_ask_feedback_suggestion[256] = {0};
+static char g_ask_feedback_options[256] = {0};
+static char g_pending_feedback_payload[512] = {0};
+static bool g_streaming = false;
 static char g_ai_next_step[256] = "Idle";
 static char g_ai_script_log[8192] = "";
 static char g_work_md_doc[32768] = "";
@@ -1151,20 +1276,35 @@ static RemoteSessionState g_remote_state = REMOTE_IDLE;
 static lv_timer_t* g_remote_session_timer = nullptr;
 static int g_remote_session_left = 0;
 static int g_remote_retry_attempt = 0;
+static int g_remote_link_down_ticks = 0;
+static char g_remote_last_reason[160] = "";
 static const int REMOTE_RETRY_MAX = 2;
 static int MODE_BAR_H = 36;
-enum UiMainMode { UI_MODE_CHAT = 0, UI_MODE_VOICE = 1, UI_MODE_WORK = 2 };
+enum UiMainMode { UI_MODE_CHAT = 0, UI_MODE_WORK = 1 };
 static UiMainMode g_ui_mode = UI_MODE_CHAT;
 /* chat_cont is declared above for early chat-history restore helpers */
 static lv_obj_t* btn_send_widget = nullptr; /* Send button */
 static lv_obj_t* btn_upload_widget = nullptr; /* Upload button */
 static lv_obj_t* btn_voice_widget = nullptr; /* Voice mode quick button */
+static constexpr int CHAT_ACTION_BTN_BASE = 40;
+static constexpr int CHAT_ACTION_BTN_MARGIN = 6;
+static constexpr int CHAT_ACTION_BTN_GAP = 6;
+static constexpr int CHAT_INPUT_MIN_H_BASE = 96;
+static constexpr int CHAT_INPUT_MAX_H_BASE = 220;
 
 struct AttachmentQueueItem {
     std::string path;
     bool is_dir = false;
     lv_obj_t* status_lbl = nullptr;
     bool done = false;
+};
+struct SentAttachmentItem {
+    std::string path;
+    bool is_dir = false;
+};
+struct AppliedWriteBackup {
+    std::string path;
+    std::string bak_path;
 };
 struct AttachmentRetryCtx {
     char* path = nullptr;
@@ -1174,6 +1314,8 @@ struct AttachmentRetryCtx {
 static std::vector<AttachmentQueueItem> g_attachment_queue;
 static lv_timer_t* g_attachment_queue_timer = nullptr;
 static std::vector<AttachmentQueueItem> g_attachment_failed_cache;
+static std::vector<SentAttachmentItem> g_sent_attachments;
+static std::vector<AppliedWriteBackup> g_step_write_backups;
 static std::atomic<bool> g_boot_check_running(false);
 static unsigned int g_remote_stub_session_seq = 1;
 static char g_remote_stub_session_id[64] = "";
@@ -1566,9 +1708,11 @@ static void btn_close_cb(lv_event_t* e) {
 static void relayout_panels();
 static void apply_mode_switch_visuals();
 static void update_work_mode_hint();
+static bool ask_mode_confirm_action(const char* reason, const char* suggestion, const char* options_csv = nullptr, char* out_answer = nullptr, size_t out_answer_cap = 0);
 static void update_remote_session_visuals();
 static void stop_remote_session_timer();
 static bool remote_begin_request(bool retry_mode);
+static void remote_reset_to_idle(const char* reason, bool stop_tcp, bool close_proto);
 void ui_relayout_all();
 static int mode_content_h() { return std::max(120, PANEL_H - CHAT_GAP * 2); }
 static int mode_content_w() { return std::max(200, RIGHT_PANEL_W - CHAT_GAP * 2); }
@@ -1587,6 +1731,58 @@ static const char* profile_ai_avatar_src() {
     return (strcmp(g_profile_ai_avatar, "garlic") == 0) ? "A:assets/garlic_32.png" : "A:assets/icons/ai/lobster_01_24.png";
 }
 
+static bool attachment_is_text_ext(const std::string& path) {
+    std::string lower = path;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    return (lower.find(".txt") != std::string::npos) ||
+           (lower.find(".md") != std::string::npos) ||
+           (lower.find(".json") != std::string::npos) ||
+           (lower.find(".cpp") != std::string::npos) ||
+           (lower.find(".h") != std::string::npos) ||
+           (lower.find(".py") != std::string::npos) ||
+           (lower.find(".log") != std::string::npos) ||
+           (lower.find(".yaml") != std::string::npos) ||
+           (lower.find(".yml") != std::string::npos) ||
+           (lower.find(".ini") != std::string::npos);
+}
+
+static bool attachment_is_probably_binary(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f.is_open()) return true;
+    char buf[1024] = {0};
+    f.read(buf, sizeof(buf));
+    std::streamsize n = f.gcount();
+    if (n <= 0) return true;
+    int bad = 0;
+    for (int i = 0; i < (int)n; i++) {
+        unsigned char ch = (unsigned char)buf[i];
+        if (ch == 0) return true;
+        if (ch < 9 || (ch > 13 && ch < 32)) bad++;
+    }
+    return bad > (int)(n / 8);
+}
+
+static void attachment_collect_files(const std::string& root,
+                                     std::vector<std::string>& out,
+                                     int max_files,
+                                     int max_depth) {
+    std::error_code ec;
+    if (!std::filesystem::exists(root, ec) || ec) return;
+    std::filesystem::recursive_directory_iterator it(root, ec), end;
+    while (!ec && it != end) {
+        if ((int)out.size() >= max_files) break;
+        if ((int)it.depth() > max_depth) {
+            it.disable_recursion_pending();
+            ++it;
+            continue;
+        }
+        if (it->is_regular_file(ec) && !ec) {
+            out.push_back(it->path().string());
+        }
+        ++it;
+    }
+}
+
 static void submit_prompt_to_chat(const char* text) {
     if (!text || !text[0]) return;
     if (is_streaming_now()) {
@@ -1596,6 +1792,69 @@ static void submit_prompt_to_chat(const char* text) {
     chat_add_user_bubble(text);
     chat_force_scroll_bottom();
     std::string payload = text;
+    if (!g_sent_attachments.empty()) {
+        constexpr int kMaxAttachItems = 10;
+        constexpr int kMaxDirExpandFiles = 20;
+        constexpr int kMaxDirDepth = 2;
+        constexpr uint64_t kMaxTotalSnippetBytes = 8192;
+        constexpr uint64_t kMaxSingleSnippetBytes = 1024;
+        std::string att = "\n\nAttached files for this request:\n";
+        std::unordered_set<std::string> seen;
+        uint64_t total_snippet_bytes = 0;
+        int take = 0;
+        for (const auto& a : g_sent_attachments) {
+            if (take >= kMaxAttachItems) break;
+            if (a.is_dir) {
+                std::vector<std::string> files;
+                attachment_collect_files(a.path, files, kMaxDirExpandFiles, kMaxDirDepth);
+                att += "- " + a.path + " [directory, expanded files=" + std::to_string((int)files.size()) + "]\n";
+                for (const auto& fp : files) {
+                    if (take >= kMaxAttachItems) break;
+                    if (!seen.insert(fp).second) continue;
+                    std::error_code fec;
+                    uint64_t sz = (uint64_t)std::filesystem::file_size(fp, fec);
+                    if (fec) continue;
+                    att += "  - " + fp + " (" + std::to_string((unsigned long long)sz) + " bytes)\n";
+                    bool can_snip = attachment_is_text_ext(fp) && !attachment_is_probably_binary(fp) &&
+                                    sz <= (256 * 1024) && total_snippet_bytes < kMaxTotalSnippetBytes;
+                    if (can_snip) {
+                        std::ifstream f(fp, std::ios::binary);
+                        std::string snippet((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+                        if (snippet.size() > kMaxSingleSnippetBytes) snippet.resize(kMaxSingleSnippetBytes);
+                        total_snippet_bytes += (uint64_t)snippet.size();
+                        att += "    snippet:\n    ```text\n" + snippet + "\n    ```\n";
+                    }
+                    take++;
+                }
+            } else {
+                const std::string fp = a.path;
+                if (!seen.insert(fp).second) continue;
+                std::error_code fec;
+                uint64_t sz = (uint64_t)std::filesystem::file_size(fp, fec);
+                if (fec) sz = 0;
+                att += "- " + fp + " [file, " + std::to_string((unsigned long long)sz) + " bytes]\n";
+                bool can_snip = attachment_is_text_ext(fp) && !attachment_is_probably_binary(fp) &&
+                                sz <= (256 * 1024) && total_snippet_bytes < kMaxTotalSnippetBytes;
+                if (can_snip) {
+                    std::ifstream f(fp, std::ios::binary);
+                    if (f.is_open()) {
+                        std::string snippet((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+                        if (snippet.size() > kMaxSingleSnippetBytes) snippet.resize(kMaxSingleSnippetBytes);
+                        total_snippet_bytes += (uint64_t)snippet.size();
+                        att += "  snippet:\n  ```text\n" + snippet + "\n  ```\n";
+                    }
+                } else if (!attachment_is_text_ext(fp) || attachment_is_probably_binary(fp)) {
+                    att += "  snippet: skipped (binary or unsupported type)\n";
+                } else {
+                    att += "  snippet: skipped (size limit)\n";
+                }
+                take++;
+            }
+        }
+        payload += att;
+        g_sent_attachments.clear();
+        ui_log("[Share] Attached files injected into chat payload");
+    }
     std::string kb_ctx = KbStore::instance().build_context_snippet(text, 3, 1000);
     if (!kb_ctx.empty()) {
         payload = kb_ctx + "\nUser request:\n" + text;
@@ -1618,6 +1877,21 @@ static void update_remote_guard_visuals() {
                               ? "Remote guard: ARMED (double confirm + countdown required)"
                               : "Remote guard: DISARMED");
     }
+}
+
+static void ui_alert_with_sound(const char* title, const char* message) {
+    const char* t = (title && title[0]) ? title : "AnyClaw Alert";
+    const char* m = (message && message[0]) ? message : "Unknown error";
+    static DWORD s_last_tick = 0;
+    static char s_last_msg[160] = {0};
+    DWORD now = GetTickCount();
+    if (s_last_msg[0] && strcmp(s_last_msg, m) == 0 && (now - s_last_tick) < 8000) {
+        return;
+    }
+    s_last_tick = now;
+    snprintf(s_last_msg, sizeof(s_last_msg), "%s", m);
+    MessageBeep(MB_ICONERROR);
+    MessageBoxA(nullptr, m, t, MB_OK | MB_ICONERROR | MB_TOPMOST);
 }
 
 static void update_profile_preview_cards() {
@@ -1748,6 +2022,19 @@ static void open_remote_arm_modal() {
 
 static void remote_session_timer_cb(lv_timer_t* t) {
     (void)t;
+    if (g_remote_state == REMOTE_CONNECTED) {
+        if (!RemoteTcpChannel::instance().is_connected()) {
+            g_remote_link_down_ticks++;
+            if (g_remote_link_down_ticks >= 2) {
+                remote_reset_to_idle("Connection lost, session closed", true, true);
+            } else {
+                update_remote_session_visuals();
+            }
+        } else {
+            g_remote_link_down_ticks = 0;
+        }
+        return;
+    }
     if (g_remote_state != REMOTE_PENDING_ACCEPT) return;
     g_remote_session_left--;
     if (g_remote_session_left <= 0) {
@@ -1755,14 +2042,12 @@ static void remote_session_timer_cb(lv_timer_t* t) {
         if (g_remote_guard_armed && g_remote_retry_attempt < REMOTE_RETRY_MAX) {
             g_remote_retry_attempt++;
             ui_log("[Remote] Request timed out, auto-retry %d/%d", g_remote_retry_attempt, REMOTE_RETRY_MAX);
-            g_remote_state = REMOTE_IDLE;
+            remote_reset_to_idle("", true, true);
             if (!remote_begin_request(true)) {
-                g_remote_state = REMOTE_IDLE;
-                ui_log("[Remote] Auto-retry failed, back to idle");
+                remote_reset_to_idle("Auto-retry failed, back to idle", true, true);
             }
         } else {
-            g_remote_state = REMOTE_IDLE;
-            ui_log("[Remote] Request timed out");
+            remote_reset_to_idle("Request timed out", true, true);
         }
     }
     update_remote_session_visuals();
@@ -1775,18 +2060,43 @@ static void stop_remote_session_timer() {
     }
 }
 
+static void remote_reset_to_idle(const char* reason, bool stop_tcp, bool close_proto) {
+    stop_remote_session_timer();
+    if (stop_tcp) RemoteTcpChannel::instance().stop();
+    if (close_proto && g_remote_stub_session_id[0]) {
+        RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
+    }
+    g_remote_state = REMOTE_IDLE;
+    g_remote_link_down_ticks = 0;
+    snprintf(g_remote_last_reason, sizeof(g_remote_last_reason), "%s", reason ? reason : "");
+    g_remote_stub_session_id[0] = '\0';
+    g_remote_stub_auth_token[0] = '\0';
+    if (reason && reason[0]) {
+        ui_log("[Remote] %s", reason);
+        if (strstr(reason, "failed") || strstr(reason, "lost") || strstr(reason, "timeout")) {
+            ui_alert_with_sound("Remote Session Alert", reason);
+        }
+    }
+    update_remote_session_visuals();
+}
+
 static void update_remote_session_visuals() {
     if (mode_lbl_remote_session_state) {
         const char* text = "Remote session: idle";
         if (g_remote_state == REMOTE_REQUESTING) text = "Remote session: requesting...";
         else if (g_remote_state == REMOTE_PENDING_ACCEPT) {
             static char buf[96] = {0};
-            snprintf(buf, sizeof(buf), "Remote session: awaiting acceptance (%ds)", g_remote_session_left);
+            snprintf(buf, sizeof(buf), "Remote session: awaiting acceptance (%ds, retry %d/%d)",
+                     g_remote_session_left, g_remote_retry_attempt, REMOTE_RETRY_MAX);
             text = buf;
         } else if (g_remote_state == REMOTE_CONNECTED) {
             static char buf[128] = {0};
-            snprintf(buf, sizeof(buf), "Remote session: CONNECTED (tcp=%s)",
-                     RemoteTcpChannel::instance().is_connected() ? "up" : "down");
+            snprintf(buf, sizeof(buf), "Remote session: CONNECTED (tcp=%s, downTicks=%d)",
+                     RemoteTcpChannel::instance().is_connected() ? "up" : "down", g_remote_link_down_ticks);
+            text = buf;
+        } else if (g_remote_last_reason[0]) {
+            static char buf[192] = {0};
+            snprintf(buf, sizeof(buf), "Remote session: idle (%s)", g_remote_last_reason);
             text = buf;
         }
         lv_label_set_text(mode_lbl_remote_session_state, text);
@@ -1816,8 +2126,55 @@ static void remote_stub_prepare_auth_token() {
     g_remote_stub_auth_expire_tick = (DWORD)rec.expire_tick;
 }
 
+static void remote_copy_text_to_clipboard(const char* text) {
+    if (!text || !text[0]) return;
+    if (!OpenClipboard(nullptr)) return;
+    EmptyClipboard();
+    size_t len = strlen(text) + 1;
+    HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, len);
+    if (h) {
+        void* p = GlobalLock(h);
+        if (p) {
+            memcpy(p, text, len);
+            GlobalUnlock(h);
+            SetClipboardData(CF_TEXT, h);
+        } else {
+            GlobalFree(h);
+        }
+    }
+    CloseClipboard();
+}
+
+static bool remote_launch_quick_assist(char* err, int err_cap) {
+    if (err && err_cap > 0) err[0] = '\0';
+    STARTUPINFOA si{};
+    PROCESS_INFORMATION pi{};
+    si.cb = sizeof(si);
+    char cmd[] = "cmd /c start \"\" quickassist:";
+    BOOL ok = CreateProcessA(nullptr, cmd, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+    if (!ok) {
+        if (err && err_cap > 0) snprintf(err, err_cap, "Quick Assist launch failed: %lu", GetLastError());
+        return false;
+    }
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return true;
+}
+
+static std::string remote_build_share_code() {
+    if (!g_remote_stub_auth_token[0]) return "";
+    std::string tok = g_remote_stub_auth_token;
+    std::string digits;
+    for (char ch : tok) {
+        if (ch >= '0' && ch <= '9') digits.push_back(ch);
+    }
+    while (digits.size() < 6) digits.push_back('0');
+    return digits.substr(0, 6);
+}
+
 static bool remote_begin_request(bool retry_mode) {
     remote_stub_prepare_auth_token();
+    g_remote_last_reason[0] = '\0';
     const char* reason = nullptr;
     if (!RemoteProtocolManager::instance().try_update_state(g_remote_stub_session_id, "requesting", &reason)) {
         ui_log("[Remote] Request rejected by protocol manager: %s", reason ? reason : "unknown");
@@ -1833,11 +2190,7 @@ static bool remote_begin_request(bool retry_mode) {
     reason = nullptr;
     if (!RemoteProtocolManager::instance().try_update_state(g_remote_stub_session_id, "pending_accept", &reason)) {
         ui_log("[Remote] Failed to enter pending_accept: %s", reason ? reason : "unknown");
-        g_remote_state = REMOTE_IDLE;
-        RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
-        g_remote_stub_session_id[0] = '\0';
-        g_remote_stub_auth_token[0] = '\0';
-        update_remote_session_visuals();
+        remote_reset_to_idle("Failed to enter pending_accept", true, true);
         return false;
     }
     g_remote_session_left = 15;
@@ -1850,6 +2203,7 @@ static bool remote_begin_request(bool retry_mode) {
 static void remote_request_cb(lv_event_t* e) {
     (void)e;
     TraceSpan span("remote_request", "work_mode");
+    if (!ask_mode_confirm_action("Start remote collaboration session request", "Confirm host/port and send request")) return;
     if (!g_remote_guard_armed) {
         span.set_fail();
         ui_log("[Remote] Cannot request session: guard is disarmed");
@@ -1858,6 +2212,28 @@ static void remote_request_cb(lv_event_t* e) {
     if (g_remote_state != REMOTE_IDLE) return;
     g_remote_retry_attempt = 0;
     if (!remote_begin_request(false)) span.set_fail();
+    else {
+        if (!RemoteTcpChannel::instance().send_text_frame("ctrl", "request")) {
+            ui_log("[Remote] ctrl/request frame send failed: %s", RemoteTcpChannel::instance().last_error().c_str());
+        }
+        char qa_err[160] = {0};
+        if (remote_launch_quick_assist(qa_err, sizeof(qa_err))) {
+            std::string code = remote_build_share_code();
+            if (!code.empty()) {
+                char payload[128] = {0};
+                snprintf(payload, sizeof(payload), "quickassist_code=%s;session=%s", code.c_str(), g_remote_stub_session_id);
+                if (!RemoteTcpChannel::instance().send_text_frame("im", payload)) {
+                    ui_log("[Remote] quickassist code IM send failed: %s", RemoteTcpChannel::instance().last_error().c_str());
+                }
+                remote_copy_text_to_clipboard(code.c_str());
+                ui_log("[Remote] Quick Assist started, code=%s (已复制到剪贴板，并通过IM通道发送)", code.c_str());
+            } else {
+                ui_log("[Remote] Quick Assist started, waiting for code...");
+            }
+        } else {
+            ui_log("[Remote] %s (fall back to manual code sharing)", qa_err[0] ? qa_err : "Quick Assist launch failed");
+        }
+    }
 }
 
 static void remote_accept_cb(lv_event_t* e) {
@@ -1874,11 +2250,7 @@ static void remote_accept_cb(lv_event_t* e) {
     if (!auth_ok) {
         span.set_fail();
         ui_log("[Remote] Session accept failed: auth token %s", expired ? "expired" : "invalid");
-        g_remote_state = REMOTE_IDLE;
-        RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
-        g_remote_stub_session_id[0] = '\0';
-        g_remote_stub_auth_token[0] = '\0';
-        update_remote_session_visuals();
+        remote_reset_to_idle("Session closed after auth failure", true, true);
         return;
     }
     stop_remote_session_timer();
@@ -1887,11 +2259,7 @@ static void remote_accept_cb(lv_event_t* e) {
     if (!RemoteProtocolManager::instance().try_update_state(g_remote_stub_session_id, "connected", &reason)) {
         span.set_fail();
         ui_log("[Remote] Cannot enter connected state: %s", reason ? reason : "unknown");
-        g_remote_state = REMOTE_IDLE;
-        RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
-        g_remote_stub_session_id[0] = '\0';
-        g_remote_stub_auth_token[0] = '\0';
-        update_remote_session_visuals();
+        remote_reset_to_idle("Cannot enter connected state, session closed", true, true);
         return;
     }
     RemoteTcpConfig tcp_cfg;
@@ -1907,16 +2275,19 @@ static void remote_accept_cb(lv_event_t* e) {
         span.set_fail();
         ui_log("[Remote] TCP channel start failed: %s",
                RemoteTcpChannel::instance().last_error().c_str());
-        g_remote_state = REMOTE_IDLE;
-        RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
-        g_remote_stub_session_id[0] = '\0';
-        g_remote_stub_auth_token[0] = '\0';
-        update_remote_session_visuals();
+        remote_reset_to_idle("TCP channel start failed, session closed", true, true);
         return;
     }
+    g_remote_link_down_ticks = 0;
+    stop_remote_session_timer();
+    g_remote_session_timer = lv_timer_create(remote_session_timer_cb, 1000, nullptr);
     ui_log("[Remote] Session accepted and connected (session=%s, auth=ok, tcp=%s:%d)",
            g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a",
            tcp_cfg.host.c_str(), tcp_cfg.port);
+    g_remote_last_reason[0] = '\0';
+    if (!RemoteTcpChannel::instance().send_text_frame("ctrl", "accept")) {
+        ui_log("[Remote] ctrl/accept frame send failed: %s", RemoteTcpChannel::instance().last_error().c_str());
+    }
     update_remote_session_visuals();
 }
 
@@ -1924,27 +2295,19 @@ static void remote_reject_cb(lv_event_t* e) {
     (void)e;
     TraceSpan span("remote_reject", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "no-session");
     if (g_remote_state != REMOTE_PENDING_ACCEPT) return;
-    stop_remote_session_timer();
-    g_remote_state = REMOTE_IDLE;
-    RemoteTcpChannel::instance().stop();
-    RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
-    ui_log("[Remote] Session rejected (session=%s)", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
-    g_remote_stub_session_id[0] = '\0';
-    g_remote_stub_auth_token[0] = '\0';
-    update_remote_session_visuals();
+    if (!RemoteTcpChannel::instance().send_text_frame("ctrl", "reject")) {
+        ui_log("[Remote] ctrl/reject frame send failed: %s", RemoteTcpChannel::instance().last_error().c_str());
+    }
+    remote_reset_to_idle("Session rejected", true, true);
 }
 
 static void remote_disconnect_cb(lv_event_t* e) {
     (void)e;
     TraceSpan span("remote_disconnect", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "no-session");
-    stop_remote_session_timer();
-    g_remote_state = REMOTE_IDLE;
-    RemoteTcpChannel::instance().stop();
-    RemoteProtocolManager::instance().close_session(g_remote_stub_session_id);
-    ui_log("[Remote] Session disconnected (session=%s)", g_remote_stub_session_id[0] ? g_remote_stub_session_id : "n/a");
-    g_remote_stub_session_id[0] = '\0';
-    g_remote_stub_auth_token[0] = '\0';
-    update_remote_session_visuals();
+    if (!RemoteTcpChannel::instance().send_text_frame("ctrl", "disconnect")) {
+        ui_log("[Remote] ctrl/disconnect frame send failed: %s", RemoteTcpChannel::instance().last_error().c_str());
+    }
+    remote_reset_to_idle("Session disconnected", true, true);
 }
 
 static int get_total_ram_gb() {
@@ -2035,6 +2398,10 @@ static void gemma_model_checkbox_cb(lv_event_t* e) {
 }
 
 static void start_gemma_install_async(int model_mask) {
+    if (g_gemma_install_started.exchange(true)) {
+        ui_log("[Gemma] Installer already running, skip duplicate start");
+        return;
+    }
     std::thread([model_mask]() {
         char out[1024] = {0};
         ui_log("[Gemma] Installer started. mask=%d", model_mask);
@@ -2043,7 +2410,9 @@ static void start_gemma_install_async(int model_mask) {
             ui_log("[Gemma] %s", out);
         } else {
             ui_log("[Gemma] Install failed: %s", out[0] ? out : "unknown error");
+            ui_alert_with_sound("Gemma Install Failed", out[0] ? out : "unknown error");
         }
+        g_gemma_install_started.store(false);
     }).detach();
 }
 
@@ -2061,13 +2430,17 @@ static void set_ai_next_step(const char* step) {
 
 static void append_ai_script_log(const char* line) {
     if (!line || !line[0]) return;
-    size_t llen = strlen(line);
+    SYSTEMTIME st;
+    GetLocalTime(&st);
+    char stamped[1536];
+    snprintf(stamped, sizeof(stamped), "[%02d:%02d:%02d] %s", st.wHour, st.wMinute, st.wSecond, line);
+    size_t llen = strlen(stamped);
     if (strlen(g_ai_script_log) + llen + 2 >= sizeof(g_ai_script_log)) {
         /* Drop oldest half to keep UI responsive and log bounded. */
         memmove(g_ai_script_log, g_ai_script_log + sizeof(g_ai_script_log) / 2, sizeof(g_ai_script_log) / 2);
         g_ai_script_log[sizeof(g_ai_script_log) / 2] = '\0';
     }
-    strcat(g_ai_script_log, line);
+    strcat(g_ai_script_log, stamped);
     strcat(g_ai_script_log, "\n");
     update_agent_trace_views();
 }
@@ -2079,17 +2452,355 @@ static void render_work_md_doc() {
                              CJK_FONT_CHAT);
 }
 
+static void work_emit_step_decision(const char* decision, const char* action) {
+    char safe_action[96] = {0};
+    int si = 0;
+    for (const char* p = action ? action : ""; *p && si < (int)sizeof(safe_action) - 1; ++p) {
+        if (*p == '"' || *p == '\\' || *p == '\n' || *p == '\r') continue;
+        safe_action[si++] = *p;
+    }
+    char payload[320] = {0};
+    snprintf(payload, sizeof(payload),
+             "{\"type\":\"feedback\",\"answer\":\"step_%s:%s\"}",
+             decision ? decision : "none",
+             safe_action[0] ? safe_action : "unknown");
+    if (g_streaming) {
+        snprintf(g_pending_feedback_payload, sizeof(g_pending_feedback_payload), "%s", payload);
+    } else {
+        submit_prompt_to_chat(payload);
+    }
+}
+
+struct StepBtnPayload {
+    char log_line[96];
+    char action[96];
+    char detail[512];
+    char decision[24];
+};
+
+static std::string json_unescape_min(const char* s) {
+    std::string out;
+    if (!s) return out;
+    for (const char* p = s; *p; ++p) {
+        if (*p == '\\' && *(p + 1)) {
+            ++p;
+            if (*p == 'n') out.push_back('\n');
+            else if (*p == 'r') {}
+            else if (*p == 't') out.push_back('\t');
+            else out.push_back(*p);
+        } else {
+            out.push_back(*p);
+        }
+    }
+    return out;
+}
+
+static std::string build_plan_preview_text(const char* raw) {
+    if (!raw || !raw[0]) return "";
+    const char* p = strstr(raw, "\"steps\"");
+    if (!p) return "";
+    std::vector<std::string> steps;
+    const char* end = p + 1600;
+    const char* cur = p;
+    while (*cur && cur < end && (int)steps.size() < 6) {
+        if (*cur == '"') {
+            cur++;
+            std::string token;
+            while (*cur && *cur != '"' && token.size() < 120) {
+                token.push_back(*cur++);
+            }
+            if (token.size() >= 4 &&
+                token != "steps" &&
+                token != "type" &&
+                token != "plan" &&
+                token != "risk" &&
+                token != "est_time" &&
+                token != "action" &&
+                token != "title") {
+                bool dup = false;
+                for (const auto& s : steps) {
+                    if (s == token) { dup = true; break; }
+                }
+                if (!dup) steps.push_back(token);
+            }
+        } else {
+            cur++;
+        }
+    }
+    if (steps.empty()) return "";
+    std::string out = "Plan Preview:\n";
+    for (size_t i = 0; i < steps.size(); ++i) {
+        out += std::to_string((int)i + 1);
+        out += ". ";
+        out += steps[i];
+        out += "\n";
+    }
+    return out;
+}
+
+static bool work_try_apply_write_from_detail(const char* detail, std::string* out_path) {
+    if (!detail || !strstr(detail, "\"name\":\"write")) return false;
+    char path[320] = {0};
+    char content[4096] = {0};
+    json_extract_string(detail, "path", path, sizeof(path));
+    json_extract_string(detail, "content", content, sizeof(content));
+    if (!path[0]) return false;
+    std::string full = path;
+    if (full.find(':') == std::string::npos && !(full.size() > 1 && full[0] == '\\' && full[1] == '\\')) {
+        full = workspace_get_root() + "\\" + full;
+    }
+    if (!permissions().is_path_allowed(full.c_str(), true)) {
+        ui_log("[Work] Step apply denied by permission boundary: %s", full.c_str());
+        return false;
+    }
+    std::string bak = full + ".anyclaw.bak";
+    try {
+        if (std::filesystem::exists(full)) {
+            std::filesystem::copy_file(full, bak, std::filesystem::copy_options::overwrite_existing);
+        }
+        std::ofstream f(full, std::ios::binary);
+        if (!f.is_open()) return false;
+        std::string decoded = json_unescape_min(content);
+        f << decoded;
+        f.close();
+        g_step_write_backups.push_back({full, bak});
+        if (out_path) *out_path = full;
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+static bool work_try_rollback_write_from_detail(const char* detail, std::string* out_path) {
+    char path[320] = {0};
+    json_extract_string(detail, "path", path, sizeof(path));
+    if (!path[0]) return false;
+    std::string full = path;
+    if (full.find(':') == std::string::npos && !(full.size() > 1 && full[0] == '\\' && full[1] == '\\')) {
+        full = workspace_get_root() + "\\" + full;
+    }
+    for (int i = (int)g_step_write_backups.size() - 1; i >= 0; --i) {
+        if (g_step_write_backups[i].path == full && std::filesystem::exists(g_step_write_backups[i].bak_path)) {
+            try {
+                std::filesystem::copy_file(g_step_write_backups[i].bak_path, full, std::filesystem::copy_options::overwrite_existing);
+                if (out_path) *out_path = full;
+                return true;
+            } catch (...) {
+                return false;
+            }
+        }
+    }
+    return false;
+}
+
+static void step_btn_clicked_cb(lv_event_t* e) {
+    StepBtnPayload* data = (StepBtnPayload*)lv_event_get_user_data(e);
+    if (!data) return;
+    if (data->log_line[0]) ui_log("%s", data->log_line);
+    if (strcmp(data->decision, "accept") == 0) {
+        std::string p;
+        if (work_try_apply_write_from_detail(data->detail, &p)) {
+            ui_log("[Work] Step local write applied: %s", p.c_str());
+        }
+    } else if (strcmp(data->decision, "rollback") == 0) {
+        std::string p;
+        if (work_try_rollback_write_from_detail(data->detail, &p)) {
+            ui_log("[Work] Step rollback restored: %s", p.c_str());
+        }
+    } else if (strcmp(data->decision, "retry") == 0) {
+        if (mode_ta_work_prompt && g_work_last_prompt[0]) {
+            lv_textarea_set_text(mode_ta_work_prompt, g_work_last_prompt);
+            work_send_cb(nullptr);
+            ui_log("[Work] Step retry triggered for last work prompt");
+        } else {
+            ui_log("[Work] Step retry skipped: no last prompt");
+        }
+    }
+    work_emit_step_decision(data->decision, data->action);
+}
+
+static void step_btn_delete_cb(lv_event_t* e) {
+    StepBtnPayload* data = (StepBtnPayload*)lv_event_get_user_data(e);
+    delete data;
+}
+
+static void update_chat_empty_state() {
+    if (!mode_chat_empty_card || !chat_cont) return;
+    uint32_t cnt = lv_obj_get_child_cnt(chat_cont);
+    if (cnt == 0) lv_obj_clear_flag(mode_chat_empty_card, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(mode_chat_empty_card, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void update_work_empty_state() {
+    if (!mode_work_empty_card || !mode_work_step_stream) return;
+    uint32_t cnt = lv_obj_get_child_cnt(mode_work_step_stream);
+    if (cnt <= 1) lv_obj_clear_flag(mode_work_empty_card, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(mode_work_empty_card, LV_OBJ_FLAG_HIDDEN);
+}
+
+static void layout_chat_action_buttons(int content_w, int input_y, int input_h) {
+    const int btn_size = SCALE(CHAT_ACTION_BTN_BASE);
+    const int btn_margin = SCALE(CHAT_ACTION_BTN_MARGIN);
+    const int btn_gap = SCALE(CHAT_ACTION_BTN_GAP);
+    if (btn_send_widget) {
+        lv_obj_set_pos(btn_send_widget, content_w - CHAT_GAP - btn_size - btn_margin, input_y + input_h - btn_size - btn_margin);
+    }
+    if (btn_upload_widget) {
+        lv_obj_set_pos(btn_upload_widget, content_w - CHAT_GAP - btn_size - btn_margin - btn_size - btn_gap, input_y + input_h - btn_size - btn_margin);
+    }
+    if (btn_voice_widget) {
+        lv_obj_set_pos(btn_voice_widget, content_w - CHAT_GAP - btn_size - btn_margin - (btn_size + btn_gap) * 2, input_y + input_h - btn_size - btn_margin);
+    }
+}
+
+static void chat_empty_suggestion_cb(lv_event_t* e) {
+    const char* prompt = (const char*)lv_event_get_user_data(e);
+    if (!chat_input || !prompt || !prompt[0]) return;
+    lv_textarea_set_text(chat_input, prompt);
+    lv_textarea_set_cursor_pos(chat_input, LV_TEXTAREA_CURSOR_LAST);
+    lv_obj_scroll_to_view(chat_input, LV_ANIM_OFF);
+}
+
+static void work_empty_example_cb(lv_event_t* e) {
+    const char* sample = (const char*)lv_event_get_user_data(e);
+    if (!mode_ta_work_prompt || !sample || !sample[0]) return;
+    lv_textarea_set_text(mode_ta_work_prompt, sample);
+    lv_textarea_set_cursor_pos(mode_ta_work_prompt, LV_TEXTAREA_CURSOR_LAST);
+    lv_obj_scroll_to_view(mode_ta_work_prompt, LV_ANIM_OFF);
+}
+
+static void work_add_step_card(const char* action, const char* detail, bool done, bool write_op) {
+    if (!mode_work_step_stream) return;
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
+    const char* act = action ? action : "";
+    const char* det = detail ? detail : "";
+    bool exec_op = strstr(act, "exec") || strstr(act, "shell") || strstr(act, "command");
+    bool read_op = strstr(act, "read") || strstr(act, "list") || strstr(act, "glob");
+    bool failed = strstr(act, "fail") || strstr(act, "error") || strstr(act, "timeout") ||
+                  strstr(act, "失败") || strstr(act, "错误") ||
+                  strstr(det, "fail") || strstr(det, "error") || strstr(det, "timeout") ||
+                  strstr(det, "失败") || strstr(det, "错误");
+    lv_color_t card_border = c->panel_border;
+    lv_color_t card_bg = c->input_bg;
+    const char* kind = "general";
+    if (write_op) { card_border = lv_color_make(230, 170, 80); card_bg = lv_color_make(58, 46, 28); kind = "write"; }
+    else if (exec_op) { card_border = lv_color_make(120, 170, 240); card_bg = lv_color_make(32, 46, 64); kind = "exec"; }
+    else if (read_op) { card_border = lv_color_make(110, 180, 130); card_bg = lv_color_make(30, 48, 36); kind = "read"; }
+    lv_obj_t* card = lv_obj_create(mode_work_step_stream);
+    lv_obj_set_width(card, LV_PCT(100));
+    lv_obj_set_height(card, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card, card_bg, 0);
+    lv_obj_set_style_border_color(card, card_border, 0);
+    lv_obj_set_style_border_width(card, 1, 0);
+    lv_obj_set_style_radius(card, 12, 0);
+    lv_obj_set_style_pad_all(card, 12, 0);
+    lv_obj_set_style_pad_gap(card, 8, 0);
+    lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* title = lv_label_create(card);
+    const char* status_icon = failed ? "✗" : (done ? "✓" : "●");
+    lv_color_t status_color = failed ? c->btn_close : (done ? c->accent : c->btn_add);
+    lv_label_set_text_fmt(title, "%s  %s", status_icon, action ? action : "Step");
+    lv_obj_set_style_text_color(title, status_color, 0);
+    lv_obj_set_style_text_font(title, CJK_FONT_SMALL, 0);
+
+    lv_obj_t* kind_lbl = lv_label_create(card);
+    lv_label_set_text_fmt(kind_lbl, "kind: %s", kind);
+    lv_obj_set_style_text_color(kind_lbl, lv_color_make(170, 190, 220), 0);
+    lv_obj_set_style_text_font(kind_lbl, CJK_FONT_SMALL, 0);
+
+    lv_obj_t* info = lv_label_create(card);
+    lv_label_set_text(info, detail && detail[0] ? detail : "");
+    lv_obj_set_style_text_color(info, c->text_dim, 0);
+    lv_obj_set_style_text_font(info, CJK_FONT_SMALL, 0);
+    lv_label_set_long_mode(info, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(info, LV_PCT(100));
+
+    if (write_op) {
+        lv_obj_t* row = lv_obj_create(card);
+        lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_pad_all(row, 0, 0);
+        lv_obj_set_style_pad_gap(row, 6, 0);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+        auto bind_btn = [&](const char* txt, AwBtnStyle bs, const char* log_line, const char* decision) {
+            lv_obj_t* btn = aw_btn_create(row, txt, bs, SCALE(90), SCALE(30));
+            StepBtnPayload* payload = new StepBtnPayload{};
+            snprintf(payload->log_line, sizeof(payload->log_line), "%s", log_line ? log_line : "");
+            snprintf(payload->action, sizeof(payload->action), "%s", action ? action : "step");
+            snprintf(payload->detail, sizeof(payload->detail), "%s", detail ? detail : "");
+            snprintf(payload->decision, sizeof(payload->decision), "%s", decision ? decision : "none");
+            lv_obj_add_event_cb(btn, step_btn_clicked_cb, LV_EVENT_CLICKED, payload);
+            lv_obj_add_event_cb(btn, step_btn_delete_cb, LV_EVENT_DELETE, payload);
+        };
+        bind_btn("接受", BTN_PRIMARY, "[Work] Step accepted", "accept");
+        bind_btn("拒绝", BTN_DANGER, "[Work] Step rejected", "reject");
+        bind_btn("回退", BTN_SECONDARY, "[Work] Step rollback requested", "rollback");
+    } else if (exec_op && failed) {
+        lv_obj_t* row = lv_obj_create(card);
+        lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_pad_all(row, 0, 0);
+        lv_obj_set_style_pad_gap(row, 6, 0);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t* btn = aw_btn_create(row, "重试", BTN_SECONDARY, SCALE(90), SCALE(30));
+        StepBtnPayload* payload = new StepBtnPayload{};
+        snprintf(payload->log_line, sizeof(payload->log_line), "%s", "[Work] Step retry requested");
+        snprintf(payload->action, sizeof(payload->action), "%s", action ? action : "step");
+        snprintf(payload->detail, sizeof(payload->detail), "%s", detail ? detail : "");
+        snprintf(payload->decision, sizeof(payload->decision), "%s", "retry");
+        lv_obj_add_event_cb(btn, step_btn_clicked_cb, LV_EVENT_CLICKED, payload);
+        lv_obj_add_event_cb(btn, step_btn_delete_cb, LV_EVENT_DELETE, payload);
+    }
+    lv_obj_scroll_to_y(mode_work_step_stream, lv_obj_get_scroll_bottom(mode_work_step_stream), LV_ANIM_ON);
+    update_work_empty_state();
+}
+
 static void work_append_md_block(const char* title, const char* text) {
     if (!title || !text || !text[0]) return;
-    char block[4096] = {0};
-    snprintf(block, sizeof(block), "\n## %s\n\n%s\n", title, text);
-    size_t cur = strlen(g_work_md_doc);
-    size_t add = strlen(block);
-    if (cur + add + 1 >= sizeof(g_work_md_doc)) {
-        memmove(g_work_md_doc, g_work_md_doc + sizeof(g_work_md_doc) / 2, sizeof(g_work_md_doc) / 2);
-        g_work_md_doc[sizeof(g_work_md_doc) / 2] = '\0';
+    WorkRenderType rt = output_renderer_pick(title, text);
+    bool is_plan = strstr(text, "\"type\":\"plan\"") || strstr(text, "\"steps\"") || strstr(text, "approve_plan");
+    std::string render_text = text;
+    std::string plan_preview;
+    if (is_plan) {
+        plan_preview = build_plan_preview_text(text);
+        if (!plan_preview.empty()) {
+            render_text = std::string("## Plan Summary\n\n```text\n") + plan_preview + "```\n\n## Raw Plan\n\n" + text;
+        }
     }
-    strcat(g_work_md_doc, block);
+    output_renderer_append_markdown(g_work_md_doc, sizeof(g_work_md_doc), title, render_text.c_str());
+    if (mode_lbl_work_output_title) {
+        const char* pfx = "";
+        if (is_plan) pfx = "[Plan] ";
+        else if (rt == WorkRenderType::Diff) pfx = "[Diff] ";
+        else if (rt == WorkRenderType::Table) pfx = "[Table] ";
+        else if (rt == WorkRenderType::Web) pfx = "[Web] ";
+        else if (rt == WorkRenderType::File) pfx = "[File] ";
+        else if (rt == WorkRenderType::Terminal) pfx = "[Terminal] ";
+        lv_label_set_text_fmt(mode_lbl_work_output_title, "Output: %s%s", pfx, title);
+    }
+    if (mode_lbl_work_renderer) {
+        lv_label_set_text_fmt(mode_lbl_work_renderer, "Renderer: %s", is_plan ? "plan" : output_renderer_name(rt));
+        lv_color_t rc = lv_color_make(140, 170, 220);
+        if (is_plan) rc = lv_color_make(255, 200, 120);
+        else if (rt == WorkRenderType::Diff) rc = lv_color_make(120, 190, 255);
+        else if (rt == WorkRenderType::Table) rc = lv_color_make(120, 210, 150);
+        else if (rt == WorkRenderType::Web) rc = lv_color_make(190, 160, 255);
+        else if (rt == WorkRenderType::File) rc = lv_color_make(255, 190, 140);
+        else if (rt == WorkRenderType::Terminal) rc = lv_color_make(180, 180, 180);
+        lv_obj_set_style_text_color(mode_lbl_work_renderer, rc, 0);
+    }
+    const bool write_op = strstr(title, "write") || strstr(title, "Write") || strstr(text, "write_file");
+    work_add_step_card(is_plan ? "计划输出" : title, plan_preview.empty() ? text : plan_preview.c_str(), true, write_op);
     render_work_md_doc();
 }
 
@@ -2097,12 +2808,103 @@ static void update_work_mode_hint() {
     if (!mode_lbl_work_hint) return;
     const char* control = (g_control_mode == CONTROL_AI) ? "AI controls AnyClaw" : "User controls AnyClaw";
     const char* llm = "Gateway mode (OpenClaw, Direct API paused)";
-    lv_label_set_text_fmt(mode_lbl_work_hint, "Control: %s\nLLM Access: %s\nRemote Guard: %s\nLocal Gemma4: %s\nUser: %s (%s)\nAI: %s (%s)",
+    const char* ai_mode = (g_ai_interaction_mode == AIMODE_PLAN) ? "Plan" :
+                          (g_ai_interaction_mode == AIMODE_ASK) ? "Ask" : "Autonomous";
+    lv_label_set_text_fmt(mode_lbl_work_hint, "Control: %s\nLLM Access: %s\nAI Interaction: %s\nRemote Guard: %s\nProactive: startup=%s idle=%s\nLocal Gemma4: %s\nUser: %s (%s)\nAI: %s (%s)",
                           control, llm,
+                          ai_mode,
                           g_remote_guard_armed ? "Armed" : "Disarmed",
+                          g_proactive_startup_enabled ? "on" : "off",
+                          g_proactive_idle_enabled ? "on" : "off",
                           g_gemma_install_opt_in ? "Enabled" : "Disabled",
                           profile_user_name(), g_profile_user_role[0] ? g_profile_user_role : "Owner",
                           profile_ai_name(), g_profile_ai_role[0] ? g_profile_ai_role : "Assistant");
+}
+
+static void update_chat_status_label(const char* text, bool busy) {
+    if (!mode_lbl_chat_status) return;
+    lv_label_set_text(mode_lbl_chat_status, text ? text : "");
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
+    lv_obj_set_style_text_color(mode_lbl_chat_status, busy ? c->accent : c->text_dim, 0);
+    if (mode_lbl_work_chat_state) {
+        lv_label_set_text_fmt(mode_lbl_work_chat_state, "State: %s", text ? text : "");
+        lv_obj_set_style_text_color(mode_lbl_work_chat_state, busy ? c->accent : c->text_dim, 0);
+    }
+}
+
+static void update_work_advanced_visibility() {
+    auto apply = [](lv_obj_t* obj, bool show) {
+        if (!obj) return;
+        if (show) lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    };
+    apply(mode_sec_lan, g_work_show_advanced);
+    apply(mode_sec_ftp, g_work_show_advanced);
+    apply(mode_sec_kb, g_work_show_advanced);
+}
+
+static void sync_ai_mode_dropdowns() {
+    if (mode_dd_ai_mode) lv_dropdown_set_selected(mode_dd_ai_mode, (uint16_t)g_ai_interaction_mode);
+    if (mode_dd_chat_ai_mode) lv_dropdown_set_selected(mode_dd_chat_ai_mode, (uint16_t)g_ai_interaction_mode);
+}
+
+static const char* ai_mode_system_prompt() {
+    switch (g_ai_interaction_mode) {
+        case AIMODE_ASK:
+            return "You are in ASK mode. Continue autonomously for normal tasks, but for decision points or risky actions, emit compact JSON blocks like {\"type\":\"ask_feedback\",\"reason\":\"...\",\"suggestion\":\"...\",\"options\":[\"...\",\"...\",\"...\"]}.";
+        case AIMODE_PLAN:
+            return "You are in PLAN mode. First output a compact JSON plan block {\"type\":\"plan\",\"steps\":[...],\"risk\":\"...\",\"est_time\":\"...\"} before execution details.";
+        default:
+            return "You are in autonomous mode. Execute tasks directly and keep responses concise.";
+    }
+}
+
+static void run_proactive_startup_once() {
+    static bool done = false;
+    if (done || !g_proactive_startup_enabled) return;
+    done = true;
+    ui_log("[Proactive] Startup check executed");
+    append_ai_script_log("[proactive] startup check complete");
+}
+
+static DWORD get_idle_ms_win32() {
+    LASTINPUTINFO lii;
+    lii.cbSize = sizeof(lii);
+    if (!GetLastInputInfo(&lii)) return 0;
+    DWORD now = GetTickCount();
+    return now - lii.dwTime;
+}
+
+static void proactive_tick() {
+    DWORD now = GetTickCount();
+    if (g_proactive_idle_enabled) {
+        DWORD idle_ms = get_idle_ms_win32();
+        DWORD threshold = (DWORD)(g_proactive_idle_threshold_minutes * 60 * 1000);
+        if (idle_ms >= threshold && (now - g_proactive_last_idle_action_tick) > threshold) {
+            g_proactive_last_idle_action_tick = now;
+            if (g_proactive_memory_enabled) {
+                workspace_sync_managed_sections();
+                ui_log("[Proactive] Idle maintenance: synced managed docs");
+                append_ai_script_log("[proactive] idle maintenance finished");
+            } else {
+                ui_log("[Proactive] Idle detected, memory maintenance disabled");
+            }
+        }
+    }
+    if (g_proactive_summary_enabled) {
+        time_t tt = time(NULL);
+        struct tm tmv;
+        localtime_s(&tmv, &tt);
+        if (g_proactive_memory_enabled && tmv.tm_hour == 18 && g_proactive_last_memory_yday != tmv.tm_yday) {
+            g_proactive_last_memory_yday = tmv.tm_yday;
+            workspace_sync_managed_sections();
+            ui_log("[Proactive] 18:00 memory maintenance executed");
+        }
+        if (tmv.tm_hour == 23 && g_proactive_last_summary_yday != tmv.tm_yday) {
+            g_proactive_last_summary_yday = tmv.tm_yday;
+            ui_log("[Proactive] Daily summary: health monitor active, workspace synced");
+        }
+    }
 }
 
 static void work_control_mode_cb(lv_event_t* e) {
@@ -2112,6 +2914,285 @@ static void work_control_mode_cb(lv_event_t* e) {
     update_work_mode_hint();
     save_theme_config();
     LOG_I("MODE", "Control mode switched to %s", g_control_mode == CONTROL_AI ? "AI" : "User");
+}
+
+static void ai_emit_ui_action_feedback(const char* action, const char* target, bool ok, const char* reason) {
+    char safe_action[96] = {0};
+    char safe_target[96] = {0};
+    char safe_reason[160] = {0};
+    auto sanitize = [](const char* in, char* out, size_t out_sz) {
+        if (!out || out_sz == 0) return;
+        out[0] = '\0';
+        if (!in) return;
+        size_t oi = 0;
+        for (size_t i = 0; in[i] && oi + 1 < out_sz; i++) {
+            char c = in[i];
+            if (c == '"' || c == '\\' || c == '\n' || c == '\r') continue;
+            out[oi++] = c;
+        }
+        out[oi] = '\0';
+    };
+    sanitize(action, safe_action, sizeof(safe_action));
+    sanitize(target, safe_target, sizeof(safe_target));
+    sanitize(reason, safe_reason, sizeof(safe_reason));
+    char payload[460] = {0};
+    snprintf(payload, sizeof(payload),
+             "{\"type\":\"feedback\",\"answer\":\"ui_action:%s:%s:%s:%s\"}",
+             safe_action[0] ? safe_action : "unknown",
+             safe_target[0] ? safe_target : "-",
+             ok ? "ok" : "fail",
+             safe_reason[0] ? safe_reason : (ok ? "done" : "error"));
+    if (g_streaming) snprintf(g_pending_feedback_payload, sizeof(g_pending_feedback_payload), "%s", payload);
+    else submit_prompt_to_chat(payload);
+}
+
+static bool ai_simulate_text_input(const char* text) {
+    if (!text || !text[0]) return false;
+    for (const unsigned char* p = (const unsigned char*)text; *p; ++p) {
+        INPUT in[2] = {};
+        in[0].type = INPUT_KEYBOARD;
+        in[0].ki.wVk = 0;
+        in[0].ki.wScan = *p;
+        in[0].ki.dwFlags = KEYEVENTF_UNICODE;
+        in[1] = in[0];
+        in[1].ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+        if (SendInput(2, in, sizeof(INPUT)) != 2) return false;
+    }
+    return true;
+}
+
+static bool ai_simulate_enter_key() {
+    INPUT in[2] = {};
+    in[0].type = INPUT_KEYBOARD;
+    in[0].ki.wVk = VK_RETURN;
+    in[1] = in[0];
+    in[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    return SendInput(2, in, sizeof(INPUT)) == 2;
+}
+
+static bool ai_simulate_mouse_left_click_at(int x, int y, bool move_first) {
+    if (move_first) SetCursorPos(x, y);
+    INPUT in[2] = {};
+    in[0].type = INPUT_MOUSE;
+    in[0].mi.dwFlags = MOUSEEVENTF_LEFTDOWN;
+    in[1] = in[0];
+    in[1].mi.dwFlags = MOUSEEVENTF_LEFTUP;
+    return SendInput(2, in, sizeof(INPUT)) == 2;
+}
+
+static bool ui_action_is_high_risk(const char* action, const char* target) {
+    if (!action || !action[0]) return false;
+    if (strcmp(action, "run_work") == 0) return true;
+    if (strcmp(action, "send_chat_message") == 0) return true;
+    if (strcmp(action, "send_work_message") == 0) return true;
+    if (strcmp(action, "simulate_input") == 0) return true;
+    if (strcmp(action, "click_button") == 0 && target) {
+        return strcmp(target, "remote_request") == 0 ||
+               strcmp(target, "remote_accept") == 0 ||
+               strcmp(target, "remote_reject") == 0 ||
+               strcmp(target, "remote_disconnect") == 0 ||
+               strcmp(target, "work_remote_disconnect") == 0 ||
+               strcmp(target, "ftp_upload") == 0 ||
+               strcmp(target, "ftp_download") == 0 ||
+               strcmp(target, "cron_delete") == 0;
+    }
+    return false;
+}
+
+static bool ask_mode_confirm_ui_action(const char* action, const char* target, const char* value) {
+    if (g_ai_interaction_mode != AIMODE_ASK) return true;
+    if (!ui_action_is_high_risk(action, target)) return true;
+    char reason[320] = {0};
+    snprintf(reason, sizeof(reason), "AI control requests ui_action: %s target=%s value=%s",
+             action ? action : "", target ? target : "", (value && value[0]) ? value : "-");
+    bool ok = ask_mode_confirm_action(reason, "Allow this UI action to continue?", "allow_once,deny");
+    if (!ok) {
+        snprintf(g_pending_feedback_payload, sizeof(g_pending_feedback_payload),
+                 "{\"type\":\"feedback\",\"answer\":\"deny_ui_action:%s\"}",
+                 action && action[0] ? action : "unknown");
+    }
+    return ok;
+}
+
+static void execute_ai_ui_action_if_any(const char* text) {
+    if (g_control_mode != CONTROL_AI || !text || !text[0]) return;
+    const char* tag = strstr(text, "\"type\":\"ui_action\"");
+    if (!tag) return;
+    char action[64] = {0};
+    char target[64] = {0};
+    char value[512] = {0};
+    json_extract_string(tag, "action", action, sizeof(action));
+    json_extract_string(tag, "target", target, sizeof(target));
+    json_extract_string(tag, "value", value, sizeof(value));
+    if (!ask_mode_confirm_ui_action(action, target, value)) {
+        ui_log("[CTRL] AI ui_action blocked by Ask mode");
+        ai_emit_ui_action_feedback(action, target, false, "blocked_by_ask");
+        return;
+    }
+
+    bool handled = false;
+    bool success = true;
+    const char* fail_reason = "";
+    struct FieldMap { const char* key; lv_obj_t** ta; };
+    static FieldMap k_field_map[] = {
+        {"lan_host", &mode_ta_lan_host}, {"lan_port", &mode_ta_lan_port}, {"lan_nick", &mode_ta_lan_nick},
+        {"lan_msg", &mode_ta_lan_msg}, {"ftp_host", &mode_ta_ftp_host}, {"ftp_port", &mode_ta_ftp_port},
+        {"ftp_user", &mode_ta_ftp_user}, {"ftp_pass", &mode_ta_ftp_pass}, {"ftp_remote", &mode_ta_ftp_remote},
+        {"kb_query", &mode_ta_kb_keyword}, {"cron_id", &mode_ta_cron_id}, {nullptr, nullptr}
+    };
+    struct ClickMap { const char* key; void (*cb)(lv_event_t*); };
+    static ClickMap k_click_map[] = {
+        {"work_send", work_send_cb}, {"chat_send", chat_send_cb}, {"work_chat_send", work_chat_send_cb},
+        {"work_chat_toggle", work_chat_toggle_cb}, {"remote_request", remote_request_cb},
+        {"remote_accept", remote_accept_cb}, {"remote_reject", remote_reject_cb},
+        {"remote_disconnect", remote_disconnect_cb}, {"work_remote_disconnect", work_remote_disconnect_cb},
+        {"trace_refresh", work_trace_refresh_cb}, {"trace_sort", work_trace_toggle_sort_cb},
+        {"trace_fail_filter", work_trace_toggle_fail_filter_cb}, {"boot_open_report", work_boot_open_report_cb},
+        {"retry_attachments", work_retry_failed_attachments_cb}, {"lan_start_host", work_lan_start_host_cb},
+        {"lan_connect", work_lan_connect_cb}, {"lan_discover", work_lan_discover_cb},
+        {"lan_send_global", work_lan_send_global_cb}, {"lan_send_private", work_lan_send_private_cb},
+        {"lan_create_group", work_lan_create_group_cb}, {"lan_join_group", work_lan_join_group_cb},
+        {"lan_send_group", work_lan_send_group_cb}, {"ftp_upload", work_ftp_upload_cb},
+        {"ftp_download", work_ftp_download_cb}, {"ftp_cancel", work_ftp_cancel_cb},
+        {"ftp_retry", work_ftp_retry_cb}, {"kb_add_source", work_kb_add_source_cb},
+        {"kb_import_dir", work_kb_import_dir_cb}, {"kb_export_manifest", work_kb_export_manifest_cb},
+        {"kb_search", work_kb_search_cb}, {"cron_refresh", work_cron_refresh_cb},
+        {"cron_run", work_cron_run_cb}, {"cron_enable", work_cron_enable_cb},
+        {"cron_disable", work_cron_disable_cb}, {"cron_delete", work_cron_delete_cb},
+        {nullptr, nullptr}
+    };
+
+    if (strcmp(action, "switch_mode") == 0) {
+        if (strcmp(target, "work") == 0) g_ui_mode = UI_MODE_WORK;
+        else g_ui_mode = UI_MODE_CHAT;
+        apply_mode_switch_visuals();
+        relayout_panels();
+        ui_log("[CTRL] AI ui_action switch_mode -> %s", target[0] ? target : "chat");
+        handled = true;
+    } else if (strcmp(action, "set_work_prompt") == 0) {
+        if (mode_ta_work_prompt && value[0]) {
+            lv_textarea_set_text(mode_ta_work_prompt, value);
+            ui_log("[CTRL] AI ui_action set_work_prompt");
+            handled = true;
+        } else { success = false; fail_reason = "work_prompt_unavailable"; }
+    } else if (strcmp(action, "set_field") == 0) {
+        if (value[0]) {
+            bool matched = false;
+            for (int i = 0; k_field_map[i].key; i++) {
+                if (strcmp(target, k_field_map[i].key) == 0) {
+                    matched = true;
+                    if (k_field_map[i].ta && *k_field_map[i].ta) {
+                        lv_textarea_set_text(*k_field_map[i].ta, value);
+                        handled = true;
+                        ui_log("[CTRL] AI ui_action set_field(%s)", target);
+                    } else {
+                        success = false;
+                        fail_reason = "field_widget_unavailable";
+                    }
+                    break;
+                }
+            }
+            if (!matched) { success = false; fail_reason = "unknown_field_target"; }
+        } else { success = false; fail_reason = "empty_field_value"; }
+    } else if (strcmp(action, "set_chat_prompt") == 0) {
+        if (chat_input && value[0]) {
+            lv_textarea_set_text(chat_input, value);
+            ui_log("[CTRL] AI ui_action set_chat_prompt");
+            handled = true;
+        } else { success = false; fail_reason = "chat_input_unavailable"; }
+    } else if (strcmp(action, "send_chat_message") == 0) {
+        if (chat_input && value[0]) {
+            lv_textarea_set_text(chat_input, value);
+            chat_send_cb(nullptr);
+            ui_log("[CTRL] AI ui_action send_chat_message");
+            handled = true;
+        } else { success = false; fail_reason = "chat_send_input_empty"; }
+    } else if (strcmp(action, "send_work_message") == 0) {
+        if (mode_ta_work_chat_input && value[0]) {
+            lv_textarea_set_text(mode_ta_work_chat_input, value);
+            work_chat_send_cb(nullptr);
+            ui_log("[CTRL] AI ui_action send_work_message");
+            handled = true;
+        } else { success = false; fail_reason = "work_chat_input_unavailable"; }
+    } else if (strcmp(action, "toggle_work_chat") == 0) {
+        work_chat_toggle_cb(nullptr);
+        ui_log("[CTRL] AI ui_action toggle_work_chat");
+        handled = true;
+    } else if (strcmp(action, "simulate_input") == 0) {
+        if (strcmp(target, "keyboard_text") == 0) {
+            if (ai_simulate_text_input(value)) {
+                ui_log("[CTRL] AI ui_action simulate_input(keyboard_text)");
+                handled = true;
+            } else {
+                success = false;
+                fail_reason = "sendinput_text_failed";
+            }
+        } else if (strcmp(target, "key_enter") == 0) {
+            if (ai_simulate_enter_key()) {
+                ui_log("[CTRL] AI ui_action simulate_input(key_enter)");
+                handled = true;
+            } else {
+                success = false;
+                fail_reason = "sendinput_enter_failed";
+            }
+        } else if (strcmp(target, "mouse_left_click") == 0) {
+            POINT p{};
+            GetCursorPos(&p);
+            if (ai_simulate_mouse_left_click_at((int)p.x, (int)p.y, false)) {
+                ui_log("[CTRL] AI ui_action simulate_input(mouse_left_click)");
+                handled = true;
+            } else {
+                success = false;
+                fail_reason = "sendinput_mouse_click_failed";
+            }
+        } else if (strcmp(target, "mouse_move_click") == 0) {
+            int x = 0, y = 0;
+            if (sscanf(value, "%d,%d", &x, &y) == 2) {
+                if (ai_simulate_mouse_left_click_at(x, y, true)) {
+                    ui_log("[CTRL] AI ui_action simulate_input(mouse_move_click:%d,%d)", x, y);
+                    handled = true;
+                } else {
+                    success = false;
+                    fail_reason = "sendinput_mouse_move_click_failed";
+                }
+            } else {
+                success = false;
+                fail_reason = "invalid_mouse_coordinates";
+            }
+        } else {
+            success = false;
+            fail_reason = "unknown_simulate_target";
+        }
+    } else if (strcmp(action, "click_button") == 0) {
+        bool matched = false;
+        for (int i = 0; k_click_map[i].key; i++) {
+            if (strcmp(target, k_click_map[i].key) == 0) {
+                matched = true;
+                if (k_click_map[i].cb) {
+                    k_click_map[i].cb(nullptr);
+                    ui_log("[CTRL] AI ui_action click_button(%s)", target);
+                    handled = true;
+                } else {
+                    success = false;
+                    fail_reason = "button_callback_missing";
+                }
+                break;
+            }
+        }
+        if (!matched) { success = false; fail_reason = "unknown_button_target"; }
+    } else if (strcmp(action, "run_work") == 0) {
+        work_send_cb(nullptr);
+        ui_log("[CTRL] AI ui_action run_work executed");
+        handled = true;
+    } else {
+        success = false;
+        fail_reason = "unknown_action";
+    }
+    if (!handled && success) {
+        success = false;
+        fail_reason = "not_executed";
+    }
+    ai_emit_ui_action_feedback(action, target, success, fail_reason);
 }
 
 static void work_llm_mode_cb(lv_event_t* e) {
@@ -2129,6 +3210,225 @@ static void work_llm_mode_cb(lv_event_t* e) {
     update_work_mode_hint();
     save_theme_config();
     LOG_I("MODE", "LLM access switched to Gateway (Direct API paused)");
+}
+
+static void ai_mode_dropdown_cb(lv_event_t* e) {
+    lv_obj_t* dd = lv_event_get_target_obj(e);
+    if (!dd) return;
+    uint16_t sel = lv_dropdown_get_selected(dd);
+    if (sel > 2) sel = 0;
+    g_ai_interaction_mode = (AiInteractionMode)sel;
+    sync_ai_mode_dropdowns();
+    update_work_mode_hint();
+    save_theme_config();
+    ui_log("[Mode] AI interaction mode: %s", sel == 0 ? "Autonomous" : (sel == 1 ? "Ask" : "Plan"));
+}
+
+static void work_advanced_sw_cb(lv_event_t* e) {
+    lv_obj_t* sw = lv_event_get_target_obj(e);
+    if (!sw) return;
+    g_work_show_advanced = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    update_work_advanced_visibility();
+    save_theme_config();
+    ui_log("[Work] Advanced modules %s", g_work_show_advanced ? "shown" : "hidden");
+}
+
+struct AskFeedbackDialogCtx {
+    volatile int* decision; /* 0=pending 1=reject 2=allow */
+    char* answer;
+    size_t answer_cap;
+    lv_obj_t* input_ta;
+};
+
+static void ask_feedback_choice_cb(lv_event_t* e) {
+    AskFeedbackDialogCtx* ctx = (AskFeedbackDialogCtx*)lv_event_get_user_data(e);
+    if (!ctx || !ctx->decision || !ctx->answer || ctx->answer_cap == 0) return;
+    const char* choice = (const char*)lv_event_get_user_data(e);
+    snprintf(ctx->answer, ctx->answer_cap, "%s", choice ? choice : "allow");
+    *ctx->decision = 2;
+}
+
+static void ask_feedback_reject_cb(lv_event_t* e) {
+    AskFeedbackDialogCtx* ctx = (AskFeedbackDialogCtx*)lv_event_get_user_data(e);
+    if (!ctx || !ctx->decision || !ctx->answer || ctx->answer_cap == 0) return;
+    snprintf(ctx->answer, ctx->answer_cap, "%s", "reject");
+    *ctx->decision = 1;
+}
+
+static void ask_feedback_submit_cb(lv_event_t* e) {
+    AskFeedbackDialogCtx* ctx = (AskFeedbackDialogCtx*)lv_event_get_user_data(e);
+    if (!ctx || !ctx->decision || !ctx->answer || ctx->answer_cap == 0) return;
+    const char* text = (ctx->input_ta) ? lv_textarea_get_text(ctx->input_ta) : "";
+    snprintf(ctx->answer, ctx->answer_cap, "%s", (text && text[0]) ? text : "allow");
+    *ctx->decision = 2;
+}
+
+static bool ask_mode_confirm_action(const char* reason, const char* suggestion, const char* options_csv, char* out_answer, size_t out_answer_cap) {
+    if (g_ai_interaction_mode != AIMODE_ASK) return true;
+    if (g_ui_thread_id == 0 || GetCurrentThreadId() != g_ui_thread_id) {
+        char msg[768];
+        snprintf(msg, sizeof(msg),
+                 "AI Ask Mode decision required.\n\nReason: %s\nSuggestion: %s\n\nYes = Continue\nNo = Reject",
+                 reason ? reason : "(none)",
+                 suggestion ? suggestion : "(none)");
+        bool ok = MessageBoxA(NULL, msg, "AnyClaw Ask Feedback", MB_ICONQUESTION | MB_YESNO | MB_TOPMOST) == IDYES;
+        if (out_answer && out_answer_cap > 0) snprintf(out_answer, out_answer_cap, "%s", ok ? "allow" : "reject");
+        return ok;
+    }
+
+    lv_obj_t* overlay = nullptr;
+    lv_obj_t* box = create_dialog(lv_screen_active(), "AnyClaw Ask Feedback", SCALE(640), 0, &overlay);
+    if (!box || !overlay) return false;
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
+
+    lv_obj_t* lbl_suggestion = lv_label_create(box);
+    lv_label_set_text_fmt(lbl_suggestion, "建议：%s", suggestion ? suggestion : "(none)");
+    lv_obj_set_style_text_color(lbl_suggestion, c->accent, 0);
+    lv_obj_set_style_text_font(lbl_suggestion, CJK_FONT, 0);
+    lv_label_set_long_mode(lbl_suggestion, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(lbl_suggestion, LV_PCT(100));
+
+    lv_obj_t* info_box = lv_obj_create(box);
+    lv_obj_set_size(info_box, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(info_box, c->input_bg, 0);
+    lv_obj_set_style_border_color(info_box, c->panel_border, 0);
+    lv_obj_set_style_border_width(info_box, 1, 0);
+    lv_obj_set_style_radius(info_box, SCALE(10), 0);
+    lv_obj_set_style_pad_all(info_box, SCALE(10), 0);
+    lv_obj_set_style_pad_gap(info_box, SCALE(6), 0);
+    lv_obj_set_flex_flow(info_box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(info_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_clear_flag(info_box, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* lbl_reason = lv_label_create(info_box);
+    lv_label_set_text_fmt(lbl_reason, "原因：%s", reason ? reason : "(none)");
+    lv_obj_set_style_text_color(lbl_reason, c->text, 0);
+    lv_obj_set_style_text_font(lbl_reason, CJK_FONT_SMALL, 0);
+    lv_label_set_long_mode(lbl_reason, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(lbl_reason, LV_PCT(100));
+
+    lv_obj_t* row_opt = lv_obj_create(box);
+    lv_obj_set_size(row_opt, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_opt, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_opt, 0, 0);
+    lv_obj_set_style_pad_all(row_opt, 0, 0);
+    lv_obj_set_style_pad_gap(row_opt, 8, 0);
+    lv_obj_set_flex_flow(row_opt, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(row_opt, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_clear_flag(row_opt, LV_OBJ_FLAG_SCROLLABLE);
+
+    volatile int decision = 0;
+    static char answer[256];
+    answer[0] = '\0';
+    AskFeedbackDialogCtx ctx = {&decision, answer, sizeof(answer), nullptr};
+    auto add_opt = [&](const char* txt) {
+        lv_obj_t* b = aw_btn_create(row_opt, txt, BTN_SECONDARY, LV_PCT(100), SCALE(34));
+        lv_obj_add_event_cb(b, [](lv_event_t* ev) {
+            AskFeedbackDialogCtx* cctx = (AskFeedbackDialogCtx*)lv_event_get_user_data(ev);
+            if (!cctx || !cctx->decision || !cctx->answer) return;
+            lv_obj_t* btn = lv_event_get_target_obj(ev);
+            lv_obj_t* lbl = lv_obj_get_child(btn, 0);
+            const char* t = lbl ? lv_label_get_text(lbl) : "allow";
+            snprintf(cctx->answer, cctx->answer_cap, "%s", t ? t : "allow");
+            *cctx->decision = 2;
+        }, LV_EVENT_CLICKED, &ctx);
+    };
+    int added = 0;
+    char default_choice[64] = "allow";
+    if (options_csv && options_csv[0]) {
+        char opts[256];
+        snprintf(opts, sizeof(opts), "%s", options_csv);
+        for (char* p = opts; *p; ++p) {
+            if (*p == ',') *p = '|';
+        }
+        char* ctxp = nullptr;
+        char* tok = strtok_s(opts, "|", &ctxp);
+        while (tok && added < 4) {
+            while (*tok == ' ' || *tok == '\t') tok++;
+            char* end = tok + strlen(tok);
+            while (end > tok && (end[-1] == ' ' || end[-1] == '\t')) {
+                end[-1] = '\0';
+                end--;
+            }
+            if (tok[0]) {
+                add_opt(tok);
+                if (added == 0) snprintf(default_choice, sizeof(default_choice), "%s", tok);
+                added++;
+            }
+            tok = strtok_s(nullptr, "|", &ctxp);
+        }
+    }
+    if (added == 0) {
+        add_opt("继续执行");
+        add_opt("先给计划");
+        add_opt("改后执行");
+        snprintf(default_choice, sizeof(default_choice), "%s", "继续执行");
+    }
+
+    lv_obj_t* lbl_custom = lv_label_create(box);
+    lv_label_set_text(lbl_custom, "自定义回复：");
+    lv_obj_set_style_text_color(lbl_custom, c->text_dim, 0);
+    lv_obj_set_style_text_font(lbl_custom, CJK_FONT_SMALL, 0);
+    lv_obj_set_width(lbl_custom, LV_PCT(100));
+
+    lv_obj_t* ta = lv_textarea_create(box);
+    lv_textarea_set_placeholder_text(ta, "自定义反馈（可选）");
+    lv_textarea_set_one_line(ta, false);
+    lv_obj_set_size(ta, LV_PCT(100), SCALE(84));
+    lv_obj_set_style_bg_color(ta, c->input_bg, 0);
+    lv_obj_set_style_text_color(ta, c->text, 0);
+    lv_obj_set_style_border_color(ta, c->panel_border, 0);
+    lv_obj_set_style_border_width(ta, 1, 0);
+    lv_obj_set_style_border_color(ta, c->accent, LV_STATE_FOCUSED);
+    lv_obj_set_style_border_width(ta, 2, LV_STATE_FOCUSED);
+    lv_obj_set_style_radius(ta, SCALE(10), 0);
+    lv_obj_set_style_pad_all(ta, SCALE(10), 0);
+    ctx.input_ta = ta;
+
+    lv_obj_t* row_btn = lv_obj_create(box);
+    lv_obj_set_size(row_btn, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_btn, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_btn, 0, 0);
+    lv_obj_set_style_pad_all(row_btn, 0, 0);
+    lv_obj_set_style_pad_gap(row_btn, 8, 0);
+    lv_obj_set_flex_flow(row_btn, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_btn, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row_btn, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* btn_reject = aw_btn_create(row_btn, "拒绝", BTN_DANGER, SCALE(110), SCALE(34));
+    lv_obj_add_event_cb(btn_reject, ask_feedback_reject_cb, LV_EVENT_CLICKED, &ctx);
+    lv_obj_t* btn_submit = aw_btn_create(row_btn, "发送", BTN_PRIMARY, SCALE(120), SCALE(34));
+    lv_obj_add_event_cb(btn_submit, ask_feedback_submit_cb, LV_EVENT_CLICKED, &ctx);
+
+    lv_obj_t* lbl_timeout = lv_label_create(box);
+    lv_label_set_text(lbl_timeout, "⏱ 60秒未选择将自动拒绝");
+    lv_obj_set_style_text_color(lbl_timeout, c->text_dim, 0);
+    lv_obj_set_style_text_font(lbl_timeout, CJK_FONT_SMALL, 0);
+    lv_obj_set_width(lbl_timeout, LV_PCT(100));
+
+    lv_obj_move_foreground(overlay);
+    uint32_t start = GetTickCount();
+    while (decision == 0) {
+        lv_timer_handler();
+        Sleep(16);
+        if (GetTickCount() - start > 60000) {
+            decision = 1;
+            snprintf(answer, sizeof(answer), "%s", "timeout_reject");
+        }
+    }
+    if (overlay) lv_obj_del(overlay);
+
+    if (out_answer && out_answer_cap > 0) {
+        snprintf(out_answer, out_answer_cap, "%s", answer[0] ? answer : (decision == 2 ? default_choice : "reject"));
+    }
+    if (decision == 2) {
+        ui_log("[AIMODE] ask_feedback approved: %s | answer=%s", reason ? reason : "(none)", answer);
+        append_ai_script_log("[ask] approved");
+        return true;
+    }
+    ui_log("[AIMODE] ask_feedback rejected: %s | answer=%s", reason ? reason : "(none)", answer);
+    append_ai_script_log("[ask] rejected");
+    return false;
 }
 
 static void work_profile_save_cb(lv_event_t* e) {
@@ -2192,46 +3492,171 @@ static void work_remote_disconnect_cb(lv_event_t* e) {
     LOG_W("REMOTE", "Emergency disconnect");
 }
 
-static void voice_send_cb(lv_event_t* e) {
-    (void)e;
-    if (!mode_ta_voice_input) return;
-    const char* text = lv_textarea_get_text(mode_ta_voice_input);
-    if (!text || !text[0]) return;
-    submit_prompt_to_chat(text);
-    lv_textarea_set_text(mode_ta_voice_input, "");
-    g_ui_mode = UI_MODE_CHAT;
-    apply_mode_switch_visuals();
-    relayout_panels();
-    LOG_I("VOICE", "Voice panel prompt sent to chat pipeline");
+static void close_voice_input_dialog() {
+    if (g_voice_input_overlay) {
+        lv_obj_del(g_voice_input_overlay);
+        g_voice_input_overlay = nullptr;
+    }
+    g_voice_input_ta = nullptr;
 }
 
-static void voice_send_to_work_cb(lv_event_t* e) {
+static void voice_input_cancel_cb(lv_event_t* e) {
     (void)e;
-    if (!mode_ta_voice_input || !mode_ta_work_prompt) return;
-    const char* text = lv_textarea_get_text(mode_ta_voice_input);
-    if (!text || !text[0]) return;
-    lv_textarea_set_text(mode_ta_work_prompt, text);
-    lv_textarea_set_text(mode_ta_voice_input, "");
-    g_ui_mode = UI_MODE_WORK;
-    apply_mode_switch_visuals();
-    relayout_panels();
-    ui_log("[Voice] Transcript moved to Work prompt");
-    LOG_I("VOICE", "Voice panel prompt moved to work mode");
+    close_voice_input_dialog();
+}
+
+static void voice_input_apply_cb(lv_event_t* e) {
+    (void)e;
+    if (!g_voice_input_ta || !chat_input) {
+        close_voice_input_dialog();
+        return;
+    }
+    const char* text = lv_textarea_get_text(g_voice_input_ta);
+    if (text && text[0]) {
+        const char* current = lv_textarea_get_text(chat_input);
+        if (current && current[0]) lv_textarea_add_text(chat_input, "\n");
+        lv_textarea_add_text(chat_input, text);
+        lv_obj_send_event(chat_input, LV_EVENT_VALUE_CHANGED, nullptr);
+        ui_log("[Voice] Transcript inserted into chat input");
+    }
+    close_voice_input_dialog();
+}
+
+static bool voice_try_system_stt(std::string& transcript, std::string& err) {
+    transcript.clear();
+    err.clear();
+    const char* cmd =
+        "powershell -NoProfile -ExecutionPolicy Bypass -Command "
+        "\"[Console]::OutputEncoding=[System.Text.UTF8Encoding]::UTF8; "
+        "Add-Type -AssemblyName System.Speech; "
+        "$r=New-Object System.Speech.Recognition.SpeechRecognitionEngine; "
+        "$r.SetInputToDefaultAudioDevice(); "
+        "$r.LoadGrammar((New-Object System.Speech.Recognition.DictationGrammar)); "
+        "$res=$r.Recognize([TimeSpan]::FromSeconds(8)); "
+        "if($res -and $res.Text){ Write-Output $res.Text } else { Write-Output '__EMPTY__' }\"";
+    FILE* pipe = _popen(cmd, "r");
+    if (!pipe) {
+        err = "cannot_launch_stt_process";
+        return false;
+    }
+    char buf[1024] = {0};
+    while (fgets(buf, sizeof(buf), pipe)) transcript += buf;
+    int rc = _pclose(pipe);
+    while (!transcript.empty() && (transcript.back() == '\r' || transcript.back() == '\n' || transcript.back() == ' ' || transcript.back() == '\t')) {
+        transcript.pop_back();
+    }
+    if (rc != 0) {
+        err = "stt_command_failed";
+        return false;
+    }
+    if (transcript.empty() || transcript == "__EMPTY__") {
+        err = "no_speech_result";
+        return false;
+    }
+    return true;
+}
+
+static void open_voice_manual_dialog() {
+    if (g_voice_input_overlay) return;
+    lv_obj_t* box = create_dialog(lv_screen_active(),
+                                  g_lang == Lang::CN ? "语音输入（转文字）" : "Voice Input (to text)",
+                                  SCALE(520), 0, &g_voice_input_overlay);
+    if (!box) return;
+    lv_obj_t* hint = lv_label_create(box);
+    lv_label_set_text(hint, g_lang == Lang::CN
+        ? "将语音识别结果粘贴到这里，点击“插入输入框”后会写入 Chat 输入区。"
+        : "Paste your speech-to-text result here, then insert it into chat input.");
+    lv_obj_set_style_text_color(hint, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(hint, CJK_FONT_SMALL, 0);
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(hint, LV_PCT(100));
+
+    g_voice_input_ta = lv_textarea_create(box);
+    lv_textarea_set_one_line(g_voice_input_ta, false);
+    lv_textarea_set_placeholder_text(g_voice_input_ta, g_lang == Lang::CN ? "语音转文字结果..." : "Voice transcript...");
+    lv_obj_set_size(g_voice_input_ta, LV_PCT(100), SCALE(120));
+    lv_obj_set_style_bg_color(g_voice_input_ta, g_colors->input_bg, 0);
+    lv_obj_set_style_text_color(g_voice_input_ta, g_colors->text, 0);
+
+    lv_obj_t* row = lv_obj_create(box);
+    lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_set_style_pad_gap(row, 8, 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* btn_cancel = aw_btn_create(row, g_lang == Lang::CN ? "取消" : "Cancel", BTN_SECONDARY, SCALE(120), SCALE(34));
+    lv_obj_add_event_cb(btn_cancel, voice_input_cancel_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* btn_apply = aw_btn_create(row, g_lang == Lang::CN ? "插入输入框" : "Insert", BTN_PRIMARY, SCALE(170), SCALE(34));
+    lv_obj_add_event_cb(btn_apply, voice_input_apply_cb, LV_EVENT_CLICKED, nullptr);
+}
+
+static DWORD WINAPI voice_stt_thread_proc(LPVOID arg) {
+    int token = (int)(INT_PTR)arg;
+    std::string transcript;
+    std::string err;
+    bool ok = voice_try_system_stt(transcript, err);
+    LONG active = InterlockedCompareExchange(&g_voice_stt_active_token, 0, 0);
+    if (token != (int)active) return 0;
+    g_voice_stt_ok = ok;
+    snprintf(g_voice_stt_text, sizeof(g_voice_stt_text), "%s", ok ? transcript.c_str() : "");
+    snprintf(g_voice_stt_err, sizeof(g_voice_stt_err), "%s", ok ? "" : err.c_str());
+    InterlockedExchange(&g_voice_stt_done, 1);
+    InterlockedExchange(&g_voice_stt_running, 0);
+    return 0;
+}
+
+static void voice_stt_poll_cb(lv_timer_t* t) {
+    (void)t;
+    if (InterlockedCompareExchange(&g_voice_stt_running, 0, 0) &&
+        GetTickCount() - g_voice_stt_start_tick > 12000) {
+        InterlockedExchange(&g_voice_stt_running, 0);
+        InterlockedIncrement(&g_voice_stt_active_token); /* invalidate stale thread result */
+        if (g_voice_stt_thread) {
+            CloseHandle(g_voice_stt_thread);
+            g_voice_stt_thread = nullptr;
+        }
+        if (g_voice_stt_poll_timer) {
+            lv_timer_del(g_voice_stt_poll_timer);
+            g_voice_stt_poll_timer = nullptr;
+        }
+        ui_log("[Voice] System STT timeout, fallback to manual dialog");
+        open_voice_manual_dialog();
+        return;
+    }
+    if (!InterlockedCompareExchange(&g_voice_stt_done, 0, 1)) return;
+    if (g_voice_stt_poll_timer) {
+        lv_timer_del(g_voice_stt_poll_timer);
+        g_voice_stt_poll_timer = nullptr;
+    }
+    if (g_voice_stt_thread) {
+        CloseHandle(g_voice_stt_thread);
+        g_voice_stt_thread = nullptr;
+    }
+    if (g_voice_stt_ok && g_voice_stt_text[0]) {
+        if (chat_input) {
+            const char* current = lv_textarea_get_text(chat_input);
+            if (current && current[0]) lv_textarea_add_text(chat_input, "\n");
+            lv_textarea_add_text(chat_input, g_voice_stt_text);
+            lv_obj_send_event(chat_input, LV_EVENT_VALUE_CHANGED, nullptr);
+        }
+        ui_log("[Voice] System STT success, transcript inserted");
+    } else {
+        ui_log("[Voice] System STT unavailable (%s), fallback to manual transcript dialog", g_voice_stt_err[0] ? g_voice_stt_err : "unknown");
+        open_voice_manual_dialog();
+    }
 }
 
 static void apply_mode_switch_visuals() {
-    if (!mode_panel_chat || !mode_panel_voice || !mode_panel_work) return;
+    if (!mode_panel_chat || !mode_panel_work) return;
     if (g_ui_mode == UI_MODE_CHAT) {
         lv_obj_clear_flag(mode_panel_chat, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(mode_panel_voice, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(mode_panel_work, LV_OBJ_FLAG_HIDDEN);
-    } else if (g_ui_mode == UI_MODE_VOICE) {
-        lv_obj_add_flag(mode_panel_chat, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(mode_panel_voice, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(mode_panel_work, LV_OBJ_FLAG_HIDDEN);
     } else {
         lv_obj_add_flag(mode_panel_chat, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(mode_panel_voice, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(mode_panel_work, LV_OBJ_FLAG_HIDDEN);
     }
 
@@ -2242,18 +3667,36 @@ static void apply_mode_switch_visuals() {
         lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
     };
     paint_btn(mode_btn_chat, g_ui_mode == UI_MODE_CHAT);
-    paint_btn(mode_btn_voice, g_ui_mode == UI_MODE_VOICE);
     paint_btn(mode_btn_work, g_ui_mode == UI_MODE_WORK);
     paint_btn(top_mode_chat, g_ui_mode == UI_MODE_CHAT);
     paint_btn(top_mode_work, g_ui_mode == UI_MODE_WORK);
-    if (top_mode_chat) {
-        lv_obj_t* lbl = lv_obj_get_child(top_mode_chat, 0);
-        if (lbl) lv_label_set_text(lbl, g_ui_mode == UI_MODE_WORK ? "切到Chat" : "切到Work");
-    }
 }
 
 static void mode_chat_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_CHAT; apply_mode_switch_visuals(); relayout_panels(); }
-static void mode_voice_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_VOICE; apply_mode_switch_visuals(); relayout_panels(); }
+static void mode_voice_cb(lv_event_t* e) {
+    (void)e;
+    if (InterlockedCompareExchange(&g_voice_stt_running, 0, 0)) {
+        ui_log("[Voice] STT capture is still running, please wait");
+        return;
+    }
+    ui_log("[Voice] Starting system STT capture asynchronously...");
+    g_voice_stt_done = 0;
+    g_voice_stt_ok = false;
+    g_voice_stt_text[0] = '\0';
+    g_voice_stt_err[0] = '\0';
+    InterlockedExchange(&g_voice_stt_running, 1);
+    LONG token = InterlockedIncrement(&g_voice_stt_active_token);
+    g_voice_stt_start_tick = GetTickCount();
+    g_voice_stt_thread = CreateThread(nullptr, 0, voice_stt_thread_proc, (LPVOID)(INT_PTR)token, 0, nullptr);
+    if (!g_voice_stt_thread) {
+        InterlockedExchange(&g_voice_stt_running, 0);
+        ui_log("[Voice] Failed to start STT thread, fallback to manual dialog");
+        open_voice_manual_dialog();
+        return;
+    }
+    if (g_voice_stt_poll_timer) lv_timer_del(g_voice_stt_poll_timer);
+    g_voice_stt_poll_timer = lv_timer_create(voice_stt_poll_cb, 160, nullptr);
+}
 static void mode_work_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_WORK; apply_mode_switch_visuals(); relayout_panels(); }
 static void mode_chat_work_toggle_cb(lv_event_t* e) {
     (void)e;
@@ -2425,16 +3868,13 @@ static void relayout_panels() {
         lv_obj_set_size(mode_panel_chat, content_w, content_h);
         lv_obj_set_pos(mode_panel_chat, CHAT_GAP, CHAT_GAP);
     }
-    if (mode_panel_voice) {
-        lv_obj_set_size(mode_panel_voice, content_w, content_h);
-        lv_obj_set_pos(mode_panel_voice, CHAT_GAP, CHAT_GAP);
-    }
     if (mode_panel_work) {
         lv_obj_set_size(mode_panel_work, content_w, content_h);
         lv_obj_set_pos(mode_panel_work, CHAT_GAP, CHAT_GAP);
     }
     if (mode_dd_control) lv_obj_set_width(mode_dd_control, std::min(content_w - 16, SCALE(360)));
     if (mode_dd_llm) lv_obj_set_width(mode_dd_llm, std::min(content_w - 16, SCALE(360)));
+    if (mode_dd_ai_mode) lv_obj_set_width(mode_dd_ai_mode, std::min(content_w - 16, SCALE(360)));
     if (mode_lbl_work_hint) lv_obj_set_width(mode_lbl_work_hint, content_w - 16);
     if (mode_lbl_gemma_recommend) lv_obj_set_width(mode_lbl_gemma_recommend, content_w - 16);
     int profile_w = std::min(content_w - 16, SCALE(520));
@@ -2445,9 +3885,26 @@ static void relayout_panels() {
     if (mode_ta_ai_persona) lv_obj_set_width(mode_ta_ai_persona, profile_w);
     if (mode_ta_ai_skills) lv_obj_set_width(mode_ta_ai_skills, profile_w);
     if (mode_ta_work_prompt) lv_obj_set_width(mode_ta_work_prompt, profile_w);
+    int work_chat_w = g_work_chat_collapsed ? SCALE(40) : SCALE(320);
+    if (mode_work_chat_panel) {
+        lv_obj_set_width(mode_work_chat_panel, work_chat_w);
+        lv_obj_set_pos(mode_work_chat_panel, std::max(SCALE(8), content_w - work_chat_w - SCALE(8)), SCALE(8));
+    }
+    if (mode_ta_work_chat_feed) lv_obj_set_width(mode_ta_work_chat_feed, std::max(SCALE(16), work_chat_w - SCALE(24)));
+    if (mode_ta_work_chat_input) lv_obj_set_width(mode_ta_work_chat_input, std::max(SCALE(16), work_chat_w - SCALE(24)));
+    if (mode_sec_step_stream) lv_obj_set_width(mode_sec_step_stream, profile_w + SCALE(24));
+    if (mode_work_step_stream) {
+        lv_obj_set_width(mode_work_step_stream, profile_w);
+        lv_obj_set_height(mode_work_step_stream, SCALE(g_work_step_stream_h));
+    }
+    if (mode_work_splitter) lv_obj_set_width(mode_work_splitter, profile_w);
+    if (mode_sec_work_console) lv_obj_set_width(mode_sec_work_console, profile_w + SCALE(24));
+    if (mode_work_output_wrap) {
+        lv_obj_set_width(mode_work_output_wrap, profile_w);
+        lv_obj_set_height(mode_work_output_wrap, SCALE(g_work_output_h));
+    }
     if (mode_dd_user_avatar) lv_obj_set_width(mode_dd_user_avatar, profile_w);
     if (mode_dd_ai_avatar) lv_obj_set_width(mode_dd_ai_avatar, profile_w);
-    if (mode_ta_voice_input) lv_obj_set_width(mode_ta_voice_input, content_w - 40);
     if (mode_remote_warning_bar) lv_obj_set_width(mode_remote_warning_bar, std::min(content_w - 16, SCALE(560)) - 24);
     if (mode_lbl_remote_state) lv_obj_set_width(mode_lbl_remote_state, content_w - 16);
 
@@ -2477,34 +3934,23 @@ static void relayout_panels() {
         lv_obj_set_size(chat_input, content_w - CHAT_GAP * 2, input_h);
         lv_obj_set_pos(chat_input, CHAT_GAP, input_y);
     }
-    /* Reposition send button: bottom-right corner of input area */
-    if (btn_send_widget) {
-        int btn_size = SCALE(20);
-        int btn_margin = 6;
-        lv_obj_set_pos(btn_send_widget, content_w - CHAT_GAP - btn_size - btn_margin, input_y + input_h - btn_size - btn_margin);
-    }
-    /* Reposition upload button: left of send button */
-    if (btn_upload_widget) {
-        int btn_size = SCALE(20);
-        int btn_margin = 6;
-        int btn_gap = 6;
-        lv_obj_set_pos(btn_upload_widget, content_w - CHAT_GAP - btn_size - btn_margin - btn_size - btn_gap, input_y + input_h - btn_size - btn_margin);
-    }
-    if (btn_voice_widget) {
-        int btn_size = SCALE(20);
-        int btn_margin = 6;
-        int btn_gap = 6;
-        lv_obj_set_pos(btn_voice_widget, content_w - CHAT_GAP - btn_size - btn_margin - (btn_size + btn_gap) * 2, input_y + input_h - btn_size - btn_margin);
-    }
+    /* Reposition action buttons: send / upload / voice */
+    layout_chat_action_buttons(content_w, input_y, input_h);
     /* Reposition search button: left of upload button */
     if (g_search_btn) {
-        int btn_size = SCALE(20);
-        int btn_margin = 6;
-        int btn_gap = 6;
+        int btn_size = SCALE(CHAT_ACTION_BTN_BASE);
+        int btn_margin = SCALE(CHAT_ACTION_BTN_MARGIN);
+        int btn_gap = SCALE(CHAT_ACTION_BTN_GAP);
         int base_x = content_w - CHAT_GAP - btn_size - btn_margin;
         if (btn_upload_widget) base_x -= (btn_size + btn_gap);
         if (btn_voice_widget) base_x -= (btn_size + btn_gap);
         lv_obj_set_pos(g_search_btn, base_x - btn_size - btn_gap, input_y + input_h - btn_size - btn_margin);
+    }
+    if (mode_dd_chat_ai_mode) {
+        lv_obj_set_pos(mode_dd_chat_ai_mode, CHAT_GAP, input_y - SCALE(28));
+    }
+    if (mode_lbl_chat_status) {
+        lv_obj_set_pos(mode_lbl_chat_status, CHAT_GAP + SCALE(96), input_y - SCALE(16));
     }
 
     /* Update left panel children widths + x positions */
@@ -2621,6 +4067,7 @@ static lv_color_t status_color(ClawStatus s) {
 
 static void auto_refresh_cb(lv_timer_t* timer) {
     (void)timer;
+    proactive_tick();
     ui_log("[Timer] Auto-refreshing...");
     app_refresh_status();
 }
@@ -3048,9 +4495,9 @@ static void chat_input_resize_cb(lv_event_t* e) {
     lv_point_t txt_sz;
     lv_text_get_size(&txt_sz, text, font, 0, 8, ta_inner_w, LV_TEXT_FLAG_BREAK_ALL);
 
-    const int pad_ver = 20;  /* textarea internal padding */
-    const int min_h = 108;   /* 最小3行高度 (3 * 28px + pad) */
-    const int max_h = 220;  /* hard cap: input box won't exceed this */
+    const int pad_ver = SCALE(24);
+    const int min_h = SCALE(CHAT_INPUT_MIN_H_BASE);
+    const int max_h = SCALE(CHAT_INPUT_MAX_H_BASE);
     int new_h = txt_sz.y + pad_ver;
     if (new_h < min_h) new_h = min_h;
     if (new_h > max_h) new_h = max_h;
@@ -3073,15 +4520,7 @@ static void chat_input_resize_cb(lv_event_t* e) {
         int new_input_y = content_h - new_h - GAP;
         lv_obj_set_pos(chat_input, CHAT_GAP, new_input_y);
 
-        if (btn_send_widget) {
-            lv_obj_set_pos(btn_send_widget, content_w - CHAT_GAP - 20 - 6, new_input_y + new_h - 20 - 6);
-        }
-        if (btn_upload_widget) {
-            lv_obj_set_pos(btn_upload_widget, content_w - CHAT_GAP - 20 - 6 - 20 - 6, new_input_y + new_h - 20 - 6);
-        }
-        if (btn_voice_widget) {
-            lv_obj_set_pos(btn_voice_widget, content_w - CHAT_GAP - 20 - 6 - 20 - 6 - 20 - 6, new_input_y + new_h - 20 - 6);
-        }
+        layout_chat_action_buttons(content_w, new_input_y, new_h);
 
         int panel_h = content_h;
         int chat_y = chat_top_y_with_trace(content_w);
@@ -3173,6 +4612,7 @@ static void chat_force_scroll_bottom() {
 
 static void chat_add_user_bubble(const char* text) {
     if (!chat_cont) return;
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
 
     char ts[32];
     SYSTEMTIME st;
@@ -3229,12 +4669,12 @@ static void chat_add_user_bubble(const char* text) {
 
     lv_obj_t* ts_lbl = lv_label_create(meta);
     lv_label_set_text(ts_lbl, ts);
-    lv_obj_set_style_text_color(ts_lbl, lv_color_make(130, 135, 150), 0);
+    lv_obj_set_style_text_color(ts_lbl, c->text_hint, 0);
     lv_obj_set_style_text_font(ts_lbl, FONT(10), 0);
 
     lv_obj_t* user_lbl = lv_label_create(meta);
     lv_label_set_text(user_lbl, profile_user_name());
-    lv_obj_set_style_text_color(user_lbl, lv_color_make(130, 135, 150), 0);
+    lv_obj_set_style_text_color(user_lbl, c->text_hint, 0);
     lv_obj_set_style_text_font(user_lbl, FONT(10), 0);
 
     lv_obj_t* avatar = lv_image_create(meta);
@@ -3277,9 +4717,9 @@ static void chat_add_user_bubble(const char* text) {
     lv_obj_set_style_text_font(lbl, CJK_FONT_CHAT, 0);
     lv_obj_set_style_pad_hor(lbl, 10, 0);
     lv_obj_set_style_pad_ver(lbl, 4, 0);
-    lv_obj_set_style_bg_color(lbl, lv_color_make(59, 130, 246), 0);
+    lv_obj_set_style_bg_color(lbl, c->btn_action, 0);
     lv_obj_set_style_bg_opa(lbl, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(lbl, 10, 0);
+    lv_obj_set_style_radius(lbl, 16, 0);
     lv_obj_set_style_border_width(lbl, 0, 0);
     lv_obj_clear_flag(lbl, LV_OBJ_FLAG_SCROLLABLE);
     make_label_selectable(lbl);  /* Enable mouse text selection + Ctrl+C */
@@ -3301,6 +4741,7 @@ static void chat_add_user_bubble(const char* text) {
     persist_chat_message("user", text, ts_short);
 
     chat_force_scroll_bottom();
+    update_chat_empty_state();
 }
 #include "markdown.h"
 
@@ -3323,17 +4764,59 @@ static bool g_stream_cs_ready = false;
 static volatile LONG g_stream_new_data = 0;   /* atomic flag: new data available */
 volatile LONG g_stream_done = 0;        /* atomic flag: stream finished */
 static lv_timer_t* g_stream_timer = nullptr;
-static bool g_streaming = false;
 static bool is_streaming_now() { return g_streaming; }
 static HANDLE g_stream_thread = nullptr;
 static DWORD g_stream_start_tick = 0;          /* when stream started (GetTickCount) */
 static DWORD g_stream_last_data_tick = 0;      /* last time new data arrived */
+
+struct WorkStepEvent {
+    char action[64];
+    char detail[1024];
+    bool write_op;
+};
+static CRITICAL_SECTION g_work_step_cs;
+static bool g_work_step_cs_ready = false;
+static WorkStepEvent g_work_step_queue[32];
+static int g_work_step_q_head = 0;
+static int g_work_step_q_tail = 0;
 
 static void stream_buf_init_once() {
     if (!g_stream_cs_ready) {
         InitializeCriticalSection(&g_stream_cs);
         g_stream_cs_ready = true;
     }
+    if (!g_work_step_cs_ready) {
+        InitializeCriticalSection(&g_work_step_cs);
+        g_work_step_cs_ready = true;
+    }
+}
+
+static void work_step_enqueue(const char* action, const char* detail, bool write_op) {
+    stream_buf_init_once();
+    EnterCriticalSection(&g_work_step_cs);
+    int next = (g_work_step_q_tail + 1) % (int)(sizeof(g_work_step_queue) / sizeof(g_work_step_queue[0]));
+    if (next == g_work_step_q_head) {
+        g_work_step_q_head = (g_work_step_q_head + 1) % (int)(sizeof(g_work_step_queue) / sizeof(g_work_step_queue[0]));
+    }
+    WorkStepEvent& ev = g_work_step_queue[g_work_step_q_tail];
+    snprintf(ev.action, sizeof(ev.action), "%s", action ? action : "step");
+    snprintf(ev.detail, sizeof(ev.detail), "%s", detail ? detail : "");
+    ev.write_op = write_op;
+    g_work_step_q_tail = next;
+    LeaveCriticalSection(&g_work_step_cs);
+}
+
+static bool work_step_dequeue(WorkStepEvent& out) {
+    stream_buf_init_once();
+    EnterCriticalSection(&g_work_step_cs);
+    if (g_work_step_q_head == g_work_step_q_tail) {
+        LeaveCriticalSection(&g_work_step_cs);
+        return false;
+    }
+    out = g_work_step_queue[g_work_step_q_head];
+    g_work_step_q_head = (g_work_step_q_head + 1) % (int)(sizeof(g_work_step_queue) / sizeof(g_work_step_queue[0]));
+    LeaveCriticalSection(&g_work_step_cs);
+    return true;
 }
 
 static void stream_buf_clear() {
@@ -3491,6 +4974,74 @@ static void sse_chunk_cb(const char* chunk, void* ctx) {
             return;
         }
 
+        if (line_end > data_start && strstr(data_start, "\"type\":\"ask_feedback\"")) {
+            char evt_json[768] = {0};
+            int n = (int)std::min((ptrdiff_t)sizeof(evt_json) - 1, line_end - data_start);
+            memcpy(evt_json, data_start, n);
+            evt_json[n] = '\0';
+            char reason[256] = {0};
+            char suggestion[256] = {0};
+            json_extract_string(evt_json, "reason", reason, sizeof(reason));
+            json_extract_string(evt_json, "suggestion", suggestion, sizeof(suggestion));
+            snprintf(g_ask_feedback_reason, sizeof(g_ask_feedback_reason), "%s", reason[0] ? reason : "LLM requested confirmation");
+            snprintf(g_ask_feedback_suggestion, sizeof(g_ask_feedback_suggestion), "%s", suggestion[0] ? suggestion : "Please confirm next action");
+            g_ask_feedback_options[0] = '\0';
+            const char* op = strstr(evt_json, "\"options\":[");
+            if (op) {
+                op = strchr(op, '[');
+                if (op) op++;
+                int count = 0;
+                while (op && *op && *op != ']' && count < 4) {
+                    while (*op && *op != '"' && *op != ']') op++;
+                    if (*op == ']') break;
+                    op++;
+                    char one[80] = {0};
+                    int oi = 0;
+                    while (*op && *op != '"' && oi < (int)sizeof(one) - 1) one[oi++] = *op++;
+                    if (one[0]) {
+                        if (g_ask_feedback_options[0]) strncat(g_ask_feedback_options, "|", sizeof(g_ask_feedback_options) - strlen(g_ask_feedback_options) - 1);
+                        strncat(g_ask_feedback_options, one, sizeof(g_ask_feedback_options) - strlen(g_ask_feedback_options) - 1);
+                        count++;
+                    }
+                    if (*op) op++;
+                }
+            }
+            InterlockedExchange(&g_ask_feedback_pending, 1);
+        }
+
+        if (line_end > data_start && strstr(data_start, "\"tool_calls\"")) {
+            const char* np = strstr(data_start, "\"name\":\"");
+            if (np) {
+                np += 8;
+                char name[48] = {0};
+                int ni = 0;
+                while (np < line_end && *np && *np != '"' && ni < (int)sizeof(name) - 1) name[ni++] = *np++;
+                char detail[1024] = {0};
+                snprintf(detail, sizeof(detail), "%.*s", (int)std::min((ptrdiff_t)900, line_end - data_start), data_start);
+                const bool write_op = strstr(name, "write") != nullptr;
+                const bool high_risk_op =
+                    write_op ||
+                    strstr(name, "delete") != nullptr ||
+                    strstr(name, "exec") != nullptr ||
+                    strstr(name, "shell") != nullptr ||
+                    strstr(name, "send") != nullptr ||
+                    strstr(name, "install") != nullptr ||
+                    strstr(name, "network") != nullptr;
+                char action[64] = {0};
+                snprintf(action, sizeof(action), "tool:%s", name[0] ? name : "unknown");
+                work_step_enqueue(action, detail, write_op);
+                if (high_risk_op && g_ai_interaction_mode == AIMODE_ASK &&
+                    InterlockedCompareExchange(&g_ask_feedback_pending, 0, 0) == 0) {
+                    snprintf(g_ask_feedback_reason, sizeof(g_ask_feedback_reason),
+                             "Tool call requests risky operation: %s", name[0] ? name : "tool");
+                    snprintf(g_ask_feedback_suggestion, sizeof(g_ask_feedback_suggestion),
+                             "Approve or reject this action before continuing");
+                    snprintf(g_ask_feedback_options, sizeof(g_ask_feedback_options), "allow_once|deny|adjust_plan");
+                    InterlockedExchange(&g_ask_feedback_pending, 1);
+                }
+            }
+        }
+
         /* Extract content from JSON: "content":"..." */
         const char* cp = data_start;
         while (cp < line_end) {
@@ -3588,14 +5139,6 @@ static unsigned __stdcall chat_api_thread(void* arg) {
     std::string gw_token = read_gateway_token();
     int gw_port = read_gateway_port();
 
-    if (gw_token.empty()) {
-        LOG_E("Chat", "Cannot read Gateway token from openclaw.json");
-        ui_log("[Chat] Error: Cannot read Gateway auth token");
-        InterlockedExchange(&g_stream_done, 1);
-        free(user_msg);
-        return 1;
-    }
-
     /* Escape user message for JSON */
     char escaped_msg[2048] = {0};
     int ei = 0;
@@ -3610,18 +5153,60 @@ static unsigned __stdcall chat_api_thread(void* arg) {
     }
     escaped_msg[ei] = '\0';
 
-    /* Build request JSON — Gateway uses OpenAI-compatible format */
+    /* Build request JSON — inject AI interaction mode prompt */
+    const char* sys_prompt = ai_mode_system_prompt();
+    char escaped_sys[2048] = {0};
+    int si = 0;
+    for (int i = 0; sys_prompt[i] && si < 2000; i++) {
+        switch (sys_prompt[i]) {
+            case '"':  escaped_sys[si++] = '\\'; escaped_sys[si++] = '"'; break;
+            case '\\': escaped_sys[si++] = '\\'; escaped_sys[si++] = '\\'; break;
+            case '\n': escaped_sys[si++] = '\\'; escaped_sys[si++] = 'n'; break;
+            case '\r': break;
+            default:   escaped_sys[si++] = sys_prompt[i]; break;
+        }
+    }
+    escaped_sys[si] = '\0';
+
+    /* Decide route: gateway(openclaw:main) or local llama.cpp */
+    char route_model[256] = {0};
+    app_get_current_model(route_model, sizeof(route_model));
+    if (!route_model[0] && g_selected_model[0]) {
+        snprintf(route_model, sizeof(route_model), "%s", g_selected_model);
+    }
+    bool use_gemma_local = gemma_local_is_model(route_model);
+    if (use_gemma_local) {
+        char local_err[256] = {0};
+        if (!gemma_local_server_start(route_model, local_err, sizeof(local_err))) {
+            stream_buf_clear();
+            stream_buf_append_text(local_err[0] ? local_err : "⚠️ Gemma local server start failed.");
+            InterlockedExchange(&g_stream_new_data, 1);
+            InterlockedExchange(&g_stream_done, 1);
+            free(user_msg);
+            return 1;
+        }
+    } else if (gw_token.empty()) {
+        LOG_E("Chat", "Cannot read Gateway token from openclaw.json");
+        ui_log("[Chat] Error: Cannot read Gateway auth token");
+        InterlockedExchange(&g_stream_done, 1);
+        free(user_msg);
+        return 1;
+    }
+
+    /* Build request JSON — OpenAI-compatible format */
     char json_body[4096];
+    const char* model_id = use_gemma_local ? route_model : "openclaw:main";
     snprintf(json_body, sizeof(json_body),
-        "{\"model\":\"openclaw:main\",\"messages\":[{\"role\":\"user\",\"content\":\"%s\"}],\"stream\":true}",
-        escaped_msg);
+        "{\"model\":\"%s\",\"messages\":[{\"role\":\"system\",\"content\":\"%s\"},{\"role\":\"user\",\"content\":\"%s\"}],\"stream\":true}",
+        model_id, escaped_sys, escaped_msg);
 
-    /* Build Gateway URL */
+    /* Build request URL */
     char url[256];
-    snprintf(url, sizeof(url), "http://127.0.0.1:%d/v1/chat/completions", gw_port);
+    if (use_gemma_local) snprintf(url, sizeof(url), "http://127.0.0.1:%d/v1/chat/completions", gemma_local_server_port());
+    else snprintf(url, sizeof(url), "http://127.0.0.1:%d/v1/chat/completions", gw_port);
 
-    LOG_I("Chat", "Calling Gateway at %s (token=%zu chars)", url, gw_token.size());
-    ui_log("[Chat] Sending to OpenClaw Gateway...");
+    LOG_I("Chat", "Calling %s route at %s", use_gemma_local ? "gemma-local" : "gateway", url);
+    ui_log(use_gemma_local ? "[Chat] Sending to Gemma local..." : "[Chat] Sending to OpenClaw Gateway...");
 
     /* Initialize stream buffer */
     stream_buf_clear();
@@ -3630,7 +5215,7 @@ static unsigned __stdcall chat_api_thread(void* arg) {
 
     /* Build auth header — http_post_stream adds "Bearer " prefix, pass raw token */
     char auth_header[512];
-    snprintf(auth_header, sizeof(auth_header), "%s", gw_token.c_str());
+    snprintf(auth_header, sizeof(auth_header), "%s", use_gemma_local ? "" : gw_token.c_str());
 
     /* Call streaming API */
     DWORD tick_start = GetTickCount();
@@ -3641,8 +5226,8 @@ static unsigned __stdcall chat_api_thread(void* arg) {
     stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
     printf("[Chat] Gateway response: status=%d, buffer_len=%zu\n", status, strlen(stream_snapshot));
 
-    /* Record result for failover health tracking */
-    {
+    /* Record result for failover health tracking (gateway route only) */
+    if (!use_gemma_local) {
         char cur_model[256] = {0};
         app_get_current_model(cur_model, sizeof(cur_model));
         if (cur_model[0]) {
@@ -3651,7 +5236,7 @@ static unsigned __stdcall chat_api_thread(void* arg) {
     }
 
     /* If HTTP failed or no data received, try failover */
-    if (status != 200 || stream_snapshot[0] == '\0') {
+    if (!use_gemma_local && (status != 200 || stream_snapshot[0] == '\0')) {
         /* Try failover: switch to a healthy backup model */
         if (failover_is_enabled()) {
             char cur_model[256] = {0};
@@ -3665,8 +5250,8 @@ static unsigned __stdcall chat_api_thread(void* arg) {
                     stream_buf_clear();
                     InterlockedExchange(&g_stream_new_data, 0);
                     snprintf(json_body, sizeof(json_body),
-                        "{\"model\":\"openclaw:main\",\"messages\":[{\"role\":\"user\",\"content\":\"%s\"}],\"stream\":true}",
-                        escaped_msg);
+                        "{\"model\":\"openclaw:main\",\"messages\":[{\"role\":\"system\",\"content\":\"%s\"},{\"role\":\"user\",\"content\":\"%s\"}],\"stream\":true}",
+                        escaped_sys, escaped_msg);
                     status = http_post_stream(url, json_body, auth_header, sse_chunk_cb, nullptr, 60);
                     DWORD fe = GetTickCount() - tick_start;
                     ui_log("[Chat] Failover result: HTTP %d (%lums)", status, fe);
@@ -3726,6 +5311,10 @@ static void stream_timer_cb(lv_timer_t* timer) {
         ui_log("[Chat] Stream timeout (%.0fs), finishing...", total_ms / 1000.0);
         set_ai_next_step("Timeout, please retry");
         append_ai_script_log("[error] stream timeout");
+        if (g_work_waiting_ai) {
+            work_add_step_card("模型输出超时", "流式结果触发超时保护", true, false);
+        }
+        update_chat_status_label("Timeout", false);
         char stream_snapshot[16384] = {0};
         stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
         if (stream_snapshot[0] == '\0') {
@@ -3741,6 +5330,25 @@ static void stream_timer_cb(lv_timer_t* timer) {
         stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
         render_markdown_to_label(g_stream_label, stream_snapshot, CJK_FONT_CHAT);
         chat_scroll_to_bottom();
+    }
+
+    WorkStepEvent sev{};
+    while (work_step_dequeue(sev)) {
+        work_add_step_card(sev.action, sev.detail, false, sev.write_op);
+    }
+
+    if (InterlockedCompareExchange(&g_ask_feedback_pending, 0, 1)) {
+        char answer[256] = {0};
+        bool ok = ask_mode_confirm_action(g_ask_feedback_reason, g_ask_feedback_suggestion, g_ask_feedback_options, answer, sizeof(answer));
+        char escaped[320] = {0};
+        int ei = 0;
+        for (int i = 0; answer[i] && ei < (int)sizeof(escaped) - 2; i++) {
+            if (answer[i] == '"' || answer[i] == '\\') escaped[ei++] = '\\';
+            escaped[ei++] = answer[i];
+        }
+        escaped[ei] = '\0';
+        snprintf(g_pending_feedback_payload, sizeof(g_pending_feedback_payload),
+                 "{\"type\":\"feedback\",\"answer\":\"%s\"}", escaped[0] ? escaped : (ok ? "allow" : "reject"));
     }
 
     if (InterlockedCompareExchange(&g_stream_done, 0, 1)) {
@@ -3763,8 +5371,14 @@ static void stream_timer_cb(lv_timer_t* timer) {
 
         if (g_work_waiting_ai) {
             work_append_md_block("AI", stream_snapshot);
+            work_add_step_card("模型输出完成", "结果已写入 Output Area", true, false);
             g_work_waiting_ai = false;
             g_work_last_prompt[0] = '\0';
+        }
+        execute_ai_ui_action_if_any(stream_snapshot);
+        if (mode_ta_work_chat_feed && stream_snapshot[0]) {
+            lv_textarea_add_text(mode_ta_work_chat_feed, "\n[AI] ");
+            lv_textarea_add_text(mode_ta_work_chat_feed, stream_snapshot);
         }
 
         if (g_stream_thread) {
@@ -3778,6 +5392,12 @@ static void stream_timer_cb(lv_timer_t* timer) {
         chat_force_scroll_bottom();
         set_ai_next_step("Completed, waiting next input");
         append_ai_script_log("[done] stream completed");
+        update_chat_status_label("Ready", false);
+        if (g_pending_feedback_payload[0]) {
+            std::string payload = g_pending_feedback_payload;
+            g_pending_feedback_payload[0] = '\0';
+            submit_prompt_to_chat(payload.c_str());
+        }
     }
 }
 
@@ -3813,6 +5433,7 @@ static void chat_start_stream(const char* user_message) {
     }
     LOG_I("Chat", "Starting stream: msg=%.60s%s", user_message,
           strlen(user_message) > 60 ? "..." : "");
+    update_chat_status_label("Streaming...", true);
 
     /* Check if Gateway is reachable */
     {
@@ -3824,8 +5445,12 @@ static void chat_start_stream(const char* user_message) {
             };
             chat_add_user_bubble(tr(S_NO_TOKEN));
             ui_log("[Chat] Cannot read Gateway token");
+            update_chat_status_label("Gateway config missing", false);
             return;
         }
+    }
+    if (g_work_waiting_ai) {
+        work_add_step_card("调用模型", "向 Gateway 发送流式请求", false, false);
     }
 
     /* Create streaming bubble UI (same layout as before) */
@@ -3917,6 +5542,7 @@ static void chat_start_stream(const char* user_message) {
 
 static void chat_add_ai_bubble(const char* text) {
     if (!chat_cont) return;
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
 
     /*
      * AI 消息 (QQ风格: 气泡靠左, 贴合文字宽度):
@@ -3972,7 +5598,7 @@ static void chat_add_ai_bubble(const char* text) {
 
     lv_obj_t* ai_lbl = lv_label_create(meta);
     lv_label_set_text(ai_lbl, profile_ai_name());
-    lv_obj_set_style_text_color(ai_lbl, lv_color_make(130, 135, 150), 0);
+    lv_obj_set_style_text_color(ai_lbl, c->text_hint, 0);
     lv_obj_set_style_text_font(ai_lbl, FONT(10), 0);
 
     /* Text label (短消息贴合文字, 长消息70%换行) */
@@ -3981,7 +5607,7 @@ static void chat_add_ai_bubble(const char* text) {
     snprintf(entry, sizeof(entry), "%s", text);
 
     render_markdown_to_label(lbl, entry, CJK_FONT_CHAT);
-    lv_obj_set_style_text_color(lbl, lv_color_make(230, 230, 230), 0);
+    lv_obj_set_style_text_color(lbl, c->text, 0);
     lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
 
     /* Measure rendered text: short → small bubble, long → 70% wrap */
@@ -4007,6 +5633,10 @@ static void chat_add_ai_bubble(const char* text) {
 
     lv_obj_set_style_pad_hor(lbl, 10, 0);
     lv_obj_set_style_pad_ver(lbl, 6, 0);
+    lv_obj_set_style_bg_color(lbl, c->panel, 0);
+    lv_obj_set_style_bg_opa(lbl, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(lbl, 16, 0);
+    lv_obj_set_style_border_width(lbl, 0, 0);
     make_label_selectable(lbl);  /* Enable mouse text selection + Ctrl+C */
 
     char history_entry[2048];
@@ -4030,6 +5660,7 @@ static void chat_add_ai_bubble(const char* text) {
     persist_chat_message("ai", text, ts_short);
 
     chat_force_scroll_bottom();
+    update_chat_empty_state();
 }
 
 /* DEV: test message injection callback (function pointer, not lambda) */
@@ -4058,13 +5689,20 @@ static void work_ftp_download_cb(lv_event_t* e);
 static void work_ftp_cancel_cb(lv_event_t* e);
 static void work_ftp_retry_cb(lv_event_t* e);
 static void work_kb_add_source_cb(lv_event_t* e);
+static void work_kb_import_dir_cb(lv_event_t* e);
+static void work_kb_export_manifest_cb(lv_event_t* e);
 static void work_kb_search_cb(lv_event_t* e);
+static void work_cron_refresh_cb(lv_event_t* e);
+static void work_cron_run_cb(lv_event_t* e);
+static void work_cron_enable_cb(lv_event_t* e);
+static void work_cron_disable_cb(lv_event_t* e);
+static void work_cron_delete_cb(lv_event_t* e);
 static void enqueue_attachment_card(const char* path, bool is_dir);
 
 /* Reset input box to single-line height after sending */
 static void chat_input_reset_height() {
     if (!chat_input) return;
-    const int min_h = 108;  /* 默认3行 */
+    const int min_h = SCALE(CHAT_INPUT_MIN_H_BASE);
     int content_h = mode_content_h();
     int content_w = mode_content_w();
     int cur_h = (int)lv_obj_get_height(chat_input);
@@ -4074,19 +5712,23 @@ static void chat_input_reset_height() {
         lv_obj_set_scrollbar_mode(chat_input, LV_SCROLLBAR_MODE_OFF);
         int new_input_y = content_h - min_h - GAP;
         lv_obj_set_pos(chat_input, CHAT_GAP, new_input_y);
-        if (btn_send_widget) {
-            lv_obj_set_pos(btn_send_widget, content_w - CHAT_GAP - 20 - 6, new_input_y + min_h - 20 - 6);
-        }
-        if (btn_upload_widget) {
-            lv_obj_set_pos(btn_upload_widget, content_w - CHAT_GAP - 20 - 6 - 20 - 6, new_input_y + min_h - 20 - 6);
-        }
-        if (btn_voice_widget) {
-            lv_obj_set_pos(btn_voice_widget, content_w - CHAT_GAP - 20 - 6 - 20 - 6 - 20 - 6, new_input_y + min_h - 20 - 6);
-        }
+        layout_chat_action_buttons(content_w, new_input_y, min_h);
         int chat_y = chat_top_y_with_trace(content_w);
         int new_chat_h = content_h - chat_y - min_h - GAP;
         if (new_chat_h > 0) lv_obj_set_height(chat_cont, new_chat_h);
     }
+}
+
+static std::string build_plan_mode_prompt(const char* raw) {
+    std::string user_task = raw ? raw : "";
+    return
+        "PLAN mode protocol (strict):\n"
+        "1) First output one compact JSON block:\n"
+        "{\"type\":\"plan\",\"goal\":\"...\",\"steps\":[\"...\"],\"risk\":\"...\",\"est_time\":\"...\"}\n"
+        "2) Then output one compact JSON confirmation block:\n"
+        "{\"type\":\"ask_feedback\",\"reason\":\"Confirm plan before execution\",\"suggestion\":\"Choose one option\",\"options\":[\"approve_plan\",\"adjust_plan\",\"cancel\"]}\n"
+        "3) Do not execute tools before approval.\n"
+        "User task:\n" + user_task;
 }
 
 static void chat_send_cb(lv_event_t* e) {
@@ -4094,11 +5736,25 @@ static void chat_send_cb(lv_event_t* e) {
     if (!chat_input) return;
     if (is_streaming_now()) {
         ui_log("[Chat] AI is still replying, wait before sending next message");
+        update_chat_status_label("Busy: AI replying", true);
         return;
     }
     const char* text = lv_textarea_get_text(chat_input);
     if (!text || !text[0]) return;
-    submit_prompt_to_chat(text);
+    if (strcmp(text, "ask_feedback") == 0 || strcmp(text, "/ask_feedback") == 0) {
+        char answer[128] = {0};
+        bool ok = ask_mode_confirm_action("Manual ask_feedback test", "Choose one option to continue", "allow_once,deny,adjust_plan", answer, sizeof(answer));
+        ui_log("[AskMode] manual ask_feedback test: %s answer=%s", ok ? "allow" : "deny", answer[0] ? answer : "-");
+        lv_textarea_set_text(chat_input, "");
+        chat_input_reset_height();
+        update_send_button_state();
+        return;
+    }
+    std::string prompt = text;
+    if (g_ai_interaction_mode == AIMODE_PLAN) {
+        prompt = build_plan_mode_prompt(text);
+    }
+    submit_prompt_to_chat(prompt.c_str());
     set_ai_next_step("Preparing request payload");
     append_ai_script_log("[input] user prompt submitted");
 
@@ -4116,11 +5772,25 @@ static void chat_send_btn_cb(lv_event_t* e) {
     if (!chat_input) return;
     if (is_streaming_now()) {
         ui_log("[Chat] AI is still replying, send button is temporarily disabled");
+        update_chat_status_label("Busy: AI replying", true);
         return;
     }
     const char* text = lv_textarea_get_text(chat_input);
     if (!text || !text[0]) return;
-    submit_prompt_to_chat(text);
+    if (strcmp(text, "ask_feedback") == 0 || strcmp(text, "/ask_feedback") == 0) {
+        char answer[128] = {0};
+        bool ok = ask_mode_confirm_action("Manual ask_feedback test", "Choose one option to continue", "allow_once,deny,adjust_plan", answer, sizeof(answer));
+        ui_log("[AskMode] manual ask_feedback test(button): %s answer=%s", ok ? "allow" : "deny", answer[0] ? answer : "-");
+        lv_textarea_set_text(chat_input, "");
+        chat_input_reset_height();
+        update_send_button_state();
+        return;
+    }
+    std::string prompt = text;
+    if (g_ai_interaction_mode == AIMODE_PLAN) {
+        prompt = build_plan_mode_prompt(text);
+    }
+    submit_prompt_to_chat(prompt.c_str());
     set_ai_next_step("Preparing request payload");
     append_ai_script_log("[input] user prompt submitted (button)");
 
@@ -4143,10 +5813,77 @@ static void work_send_cb(lv_event_t* e) {
     snprintf(g_work_last_prompt, sizeof(g_work_last_prompt), "%s", text);
     g_work_waiting_ai = true;
     work_append_md_block("User", text);
+    work_add_step_card("接收任务", text, false, false);
     set_ai_next_step("Work mode: executing task");
     append_ai_script_log("[work] prompt submitted");
-    submit_prompt_to_chat(text);
+    if (g_ai_interaction_mode == AIMODE_PLAN) {
+        std::string plan_prompt = build_plan_mode_prompt(text);
+        submit_prompt_to_chat(plan_prompt.c_str());
+    } else {
+        submit_prompt_to_chat(text);
+    }
     lv_textarea_set_text(mode_ta_work_prompt, "");
+}
+
+static void work_chat_toggle_cb(lv_event_t* e) {
+    (void)e;
+    if (!mode_work_chat_panel || !mode_ta_work_chat_feed || !mode_ta_work_chat_input) return;
+    g_work_chat_collapsed = !g_work_chat_collapsed;
+    lv_obj_set_width(mode_work_chat_panel, g_work_chat_collapsed ? SCALE(40) : SCALE(320));
+    lv_obj_set_height(mode_work_chat_panel, g_work_chat_collapsed ? SCALE(40) : SCALE(220));
+    if (mode_btn_work_chat_toggle) {
+        lv_obj_t* lbl = lv_obj_get_child(mode_btn_work_chat_toggle, 0);
+        if (lbl) lv_label_set_text(lbl, g_work_chat_collapsed ? ">" : "<");
+    }
+    if (g_work_chat_collapsed) {
+        lv_obj_add_flag(mode_ta_work_chat_feed, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(mode_ta_work_chat_input, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_clear_flag(mode_ta_work_chat_feed, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(mode_ta_work_chat_input, LV_OBJ_FLAG_HIDDEN);
+    }
+    relayout_panels();
+}
+
+static void work_vertical_splitter_cb(lv_event_t* e) {
+    static int start_y = 0;
+    static int start_step_h = 160;
+    lv_event_code_t code = lv_event_get_code(e);
+    if (code == LV_EVENT_PRESSED) {
+        lv_point_t p{};
+        lv_indev_t* indev = lv_indev_get_act();
+        if (!indev) return;
+        lv_indev_get_point(indev, &p);
+        start_y = p.y;
+        start_step_h = g_work_step_stream_h;
+        return;
+    }
+    if (code != LV_EVENT_PRESSING) return;
+    lv_indev_t* indev = lv_indev_get_act();
+    if (!indev) return;
+    lv_point_t p{};
+    lv_indev_get_point(indev, &p);
+    int delta = p.y - start_y;
+    int content_h = mode_content_h();
+    int min_h = SCALE(90);
+    int max_h = std::max(min_h, content_h - SCALE(420));
+    int step_h = std::clamp(start_step_h + delta, min_h, max_h);
+    int out_h = std::max(min_h, g_work_step_stream_h + g_work_output_h - step_h);
+    g_work_step_stream_h = step_h;
+    g_work_output_h = out_h;
+    if (mode_work_step_stream) lv_obj_set_height(mode_work_step_stream, SCALE(g_work_step_stream_h));
+    if (mode_work_output_wrap) lv_obj_set_height(mode_work_output_wrap, SCALE(g_work_output_h));
+}
+
+static void work_chat_send_cb(lv_event_t* e) {
+    (void)e;
+    if (!mode_ta_work_chat_input || !mode_ta_work_chat_feed) return;
+    const char* text = lv_textarea_get_text(mode_ta_work_chat_input);
+    if (!text || !text[0]) return;
+    lv_textarea_add_text(mode_ta_work_chat_feed, "\n[User] ");
+    lv_textarea_add_text(mode_ta_work_chat_feed, text);
+    submit_prompt_to_chat(text);
+    lv_textarea_set_text(mode_ta_work_chat_input, "");
 }
 
 static void work_boot_check_cb(lv_event_t* e) {
@@ -4390,6 +6127,64 @@ static void work_lan_discover_cb(lv_event_t* e) {
     ui_log("[LAN] Discovered hosts: %s", merged.c_str());
 }
 
+static void work_cron_refresh_cb(lv_event_t* e) {
+    (void)e;
+    if (!mode_ta_cron_list) return;
+    char out[8192] = {0};
+    if (app_cron_list(out, sizeof(out))) {
+        lv_textarea_set_text(mode_ta_cron_list, out[0] ? out : "(empty)");
+        ui_log("[Cron] Refreshed cron list");
+    } else {
+        lv_textarea_set_text(mode_ta_cron_list, out[0] ? out : "cron list failed");
+        ui_log("[Cron] Refresh failed: %s", out);
+    }
+}
+
+static void work_cron_run_cb(lv_event_t* e) {
+    (void)e;
+    std::string id = ta_text(mode_ta_cron_id);
+    if (id.empty()) { ui_log("[Cron] run requires cron id"); return; }
+    char out[2048] = {0};
+    bool ok = app_cron_run(id.c_str(), out, sizeof(out));
+    ui_log("[Cron] run %s: %s", id.c_str(), ok ? "ok" : "fail");
+    if (out[0]) ui_log("[Cron] %s", out);
+    work_cron_refresh_cb(nullptr);
+}
+
+static void work_cron_enable_cb(lv_event_t* e) {
+    (void)e;
+    std::string id = ta_text(mode_ta_cron_id);
+    if (id.empty()) { ui_log("[Cron] enable requires cron id"); return; }
+    char out[2048] = {0};
+    bool ok = app_cron_enable(id.c_str(), true, out, sizeof(out));
+    ui_log("[Cron] enable %s: %s", id.c_str(), ok ? "ok" : "fail");
+    if (out[0]) ui_log("[Cron] %s", out);
+    work_cron_refresh_cb(nullptr);
+}
+
+static void work_cron_disable_cb(lv_event_t* e) {
+    (void)e;
+    std::string id = ta_text(mode_ta_cron_id);
+    if (id.empty()) { ui_log("[Cron] disable requires cron id"); return; }
+    char out[2048] = {0};
+    bool ok = app_cron_enable(id.c_str(), false, out, sizeof(out));
+    ui_log("[Cron] disable %s: %s", id.c_str(), ok ? "ok" : "fail");
+    if (out[0]) ui_log("[Cron] %s", out);
+    work_cron_refresh_cb(nullptr);
+}
+
+static void work_cron_delete_cb(lv_event_t* e) {
+    (void)e;
+    std::string id = ta_text(mode_ta_cron_id);
+    if (id.empty()) { ui_log("[Cron] delete requires cron id"); return; }
+    if (!ask_mode_confirm_action("Delete cron task", "Confirm delete selected cron id")) return;
+    char out[2048] = {0};
+    bool ok = app_cron_delete(id.c_str(), out, sizeof(out));
+    ui_log("[Cron] delete %s: %s", id.c_str(), ok ? "ok" : "fail");
+    if (out[0]) ui_log("[Cron] %s", out);
+    work_cron_refresh_cb(nullptr);
+}
+
 static void run_ftp_transfer_config(const FtpTransferConfig& cfg) {
     if (g_ftp_running.exchange(true)) {
         ui_log("[FTP] Transfer already running");
@@ -4446,11 +6241,13 @@ static void run_ftp_transfer(bool upload) {
 
 static void work_ftp_upload_cb(lv_event_t* e) {
     (void)e;
+    if (!ask_mode_confirm_action("FTP upload will access remote endpoint and transfer files", "Review host/path and then continue")) return;
     run_ftp_transfer(true);
 }
 
 static void work_ftp_download_cb(lv_event_t* e) {
     (void)e;
+    if (!ask_mode_confirm_action("FTP download will write files to local disk", "Confirm destination path before continue")) return;
     run_ftp_transfer(false);
 }
 
@@ -4476,12 +6273,39 @@ static void work_ftp_retry_cb(lv_event_t* e) {
 
 static void work_kb_add_source_cb(lv_event_t* e) {
     (void)e;
+    if (!ask_mode_confirm_action("Add KB source file into local index", "Proceed with selected file")) return;
     std::string p = ta_text(mode_ta_kb_source);
     std::string err;
     if (KbStore::instance().add_source_file(p.c_str(), err)) {
         ui_log("[KB] Added source: %s (total=%d)", p.c_str(), KbStore::instance().doc_count());
     } else {
         ui_log("[KB] Add source failed: %s", err.c_str());
+    }
+}
+
+static void work_kb_import_dir_cb(lv_event_t* e) {
+    (void)e;
+    if (!ask_mode_confirm_action("Import KB directory recursively", "Proceed and index markdown/text documents")) return;
+    std::string dir = ta_text(mode_ta_kb_source);
+    int added = 0;
+    std::string err;
+    if (KbStore::instance().add_source_dir(dir.c_str(), &added, err)) {
+        ui_log("[KB] Imported directory: %s (added=%d, docs=%d, sources=%d)",
+               dir.c_str(), added, KbStore::instance().doc_count(), KbStore::instance().source_count());
+    } else {
+        ui_log("[KB] Import directory failed: %s", err.c_str());
+    }
+}
+
+static void work_kb_export_manifest_cb(lv_event_t* e) {
+    (void)e;
+    if (!ask_mode_confirm_action("Export KB manifest to local path", "Proceed and write kb_export_manifest.md")) return;
+    std::string out_dir = ta_text(mode_ta_kb_source);
+    std::string err;
+    if (KbStore::instance().export_manifest(out_dir.c_str(), err)) {
+        ui_log("[KB] Exported manifest to: %s\\kb_export_manifest.md", out_dir.c_str());
+    } else {
+        ui_log("[KB] Export manifest failed: %s", err.c_str());
     }
 }
 
@@ -4493,9 +6317,13 @@ static void work_kb_search_cb(lv_event_t* e) {
     std::string out;
     if (hits.empty()) out = "No hits.";
     else {
+        out += "Docs=" + std::to_string(KbStore::instance().doc_count()) +
+               ", Sources=" + std::to_string(KbStore::instance().source_count()) + "\n\n";
         for (size_t i = 0; i < hits.size(); ++i) {
             out += "[" + std::to_string(i + 1) + "] " + hits[i].path + "\n";
         }
+        out += "\n--- Context Snippet ---\n";
+        out += KbStore::instance().build_context_snippet(kw.c_str(), 3, 1400);
     }
     lv_textarea_set_text(mode_ta_kb_result, out.c_str());
 }
@@ -4869,7 +6697,7 @@ void update_ui_language() {
     }
 
     /* Chat input placeholder */
-    if (chat_input) lv_textarea_set_placeholder_text(chat_input, tr(STR_CHAT_INPUT));
+    if (chat_input) lv_textarea_set_placeholder_text(chat_input, "输入消息... (Shift+Enter 换行)");
 
     /* Refresh status (re-renders status text + task list in new language) */
     app_refresh_status();
@@ -5195,18 +7023,35 @@ int ui_permission_confirm(const char* perm_key, const char* target) {
     }
 
     const ThemeColors* c = g_colors;
-    char content[1200] = {0};
-    snprintf(content, sizeof(content),
-             "Agent 请求执行命令：\n\n%s\n\n权限项：%s",
-             target ? target : "(unknown)",
-             perm_key ? perm_key : "exec_shell");
+    lv_obj_t* lbl_intro = lv_label_create(box);
+    lv_label_set_text(lbl_intro, "Agent 请求执行命令：");
+    lv_obj_set_style_text_color(lbl_intro, c->text, 0);
+    lv_obj_set_style_text_font(lbl_intro, CJK_FONT_SMALL, 0);
+    lv_obj_set_width(lbl_intro, LV_PCT(100));
 
-    lv_obj_t* lbl = lv_label_create(box);
-    lv_label_set_text(lbl, content);
-    lv_obj_set_style_text_color(lbl, c->text, 0);
-    lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
-    lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(lbl, LV_PCT(100));
+    lv_obj_t* cmd_box = lv_obj_create(box);
+    lv_obj_set_size(cmd_box, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(cmd_box, c->input_bg, 0);
+    lv_obj_set_style_border_color(cmd_box, c->panel_border, 0);
+    lv_obj_set_style_border_width(cmd_box, 1, 0);
+    lv_obj_set_style_radius(cmd_box, SCALE(10), 0);
+    lv_obj_set_style_pad_all(cmd_box, SCALE(10), 0);
+    lv_obj_set_flex_flow(cmd_box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(cmd_box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_clear_flag(cmd_box, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* lbl_cmd = lv_label_create(cmd_box);
+    lv_label_set_text(lbl_cmd, target ? target : "(unknown)");
+    lv_obj_set_style_text_color(lbl_cmd, c->text, 0);
+    lv_obj_set_style_text_font(lbl_cmd, CJK_FONT_SMALL, 0);
+    lv_label_set_long_mode(lbl_cmd, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(lbl_cmd, LV_PCT(100));
+
+    lv_obj_t* lbl_perm = lv_label_create(box);
+    lv_label_set_text_fmt(lbl_perm, "权限项: %s", perm_key ? perm_key : "exec_shell");
+    lv_obj_set_style_text_color(lbl_perm, c->text_dim, 0);
+    lv_obj_set_style_text_font(lbl_perm, CJK_FONT_SMALL, 0);
+    lv_obj_set_width(lbl_perm, LV_PCT(100));
 
     lv_obj_t* btn_row = lv_obj_create(box);
     lv_obj_set_size(btn_row, LV_PCT(100), LV_SIZE_CONTENT);
@@ -5239,6 +7084,12 @@ int ui_permission_confirm(const char* perm_key, const char* target) {
     add_btn("拒绝", c->btn_close, perm_dialog_deny_cb);
     add_btn("此次授权", c->btn_action, perm_dialog_allow_once_cb);
     add_btn("永久授权", c->btn_add, perm_dialog_allow_persist_cb);
+
+    lv_obj_t* lbl_timeout = lv_label_create(box);
+    lv_label_set_text(lbl_timeout, "⏱ 60秒超时自动拒绝");
+    lv_obj_set_style_text_color(lbl_timeout, c->text_dim, 0);
+    lv_obj_set_style_text_font(lbl_timeout, CJK_FONT_SMALL, 0);
+    lv_obj_set_width(lbl_timeout, LV_PCT(100));
 
     lv_obj_move_foreground(overlay);
 
@@ -5703,20 +7554,22 @@ void ui_show_license_dialog() {
     lv_label_set_long_mode(lbl_desc, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(lbl_desc, LV_PCT(100));
 
-    /* Sequence info */
-    int seq = license_get_seq();
-    char seq_info[128];
-    snprintf(seq_info, sizeof(seq_info), "Current sequence: %d (next key: seq %d, %dh)",
-             seq, seq + 1, 12 * (1 << (seq + 1)));
-    lv_obj_t* lbl_seq = lv_label_create(box);
-    lv_label_set_text(lbl_seq, seq_info);
-    lv_obj_set_style_text_color(lbl_seq, c->text_dim, 0);
-    lv_obj_set_style_text_font(lbl_seq, FONT(12), 0);
+    /* Machine id for HW license generation */
+    char machine_id[64] = {0};
+    if (!license_get_machine_id(machine_id, sizeof(machine_id))) {
+        snprintf(machine_id, sizeof(machine_id), "Unavailable");
+    }
+    char machine_info[160];
+    snprintf(machine_info, sizeof(machine_info), "Machine ID (MAC): %s", machine_id);
+    lv_obj_t* lbl_machine = lv_label_create(box);
+    lv_label_set_text(lbl_machine, machine_info);
+    lv_obj_set_style_text_color(lbl_machine, c->text_dim, 0);
+    lv_obj_set_style_text_font(lbl_machine, FONT(12), 0);
 
     /* Key input */
     g_license_input = lv_textarea_create(box);
     lv_textarea_set_one_line(g_license_input, true);
-    lv_textarea_set_placeholder_text(g_license_input, "XXXXX-XXXXX-XXXXX");
+    lv_textarea_set_placeholder_text(g_license_input, "HW-<MAC12><SIGN12> / TM-<EXP8><SIGN12>");
     lv_obj_set_width(g_license_input, LV_PCT(100));
     lv_obj_set_style_bg_color(g_license_input, c->input_bg, 0);
     lv_obj_set_style_border_color(g_license_input, c->panel_border, 0);
@@ -5762,7 +7615,7 @@ void ui_show_license_dialog() {
     lv_obj_set_style_text_font(lbl_close, CJK_FONT, 0);
     lv_obj_center(lbl_close);
 
-    ui_log("[License] Showing activation dialog (seq=%d)", seq);
+    ui_log("[License] Showing activation dialog");
 }
 
 /* ═══ Apply theme colors to all UI elements ═══ */
@@ -6081,6 +7934,7 @@ static void attachment_retry_click_cb(lv_event_t* e) {
 
 static lv_obj_t* chat_add_attachment_card(const char* path, bool is_dir) {
     if (!chat_cont || !path || !path[0]) return nullptr;
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
 
     lv_obj_t* row = lv_obj_create(chat_cont);
     lv_obj_set_width(row, LV_PCT(100));
@@ -6093,11 +7947,12 @@ static lv_obj_t* chat_add_attachment_card(const char* path, bool is_dir) {
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
     lv_obj_t* card = lv_button_create(row);
-    lv_obj_set_style_bg_color(card, lv_color_make(40, 72, 140), 0);
-    lv_obj_set_style_bg_color(card, lv_color_make(55, 92, 170), LV_STATE_PRESSED);
-    lv_obj_set_style_radius(card, 10, 0);
-    lv_obj_set_style_border_width(card, 0, 0);
-    lv_obj_set_style_pad_all(card, 8, 0);
+    lv_obj_set_style_bg_color(card, c->panel, 0);
+    lv_obj_set_style_bg_color(card, c->input_bg, LV_STATE_PRESSED);
+    lv_obj_set_style_radius(card, 12, 0);
+    lv_obj_set_style_border_width(card, 1, 0);
+    lv_obj_set_style_border_color(card, c->accent, 0);
+    lv_obj_set_style_pad_all(card, 10, 0);
     lv_obj_set_style_pad_gap(card, 6, 0);
     lv_obj_set_size(card, LV_PCT(82), LV_SIZE_CONTENT);
     lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
@@ -6111,7 +7966,7 @@ static lv_obj_t* chat_add_attachment_card(const char* path, bool is_dir) {
     lv_label_set_text_fmt(title, "%s %s", tag, (base && base[0]) ? base : path);
     lv_label_set_long_mode(title, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(title, LV_PCT(100));
-    lv_obj_set_style_text_color(title, lv_color_make(235, 242, 255), 0);
+    lv_obj_set_style_text_color(title, c->text, 0);
     lv_obj_set_style_text_font(title, CJK_FONT_SMALL, 0);
 
     lv_obj_t* subtitle = lv_label_create(card);
@@ -6119,7 +7974,7 @@ static lv_obj_t* chat_add_attachment_card(const char* path, bool is_dir) {
     lv_label_set_text_fmt(subtitle, "%s\n%s", detail.c_str(), path);
     lv_label_set_long_mode(subtitle, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(subtitle, LV_PCT(100));
-    lv_obj_set_style_text_color(subtitle, lv_color_make(200, 220, 245), 0);
+    lv_obj_set_style_text_color(subtitle, c->text_dim, 0);
     lv_obj_set_style_text_font(subtitle, FONT(10), 0);
 
     if (image_file) {
@@ -6143,7 +7998,7 @@ static lv_obj_t* chat_add_attachment_card(const char* path, bool is_dir) {
 
     lv_obj_t* open_tip = lv_label_create(card);
     lv_label_set_text(open_tip, "Click to open");
-    lv_obj_set_style_text_color(open_tip, lv_color_make(180, 210, 255), 0);
+    lv_obj_set_style_text_color(open_tip, c->accent, 0);
     lv_obj_set_style_text_font(open_tip, CJK_FONT_SMALL, 0);
 
     lv_obj_t* status_tip = lv_label_create(card);
@@ -6187,6 +8042,7 @@ static void attachment_queue_timer_cb(lv_timer_t* t) {
             if (ok) {
                 lv_label_set_text(it.status_lbl, "Queue: sent");
                 lv_obj_set_style_text_color(it.status_lbl, lv_color_make(140, 235, 170), 0);
+                g_sent_attachments.push_back({it.path, it.is_dir});
             } else {
                 lv_label_set_text(it.status_lbl, "Queue: failed (click to retry)");
                 lv_obj_set_style_text_color(it.status_lbl, lv_color_make(255, 150, 150), 0);
@@ -6239,6 +8095,7 @@ static void enqueue_attachment_card(const char* path, bool is_dir) {
 /* Upload menu click callbacks */
 static void upload_file_click_cb(lv_event_t* e) {
     upload_menu_hide_cb(e);
+    if (!ask_mode_confirm_action("Select and send local files as attachments", "Proceed to open file chooser")) return;
     /* Win32 file open dialog */
     OPENFILENAMEA ofn;
     char file_buf[8192] = {0};
@@ -6273,6 +8130,7 @@ static void upload_file_click_cb(lv_event_t* e) {
 }
 static void upload_dir_click_cb(lv_event_t* e) {
     upload_menu_hide_cb(e);
+    if (!ask_mode_confirm_action("Select and send local directory as attachment", "Proceed to open directory chooser")) return;
     /* Win32 folder browse dialog */
     BROWSEINFOA bi = {0};
     bi.lpszTitle = "Select Directory";
@@ -6313,7 +8171,7 @@ static void create_title_bar(lv_obj_t* scr) {
 
     title_label = lv_label_create(title_bar);
     lv_label_set_text(title_label, tr_title(STR_TITLE));
-    lv_obj_set_style_text_color(title_label, lv_color_make(100, 160, 255), 0);
+    lv_obj_set_style_text_color(title_label, c->text, 0);
     lv_obj_set_style_text_font(title_label, CJK_FONT, 0);
     lv_obj_align(title_label, LV_ALIGN_LEFT_MID, 48, 0);
 
@@ -6353,7 +8211,7 @@ static void create_title_bar(lv_obj_t* scr) {
 
         /* Right-top quick controls: mode switch + device + settings (left of minimize). */
         int top_gap = SCALE(6);
-        int mode_w = SCALE(110);
+        int mode_w = SCALE(150);
         int side_w = SCALE(68);
         int top_y = wc_btn_y;
         int right_x = wc_base_x - top_gap;
@@ -6373,7 +8231,7 @@ static void create_title_bar(lv_obj_t* scr) {
         lv_obj_set_pos(mode_bar, right_x, top_y);
         lv_obj_set_style_bg_color(mode_bar, c->input_bg, 0);
         lv_obj_set_style_border_width(mode_bar, 0, 0);
-        lv_obj_set_style_radius(mode_bar, 6, 0);
+        lv_obj_set_style_radius(mode_bar, 14, 0);
         lv_obj_set_style_pad_all(mode_bar, 2, 0);
         lv_obj_clear_flag(mode_bar, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_clear_flag(mode_bar, LV_OBJ_FLAG_EVENT_BUBBLE);
@@ -6397,18 +8255,18 @@ static void create_title_bar(lv_obj_t* scr) {
             lv_obj_center(lbl);
             return b;
         };
-        top_mode_chat = create_mode_btn("切到Work", mode_chat_work_toggle_cb);
-        top_mode_work = top_mode_chat;
+        top_mode_chat = create_mode_btn("Chat", mode_chat_cb);
+        top_mode_work = create_mode_btn("Work", mode_work_cb);
 
         /* Minimize button - 灰色 */
         btn_minimize = lv_button_create(title_bar);
         lv_obj_set_size(btn_minimize, wc_btn_size, wc_btn_h);
         lv_obj_set_pos(btn_minimize, wc_base_x, wc_btn_y);
-        lv_obj_set_style_bg_color(btn_minimize, lv_color_make(120, 120, 140), 0);
+        lv_obj_set_style_bg_color(btn_minimize, c->btn_secondary, 0);
         lv_obj_set_style_bg_opa(btn_minimize, LV_OPA_COVER, 0);
         lv_obj_set_style_radius(btn_minimize, 6, 0);
         lv_obj_set_style_border_width(btn_minimize, 1, 0);
-        lv_obj_set_style_border_color(btn_minimize, lv_color_make(200, 200, 220), 0);
+        lv_obj_set_style_border_color(btn_minimize, c->panel_border, 0);
         lv_obj_clear_flag(btn_minimize, LV_OBJ_FLAG_CLICK_FOCUSABLE);
         lv_obj_clear_flag(btn_minimize, LV_OBJ_FLAG_EVENT_BUBBLE);
         lv_obj_set_ext_click_area(btn_minimize, SCALE(6));
@@ -6425,11 +8283,11 @@ static void create_title_bar(lv_obj_t* scr) {
         btn_maximize = lv_button_create(title_bar);
         lv_obj_set_size(btn_maximize, wc_btn_size, wc_btn_h);
         lv_obj_set_pos(btn_maximize, wc_base_x + wc_btn_size + wc_btn_gap, wc_btn_y);
-        lv_obj_set_style_bg_color(btn_maximize, lv_color_make(70, 130, 220), 0);
+        lv_obj_set_style_bg_color(btn_maximize, c->btn_secondary, 0);
         lv_obj_set_style_bg_opa(btn_maximize, LV_OPA_COVER, 0);
         lv_obj_set_style_radius(btn_maximize, 6, 0);
         lv_obj_set_style_border_width(btn_maximize, 1, 0);
-        lv_obj_set_style_border_color(btn_maximize, lv_color_make(100, 160, 255), 0);
+        lv_obj_set_style_border_color(btn_maximize, c->panel_border, 0);
         lv_obj_clear_flag(btn_maximize, LV_OBJ_FLAG_CLICK_FOCUSABLE);
         lv_obj_clear_flag(btn_maximize, LV_OBJ_FLAG_EVENT_BUBBLE);
         lv_obj_set_ext_click_area(btn_maximize, SCALE(6));
@@ -6445,11 +8303,11 @@ static void create_title_bar(lv_obj_t* scr) {
         btn_close = lv_button_create(title_bar);
         lv_obj_set_size(btn_close, wc_btn_size, wc_btn_h);
         lv_obj_set_pos(btn_close, wc_base_x + (wc_btn_size + wc_btn_gap) * 2, wc_btn_y);
-        lv_obj_set_style_bg_color(btn_close, lv_color_make(220, 60, 60), 0);
+        lv_obj_set_style_bg_color(btn_close, c->btn_close, 0);
         lv_obj_set_style_bg_opa(btn_close, LV_OPA_COVER, 0);
         lv_obj_set_style_radius(btn_close, 6, 0);
         lv_obj_set_style_border_width(btn_close, 1, 0);
-        lv_obj_set_style_border_color(btn_close, lv_color_make(255, 120, 120), 0);
+        lv_obj_set_style_border_color(btn_close, c->panel_border, 0);
         lv_obj_clear_flag(btn_close, LV_OBJ_FLAG_CLICK_FOCUSABLE);
         lv_obj_clear_flag(btn_close, LV_OBJ_FLAG_EVENT_BUBBLE);
         lv_obj_set_ext_click_area(btn_close, SCALE(6));
@@ -6468,10 +8326,10 @@ static void create_title_bar(lv_obj_t* scr) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  Setup Wizard — First-launch 5-step onboarding
+ *  Setup Wizard — First-launch 6-step onboarding
  * ═══════════════════════════════════════════════════════════════ */
 
-#define WIZARD_STEPS 5
+#define WIZARD_STEPS 6
 static lv_obj_t* g_wizard_modal = nullptr;
 static lv_obj_t* g_wizard_box = nullptr;
 static lv_obj_t* g_wizard_step_label = nullptr;
@@ -6492,6 +8350,19 @@ static int g_wizard_model_sel = 0;
 static char g_wizard_model_name[128] = {0};  /* Stored model name string (survives dropdown deletion) */
 static char g_wizard_nickname[128] = {0};
 static int g_wizard_tz_sel = 4;          /* timezone index, default Asia/Shanghai */
+static bool g_wiz_im_tg_connected = false;
+static bool g_wiz_im_discord_connected = false;
+static bool g_wiz_im_whatsapp_connected = false;
+static char g_wiz_im_tg_token[256] = {0};
+static char g_wiz_im_discord_token[256] = {0};
+static lv_obj_t* g_wiz_im_tg_status = nullptr;
+static lv_obj_t* g_wiz_im_discord_status = nullptr;
+static lv_obj_t* g_wiz_im_whatsapp_status = nullptr;
+static lv_obj_t* g_wiz_im_token_overlay = nullptr;
+static lv_obj_t* g_wiz_im_token_ta = nullptr;
+static char* g_wiz_im_active_token = nullptr;
+static size_t g_wiz_im_active_token_cap = 0;
+static bool* g_wiz_im_active_connected = nullptr;
 
 /* Widget refs per step */
 static lv_obj_t* g_wiz_btn_cn = nullptr;
@@ -6522,8 +8393,11 @@ static lv_obj_t* g_wiz_dl_node_btn = nullptr;
 static lv_obj_t* g_wiz_dl_oc_btn = nullptr;
 
 static void wizard_progress_mirror_from_event(const PendingProgressEvent& ev, int pct) {
-    if (!g_wizard_modal || g_wizard_step != 1 || !g_wiz_install_progress_panel || !g_wiz_install_progress_bar) return;
-    if (!(strstr(ev.task, "Setup") || strstr(ev.task, "Node.js"))) return;
+    if (!g_wizard_modal || !g_wiz_install_progress_panel || !g_wiz_install_progress_bar) return;
+    bool is_setup_task = (strstr(ev.task, "Setup") || strstr(ev.task, "Node.js"));
+    bool is_gemma_task = strstr(ev.task, "Gemma") != nullptr;
+    if (!is_setup_task && !is_gemma_task) return;
+    if ((is_setup_task && g_wizard_step != 1) || (is_gemma_task && g_wizard_step != 3)) return;
     lv_obj_clear_flag(g_wiz_install_progress_panel, LV_OBJ_FLAG_HIDDEN);
     if (g_wiz_install_progress_task) {
         lv_label_set_text_fmt(g_wiz_install_progress_task, "Task: %s", ev.task[0] ? ev.task : "Setup");
@@ -6565,7 +8439,8 @@ static const I18n wizard_step_titles[WIZARD_STEPS] = {
     {"OpenClaw Detection", "OpenClaw 检测"},       /* Step 1 */
     {"Model & API Key", "模型 & API 密钥"},        /* Step 2 */
     {"Local Models (Optional)", "本地模型（可选）"}, /* Step 3 */
-    {"Profile & Confirm", "个人信息 & 确认"}       /* Step 4 */
+    {"Connect IM (Optional)", "连接 IM（可选）"},    /* Step 4 */
+    {"Profile & Confirm", "个人信息 & 确认"}        /* Step 5 */
 };
 
 /* Wizard text strings — bilingual */
@@ -6632,6 +8507,7 @@ static void wizard_update_step();
 static void wizard_close_cb(lv_event_t* e);
 static void wizard_set_next_enabled(bool enabled);
 static void wizard_gemma_skip_cb(lv_event_t* e);
+static void wizard_build_step_im();
 
 /* Navigate to a specific step */
 static void wizard_go_step(int step) {
@@ -7468,6 +9344,56 @@ static void wizard_build_step_gemma() {
     lv_obj_set_width(mode_lbl_gemma_recommend, LV_PCT(100));
     update_gemma_recommend_visuals();
 
+    lv_obj_t* btn_start_gemma = lv_button_create(g_wizard_content);
+    lv_obj_set_size(btn_start_gemma, LV_PCT(100), SCALE(36));
+    lv_obj_set_style_bg_color(btn_start_gemma, lv_color_make(70, 120, 85), 0);
+    lv_obj_set_style_radius(btn_start_gemma, 8, 0);
+    lv_obj_t* lbl_start = lv_label_create(btn_start_gemma);
+    lv_label_set_text(lbl_start, g_lang == Lang::CN ? "立即开始下载 Gemma" : "Start Gemma Download Now");
+    lv_obj_set_style_text_font(lbl_start, CJK_FONT_SMALL, 0);
+    lv_obj_center(lbl_start);
+    lv_obj_add_event_cb(btn_start_gemma, [](lv_event_t* e) {
+        (void)e;
+        if (!g_gemma_install_opt_in || g_gemma_model_mask == 0) {
+            ui_log("[Gemma] Please enable Gemma install and select at least one model");
+            return;
+        }
+        start_gemma_install_async(g_gemma_model_mask);
+    }, LV_EVENT_CLICKED, nullptr);
+
+    g_wiz_install_progress_panel = lv_obj_create(g_wizard_content);
+    lv_obj_set_size(g_wiz_install_progress_panel, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(g_wiz_install_progress_panel, g_colors->input_bg, 0);
+    lv_obj_set_style_border_color(g_wiz_install_progress_panel, g_colors->panel_border, 0);
+    lv_obj_set_style_border_width(g_wiz_install_progress_panel, 1, 0);
+    lv_obj_set_style_radius(g_wiz_install_progress_panel, 8, 0);
+    lv_obj_set_style_pad_all(g_wiz_install_progress_panel, 8, 0);
+    lv_obj_set_style_pad_gap(g_wiz_install_progress_panel, 6, 0);
+    lv_obj_set_flex_flow(g_wiz_install_progress_panel, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(g_wiz_install_progress_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_clear_flag(g_wiz_install_progress_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(g_wiz_install_progress_panel, LV_OBJ_FLAG_HIDDEN);
+
+    g_wiz_install_progress_task = lv_label_create(g_wiz_install_progress_panel);
+    lv_label_set_text(g_wiz_install_progress_task, "Task: Gemma Setup");
+    lv_obj_set_style_text_font(g_wiz_install_progress_task, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_color(g_wiz_install_progress_task, g_colors->accent, 0);
+
+    g_wiz_install_progress_step = lv_label_create(g_wiz_install_progress_panel);
+    lv_label_set_text(g_wiz_install_progress_step, "Step: Waiting");
+    lv_obj_set_style_text_font(g_wiz_install_progress_step, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_color(g_wiz_install_progress_step, g_colors->text_dim, 0);
+
+    g_wiz_install_progress_bar = lv_bar_create(g_wiz_install_progress_panel);
+    lv_obj_set_width(g_wiz_install_progress_bar, LV_PCT(100));
+    lv_bar_set_range(g_wiz_install_progress_bar, 0, 100);
+    lv_bar_set_value(g_wiz_install_progress_bar, 0, LV_ANIM_OFF);
+
+    g_wiz_install_progress_result = lv_label_create(g_wiz_install_progress_panel);
+    lv_label_set_text(g_wiz_install_progress_result, "");
+    lv_obj_set_style_text_font(g_wiz_install_progress_result, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_color(g_wiz_install_progress_result, g_colors->text_dim, 0);
+
     /* Skip button — Gemma is optional, always allow Next */
     lv_obj_t* btn_skip_gemma = lv_button_create(g_wizard_content);
     lv_obj_set_size(btn_skip_gemma, LV_PCT(100), SCALE(36));
@@ -7489,7 +9415,158 @@ static void wizard_gemma_skip_cb(lv_event_t* e) {
     wizard_go_step(g_wizard_step + 1);
 }
 
-/* ── Step 4: Profile & Confirm ── */
+static void wizard_im_refresh_status_labels() {
+    auto set_status = [](lv_obj_t* lbl, bool ok) {
+        if (!lbl) return;
+        lv_label_set_text(lbl, ok ? "已连接" : "未配置");
+        lv_obj_set_style_text_color(lbl, ok ? lv_color_make(90, 210, 130) : lv_color_make(230, 180, 80), 0);
+    };
+    set_status(g_wiz_im_tg_status, g_wiz_im_tg_connected);
+    set_status(g_wiz_im_discord_status, g_wiz_im_discord_connected);
+    set_status(g_wiz_im_whatsapp_status, g_wiz_im_whatsapp_connected);
+}
+
+static void wizard_im_token_close_dialog() {
+    if (g_wiz_im_token_overlay) {
+        lv_obj_del(g_wiz_im_token_overlay);
+        g_wiz_im_token_overlay = nullptr;
+    }
+    g_wiz_im_token_ta = nullptr;
+    g_wiz_im_active_token = nullptr;
+    g_wiz_im_active_token_cap = 0;
+    g_wiz_im_active_connected = nullptr;
+}
+
+static void wizard_im_token_cancel_cb(lv_event_t* e) {
+    (void)e;
+    wizard_im_token_close_dialog();
+}
+
+static void wizard_im_token_save_cb(lv_event_t* e) {
+    (void)e;
+    if (g_wiz_im_token_ta && g_wiz_im_active_token && g_wiz_im_active_token_cap > 0) {
+        const char* text = lv_textarea_get_text(g_wiz_im_token_ta);
+        snprintf(g_wiz_im_active_token, g_wiz_im_active_token_cap, "%s", text ? text : "");
+        if (g_wiz_im_active_connected) *g_wiz_im_active_connected = (text && text[0]);
+    }
+    wizard_im_refresh_status_labels();
+    wizard_im_token_close_dialog();
+}
+
+static void wizard_im_open_token_dialog(const char* title, char* token_buf, size_t token_cap, bool* connected_flag) {
+    if (g_wiz_im_token_overlay) return;
+    g_wiz_im_active_token = token_buf;
+    g_wiz_im_active_token_cap = token_cap;
+    g_wiz_im_active_connected = connected_flag;
+
+    lv_obj_t* box = create_dialog(g_wizard_modal ? g_wizard_modal : lv_screen_active(),
+                                  title, SCALE(500), 0, &g_wiz_im_token_overlay);
+    if (!box) return;
+    lv_obj_t* hint = lv_label_create(box);
+    lv_label_set_text(hint, g_lang == Lang::CN ? "请输入 Bot Token，保存后标记为已连接。" : "Enter Bot token and save.");
+    lv_obj_set_style_text_color(hint, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(hint, CJK_FONT_SMALL, 0);
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(hint, LV_PCT(100));
+
+    g_wiz_im_token_ta = lv_textarea_create(box);
+    lv_textarea_set_one_line(g_wiz_im_token_ta, true);
+    lv_textarea_set_placeholder_text(g_wiz_im_token_ta, "token...");
+    lv_obj_set_size(g_wiz_im_token_ta, LV_PCT(100), SCALE(40));
+    lv_obj_set_style_bg_color(g_wiz_im_token_ta, g_colors->input_bg, 0);
+    lv_obj_set_style_text_color(g_wiz_im_token_ta, g_colors->text, 0);
+    if (token_buf && token_buf[0]) lv_textarea_set_text(g_wiz_im_token_ta, token_buf);
+
+    lv_obj_t* row = lv_obj_create(box);
+    lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_set_style_pad_gap(row, 8, 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* btn_cancel = aw_btn_create(row, g_lang == Lang::CN ? "取消" : "Cancel", BTN_SECONDARY, SCALE(120), SCALE(34));
+    lv_obj_add_event_cb(btn_cancel, wizard_im_token_cancel_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* btn_save = aw_btn_create(row, g_lang == Lang::CN ? "保存" : "Save", BTN_PRIMARY, SCALE(120), SCALE(34));
+    lv_obj_add_event_cb(btn_save, wizard_im_token_save_cb, LV_EVENT_CLICKED, nullptr);
+}
+
+static void wizard_im_tg_config_cb(lv_event_t* e) {
+    (void)e;
+    wizard_im_open_token_dialog("Telegram Bot Token", g_wiz_im_tg_token, sizeof(g_wiz_im_tg_token), &g_wiz_im_tg_connected);
+}
+
+static void wizard_im_discord_config_cb(lv_event_t* e) {
+    (void)e;
+    wizard_im_open_token_dialog("Discord Bot Token", g_wiz_im_discord_token, sizeof(g_wiz_im_discord_token), &g_wiz_im_discord_connected);
+}
+
+static void wizard_im_whatsapp_bind_cb(lv_event_t* e) {
+    (void)e;
+    g_wiz_im_whatsapp_connected = true;
+    wizard_im_refresh_status_labels();
+    ui_log("[Wizard] WhatsApp QR binding marked as connected");
+}
+
+static void wizard_build_step_im() {
+    lv_obj_t* hint = lv_label_create(g_wizard_content);
+    lv_label_set_text(hint, g_lang == Lang::CN
+        ? "可选：连接 IM 渠道，后续可通过手机远程指挥 AnyClaw。"
+        : "Optional: connect IM channels for remote control.");
+    lv_obj_set_style_text_color(hint, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(hint, CJK_FONT, 0);
+
+    auto add_channel_row = [&](const char* name, lv_obj_t** status_out, const char* btn_text, lv_event_cb_t cb) {
+        lv_obj_t* row = lv_obj_create(g_wizard_content);
+        lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_color(row, g_colors->input_bg, 0);
+        lv_obj_set_style_border_color(row, g_colors->panel_border, 0);
+        lv_obj_set_style_border_width(row, 1, 0);
+        lv_obj_set_style_radius(row, 8, 0);
+        lv_obj_set_style_pad_all(row, 8, 0);
+        lv_obj_set_style_pad_gap(row, 8, 0);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* left = lv_obj_create(row);
+        lv_obj_set_size(left, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(left, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(left, 0, 0);
+        lv_obj_set_style_pad_all(left, 0, 0);
+        lv_obj_set_style_pad_gap(left, 4, 0);
+        lv_obj_set_flex_flow(left, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(left, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(left, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* title = lv_label_create(left);
+        lv_label_set_text(title, name);
+        lv_obj_set_style_text_color(title, g_colors->text, 0);
+        lv_obj_set_style_text_font(title, CJK_FONT, 0);
+
+        *status_out = lv_label_create(left);
+        lv_obj_set_style_text_font(*status_out, CJK_FONT_SMALL, 0);
+
+        lv_obj_t* btn = aw_btn_create(row, btn_text, BTN_SECONDARY, SCALE(130), SCALE(32));
+        lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, nullptr);
+    };
+
+    add_channel_row("Telegram", &g_wiz_im_tg_status, g_lang == Lang::CN ? "配置 Token" : "Configure", wizard_im_tg_config_cb);
+    add_channel_row("Discord", &g_wiz_im_discord_status, g_lang == Lang::CN ? "配置 Token" : "Configure", wizard_im_discord_config_cb);
+    add_channel_row("WhatsApp", &g_wiz_im_whatsapp_status, g_lang == Lang::CN ? "扫码绑定" : "Scan Bind", wizard_im_whatsapp_bind_cb);
+    wizard_im_refresh_status_labels();
+
+    lv_obj_t* skip_hint = lv_label_create(g_wizard_content);
+    lv_label_set_text(skip_hint, g_lang == Lang::CN
+        ? "可直接下一步（Skip），稍后可在设置中补充。"
+        : "You can skip now and configure later in settings.");
+    lv_obj_set_style_text_color(skip_hint, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(skip_hint, CJK_FONT_SMALL, 0);
+}
+
+/* ── Step 5: Profile & Confirm ── */
 static const char* tz_options =
     "UTC-12\nUTC-11\nUTC-10\nUTC-9\nUTC-8 (PST)\nUTC-7 (MST)\n"
     "UTC-6 (CST-US)\nUTC-5 (EST)\nUTC-4\nUTC-3\nUTC-2\nUTC-1\n"
@@ -7504,6 +9581,9 @@ static void wizard_build_summary_text(char* buf, int buf_size) {
     const char* api_str = (g_wizard_api_key[0]) ? "****" : tr(W_NOTSET);
     const char* model_str = g_wizard_model_name[0] ? g_wizard_model_name : "N/A";
     const char* nick_str = g_wizard_nickname[0] ? g_wizard_nickname : tr(W_ANONYMOUS);
+    const char* tg = g_wiz_im_tg_connected ? "on" : "off";
+    const char* dc = g_wiz_im_discord_connected ? "on" : "off";
+    const char* wa = g_wiz_im_whatsapp_connected ? "on" : "off";
 
     static char tz_str[64];
     if (g_wiz_tz_dd) {
@@ -7515,14 +9595,15 @@ static void wizard_build_summary_text(char* buf, int buf_size) {
     const char* gemma_sw = g_gemma_install_opt_in ? "enabled" : "disabled";
     const char* gemma_models = gemma_mask_to_text(g_gemma_model_mask);
     snprintf(buf, buf_size,
-        "%s %s\n%s %s\n%s %s\n%s %s\n%s %s\n%s %s\nGemma Local %s\nGemma Models %s",
+        "%s %s\n%s %s\n%s %s\n%s %s\n%s %s\n%s %s\nGemma Local %s\nGemma Models %s\nIM Telegram %s / Discord %s / WhatsApp %s",
         tr(W_LANG_LABEL), lang_str,
         tr(W_OC_LABEL), detect_str,
         tr(W_APIK_LABEL), api_str,
         tr(W_MODEL_LABEL), model_str,
         tr(W_NAME_LABEL), nick_str,
         tr(W_TZ_HINT), tz_str,
-        gemma_sw, gemma_models);
+        gemma_sw, gemma_models,
+        tg, dc, wa);
 }
 
 static void wizard_build_step_profile() {
@@ -7622,11 +9703,11 @@ static void wizard_update_step() {
         char* free_tag = strstr(g_wizard_model_name, " [free]");
         if (free_tag) *free_tag = '\0';
     }
-    if (g_wizard_step == 4 && g_wiz_nick_ta) {
+    if (g_wizard_step == 5 && g_wiz_nick_ta) {
         const char* t = lv_textarea_get_text(g_wiz_nick_ta);
         if (t) snprintf(g_wizard_nickname, sizeof(g_wizard_nickname), "%s", t);
     }
-    if (g_wizard_step == 4 && g_wiz_tz_dd) {
+    if (g_wizard_step == 5 && g_wiz_tz_dd) {
         g_wizard_tz_sel = lv_dropdown_get_selected(g_wiz_tz_dd);
     }
 
@@ -7666,7 +9747,8 @@ static void wizard_update_step() {
         case 1: wizard_build_step_detect(); break;       /* May override: wizard_set_next_enabled(critical_ok) */
         case 2: wizard_build_step_model_api(); break;    /* Model + API Key */
         case 3: wizard_build_step_gemma(); break;        /* Local Gemma models (optional) */
-        case 4: wizard_build_step_profile(); break;      /* Nickname + timezone + summary */
+        case 4: wizard_build_step_im(); break;           /* IM connect (optional) */
+        case 5: wizard_build_step_profile(); break;      /* Nickname + timezone + summary */
     }
 
     /* Update buttons */
@@ -7712,11 +9794,11 @@ static void wizard_next_cb(lv_event_t* e) {
         char* free_tag = strstr(g_wizard_model_name, " [free]");
         if (free_tag) *free_tag = '\0';
     }
-    if (g_wizard_step == 4 && g_wiz_nick_ta) {
+    if (g_wizard_step == 5 && g_wiz_nick_ta) {
         const char* t = lv_textarea_get_text(g_wiz_nick_ta);
         if (t) snprintf(g_wizard_nickname, sizeof(g_wizard_nickname), "%s", t);
     }
-    if (g_wizard_step == 4 && g_wiz_tz_dd) {
+    if (g_wizard_step == 5 && g_wiz_tz_dd) {
         g_wizard_tz_sel = lv_dropdown_get_selected(g_wiz_tz_dd);
     }
 
@@ -8258,38 +10340,6 @@ void app_ui_init() {
     lv_obj_set_style_pad_all(mode_panel_chat, 0, 0);
     lv_obj_clear_flag(mode_panel_chat, LV_OBJ_FLAG_SCROLLABLE);
 
-    mode_panel_voice = lv_obj_create(pr);
-    lv_obj_set_size(mode_panel_voice, content_w, content_h);
-    lv_obj_set_pos(mode_panel_voice, CHAT_GAP, CHAT_GAP);
-    lv_obj_set_style_bg_opa(mode_panel_voice, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(mode_panel_voice, 0, 0);
-    lv_obj_set_style_pad_all(mode_panel_voice, 0, 0);
-    lv_obj_clear_flag(mode_panel_voice, LV_OBJ_FLAG_SCROLLABLE);
-    {
-        lv_obj_t* sec_voice = aw_form_section_create(mode_panel_voice, "Voice Input", std::max(220, content_w - 16));
-        lv_obj_align(sec_voice, LV_ALIGN_TOP_LEFT, 8, 8);
-        lv_obj_t* hint = aw_label_wrap_create(sec_voice,
-                                              "Input transcript text and send through the same chat/LLM pipeline.",
-                                              LABEL_HINT, 100);
-        lv_obj_set_style_text_color(hint, c->text_dim, 0);
-        mode_ta_voice_input = aw_textarea_create(sec_voice, "Type voice transcript...", false, content_w - 40, SCALE(120));
-        lv_textarea_set_one_line(mode_ta_voice_input, false);
-        lv_obj_t* voice_btn_row = lv_obj_create(sec_voice);
-        lv_obj_set_width(voice_btn_row, content_w - 40);
-        lv_obj_set_height(voice_btn_row, LV_SIZE_CONTENT);
-        lv_obj_set_style_bg_opa(voice_btn_row, LV_OPA_TRANSP, 0);
-        lv_obj_set_style_border_width(voice_btn_row, 0, 0);
-        lv_obj_set_style_pad_all(voice_btn_row, 0, 0);
-        lv_obj_set_style_pad_gap(voice_btn_row, 8, 0);
-        lv_obj_set_flex_flow(voice_btn_row, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(voice_btn_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_clear_flag(voice_btn_row, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_t* btn_voice_send = aw_btn_create(voice_btn_row, "Send To Chat", BTN_PRIMARY, SCALE(150), SCALE(34));
-        lv_obj_add_event_cb(btn_voice_send, voice_send_cb, LV_EVENT_CLICKED, nullptr);
-        lv_obj_t* btn_voice_send_work = aw_btn_create(voice_btn_row, "Send To Work", BTN_SECONDARY, SCALE(150), SCALE(34));
-        lv_obj_add_event_cb(btn_voice_send_work, voice_send_to_work_cb, LV_EVENT_CLICKED, nullptr);
-    }
-
     mode_panel_work = lv_obj_create(pr);
     lv_obj_set_size(mode_panel_work, content_w, content_h);
     lv_obj_set_pos(mode_panel_work, CHAT_GAP, CHAT_GAP);
@@ -8311,6 +10361,30 @@ void app_ui_init() {
                                "Gateway mode (OpenClaw)\nDirect API mode (paused)",
                                0, &mode_dd_llm, card_w - 24);
         lv_obj_add_event_cb(mode_dd_llm, work_llm_mode_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+        aw_form_field_dropdown(sec_runtime, "AI interaction mode",
+                               "Autonomous\nAsk\nPlan",
+                               (uint16_t)g_ai_interaction_mode, &mode_dd_ai_mode, card_w - 24);
+        lv_obj_add_event_cb(mode_dd_ai_mode, ai_mode_dropdown_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+        lv_obj_t* row_adv = lv_obj_create(sec_runtime);
+        lv_obj_set_width(row_adv, card_w - 24);
+        lv_obj_set_height(row_adv, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(row_adv, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(row_adv, 0, 0);
+        lv_obj_set_style_pad_all(row_adv, 0, 0);
+        lv_obj_set_style_pad_gap(row_adv, 8, 0);
+        lv_obj_set_flex_flow(row_adv, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(row_adv, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(row_adv, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t* lbl_adv = lv_label_create(row_adv);
+        lv_label_set_text(lbl_adv, "Show advanced modules (LAN/FTP/KB)");
+        lv_obj_set_style_text_color(lbl_adv, c->text, 0);
+        lv_obj_set_style_text_font(lbl_adv, CJK_FONT_SMALL, 0);
+        mode_sw_work_advanced = lv_switch_create(row_adv);
+        if (g_work_show_advanced) lv_obj_add_state(mode_sw_work_advanced, LV_STATE_CHECKED);
+        lv_obj_set_style_bg_color(mode_sw_work_advanced, c->btn_secondary, 0);
+        lv_obj_set_style_bg_color(mode_sw_work_advanced, c->btn_action, LV_PART_INDICATOR | LV_STATE_CHECKED);
+        lv_obj_add_event_cb(mode_sw_work_advanced, work_advanced_sw_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
         mode_lbl_work_hint = aw_label_wrap_create(sec_runtime, "", LABEL_HINT, 100);
         lv_obj_set_style_text_color(mode_lbl_work_hint, c->text_dim, 0);
@@ -8348,31 +10422,122 @@ void app_ui_init() {
         lv_obj_add_event_cb(btn_trace_filter, work_trace_toggle_fail_filter_cb, LV_EVENT_CLICKED, nullptr);
         work_trace_refresh_cb(nullptr);
 
-        lv_obj_t* sec_work_console = aw_form_section_create(mode_panel_work, "Work Console (Markdown)", card_w);
-        lv_obj_t* md_wrap = lv_obj_create(sec_work_console);
-        lv_obj_set_size(md_wrap, card_w - 24, SCALE(180));
-        lv_obj_set_style_bg_color(md_wrap, c->panel, 0);
-        lv_obj_set_style_border_color(md_wrap, c->panel_border, 0);
-        lv_obj_set_style_border_width(md_wrap, 1, 0);
-        lv_obj_set_style_radius(md_wrap, 6, 0);
-        lv_obj_set_style_pad_all(md_wrap, 8, 0);
-        lv_obj_set_scroll_dir(md_wrap, LV_DIR_VER);
-        lv_obj_set_scrollbar_mode(md_wrap, LV_SCROLLBAR_MODE_AUTO);
-        lv_obj_set_flex_flow(md_wrap, LV_FLEX_FLOW_COLUMN);
-        lv_obj_set_flex_align(md_wrap, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        mode_sec_step_stream = aw_form_section_create(mode_panel_work, "Step Stream", card_w);
+        mode_work_step_stream = lv_obj_create(mode_sec_step_stream);
+        lv_obj_set_size(mode_work_step_stream, card_w - 24, SCALE(g_work_step_stream_h));
+        lv_obj_set_style_bg_color(mode_work_step_stream, c->panel, 0);
+        lv_obj_set_style_border_color(mode_work_step_stream, c->panel_border, 0);
+        lv_obj_set_style_border_width(mode_work_step_stream, 1, 0);
+        lv_obj_set_style_radius(mode_work_step_stream, 12, 0);
+        lv_obj_set_style_pad_all(mode_work_step_stream, 12, 0);
+        lv_obj_set_style_pad_gap(mode_work_step_stream, 8, 0);
+        lv_obj_set_scroll_dir(mode_work_step_stream, LV_DIR_VER);
+        lv_obj_set_scrollbar_mode(mode_work_step_stream, LV_SCROLLBAR_MODE_AUTO);
+        lv_obj_set_flex_flow(mode_work_step_stream, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(mode_work_step_stream, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_clear_flag(mode_work_step_stream, LV_OBJ_FLAG_SCROLL_CHAIN);
+        mode_work_empty_card = lv_obj_create(mode_sec_step_stream);
+        lv_obj_set_size(mode_work_empty_card, card_w - 24, SCALE(74));
+        lv_obj_set_style_bg_color(mode_work_empty_card, c->panel, 0);
+        lv_obj_set_style_border_color(mode_work_empty_card, c->panel_border, 0);
+        lv_obj_set_style_border_width(mode_work_empty_card, 1, 0);
+        lv_obj_set_style_radius(mode_work_empty_card, 12, 0);
+        lv_obj_set_style_pad_all(mode_work_empty_card, 10, 0);
+        lv_obj_set_style_pad_gap(mode_work_empty_card, 6, 0);
+        lv_obj_set_flex_flow(mode_work_empty_card, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(mode_work_empty_card, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(mode_work_empty_card, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t* we_icon = lv_label_create(mode_work_empty_card);
+        lv_label_set_text(we_icon, "⚡");
+        lv_obj_set_style_text_font(we_icon, CJK_FONT, 0);
+        lv_obj_t* we_text = lv_label_create(mode_work_empty_card);
+        lv_label_set_text(we_text, "AI 工作台已就绪 - 在 Chat 中发送任务");
+        lv_obj_set_style_text_color(we_text, c->text_dim, 0);
+        lv_obj_set_style_text_font(we_text, CJK_FONT_SMALL, 0);
+        lv_obj_t* we_btn = aw_btn_create(mode_work_empty_card, "查看示例任务", BTN_SECONDARY, SCALE(160), SCALE(32));
+        static const char* k_work_example = "请读取当前工作区并给我一个可执行的三步改造计划。";
+        lv_obj_add_event_cb(we_btn, work_empty_example_cb, LV_EVENT_CLICKED, (void*)k_work_example);
+        work_add_step_card("等待任务", "在 Chat 或 Work 输入任务后，将按步骤展示执行过程。", true, false);
+        update_work_empty_state();
 
-        mode_lbl_work_md_output = lv_label_create(md_wrap);
+        mode_work_splitter = lv_obj_create(mode_panel_work);
+        lv_obj_set_size(mode_work_splitter, card_w - 24, SCALE(6));
+        lv_obj_set_style_bg_color(mode_work_splitter, c->input_bg, 0);
+        lv_obj_set_style_border_width(mode_work_splitter, 0, 0);
+        lv_obj_set_style_radius(mode_work_splitter, SCALE(3), 0);
+        lv_obj_clear_flag(mode_work_splitter, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(mode_work_splitter, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(mode_work_splitter, work_vertical_splitter_cb, LV_EVENT_PRESSED, nullptr);
+        lv_obj_add_event_cb(mode_work_splitter, work_vertical_splitter_cb, LV_EVENT_PRESSING, nullptr);
+
+        mode_sec_work_console = aw_form_section_create(mode_panel_work, "Output Area", card_w);
+        mode_work_output_wrap = lv_obj_create(mode_sec_work_console);
+        lv_obj_set_size(mode_work_output_wrap, card_w - 24, SCALE(g_work_output_h));
+        lv_obj_set_style_bg_color(mode_work_output_wrap, c->panel, 0);
+        lv_obj_set_style_border_color(mode_work_output_wrap, c->panel_border, 0);
+        lv_obj_set_style_border_width(mode_work_output_wrap, 1, 0);
+        lv_obj_set_style_radius(mode_work_output_wrap, 12, 0);
+        lv_obj_set_style_pad_all(mode_work_output_wrap, 12, 0);
+        lv_obj_set_scroll_dir(mode_work_output_wrap, LV_DIR_VER);
+        lv_obj_set_scrollbar_mode(mode_work_output_wrap, LV_SCROLLBAR_MODE_AUTO);
+        lv_obj_set_flex_flow(mode_work_output_wrap, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(mode_work_output_wrap, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_set_style_pad_gap(mode_work_output_wrap, 8, 0);
+
+        mode_lbl_work_output_title = lv_label_create(mode_work_output_wrap);
+        lv_label_set_text(mode_lbl_work_output_title, "Output: waiting");
+        lv_obj_set_width(mode_lbl_work_output_title, LV_PCT(100));
+        lv_obj_set_style_text_color(mode_lbl_work_output_title, c->text, 0);
+        lv_obj_set_style_text_font(mode_lbl_work_output_title, CJK_FONT_SMALL, 0);
+
+        mode_lbl_work_renderer = lv_label_create(mode_work_output_wrap);
+        lv_label_set_text(mode_lbl_work_renderer, "Renderer: preview");
+        lv_obj_set_width(mode_lbl_work_renderer, LV_PCT(100));
+        lv_obj_set_style_text_color(mode_lbl_work_renderer, c->accent, 0);
+        lv_obj_set_style_text_font(mode_lbl_work_renderer, CJK_FONT_SMALL, 0);
+
+        mode_lbl_work_md_output = lv_label_create(mode_work_output_wrap);
         lv_obj_set_width(mode_lbl_work_md_output, LV_PCT(100));
         lv_obj_set_style_text_color(mode_lbl_work_md_output, c->text, 0);
         lv_obj_set_style_text_font(mode_lbl_work_md_output, CJK_FONT_CHAT, 0);
         lv_label_set_long_mode(mode_lbl_work_md_output, LV_LABEL_LONG_WRAP);
         render_work_md_doc();
 
-        mode_ta_work_prompt = aw_textarea_create(sec_work_console, "Work mode input...", false, card_w - 24, SCALE(90));
+        mode_ta_work_prompt = aw_textarea_create(mode_sec_work_console, "输入任务... (Shift+Enter 换行)", false, card_w - 24, SCALE(96));
         lv_textarea_set_one_line(mode_ta_work_prompt, false);
         lv_textarea_set_text_selection(mode_ta_work_prompt, true);
-        lv_obj_t* btn_work_send = aw_btn_create(sec_work_console, "Run In Work", BTN_PRIMARY, SCALE(160), SCALE(34));
+        lv_obj_set_style_radius(mode_ta_work_prompt, 12, 0);
+        lv_obj_set_style_pad_all(mode_ta_work_prompt, 12, 0);
+        lv_obj_set_style_pad_ver(mode_ta_work_prompt, 10, 0);
+        lv_obj_set_style_border_width(mode_ta_work_prompt, 1, 0);
+        lv_obj_set_style_border_color(mode_ta_work_prompt, c->panel_border, 0);
+        lv_obj_set_style_border_color(mode_ta_work_prompt, c->accent, LV_STATE_FOCUSED);
+        lv_obj_set_style_border_width(mode_ta_work_prompt, 2, LV_STATE_FOCUSED);
+        lv_obj_t* btn_work_send = aw_btn_create(mode_sec_work_console, "Run In Work", BTN_PRIMARY, SCALE(160), SCALE(40));
+        lv_obj_set_style_radius(btn_work_send, 10, 0);
         lv_obj_add_event_cb(btn_work_send, work_send_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* work_prompt_hint = lv_label_create(mode_sec_work_console);
+        lv_label_set_text(work_prompt_hint, "提示: 任务越具体，步骤拆解越准确。");
+        lv_obj_set_style_text_color(work_prompt_hint, c->text_dim, 0);
+        lv_obj_set_style_text_font(work_prompt_hint, CJK_FONT_SMALL, 0);
+
+        mode_work_chat_panel = aw_form_section_create(mode_panel_work, "Work Chat Panel", card_w);
+        lv_obj_add_flag(mode_work_chat_panel, LV_OBJ_FLAG_FLOATING);
+        lv_obj_set_width(mode_work_chat_panel, SCALE(320));
+        lv_obj_set_height(mode_work_chat_panel, SCALE(220));
+        lv_obj_set_pos(mode_work_chat_panel, std::max(SCALE(8), content_w - SCALE(328)), SCALE(8));
+        mode_btn_work_chat_toggle = aw_btn_create(mode_work_chat_panel, "<", BTN_SECONDARY, SCALE(36), SCALE(30));
+        lv_obj_add_event_cb(mode_btn_work_chat_toggle, work_chat_toggle_cb, LV_EVENT_CLICKED, nullptr);
+        mode_lbl_work_chat_state = lv_label_create(mode_work_chat_panel);
+        lv_label_set_text(mode_lbl_work_chat_state, "State: Ready");
+        lv_obj_set_style_text_color(mode_lbl_work_chat_state, c->text_dim, 0);
+        lv_obj_set_style_text_font(mode_lbl_work_chat_state, CJK_FONT_SMALL, 0);
+        mode_ta_work_chat_feed = aw_textarea_create(mode_work_chat_panel, "Agent summary...", false, card_w - 24, SCALE(100));
+        lv_textarea_set_text_selection(mode_ta_work_chat_feed, true);
+        mode_ta_work_chat_input = aw_textarea_create(mode_work_chat_panel, "Input for Work chat...", false, card_w - 24, SCALE(56));
+        lv_textarea_set_one_line(mode_ta_work_chat_input, false);
+        lv_obj_t* btn_work_chat_send = aw_btn_create(mode_work_chat_panel, "Send", BTN_PRIMARY, SCALE(100), SCALE(30));
+        lv_obj_add_event_cb(btn_work_chat_send, work_chat_send_cb, LV_EVENT_CLICKED, nullptr);
 
         lv_obj_t* sec_gemma = aw_form_section_create(mode_panel_work, "Local Gemma 4 Install", card_w);
         lv_obj_t* row_gemma_sw = lv_obj_create(sec_gemma);
@@ -8557,7 +10722,34 @@ void app_ui_init() {
         lv_obj_add_event_cb(mode_btn_remote_reject, remote_reject_cb, LV_EVENT_CLICKED, nullptr);
         update_remote_session_visuals();
 
+        lv_obj_t* sec_cron = aw_form_section_create(mode_panel_work, "Cron Tasks", card_w);
+        mode_ta_cron_id = aw_textarea_create(sec_cron, "Cron ID", true, card_w - 24, SCALE(34));
+        mode_ta_cron_list = aw_textarea_create(sec_cron, "Cron list output", false, card_w - 24, SCALE(120));
+        lv_textarea_set_text_selection(mode_ta_cron_list, true);
+        lv_obj_t* cron_row = lv_obj_create(sec_cron);
+        lv_obj_set_width(cron_row, card_w - 24);
+        lv_obj_set_height(cron_row, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(cron_row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(cron_row, 0, 0);
+        lv_obj_set_style_pad_all(cron_row, 0, 0);
+        lv_obj_set_style_pad_gap(cron_row, 8, 0);
+        lv_obj_set_flex_flow(cron_row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(cron_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(cron_row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t* cron_btn_refresh = aw_btn_create(cron_row, "Refresh", BTN_SECONDARY, SCALE(100), SCALE(34));
+        lv_obj_t* cron_btn_run = aw_btn_create(cron_row, "Run", BTN_PRIMARY, SCALE(90), SCALE(34));
+        lv_obj_t* cron_btn_enable = aw_btn_create(cron_row, "Enable", BTN_SECONDARY, SCALE(90), SCALE(34));
+        lv_obj_t* cron_btn_disable = aw_btn_create(cron_row, "Disable", BTN_SECONDARY, SCALE(90), SCALE(34));
+        lv_obj_t* cron_btn_delete = aw_btn_create(cron_row, "Delete", BTN_DANGER, SCALE(90), SCALE(34));
+        lv_obj_add_event_cb(cron_btn_refresh, work_cron_refresh_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_add_event_cb(cron_btn_run, work_cron_run_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_add_event_cb(cron_btn_enable, work_cron_enable_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_add_event_cb(cron_btn_disable, work_cron_disable_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_add_event_cb(cron_btn_delete, work_cron_delete_cb, LV_EVENT_CLICKED, nullptr);
+        work_cron_refresh_cb(nullptr);
+
         lv_obj_t* sec_lan = aw_form_section_create(mode_panel_work, "LAN Chat (Host/Private/Group)", card_w);
+        mode_sec_lan = sec_lan;
         mode_ta_lan_host = aw_textarea_create(sec_lan, "LAN host IP, e.g. 192.168.1.10", true, card_w - 24, SCALE(34));
         lv_textarea_set_text(mode_ta_lan_host, "127.0.0.1");
         mode_ta_lan_port = aw_textarea_create(sec_lan, "Port", true, card_w - 24, SCALE(34));
@@ -8609,6 +10801,7 @@ void app_ui_init() {
         lv_textarea_set_text_selection(mode_ta_lan_feed, true);
 
         lv_obj_t* sec_ftp = aw_form_section_create(mode_panel_work, "FTP Upload/Download", card_w);
+        mode_sec_ftp = sec_ftp;
         mode_ta_ftp_host = aw_textarea_create(sec_ftp, "FTP host", true, card_w - 24, SCALE(34));
         mode_ta_ftp_port = aw_textarea_create(sec_ftp, "FTP port", true, card_w - 24, SCALE(34));
         lv_textarea_set_text(mode_ta_ftp_port, "21");
@@ -8644,6 +10837,7 @@ void app_ui_init() {
         lv_obj_add_state(mode_btn_ftp_cancel, LV_STATE_DISABLED);
 
         lv_obj_t* sec_kb = aw_form_section_create(mode_panel_work, "Local Knowledge Base", card_w);
+        mode_sec_kb = sec_kb;
         mode_ta_kb_source = aw_textarea_create(sec_kb, "Source file path", true, card_w - 24, SCALE(34));
         mode_ta_kb_keyword = aw_textarea_create(sec_kb, "Search keyword", true, card_w - 24, SCALE(34));
         lv_obj_t* kb_row = lv_obj_create(sec_kb);
@@ -8658,9 +10852,14 @@ void app_ui_init() {
         lv_obj_clear_flag(kb_row, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_t* kb_add = aw_btn_create(kb_row, "Add Source", BTN_SECONDARY, SCALE(120), SCALE(34));
         lv_obj_add_event_cb(kb_add, work_kb_add_source_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* kb_import = aw_btn_create(kb_row, "Import Dir", BTN_SECONDARY, SCALE(110), SCALE(34));
+        lv_obj_add_event_cb(kb_import, work_kb_import_dir_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_t* kb_search = aw_btn_create(kb_row, "Search", BTN_PRIMARY, SCALE(100), SCALE(34));
         lv_obj_add_event_cb(kb_search, work_kb_search_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* kb_export = aw_btn_create(kb_row, "Export Manifest", BTN_SECONDARY, SCALE(140), SCALE(34));
+        lv_obj_add_event_cb(kb_export, work_kb_export_manifest_cb, LV_EVENT_CLICKED, nullptr);
         mode_ta_kb_result = aw_textarea_create(sec_kb, "KB result", false, card_w - 24, SCALE(100));
+        update_work_advanced_visibility();
     }
 
     /* Cursor-like trace panel (Chat mode): next step + script output */
@@ -8728,6 +10927,57 @@ void app_ui_init() {
      * inside LV_SIZE_CONTENT parents will get correct pixel widths. */
     lv_obj_update_layout(chat_cont);
 
+    mode_chat_empty_card = lv_obj_create(mode_panel_chat);
+    lv_obj_set_size(mode_chat_empty_card, content_w - CHAT_GAP * 2, SCALE(92));
+    lv_obj_set_pos(mode_chat_empty_card, CHAT_GAP, chat_y + SCALE(8));
+    lv_obj_set_style_bg_color(mode_chat_empty_card, c->panel, 0);
+    lv_obj_set_style_border_color(mode_chat_empty_card, c->panel_border, 0);
+    lv_obj_set_style_border_width(mode_chat_empty_card, 1, 0);
+    lv_obj_set_style_radius(mode_chat_empty_card, 12, 0);
+    lv_obj_set_style_pad_all(mode_chat_empty_card, 10, 0);
+    lv_obj_set_style_pad_gap(mode_chat_empty_card, 6, 0);
+    lv_obj_set_flex_flow(mode_chat_empty_card, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(mode_chat_empty_card, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(mode_chat_empty_card, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* ce_icon = lv_label_create(mode_chat_empty_card);
+    lv_label_set_text(ce_icon, "🧄🦞");
+    lv_obj_set_style_text_font(ce_icon, CJK_FONT, 0);
+    lv_obj_t* ce_text = lv_label_create(mode_chat_empty_card);
+    lv_label_set_text(ce_text, "龙虾要吃蒜蓉的 - 有什么我能帮你？");
+    lv_obj_set_style_text_color(ce_text, c->text_dim, 0);
+    lv_obj_set_style_text_font(ce_text, CJK_FONT_SMALL, 0);
+    lv_obj_t* ce_suggest_row = lv_obj_create(mode_chat_empty_card);
+    lv_obj_set_width(ce_suggest_row, LV_PCT(100));
+    lv_obj_set_height(ce_suggest_row, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(ce_suggest_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(ce_suggest_row, 0, 0);
+    lv_obj_set_style_pad_all(ce_suggest_row, 0, 0);
+    lv_obj_set_style_pad_gap(ce_suggest_row, 8, 0);
+    lv_obj_set_flex_flow(ce_suggest_row, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(ce_suggest_row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(ce_suggest_row, LV_OBJ_FLAG_SCROLLABLE);
+    auto make_chat_suggestion = [&](const char* title, const char* prompt) {
+        lv_obj_t* btn = lv_button_create(ce_suggest_row);
+        lv_obj_set_size(btn, SCALE(220), SCALE(30));
+        lv_obj_set_style_radius(btn, 10, 0);
+        lv_obj_set_style_bg_color(btn, c->input_bg, 0);
+        lv_obj_set_style_border_width(btn, 1, 0);
+        lv_obj_set_style_border_color(btn, c->panel_border, 0);
+        lv_obj_set_style_pad_hor(btn, 10, 0);
+        lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_t* lbl = lv_label_create(btn);
+        lv_label_set_text(lbl, title);
+        lv_obj_set_style_text_color(lbl, c->text, 0);
+        lv_obj_set_style_text_font(lbl, CJK_FONT_SMALL, 0);
+        lv_obj_center(lbl);
+        lv_obj_add_event_cb(btn, chat_empty_suggestion_cb, LV_EVENT_CLICKED, (void*)prompt);
+    };
+    static const char* k_chat_suggest1 = "帮我整理一下当前工作区的文件结构";
+    static const char* k_chat_suggest2 = "今天我需要做什么，请给我优先级清单";
+    make_chat_suggestion("💡 试试：帮我整理一下文件", k_chat_suggest1);
+    make_chat_suggestion("💡 试试：今天有什么安排", k_chat_suggest2);
+    lv_obj_add_flag(mode_chat_empty_card, LV_OBJ_FLAG_HIDDEN);
+
     /* By default start fresh each launch; optional restore can be enabled by config. */
     if (g_restore_last_session) {
         load_chat_history();
@@ -8772,6 +11022,7 @@ void app_ui_init() {
 
     /* Scroll chat to show welcome message at bottom */
     chat_force_scroll_bottom();
+    update_chat_empty_state();
 
     /* No fake test messages — real chat via OpenRouter API */
 
@@ -8859,6 +11110,19 @@ void app_ui_init() {
         lv_obj_add_event_cb(g_search_btn, search_toggle_cb, LV_EVENT_CLICKED, nullptr);
     }
 
+    /* Chat quick switch: AI interaction mode (Autonomous/Ask/Plan) */
+    mode_dd_chat_ai_mode = lv_dropdown_create(mode_panel_chat);
+    lv_dropdown_set_options(mode_dd_chat_ai_mode, "Auto\nAsk\nPlan");
+    lv_dropdown_set_selected(mode_dd_chat_ai_mode, (uint16_t)g_ai_interaction_mode);
+    lv_obj_set_size(mode_dd_chat_ai_mode, SCALE(88), SCALE(24));
+    lv_obj_set_pos(mode_dd_chat_ai_mode, CHAT_GAP, content_h - SCALE(140));
+    lv_obj_set_style_bg_color(mode_dd_chat_ai_mode, c->input_bg, 0);
+    lv_obj_set_style_text_color(mode_dd_chat_ai_mode, c->text_dim, 0);
+    lv_obj_set_style_border_color(mode_dd_chat_ai_mode, c->panel_border, 0);
+    lv_obj_set_style_text_font(mode_dd_chat_ai_mode, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_font(mode_dd_chat_ai_mode, FONT(12), LV_PART_INDICATOR);
+    lv_obj_add_event_cb(mode_dd_chat_ai_mode, ai_mode_dropdown_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
     /* Chat input area — pinned to bottom with GAP spacing */
     input_h = 108;  /* Default 3-line height (28px/line + padding) */
     int input_y = content_h - input_h - GAP;
@@ -8878,7 +11142,7 @@ void app_ui_init() {
     chat_input = lv_textarea_create(mode_panel_chat);
     lv_obj_set_size(chat_input, content_w - CHAT_GAP * 2, input_h);
     lv_obj_set_pos(chat_input, CHAT_GAP, input_y);
-    lv_textarea_set_placeholder_text(chat_input, tr(STR_CHAT_INPUT));
+    lv_textarea_set_placeholder_text(chat_input, "输入消息... (Shift+Enter 换行)");
     lv_textarea_set_one_line(chat_input, false);
     lv_textarea_set_max_length(chat_input, 2000);
     lv_textarea_set_text_selection(chat_input, true);  /* Enable mouse text selection */
@@ -8889,15 +11153,15 @@ void app_ui_init() {
     lv_obj_set_style_text_font(chat_input, CJK_FONT_CHAT, 0);
     lv_obj_set_style_border_color(chat_input, c->panel_border, 0);
     lv_obj_set_style_border_width(chat_input, 1, 0);
-    lv_obj_set_style_radius(chat_input, 6, 0);
+    lv_obj_set_style_radius(chat_input, 12, 0);
     /* Match chat_cont internal padding + extra vertical for line height */
-    lv_obj_set_style_pad_all(chat_input, 6, 0);
-    lv_obj_set_style_pad_ver(chat_input, 8, 0);
+    lv_obj_set_style_pad_all(chat_input, 12, 0);
+    lv_obj_set_style_pad_ver(chat_input, 10, 0);
     /* Focus: keep same border as normal state (no blue flash) */
-    lv_obj_set_style_border_color(chat_input, c->panel_border, LV_STATE_FOCUSED);
+    lv_obj_set_style_border_color(chat_input, c->accent, LV_STATE_FOCUSED);
     /* Selection highlight: light blue */
     lv_obj_set_style_text_color(chat_input, c->text, LV_PART_SELECTED);
-    lv_obj_set_style_border_width(chat_input, 1, LV_STATE_FOCUSED);
+    lv_obj_set_style_border_width(chat_input, 2, LV_STATE_FOCUSED);
     lv_obj_set_style_outline_width(chat_input, 0, LV_STATE_FOCUSED);
     lv_obj_add_event_cb(chat_input, chat_input_cb, LV_EVENT_READY, nullptr);
     lv_obj_add_event_cb(chat_input, chat_input_cb, LV_EVENT_KEY, nullptr);
@@ -8908,10 +11172,16 @@ void app_ui_init() {
     lv_obj_add_event_cb(chat_input, chat_input_right_click_cb, LV_EVENT_LONG_PRESSED, nullptr);  /* Right-click menu */
     lv_group_add_obj(lv_group_get_default(), chat_input);
 
+    mode_lbl_chat_status = lv_label_create(mode_panel_chat);
+    lv_obj_set_style_text_font(mode_lbl_chat_status, CJK_FONT_SMALL, 0);
+    lv_obj_set_pos(mode_lbl_chat_status, CHAT_GAP, input_y - SCALE(16));
+    update_chat_status_label("Ready", false);
+
     /* ═══ Send button (CI-01-2: 内嵌发送按钮) ═══ */
     {
-        int btn_size = SCALE(20);
-        int btn_margin = 6;
+        int btn_size = SCALE(CHAT_ACTION_BTN_BASE);
+        int btn_margin = SCALE(CHAT_ACTION_BTN_MARGIN);
+        int btn_gap = SCALE(CHAT_ACTION_BTN_GAP);
         int btn_x = content_w - CHAT_GAP - btn_size - btn_margin;
         int btn_y = input_y + input_h - btn_size - btn_margin;
         btn_send_widget = lv_button_create(mode_panel_chat);
@@ -8935,11 +11205,12 @@ void app_ui_init() {
         /* Restore upload button: left of send button */
         btn_upload_widget = lv_button_create(mode_panel_chat);
         lv_obj_set_size(btn_upload_widget, btn_size, btn_size);
-        lv_obj_set_pos(btn_upload_widget, btn_x - btn_size - 6, btn_y);
+        lv_obj_set_pos(btn_upload_widget, btn_x - btn_size - btn_gap, btn_y);
         lv_obj_set_style_radius(btn_upload_widget, btn_size / 2, 0);
-        lv_obj_set_style_bg_color(btn_upload_widget, c->btn_secondary, 0);
+        lv_obj_set_style_bg_color(btn_upload_widget, c->input_bg, 0);
         lv_obj_set_style_bg_opa(btn_upload_widget, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(btn_upload_widget, 0, 0);
+        lv_obj_set_style_border_width(btn_upload_widget, 1, 0);
+        lv_obj_set_style_border_color(btn_upload_widget, c->panel_border, 0);
         lv_obj_clear_flag(btn_upload_widget, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_clear_flag(btn_upload_widget, LV_OBJ_FLAG_CLICK_FOCUSABLE);
         lv_obj_add_event_cb(btn_upload_widget, upload_file_click_cb, LV_EVENT_CLICKED, nullptr);
@@ -8951,11 +11222,12 @@ void app_ui_init() {
 
         btn_voice_widget = lv_button_create(mode_panel_chat);
         lv_obj_set_size(btn_voice_widget, btn_size, btn_size);
-        lv_obj_set_pos(btn_voice_widget, btn_x - (btn_size + 6) * 2, btn_y);
+        lv_obj_set_pos(btn_voice_widget, btn_x - (btn_size + btn_gap) * 2, btn_y);
         lv_obj_set_style_radius(btn_voice_widget, btn_size / 2, 0);
-        lv_obj_set_style_bg_color(btn_voice_widget, c->btn_secondary, 0);
+        lv_obj_set_style_bg_color(btn_voice_widget, c->input_bg, 0);
         lv_obj_set_style_bg_opa(btn_voice_widget, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(btn_voice_widget, 0, 0);
+        lv_obj_set_style_border_width(btn_voice_widget, 1, 0);
+        lv_obj_set_style_border_color(btn_voice_widget, c->panel_border, 0);
         lv_obj_clear_flag(btn_voice_widget, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_clear_flag(btn_voice_widget, LV_OBJ_FLAG_CLICK_FOCUSABLE);
         lv_obj_add_event_cb(btn_voice_widget, mode_voice_cb, LV_EVENT_CLICKED, nullptr);
@@ -8992,7 +11264,9 @@ void app_ui_init() {
     ui_settings_init(scr);
 
     /* Initial refresh - populates task list */
+    run_proactive_startup_once();
     app_refresh_status();
+    sync_ai_mode_dropdowns();
     apply_mode_switch_visuals();
 
     /* P2-27: Auto-refresh timer (configurable: 15s / 30s / 60s) */

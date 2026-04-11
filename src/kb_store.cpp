@@ -7,6 +7,7 @@
 #include <functional>
 #include <mutex>
 #include <sstream>
+#include <set>
 
 namespace {
 std::mutex g_kb_mtx;
@@ -22,6 +23,36 @@ std::string kb_index_path() {
     std::filesystem::create_directories(p, ec);
     p /= "kb_index.txt";
     return p.string();
+}
+
+bool load_file_content(const std::string& path, std::string& out, std::string& err) {
+    out.clear();
+    err.clear();
+    std::ifstream f(path, std::ios::binary);
+    if (!f.is_open()) {
+        err = "open failed";
+        return false;
+    }
+    out.assign((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    if (out.empty()) {
+        err = "empty file";
+        return false;
+    }
+    return true;
+}
+
+std::string normalize_path(const std::string& p) {
+    std::error_code ec;
+    auto abs = std::filesystem::absolute(std::filesystem::path(p), ec);
+    if (!ec) return abs.lexically_normal().string();
+    return p;
+}
+
+bool is_kb_doc_file(const std::filesystem::path& p) {
+    if (!std::filesystem::is_regular_file(p)) return false;
+    std::string ext = p.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    return ext == ".md" || ext == ".markdown" || ext == ".txt";
 }
 
 void save_index_locked() {
@@ -121,26 +152,85 @@ bool KbStore::add_source_file(const char* path, std::string& err) {
         err = "empty path";
         return false;
     }
-    std::ifstream f(path, std::ios::binary);
-    if (!f.is_open()) {
-        err = "open failed";
-        return false;
-    }
-    std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    if (content.empty()) {
-        err = "empty file";
-        return false;
-    }
+    std::string np = normalize_path(path);
+    std::string content;
+    if (!load_file_content(np, content, err)) return false;
     std::lock_guard<std::mutex> lk(g_kb_mtx);
     for (auto& d : g_docs) {
-        if (d.path == path) {
+        if (d.path == np) {
             d.content = content;
             save_index_locked();
             return true;
         }
     }
-    g_docs.push_back({path, content});
+    g_docs.push_back({np, content});
     save_index_locked();
+    return true;
+}
+
+bool KbStore::add_source_dir(const char* dir_path, int* out_added, std::string& err) {
+    err.clear();
+    if (out_added) *out_added = 0;
+    ensure_loaded();
+    if (!dir_path || !dir_path[0]) {
+        err = "empty dir path";
+        return false;
+    }
+    std::filesystem::path root = normalize_path(dir_path);
+    std::error_code ec;
+    if (!std::filesystem::exists(root, ec) || !std::filesystem::is_directory(root, ec)) {
+        err = "dir not found";
+        return false;
+    }
+    int added = 0;
+    for (auto it = std::filesystem::recursive_directory_iterator(root, ec);
+         !ec && it != std::filesystem::recursive_directory_iterator(); it.increment(ec)) {
+        if (ec) break;
+        const auto& p = it->path();
+        if (!is_kb_doc_file(p)) continue;
+        std::string e;
+        if (add_source_file(p.string().c_str(), e)) added++;
+    }
+    if (out_added) *out_added = added;
+    if (added <= 0) {
+        err = "no valid docs found";
+        return false;
+    }
+    return true;
+}
+
+bool KbStore::export_manifest(const char* out_dir, std::string& err) {
+    err.clear();
+    ensure_loaded();
+    if (!out_dir || !out_dir[0]) {
+        err = "empty output dir";
+        return false;
+    }
+    std::filesystem::path dir = normalize_path(out_dir);
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    if (ec) {
+        err = "cannot create output dir";
+        return false;
+    }
+    std::filesystem::path out = dir / "kb_export_manifest.md";
+    std::ofstream f(out.string(), std::ios::trunc);
+    if (!f.is_open()) {
+        err = "cannot write manifest";
+        return false;
+    }
+    std::lock_guard<std::mutex> lk(g_kb_mtx);
+    f << "# KB Export Manifest\n\n";
+    f << "- total_docs: " << g_docs.size() << "\n";
+    std::set<std::string> src;
+    for (const auto& d : g_docs) {
+        src.insert(std::filesystem::path(d.path).parent_path().string());
+    }
+    f << "- total_sources: " << src.size() << "\n\n";
+    int idx = 1;
+    for (const auto& d : g_docs) {
+        f << idx++ << ". " << d.path << "\n";
+    }
     return true;
 }
 
@@ -207,4 +297,14 @@ int KbStore::doc_count() const {
     const_cast<KbStore*>(this)->ensure_loaded();
     std::lock_guard<std::mutex> lk(g_kb_mtx);
     return (int)g_docs.size();
+}
+
+int KbStore::source_count() const {
+    const_cast<KbStore*>(this)->ensure_loaded();
+    std::lock_guard<std::mutex> lk(g_kb_mtx);
+    std::set<std::string> src;
+    for (const auto& d : g_docs) {
+        src.insert(std::filesystem::path(d.path).parent_path().string());
+    }
+    return (int)src.size();
 }

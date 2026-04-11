@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500"><style>text{font-family:"Noto Sans SC","PingFang SC",sans-serif}
+.t{fill:#2D1B14;font-weight:700}.t2{fill:#2D1B14;font-weight:600}
+.s{fill:#8B7355;font-size:12px}.s2{fill:#C4A882;font-size:11px}
+.l{fill:#2D1B14;font-size:14px}.l2{fill:#2D1B14;font-size:13px}
+.a{fill:#FF7F50}.g{fill:#7ECFB3}.w{fill:#FFF}.dim{fill:#C4A882}</style><defs>
+  <filter id="s"><feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#D4A574" flood-opacity="0.15"/></filter>
+  <filter id="s2"><feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#D4A574" flood-opacity="0.12"/></filter>
+  <linearGradient id="ag"><stop offset="0%" stop-color="#FF7F50"/><stop offset="100%" stop-color="#FFB347"/></linearGradient>
+  <linearGradient id="pg"><stop offset="0%" stop-color="#FFF8F3"/><stop offset="100%" stop-color="#FFE8D6"/></linearGradient>
+  <linearGradient id="mg"><stop offset="0%" stop-color="#7ECFB3"/><stop offset="100%" stop-color="#B8E8D0"/></linearGradient>
+  <linearGradient id="pk"><stop offset="0%" stop-color="#FF6B8A"/><stop offset="100%" stop-color="#FFB347"/></linearGradient>
+</defs><rect width="900" height="500" fill="#FFF8F3"/><rect x="0" y="0" width="900" height="52" rx="0" fill="#FFF1E8"/><text x="16" y="34" text-anchor="start" class="t2" font-size="16">⚙️ Settings</text><line x1="0" y1="52" x2="900" y2="52" stroke="#F0E0D0" stroke-width="1"/>
+<text x="70" y="34" text-anchor="middle" class="s" font-size="12">General</text><text x="165" y="34" text-anchor="middle" class="s" font-size="12">Permissions</text><text x="260" y="34" text-anchor="middle" class="t2" font-size="12">Model</text><rect x="230" y="42" width="60" height="3" rx="1.5" fill="#FF7F50"/><text x="355" y="34" text-anchor="middle" class="s" font-size="12">Log</text><text x="450" y="34" text-anchor="middle" class="s" font-size="12">About</text>
+<text x="30" y="75" text-anchor="start" class="s">当前模型</text><text x="200" y="75" text-anchor="start" class="g">● openrouter/gemma-3-4b-it:free</text>
+<line x1="30" y1="95" x2="700" y2="95" stroke="#F0E0D0" stroke-width="1"/>
+<text x="30" y="120" text-anchor="start" class="l2">选择模型</text>
+<rect x="30" y="130" width="450" height="44" rx="12" fill="#FFF1E8" stroke="#F0E0D0" stroke-width="1"/><text x="45" y="158" text-anchor="start" class="l">gemma-3-4b-it:free</text>
+<rect x="490" y="130" width="44" height="44" rx="12" fill="#FF7F50"/><text x="507" y="159" text-anchor="middle" class="w" font-size="18">+</text>
+<text x="30" y="190" text-anchor="start" class="s">Provider: OpenRouter (自动检测)</text>
+<line x1="30" y1="210" x2="700" y2="210" stroke="#F0E0D0" stroke-width="1"/>
+<text x="30" y="235" text-anchor="start" class="l2">API Key 🔑</text>
+<rect x="30" y="245" width="450" height="44" rx="12" fill="#FFF1E8" stroke="#F0E0D0" stroke-width="1"/><text x="45" y="273" text-anchor="start" class="dim">••••••••••••••••</text>
+<rect x="490" y="250" width="80" height="36" rx="18" fill="#7ECFB3"/><text x="530" y="273" text-anchor="middle" fill="#FFF" font-size="13">Save</text>
+<text x="30" y="310" text-anchor="start" class="s">💡 免费模型可用!</text>
+<rect x="30" y="325" width="180" height="36" rx="18" fill="url(#ag)"/><text x="120" y="348" text-anchor="middle" class="w" font-size="13">使用免费模型 🎁</text>
+<line x1="30" y1="375" x2="700" y2="375" stroke="#F0E0D0" stroke-width="1"/>
+<text x="30" y="400" text-anchor="start" class="l2">Failover 弹性切换</text>
+<rect x="30" y="410" width="48" height="26" rx="13" fill="#FF7F50"/><circle cx="65" cy="423" r="10" fill="white"/>
+<text x="90" y="428" text-anchor="start" class="s">启用自动切换</text>
+<text x="30" y="455" text-anchor="start" class="s">备用模型:</text><rect x="130" y="443" width="200" height="32" rx="12" fill="#FFF1E8" stroke="#F0E0D0" stroke-width="1"/><text x="145" y="465" text-anchor="start" class="l2" font-size="12">gemini-2.5-flash</text>
+</svg>

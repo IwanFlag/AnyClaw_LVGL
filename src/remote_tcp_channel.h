@@ -18,6 +18,8 @@ public:
     void stop();
     bool is_connected() const;
     std::string last_error() const;
+    bool send_text_frame(const char* channel, const char* payload);
+    std::string last_rx_frame() const;
 
 private:
     RemoteTcpChannel();

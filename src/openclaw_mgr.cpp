@@ -187,7 +187,7 @@ static bool exec_cmd(const char* cmd, char* output, int out_size, DWORD timeout_
 static bool is_running_as_admin() {
     BOOL isAdmin = FALSE;
     PSID adminGroup = nullptr;
-    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_SID_AUTHORITY;
+    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
     if (AllocateAndInitializeSid(&ntAuthority, 2, SECURITY_BUILTIN_DOMAIN_RID,
                                  DOMAIN_ALIAS_RID_ADMINS, 0, 0, 0, 0, 0, 0, &adminGroup)) {
         CheckTokenMembership(nullptr, adminGroup, &isAdmin);
@@ -1683,4 +1683,39 @@ bool app_abort_all_sessions() {
 
     LOG_I("Session", "Reset all sessions: %.200s", output);
     return true;
+}
+
+bool app_cron_list(char* output, int out_size) {
+    if (!output || out_size <= 0) return false;
+    output[0] = '\0';
+    bool ok = exec_cmd("openclaw cron list", output, out_size, 10000);
+    if (!ok && out_size > 0) snprintf(output, out_size, "Failed to run: openclaw cron list");
+    return ok;
+}
+
+bool app_cron_run(const char* cron_id, char* output, int out_size) {
+    if (!cron_id || !cron_id[0] || !output || out_size <= 0) return false;
+    char cmd[512] = {0};
+    snprintf(cmd, sizeof(cmd), "openclaw cron run \"%s\"", cron_id);
+    bool ok = exec_cmd(cmd, output, out_size, 15000);
+    if (!ok && out_size > 0) snprintf(output, out_size, "Failed to run cron: %s", cron_id);
+    return ok;
+}
+
+bool app_cron_enable(const char* cron_id, bool enable, char* output, int out_size) {
+    if (!cron_id || !cron_id[0] || !output || out_size <= 0) return false;
+    char cmd[512] = {0};
+    snprintf(cmd, sizeof(cmd), "openclaw cron %s \"%s\"", enable ? "enable" : "disable", cron_id);
+    bool ok = exec_cmd(cmd, output, out_size, 10000);
+    if (!ok && out_size > 0) snprintf(output, out_size, "Failed to %s cron: %s", enable ? "enable" : "disable", cron_id);
+    return ok;
+}
+
+bool app_cron_delete(const char* cron_id, char* output, int out_size) {
+    if (!cron_id || !cron_id[0] || !output || out_size <= 0) return false;
+    char cmd[512] = {0};
+    snprintf(cmd, sizeof(cmd), "openclaw cron delete \"%s\"", cron_id);
+    bool ok = exec_cmd(cmd, output, out_size, 10000);
+    if (!ok && out_size > 0) snprintf(output, out_size, "Failed to delete cron: %s", cron_id);
+    return ok;
 }

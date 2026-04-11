@@ -37,6 +37,9 @@ set "OUT_ENV=%~dp0.env-path.bat"
 echo @echo off>"%OUT_ENV%"
 echo set ANYCLAW_PROJECT_DIR=%PROJECT_DIR%>>"%OUT_ENV%"
 echo set ANYCLAW_CMAKE_BIN=%CMAKE_BIN%>>"%OUT_ENV%"
+echo set ANYCLAW_BUILD_ROOT=%PROJECT_DIR%\build\windows>>"%OUT_ENV%"
+echo set ANYCLAW_BUILD_OUT=%PROJECT_DIR%\build\windows\out>>"%OUT_ENV%"
+echo set ANYCLAW_BUILD_ARTIFACTS=%PROJECT_DIR%\build\windows\artifacts>>"%OUT_ENV%"
 echo [OK] Generated %OUT_ENV%
 echo Use: call build\windows\.env-path.bat
 exit /b 0

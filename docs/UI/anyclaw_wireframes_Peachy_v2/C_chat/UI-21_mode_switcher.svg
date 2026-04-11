@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="620" viewBox="0 0 900 620"><style>text{font-family:"Noto Sans SC","PingFang SC",sans-serif}.t{fill:#2D1B14;font-weight:700}.t2{fill:#2D1B14;font-weight:600}.s{fill:#8B7355;font-size:12px}.s2{fill:#C4A882;font-size:11px}.l{fill:#2D1B14;font-size:14px}.l2{fill:#2D1B14;font-size:13px}.a{fill:#FF7F50}.g{fill:#7ECFB3}.w{fill:#FFF}.dim{fill:#C4A882}</style><defs>
+  <filter id="s"><feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#D4A574" flood-opacity="0.15"/></filter>
+  <filter id="s2"><feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#D4A574" flood-opacity="0.12"/></filter>
+  <linearGradient id="ag" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF7F50"/><stop offset="100%" stop-color="#FFB347"/></linearGradient>
+  <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFF8F3"/><stop offset="100%" stop-color="#FFE8D6"/></linearGradient>
+  <linearGradient id="mg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#7ECFB3"/><stop offset="100%" stop-color="#B8E8D0"/></linearGradient>
+  <linearGradient id="pk" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FF6B8A"/><stop offset="100%" stop-color="#FFB347"/></linearGradient>
+</defs><rect width="900" height="620" fill="#FFF8F3"/>
+<text x="100" y="100" text-anchor="start" class="t" font-size="18">模式切换器</text>
+<rect x="300" y="140" width="160" height="32" rx="16" fill="#FFF1E8"/>
+<rect x="302" y="142" width="78" height="28" rx="14" fill="url(#ag)"/>
+<text x="341" y="162" text-anchor="middle" class="w" font-size="12">Chat</text>
+<text x="405" y="162" text-anchor="middle" class="dim" font-size="12">Work</text>
+<text x="100" y="210" text-anchor="start" class="s">· 160×32px 胶囊式</text>
+<text x="100" y="235" text-anchor="start" class="s">· 选中: 渐变背景 + 白字</text>
+<text x="100" y="260" text-anchor="start" class="s">· 切换延迟 < 150ms</text>
+<text x="100" y="285" text-anchor="start" class="s">· 上下文完全互通</text>
+</svg>

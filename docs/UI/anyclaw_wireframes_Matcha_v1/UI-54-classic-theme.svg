@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="620" height="420" viewBox="0 0 620 420">
+  <defs>
+    <style>
+      text{font-family:'Inter','Segoe UI',sans-serif;fill:#FFFFFF}
+      .t2{fill:#B0B0B0} .accent{fill:#82AAF0} .danger{fill:#F44747} .warning{fill:#CCA700} .info{fill:#82AAF0}
+    </style>
+  </defs>
+  <rect width="620" height="420" rx="12" fill="#2D2D2D"/>
+  <!-- Title -->
+  <text x="24" y="32" font-size="14" font-weight="600">Classic Theme Preview</text>
+
+  <!-- Mini Chat Interface -->
+  <rect x="24" y="48" width="360" height="350" rx="8" fill="#252526"/>
+  <rect x="24" y="48" width="360" height="36" rx="8" fill="#3C3C3C"/>
+  <rect x="24" y="76" width="360" height="8" fill="#3C3C3C"/>
+  <text x="40" y="72" font-size="12" font-weight="600">Chat</text>
+  <!-- User message -->
+  <rect x="200" y="96" width="170" height="32" rx="8" fill="#3C3C3C"/>
+  <text x="212" y="117" font-size="11">Hello, AnyClaw!</text>
+  <!-- Bot message -->
+  <rect x="36" y="140" width="200" height="40" rx="8" fill="#82AAF015" stroke="#82AAF030" stroke-width="1"/>
+  <text x="48" y="165" font-size="11">Hi! How can I help?</text>
+  <!-- Input -->
+  <rect x="36" y="352" width="336" height="32" rx="6" fill="#3C3C3C" stroke="#555" stroke-width="1"/>
+  <text x="48" y="373" font-size="11" fill="#808080">Type a message...</text>
+  <rect x="340" y="358" width="24" height="20" rx="4" fill="#82AAF0"/>
+  <text x="345" y="373" font-size="11" fill="#2D2D2D">→</text>
+
+  <!-- Color Palette -->
+  <text x="400" y="72" font-size="12" font-weight="600">Color Palette</text>
+  <!-- bg -->
+  <rect x="400" y="86" width="28" height="28" rx="4" fill="#2D2D2D" stroke="#555" stroke-width="1"/>
+  <text x="436" y="105" font-size="10" class="t2">#2D2D2D</text>
+  <!-- panel -->
+  <rect x="400" y="120" width="28" height="28" rx="4" fill="#3C3C3C" stroke="#555" stroke-width="1"/>
+  <text x="436" y="139" font-size="10" class="t2">#3C3C3C</text>
+  <!-- text -->
+  <rect x="400" y="154" width="28" height="28" rx="4" fill="#FFFFFF"/>
+  <text x="436" y="173" font-size="10" class="t2">#FFFFFF</text>
+  <!-- accent -->
+  <rect x="400" y="188" width="28" height="28" rx="4" fill="#82AAF0"/>
+  <text x="436" y="207" font-size="10" class="accent">#82AAF0</text>
+  <!-- danger -->
+  <rect x="400" y="222" width="28" height="28" rx="4" fill="#F44747"/>
+  <text x="436" y="241" font-size="10" class="danger">#F44747</text>
+  <!-- warning -->
+  <rect x="400" y="256" width="28" height="28" rx="4" fill="#CCA700"/>
+  <text x="436" y="275" font-size="10" class="warning">#CCA700</text>
+  <!-- info -->
+  <rect x="400" y="290" width="28" height="28" rx="4" fill="#82AAF0"/>
+  <text x="436" y="309" font-size="10" class="info">#82AAF0</text>
+</svg>

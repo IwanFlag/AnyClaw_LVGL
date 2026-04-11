@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500"><style>text{font-family:"Noto Sans SC","PingFang SC",sans-serif}
+.t{fill:#2D1B14;font-weight:700}.t2{fill:#2D1B14;font-weight:600}
+.s{fill:#8B7355;font-size:12px}.s2{fill:#C4A882;font-size:11px}
+.l{fill:#2D1B14;font-size:14px}.l2{fill:#2D1B14;font-size:13px}
+.a{fill:#FF7F50}.g{fill:#7ECFB3}.w{fill:#FFF}.dim{fill:#C4A882}</style><defs>
+  <filter id="s"><feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#D4A574" flood-opacity="0.15"/></filter>
+  <filter id="s2"><feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#D4A574" flood-opacity="0.12"/></filter>
+  <linearGradient id="ag"><stop offset="0%" stop-color="#FF7F50"/><stop offset="100%" stop-color="#FFB347"/></linearGradient>
+  <linearGradient id="pg"><stop offset="0%" stop-color="#FFF8F3"/><stop offset="100%" stop-color="#FFE8D6"/></linearGradient>
+  <linearGradient id="mg"><stop offset="0%" stop-color="#7ECFB3"/><stop offset="100%" stop-color="#B8E8D0"/></linearGradient>
+  <linearGradient id="pk"><stop offset="0%" stop-color="#FF6B8A"/><stop offset="100%" stop-color="#FFB347"/></linearGradient>
+</defs><rect width="900" height="500" fill="#FFF8F3"/>
+<text x="40" y="60" text-anchor="start" class="t" font-size="18">托盘气泡通知</text><rect x="550" y="350" width="280" height="80" rx="16" fill="#FFFFFF" stroke="#FF7F50" stroke-width="1.5"/><text x="570" y="380" text-anchor="start" class="t2" font-size="13">🧄 AnyClaw</text><text x="570" y="405" text-anchor="start" class="l2" font-size="12">日历提醒: 20 分钟后有会议</text><text x="40" y="120" text-anchor="start" class="t2" font-size="14">四种托盘状态:</text><rect x="50" y="140" width="20" height="20" rx="10" fill="#FFF" stroke="#F0E0D0" stroke-width="1"/><text x="80" y="155" text-anchor="start" class="l2">白色 = 空闲</text><rect x="50" y="175" width="20" height="20" rx="10" fill="#7ECFB3"/><text x="80" y="190" text-anchor="start" class="l2">绿色 = 运行中</text><rect x="50" y="210" width="20" height="20" rx="10" fill="#FF5C5C"/><text x="80" y="225" text-anchor="start" class="l2">红色 = 异常</text><rect x="50" y="245" width="20" height="20" rx="10" fill="#FFB347"/><text x="80" y="260" text-anchor="start" class="l2">黄色 = 检测中</text></svg>

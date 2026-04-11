@@ -65,6 +65,13 @@ bool model_remove_custom(const char* model_name);
 /* Check if a model at index is user-added (not in the hardcoded default list). */
 bool model_is_custom(int index);
 
+/* ── Gemma local inference (llama.cpp) ── */
+bool gemma_local_is_model(const char* model_name);
+bool gemma_local_server_start(const char* model_name, char* err_out, int err_size);
+void gemma_local_server_stop();
+bool gemma_local_server_running();
+int gemma_local_server_port();
+
 /* ═══════════════════════════════════════════════════════════════
  *  Model Failover (弹性通道)
  *  Auto-switch to healthy backup model when current model fails.

@@ -47,6 +47,7 @@ Thumbs.db
 # Python dev scripts
 *.py
 !setup.py
+!tools/keygen.py
 
 # Font source files
 *.ttf

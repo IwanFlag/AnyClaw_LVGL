@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="360" viewBox="0 0 520 360">
+  <defs>
+    <style>
+      .bg { fill: #0F1117; }
+      .panel { fill: #1A1D27; }
+      .surface { fill: #13151E; }
+      .raised { fill: #1E2230; }
+      .text { fill: #E8ECF4; font-family: 'Segoe UI', sans-serif; font-size: 14px; }
+      .text2 { fill: #8B92A8; font-family: 'Segoe UI', sans-serif; font-size: 12px; }
+      .text3 { fill: #6B7280; font-family: 'Segoe UI', sans-serif; font-size: 11px; }
+      .title { fill: #E8ECF4; font-family: 'Segoe UI', sans-serif; font-size: 16px; font-weight: 600; }
+      .mono { fill: #E8ECF4; font-family: 'Consolas', 'Courier New', monospace; font-size: 18px; font-weight: 600; letter-spacing: 2px; }
+      .btn-text { fill: #0F1117; font-family: 'Segoe UI', sans-serif; font-size: 12px; font-weight: 600; }
+      .btn-outline-text { fill: #E8ECF4; font-family: 'Segoe UI', sans-serif; font-size: 12px; }
+      .im-label { fill: #8B92A8; font-family: 'Segoe UI', sans-serif; font-size: 12px; }
+    </style>
+    <linearGradient id="btnAccent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3DD68C"/>
+      <stop offset="100%" stop-color="#2BB876"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect class="bg" width="520" height="360" rx="12"/>
+  <!-- Title -->
+  <text class="title" x="24" y="36">🔗 远程协助</text>
+  <text class="text3" x="496" y="36" text-anchor="end">有效期 10 分钟</text>
+  <!-- Connection code label -->
+  <text class="text2" x="24" y="72">连接码</text>
+  <!-- Connection code box -->
+  <rect class="surface" x="24" y="82" width="472" height="48" rx="8"/>
+  <text class="mono" x="260" y="114" text-anchor="middle">AX7K-9M2P-QW4R</text>
+  <!-- Copy button -->
+  <rect x="24" y="144" width="472" height="38" rx="8" fill="url(#btnAccent)"/>
+  <text class="btn-text" x="260" y="168" text-anchor="middle">📋 复制到剪贴板</text>
+  <!-- IM section -->
+  <text class="im-label" x="24" y="212">通过 IM 发送</text>
+  <!-- Telegram -->
+  <rect class="raised" x="24" y="224" width="144" height="40" rx="8" stroke="#2A2D3A" stroke-width="1"/>
+  <text class="btn-outline-text" x="96" y="249" text-anchor="middle">✈️ Telegram</text>
+  <!-- Discord -->
+  <rect class="raised" x="188" y="224" width="144" height="40" rx="8" stroke="#2A2D3A" stroke-width="1"/>
+  <text class="btn-outline-text" x="260" y="249" text-anchor="middle">🎮 Discord</text>
+  <!-- WhatsApp -->
+  <rect class="raised" x="352" y="224" width="144" height="40" rx="8" stroke="#2A2D3A" stroke-width="1"/>
+  <text class="btn-outline-text" x="424" y="249" text-anchor="middle">💬 WhatsApp</text>
+  <!-- Footer info -->
+  <text class="text3" x="260" y="300" text-anchor="middle">连接码将在 10 分钟后过期，请及时使用</text>
+  <text class="text3" x="260" y="320" text-anchor="middle">对方可通过此码远程访问您的设备</text>
+  <rect class="raised" x="24" y="336" width="472" height="12" rx="4"/>
+</svg>

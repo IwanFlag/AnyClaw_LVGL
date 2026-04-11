@@ -9,6 +9,9 @@
 #include "migration.h"
 #include "workspace.h"
 #include "permissions.h"
+#include "feature_flags.h"
+#include "tracing.h"
+#include "kb_store.h"
 #include "app_log.h"
 #include "theme.h"
 #include "SDL.h"
@@ -43,6 +46,9 @@ static const lv_font_t* FONT(int base_px) {
 #include <fstream>
 #include <string>
 #include <thread>
+#include <algorithm>
+#include <vector>
+#include <sstream>
 #include <windows.h>
 
 /* Use app.h declaration for app_get_cjk_font() */
@@ -90,14 +96,49 @@ static lv_obj_t* model_current_label = nullptr;
 static lv_obj_t* model_provider_hint = nullptr; /* "Provider: openrouter/xiaomi" */
 static lv_obj_t* failover_list_container = nullptr; /* checkbox list for failover models */
 static char gw_model_buf[256] = {0}; /* Gateway model for callbacks */
+static lv_obj_t* ff_status_label = nullptr;
+static lv_obj_t* trace_list_ta = nullptr;
+static lv_obj_t* trace_filter_action_input = nullptr;
+static lv_obj_t* trace_filter_outcome_dd = nullptr;
+static lv_obj_t* kb_docs_label = nullptr;
+static lv_obj_t* kb_search_input = nullptr;
+static lv_obj_t* kb_result_ta = nullptr;
+static lv_obj_t* gen_workspace_label = nullptr;
+static lv_obj_t* gen_workspace_dropdown = nullptr;
+static lv_obj_t* gen_workspace_input = nullptr;
+static lv_obj_t* gen_workspace_status = nullptr;
+static lv_obj_t* gen_auth_email_sw = nullptr;
+static lv_obj_t* gen_auth_calendar_sw = nullptr;
+static lv_obj_t* gen_apps_scan_ta = nullptr;
+static std::vector<std::string> g_workspace_choices;
 
-/* ── Current language (0=Chinese, 1=English) ── */
-static int current_lang = (g_lang == Lang::CN) ? 0 : 1;
+static int lang_to_dropdown_index(Lang lang) {
+    switch (lang) {
+        case Lang::CN: return 0;
+        case Lang::EN: return 1;
+        case Lang::KR: return 2;
+        case Lang::JP: return 3;
+    }
+    return 1;
+}
+
+static Lang dropdown_index_to_lang(int idx) {
+    switch (idx) {
+        case 0: return Lang::CN;
+        case 1: return Lang::EN;
+        case 2: return Lang::KR;
+        case 3: return Lang::JP;
+        default: return Lang::EN;
+    }
+}
 
 /* ── Forward declarations ── */
 static void settings_close_cb(lv_event_t* e);
 static void settings_tab_change_cb(lv_event_t* e);
 static void build_permissions_tab(lv_obj_t* tab);
+static void build_feature_tab(lv_obj_t* tab);
+static void build_tracing_tab(lv_obj_t* tab);
+static void build_kb_tab(lv_obj_t* tab);
 
 /* ═══════════════════════════════════════════════════════════════
  *  i18n helpers (single-language display)
@@ -107,8 +148,150 @@ static const char* tr(const char* cn, const char* en) {
     switch (g_lang) {
         case Lang::CN:  return cn;
         case Lang::EN:  return en;
+        case Lang::KR:  return en;
+        case Lang::JP:  return en;
     }
     return en;
+}
+
+static std::string workspace_registry_path() {
+    const char* home = getenv("USERPROFILE");
+    if (!home || !home[0]) return "workspaces.txt";
+    return std::string(home) + "\\.openclaw\\workspaces.txt";
+}
+
+static std::string normalize_workspace_path(const char* in) {
+    if (!in) return "";
+    std::string p = in;
+    while (!p.empty() && (p.back() == '\r' || p.back() == '\n' || p.back() == ' ' || p.back() == '\t')) p.pop_back();
+    while (!p.empty() && (p.front() == ' ' || p.front() == '\t' || p.front() == '"' || p.front() == '\'')) p.erase(p.begin());
+    while (!p.empty() && (p.back() == '"' || p.back() == '\'')) p.pop_back();
+    std::replace(p.begin(), p.end(), '/', '\\');
+    return p;
+}
+
+static std::vector<std::string> load_workspace_registry() {
+    std::vector<std::string> out;
+    std::ifstream f(workspace_registry_path());
+    if (!f.is_open()) return out;
+    std::string line;
+    while (std::getline(f, line)) {
+        line = normalize_workspace_path(line.c_str());
+        if (!line.empty()) out.push_back(line);
+    }
+    return out;
+}
+
+static void save_workspace_registry(const std::vector<std::string>& paths) {
+    std::string p = workspace_registry_path();
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(p).parent_path(), ec);
+    std::ofstream f(p, std::ios::trunc);
+    if (!f.is_open()) return;
+    for (const auto& it : paths) f << it << "\n";
+}
+
+static void refresh_workspace_dropdown() {
+    if (!gen_workspace_dropdown) return;
+    g_workspace_choices = load_workspace_registry();
+    std::string current = workspace_get_root();
+    if (!current.empty() && std::find(g_workspace_choices.begin(), g_workspace_choices.end(), current) == g_workspace_choices.end()) {
+        g_workspace_choices.push_back(current);
+    }
+    if (g_workspace_choices.empty()) g_workspace_choices.push_back(current.empty() ? "Not configured" : current);
+
+    std::string opts;
+    int selected = 0;
+    for (size_t i = 0; i < g_workspace_choices.size(); i++) {
+        if (i) opts += "\n";
+        opts += g_workspace_choices[i];
+        if (g_workspace_choices[i] == current) selected = (int)i;
+    }
+    lv_dropdown_set_options(gen_workspace_dropdown, opts.c_str());
+    lv_dropdown_set_selected(gen_workspace_dropdown, (uint16_t)selected);
+}
+
+static void workspace_apply_and_sync(const std::string& path) {
+    if (path.empty()) return;
+    if (!workspace_set_root(path.c_str())) {
+        if (gen_workspace_status) lv_label_set_text(gen_workspace_status, "Workspace switch failed");
+        return;
+    }
+    permissions().set_workspace_root(path.c_str());
+    workspace_init(path.c_str());
+    workspace_sync_managed_sections();
+    workspace_sync_runtime_config_from_permissions();
+    if (gen_workspace_label) lv_label_set_text(gen_workspace_label, path.c_str());
+    if (gen_workspace_status) lv_label_set_text(gen_workspace_status, "Workspace switched");
+    ui_log("[Workspace] Switched root: %s", path.c_str());
+}
+
+static void workspace_add_to_registry(const std::string& path) {
+    if (path.empty()) return;
+    auto paths = load_workspace_registry();
+    if (std::find(paths.begin(), paths.end(), path) == paths.end()) {
+        paths.push_back(path);
+        save_workspace_registry(paths);
+    }
+}
+
+static void workspace_apply_cb(lv_event_t* e) {
+    (void)e;
+    std::string input = normalize_workspace_path(gen_workspace_input ? lv_textarea_get_text(gen_workspace_input) : "");
+    std::string path = input;
+    if (path.empty() && gen_workspace_dropdown) {
+        int sel = lv_dropdown_get_selected(gen_workspace_dropdown);
+        if (sel >= 0 && sel < (int)g_workspace_choices.size()) path = g_workspace_choices[(size_t)sel];
+    }
+    if (path.empty() || path == "Not configured") {
+        if (gen_workspace_status) lv_label_set_text(gen_workspace_status, "Please input or select workspace path");
+        return;
+    }
+    workspace_add_to_registry(path);
+    workspace_apply_and_sync(path);
+    refresh_workspace_dropdown();
+}
+
+static void workspace_add_only_cb(lv_event_t* e) {
+    (void)e;
+    std::string input = normalize_workspace_path(gen_workspace_input ? lv_textarea_get_text(gen_workspace_input) : "");
+    if (input.empty()) {
+        if (gen_workspace_status) lv_label_set_text(gen_workspace_status, "Input path is empty");
+        return;
+    }
+    workspace_add_to_registry(input);
+    refresh_workspace_dropdown();
+    if (gen_workspace_status) lv_label_set_text(gen_workspace_status, "Workspace path saved");
+    ui_log("[Workspace] Added candidate: %s", input.c_str());
+}
+
+static std::string scan_installed_apps_text() {
+    const char* cmd =
+        "powershell -NoProfile -ExecutionPolicy Bypass -Command "
+        "\"$ErrorActionPreference='SilentlyContinue';"
+        "$apps=Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* ,"
+        "HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* ,"
+        "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | "
+        "Where-Object {$_.DisplayName} | "
+        "Select-Object -ExpandProperty DisplayName -Unique | Sort-Object | Select-Object -First 120; "
+        "$apps -join \"`n\"\"";
+    FILE* pipe = _popen(cmd, "r");
+    if (!pipe) return "Scan failed: cannot launch powershell";
+    std::string out;
+    char buf[1024] = {0};
+    while (fgets(buf, sizeof(buf), pipe)) out += buf;
+    _pclose(pipe);
+    if (out.empty()) return "No installed apps found.";
+    return out;
+}
+
+static void scan_apps_cb(lv_event_t* e) {
+    (void)e;
+    if (!gen_apps_scan_ta) return;
+    lv_textarea_set_text(gen_apps_scan_ta, "Scanning installed apps...");
+    std::string txt = scan_installed_apps_text();
+    lv_textarea_set_text(gen_apps_scan_ta, txt.c_str());
+    ui_log("[Auth] Installed apps scan completed");
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -283,16 +466,106 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_set_style_text_font(gen_path_label, CJK_FONT, 0);
     make_kv_row("Install Path", gen_path_label);
 
-    /* ── Workspace Path (WS-01) ── */
+    /* ── Workspace Path (WS-01/WS-03) ── */
     {
         std::string ws_root = workspace_get_root();
-        lv_obj_t* ws_label = lv_label_create(tab);
-        lv_label_set_text(ws_label, ws_root.empty() ? "Not configured" : ws_root.c_str());
-        lv_label_set_long_mode(ws_label, LV_LABEL_LONG_MODE_DOTS);
-        lv_obj_set_width(ws_label, LV_SIZE_CONTENT);
-        lv_obj_set_style_text_color(ws_label, lv_color_make(160, 165, 185), 0);
-        lv_obj_set_style_text_font(ws_label, CJK_FONT, 0);
-        make_kv_row("Workspace", ws_label);
+        gen_workspace_label = lv_label_create(tab);
+        lv_label_set_text(gen_workspace_label, ws_root.empty() ? "Not configured" : ws_root.c_str());
+        lv_label_set_long_mode(gen_workspace_label, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_set_width(gen_workspace_label, LV_SIZE_CONTENT);
+        lv_obj_set_style_text_color(gen_workspace_label, lv_color_make(160, 165, 185), 0);
+        lv_obj_set_style_text_font(gen_workspace_label, CJK_FONT, 0);
+        make_kv_row("Workspace", gen_workspace_label);
+
+        gen_workspace_dropdown = lv_dropdown_create(tab);
+        lv_obj_set_width(gen_workspace_dropdown, SCALE(300));
+        apply_input_style(gen_workspace_dropdown);
+        make_kv_row("Workspace List", gen_workspace_dropdown);
+        refresh_workspace_dropdown();
+
+        gen_workspace_input = lv_textarea_create(tab);
+        lv_textarea_set_one_line(gen_workspace_input, true);
+        lv_textarea_set_placeholder_text(gen_workspace_input, "D:\\workspace\\MyProject");
+        lv_obj_set_width(gen_workspace_input, SCALE(300));
+        apply_input_style(gen_workspace_input);
+        make_kv_row("Workspace Input", gen_workspace_input);
+
+        lv_obj_t* ws_btn_row = lv_obj_create(tab);
+        lv_obj_set_size(ws_btn_row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(ws_btn_row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(ws_btn_row, 0, 0);
+        lv_obj_set_style_pad_all(ws_btn_row, 0, 0);
+        lv_obj_clear_flag(ws_btn_row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(ws_btn_row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_style_pad_gap(ws_btn_row, 8, 0);
+
+        lv_obj_t* btn_apply_ws = lv_button_create(ws_btn_row);
+        lv_obj_set_size(btn_apply_ws, SCALE(150), SCALE(34));
+        lv_obj_set_style_bg_color(btn_apply_ws, lv_color_make(60, 130, 220), 0);
+        lv_obj_add_event_cb(btn_apply_ws, workspace_apply_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* btn_apply_lbl = lv_label_create(btn_apply_ws);
+        lv_label_set_text(btn_apply_lbl, "Apply Workspace");
+        lv_obj_set_style_text_font(btn_apply_lbl, CJK_FONT, 0);
+        lv_obj_center(btn_apply_lbl);
+
+        lv_obj_t* btn_add_ws = lv_button_create(ws_btn_row);
+        lv_obj_set_size(btn_add_ws, SCALE(140), SCALE(34));
+        lv_obj_set_style_bg_color(btn_add_ws, lv_color_make(80, 92, 120), 0);
+        lv_obj_add_event_cb(btn_add_ws, workspace_add_only_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* btn_add_lbl = lv_label_create(btn_add_ws);
+        lv_label_set_text(btn_add_lbl, "Save Candidate");
+        lv_obj_set_style_text_font(btn_add_lbl, CJK_FONT, 0);
+        lv_obj_center(btn_add_lbl);
+
+        gen_workspace_status = lv_label_create(tab);
+        lv_label_set_text(gen_workspace_status, "Workspace manager ready");
+        apply_hint_label(gen_workspace_status);
+        make_kv_row("Workspace Status", gen_workspace_status);
+    }
+
+    /* ── Application Authorization (P2) ── */
+    {
+        extern bool g_app_auth_email;
+        extern bool g_app_auth_calendar;
+        extern void save_theme_config();
+
+        gen_auth_email_sw = lv_switch_create(tab);
+        lv_obj_set_size(gen_auth_email_sw, SCALE(50), SCALE(26));
+        if (g_app_auth_email) lv_obj_add_state(gen_auth_email_sw, LV_STATE_CHECKED);
+        lv_obj_add_event_cb(gen_auth_email_sw, [](lv_event_t* e) {
+            lv_obj_t* sw = (lv_obj_t*)lv_event_get_target(e);
+            g_app_auth_email = lv_obj_has_state(sw, LV_STATE_CHECKED);
+            save_theme_config();
+            ui_log("[Auth] Email access %s", g_app_auth_email ? "enabled" : "disabled");
+        }, LV_EVENT_VALUE_CHANGED, nullptr);
+        make_kv_row("Email Access", gen_auth_email_sw);
+
+        gen_auth_calendar_sw = lv_switch_create(tab);
+        lv_obj_set_size(gen_auth_calendar_sw, SCALE(50), SCALE(26));
+        if (g_app_auth_calendar) lv_obj_add_state(gen_auth_calendar_sw, LV_STATE_CHECKED);
+        lv_obj_add_event_cb(gen_auth_calendar_sw, [](lv_event_t* e) {
+            lv_obj_t* sw = (lv_obj_t*)lv_event_get_target(e);
+            g_app_auth_calendar = lv_obj_has_state(sw, LV_STATE_CHECKED);
+            save_theme_config();
+            ui_log("[Auth] Calendar access %s", g_app_auth_calendar ? "enabled" : "disabled");
+        }, LV_EVENT_VALUE_CHANGED, nullptr);
+        make_kv_row("Calendar Access", gen_auth_calendar_sw);
+
+        lv_obj_t* btn_scan_apps = lv_button_create(tab);
+        lv_obj_set_size(btn_scan_apps, SCALE(220), SCALE(34));
+        lv_obj_set_style_bg_color(btn_scan_apps, lv_color_make(70, 110, 170), 0);
+        lv_obj_add_event_cb(btn_scan_apps, scan_apps_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* lbl_scan = lv_label_create(btn_scan_apps);
+        lv_label_set_text(lbl_scan, "Scan Installed Apps");
+        lv_obj_set_style_text_font(lbl_scan, CJK_FONT, 0);
+        lv_obj_center(lbl_scan);
+        make_kv_row("Installed Apps", btn_scan_apps);
+
+        gen_apps_scan_ta = lv_textarea_create(tab);
+        lv_textarea_set_one_line(gen_apps_scan_ta, false);
+        lv_textarea_set_placeholder_text(gen_apps_scan_ta, "Scan result will be shown here...");
+        lv_obj_set_size(gen_apps_scan_ta, LV_PCT(100), SCALE(130));
+        apply_input_style(gen_apps_scan_ta);
     }
 
     add_divider(tab);
@@ -483,13 +756,8 @@ static void build_general_tab(lv_obj_t* tab) {
 
     /* ── Language ── */
     gen_lang_dropdown = lv_dropdown_create(tab);
-    extern Lang g_lang;
-    if (g_lang == Lang::CN) {
-        lv_dropdown_set_options(gen_lang_dropdown, "中文\nEnglish");
-    } else {
-        lv_dropdown_set_options(gen_lang_dropdown, "English\n中文");
-    }
-    lv_dropdown_set_selected(gen_lang_dropdown, 0);
+    lv_dropdown_set_options(gen_lang_dropdown, "中文\nEnglish\n한국어\n日本語");
+    lv_dropdown_set_selected(gen_lang_dropdown, (uint16_t)lang_to_dropdown_index(g_lang));
     lv_obj_set_width(gen_lang_dropdown, SCALE(160));
     apply_input_style(gen_lang_dropdown);
     lv_obj_add_event_cb(gen_lang_dropdown, [](lv_event_t* e) {
@@ -498,11 +766,7 @@ static void build_general_tab(lv_obj_t* tab) {
         extern Lang g_lang;
         extern void save_theme_config();
         extern void apply_theme_to_all();
-        if (g_lang == Lang::CN) {
-            g_lang = (sel == 0) ? Lang::CN : Lang::EN;
-        } else {
-            g_lang = (sel == 0) ? Lang::EN : Lang::CN;
-        }
+        g_lang = dropdown_index_to_lang(sel);
         save_theme_config();
         update_ui_language();
         apply_theme_to_all();
@@ -670,8 +934,18 @@ static void build_permissions_tab(lv_obj_t* tab) {
         {"FS Write External",  PermKey::FS_WRITE_EXTERNAL},
         {"Exec Shell",         PermKey::EXEC_SHELL},
         {"Exec Install",       PermKey::EXEC_INSTALL},
+        {"Exec Delete",        PermKey::EXEC_DELETE},
         {"Net Outbound",       PermKey::NET_OUTBOUND},
+        {"Net Inbound",        PermKey::NET_INBOUND},
         {"Net Intranet",       PermKey::NET_INTRANET},
+        {"Device Camera",      PermKey::DEVICE_CAMERA},
+        {"Device Mic",         PermKey::DEVICE_MIC},
+        {"Device Screen",      PermKey::DEVICE_SCREEN},
+        {"USB Storage",        PermKey::DEVICE_USB_STORAGE},
+        {"Remote Node",        PermKey::DEVICE_REMOTE_NODE},
+        {"New Device",         PermKey::DEVICE_NEW_DEVICE},
+        {"Clipboard Read",     PermKey::CLIPBOARD_READ},
+        {"Clipboard Write",    PermKey::CLIPBOARD_WRITE},
         {"System Modify",      PermKey::SYSTEM_MODIFY},
     };
 
@@ -1443,17 +1717,44 @@ static void build_model_tab(lv_obj_t* tab) {
 /* ═══════════════════════════════════════════════════════════════
  *  SKILLS TAB
  * ═══════════════════════════════════════════════════════════════ */
+static lv_obj_t* g_skill_search_input = nullptr;
+static lv_obj_t* g_skill_list_available = nullptr;
+static lv_obj_t* g_skill_list_installed = nullptr;
+static const char* k_skill_catalog[] = {
+    "weather", "github", "news-summary", "web-scraping",
+    "data-analysis", "translate", "stock-tech-analysis", "obsidian",
+    nullptr
+};
+
+static std::string skill_root_dir() {
+    const char* home = getenv("USERPROFILE");
+    if (!home || !home[0]) return ".\\skills";
+    return std::string(home) + "\\.openclaw\\skills";
+}
+
+static std::vector<std::string> list_installed_skills() {
+    std::vector<std::string> out;
+    std::error_code ec;
+    std::string root = skill_root_dir();
+    if (!std::filesystem::exists(root, ec)) return out;
+    for (const auto& e : std::filesystem::directory_iterator(root, ec)) {
+        if (ec) break;
+        if (e.is_directory(ec) && !ec) out.push_back(e.path().filename().string());
+    }
+    std::sort(out.begin(), out.end());
+    return out;
+}
 
 /* P2-28: Skill download callback */
 static void skill_download_cb(lv_event_t* e) {
     lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
-    const char* skill_name = (const char*)lv_obj_get_user_data(btn);
+    lv_obj_t* label = lv_obj_get_child(btn, 0);
+    const char* skill_name = label ? lv_label_get_text(label) : nullptr;
     if (!skill_name) return;
 
     /* Show downloading status on button */
     static char status_text[256];
     snprintf(status_text, sizeof(status_text), "%s [Downloading]", skill_name);
-    lv_obj_t* label = lv_obj_get_child(btn, 0);
     if (label) lv_label_set_text(label, status_text);
 
     /* Build download URL - ClawHub API */
@@ -1502,13 +1803,72 @@ static void skill_download_cb(lv_event_t* e) {
         lv_label_set_text(label, status_text);
         lv_obj_set_style_text_color(label, lv_color_make(120, 200, 120), 0);
     }
+    if (g_skill_list_installed) {
+        lv_obj_clean(g_skill_list_installed);
+        auto installed = list_installed_skills();
+        for (const auto& name : installed) {
+            lv_obj_t* b = lv_list_add_btn(g_skill_list_installed, NULL, name.c_str());
+            lv_obj_set_style_text_font(b, CJK_FONT, 0);
+            lv_obj_set_style_bg_color(b, lv_color_make(35, 38, 52), 0);
+            lv_obj_set_style_text_color(b, lv_color_make(120, 200, 120), 0);
+        }
+        if (installed.empty()) {
+            lv_obj_t* lbl_empty = lv_label_create(g_skill_list_installed);
+            lv_label_set_text(lbl_empty, "No skills installed yet");
+            lv_obj_set_style_text_color(lbl_empty, lv_color_make(120, 125, 140), 0);
+            lv_obj_set_style_text_font(lbl_empty, CJK_FONT, 0);
+        }
+    }
 }
 
-static const char* skill_names[] = {
-    "weather", "github", "news-summary", "web-scraping",
-    "Data Analysis", "translate", "stock-tech-analysis", "obsidian",
-    nullptr
-};
+static void refresh_available_skills_list() {
+    if (!g_skill_list_available) return;
+    lv_obj_clean(g_skill_list_available);
+    std::string filter = normalize_workspace_path(g_skill_search_input ? lv_textarea_get_text(g_skill_search_input) : "");
+    std::transform(filter.begin(), filter.end(), filter.begin(), ::tolower);
+    int shown = 0;
+    for (int i = 0; k_skill_catalog[i]; i++) {
+        std::string name = k_skill_catalog[i];
+        std::string lower = name;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+        if (!filter.empty() && lower.find(filter) == std::string::npos) continue;
+        lv_obj_t* last_btn = lv_list_add_btn(g_skill_list_available, NULL, name.c_str());
+        lv_obj_set_style_text_font(last_btn, CJK_FONT, 0);
+        lv_obj_set_style_bg_color(last_btn, lv_color_make(35, 38, 52), 0);
+        lv_obj_set_style_text_color(last_btn, lv_color_make(180, 185, 200), 0);
+        lv_obj_add_event_cb(last_btn, skill_download_cb, LV_EVENT_CLICKED, nullptr);
+        shown++;
+    }
+    if (shown == 0) {
+        lv_obj_t* lbl_empty = lv_label_create(g_skill_list_available);
+        lv_label_set_text(lbl_empty, "No matched skills");
+        lv_obj_set_style_text_color(lbl_empty, lv_color_make(120, 125, 140), 0);
+        lv_obj_set_style_text_font(lbl_empty, CJK_FONT, 0);
+    }
+}
+
+static void refresh_installed_skills_list() {
+    if (!g_skill_list_installed) return;
+    lv_obj_clean(g_skill_list_installed);
+    auto installed = list_installed_skills();
+    for (const auto& name : installed) {
+        lv_obj_t* b = lv_list_add_btn(g_skill_list_installed, NULL, name.c_str());
+        lv_obj_set_style_text_font(b, CJK_FONT, 0);
+        lv_obj_set_style_bg_color(b, lv_color_make(35, 38, 52), 0);
+        lv_obj_set_style_text_color(b, lv_color_make(120, 200, 120), 0);
+    }
+    if (installed.empty()) {
+        lv_obj_t* lbl_empty = lv_label_create(g_skill_list_installed);
+        lv_label_set_text(lbl_empty, "No skills installed yet");
+        lv_obj_set_style_text_color(lbl_empty, lv_color_make(120, 125, 140), 0);
+        lv_obj_set_style_text_font(lbl_empty, CJK_FONT, 0);
+    }
+}
+
+static void skill_search_changed_cb(lv_event_t* e) {
+    (void)e;
+    refresh_available_skills_list();
+}
 
 static void build_skills_tab(lv_obj_t* tab) {
     apply_dark_style(tab);
@@ -1530,45 +1890,29 @@ static void build_skills_tab(lv_obj_t* tab) {
     lv_label_set_text(lbl_search, "Search Skills");
     apply_section_label(lbl_search);
 
-    lv_obj_t* skill_search = lv_textarea_create(tab);
-    lv_textarea_set_one_line(skill_search, true);
-    lv_textarea_set_placeholder_text(skill_search, "Type to filter...");
-    lv_obj_set_width(skill_search, LV_PCT(100));
-    lv_obj_set_height(skill_search, 56);
-    apply_input_style(skill_search);
-    lv_textarea_set_text_selection(skill_search, true);
-    lv_group_add_obj(lv_group_get_default(), skill_search);
+    g_skill_search_input = lv_textarea_create(tab);
+    lv_textarea_set_one_line(g_skill_search_input, true);
+    lv_textarea_set_placeholder_text(g_skill_search_input, "Type to filter...");
+    lv_obj_set_width(g_skill_search_input, LV_PCT(100));
+    lv_obj_set_height(g_skill_search_input, 56);
+    apply_input_style(g_skill_search_input);
+    lv_textarea_set_text_selection(g_skill_search_input, true);
+    lv_group_add_obj(lv_group_get_default(), g_skill_search_input);
+    lv_obj_add_event_cb(g_skill_search_input, skill_search_changed_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     /* Available skills list */
     lv_obj_t* lbl_avail = lv_label_create(tab);
     lv_label_set_text(lbl_avail, "Available Skills");
     apply_section_label(lbl_avail);
 
-    lv_obj_t* skill_list = lv_list_create(tab);
-    lv_obj_set_width(skill_list, LV_PCT(100));
-    lv_obj_set_height(skill_list, 390);
-    lv_obj_set_style_bg_color(skill_list, lv_color_make(25, 28, 40), 0);
-    lv_obj_set_style_border_color(skill_list, lv_color_make(50, 55, 75), 0);
-    lv_obj_set_style_border_width(skill_list, 1, 0);
-    lv_obj_set_style_radius(skill_list, 6, 0);
-
-    /* P2-28: Skill download with HTTP GET callback */
-    for (int i = 0; skill_names[i]; i++) {
-        static char btn_texts[32][128]; /* One per skill */
-        snprintf(btn_texts[i], sizeof(btn_texts[i]), "%s", skill_names[i]);
-        lv_list_add_btn(skill_list, NULL, btn_texts[i]);
-        lv_obj_t* last_btn = lv_obj_get_child(skill_list, -1);
-        if (last_btn) {
-            lv_obj_set_style_text_font(last_btn, CJK_FONT, 0);
-            lv_obj_set_style_bg_color(last_btn, lv_color_make(35, 38, 52), 0);
-            lv_obj_set_style_text_color(last_btn, lv_color_make(180, 185, 200), 0);
-            /* Set skill name as user data for download callback */
-            static char skill_data[32][64];
-            snprintf(skill_data[i], sizeof(skill_data[i]), "%s", skill_names[i]);
-            lv_obj_set_user_data(last_btn, skill_data[i]);
-            lv_obj_add_event_cb(last_btn, skill_download_cb, LV_EVENT_CLICKED, nullptr);
-        }
-    }
+    g_skill_list_available = lv_list_create(tab);
+    lv_obj_set_width(g_skill_list_available, LV_PCT(100));
+    lv_obj_set_height(g_skill_list_available, 390);
+    lv_obj_set_style_bg_color(g_skill_list_available, lv_color_make(25, 28, 40), 0);
+    lv_obj_set_style_border_color(g_skill_list_available, lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_border_width(g_skill_list_available, 1, 0);
+    lv_obj_set_style_radius(g_skill_list_available, 6, 0);
+    refresh_available_skills_list();
 
     /* Divider */
     add_divider(tab);
@@ -1578,42 +1922,14 @@ static void build_skills_tab(lv_obj_t* tab) {
     lv_label_set_text(lbl_installed, "Installed Skills");
     apply_section_label(lbl_installed);
 
-    lv_obj_t* installed_list = lv_list_create(tab);
-    lv_obj_set_width(installed_list, LV_PCT(100));
-    lv_obj_set_height(installed_list, 240);
-    lv_obj_set_style_bg_color(installed_list, lv_color_make(25, 28, 40), 0);
-
-    /* Add installed skills with toggle switch */
-    static bool skill_enabled[] = {true, true, true, false, false, true, true, false}; /* Default states */
-    const char* installed_skills[] = {"xiaolongxi-search", "xiaolongxi-convert", "web-scraper",
-                                       "openclaw-audit", "openclaw-code-interpreter", "openclaw-perplexity",
-                                       "openclaw-web-search", "openclaw-gemini", nullptr};
-    for (int i = 0; installed_skills[i]; i++) {
-        static char btn_text[256];
-        snprintf(btn_text, sizeof(btn_text), "%s  %s",
-                 installed_skills[i],
-                 skill_enabled[i] ? "[ON]" : "[OFF]");
-        lv_list_add_btn(installed_list, NULL, btn_text);
-        lv_obj_t* last_btn = lv_obj_get_child(installed_list, -1);
-        if (last_btn) {
-            lv_obj_set_style_text_font(last_btn, CJK_FONT, 0);
-            lv_obj_set_style_bg_color(last_btn, lv_color_make(35, 38, 52), 0);
-            if (skill_enabled[i]) {
-                lv_obj_set_style_text_color(last_btn, lv_color_make(120, 200, 120), 0);
-            } else {
-                lv_obj_set_style_text_color(last_btn, lv_color_make(140, 140, 140), 0);
-            }
-        }
-    }
-    lv_obj_set_style_border_color(installed_list, lv_color_make(50, 55, 75), 0);
-    lv_obj_set_style_border_width(installed_list, 1, 0);
-    lv_obj_set_style_radius(installed_list, 6, 0);
-
-    /* Placeholder - no skills installed yet */
-    lv_obj_t* lbl_empty = lv_label_create(installed_list);
-    lv_label_set_text(lbl_empty, "No skills installed yet");
-    lv_obj_set_style_text_color(lbl_empty, lv_color_make(120, 125, 140), 0);
-    lv_obj_set_style_text_font(lbl_empty, CJK_FONT, 0);
+    g_skill_list_installed = lv_list_create(tab);
+    lv_obj_set_width(g_skill_list_installed, LV_PCT(100));
+    lv_obj_set_height(g_skill_list_installed, 240);
+    lv_obj_set_style_bg_color(g_skill_list_installed, lv_color_make(25, 28, 40), 0);
+    lv_obj_set_style_border_color(g_skill_list_installed, lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_border_width(g_skill_list_installed, 1, 0);
+    lv_obj_set_style_radius(g_skill_list_installed, 6, 0);
+    refresh_installed_skills_list();
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1889,6 +2205,248 @@ static void build_log_tab(lv_obj_t* tab) {
     log_tab_refresh_list();
 }
 
+static void refresh_tracing_view() {
+    if (!trace_list_ta) return;
+    auto items = TraceManager::instance().get_recent_events(80);
+    const char* action_kw = trace_filter_action_input ? lv_textarea_get_text(trace_filter_action_input) : "";
+    char out_sel[16] = {0};
+    if (trace_filter_outcome_dd) {
+        lv_dropdown_get_selected_str(trace_filter_outcome_dd, out_sel, sizeof(out_sel));
+    }
+    std::string out;
+    for (const auto& ev : items) {
+        if (action_kw && action_kw[0] && ev.action.find(action_kw) == std::string::npos) continue;
+        if (out_sel[0] && strcmp(out_sel, "all") != 0 && ev.outcome != out_sel) continue;
+        char line[512];
+        snprintf(line, sizeof(line), "[%s] %s | %s | %dms | %s\n",
+                 ev.ts.c_str(), ev.action.c_str(), ev.target.c_str(), ev.latency_ms, ev.outcome.c_str());
+        out += line;
+    }
+    if (out.empty()) out = "(no trace events)";
+    lv_textarea_set_text(trace_list_ta, out.c_str());
+}
+
+static void build_feature_tab(lv_obj_t* tab) {
+    apply_dark_style(tab);
+    lv_obj_set_style_pad_all(tab, 16, 0);
+    lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(tab, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_gap(tab, 10, 0);
+
+    lv_obj_t* title = lv_label_create(tab);
+    lv_label_set_text(title, tr("功能开关", "Feature Flags"));
+    lv_obj_set_style_text_color(title, g_colors->accent, 0);
+    lv_obj_set_style_text_font(title, CJK_FONT, 0);
+
+    const auto& flags = feature_flags().get_all_flags();
+    for (const auto& f : flags) {
+        lv_obj_t* row = lv_obj_create(tab);
+        lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_pad_all(row, 0, 0);
+        lv_obj_set_style_pad_gap(row, 8, 0);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* left = lv_obj_create(row);
+        lv_obj_set_size(left, LV_PCT(75), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(left, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(left, 0, 0);
+        lv_obj_set_style_pad_all(left, 0, 0);
+        lv_obj_set_style_pad_gap(left, 2, 0);
+        lv_obj_set_flex_flow(left, LV_FLEX_FLOW_COLUMN);
+        lv_obj_clear_flag(left, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* name = lv_label_create(left);
+        lv_label_set_text(name, f.name.c_str());
+        lv_obj_set_style_text_font(name, FONT(11), 0);
+        lv_obj_t* desc = lv_label_create(left);
+        lv_label_set_text(desc, f.description.c_str());
+        lv_obj_set_style_text_color(desc, g_colors->text_dim, 0);
+        lv_obj_set_style_text_font(desc, FONT(10), 0);
+
+        lv_obj_t* sw = lv_switch_create(row);
+        if (f.enabled) lv_obj_add_state(sw, LV_STATE_CHECKED);
+        std::string* key = new std::string(f.name);
+        bool need_restart = f.requires_restart;
+        lv_obj_add_event_cb(sw, [](lv_event_t* e) {
+            std::string* n = (std::string*)lv_event_get_user_data(e);
+            if (!n) return;
+            bool on = lv_obj_has_state(lv_event_get_target_obj(e), LV_STATE_CHECKED);
+            feature_flags().set_enabled(n->c_str(), on);
+            feature_flags().save_to_config();
+        }, LV_EVENT_VALUE_CHANGED, key);
+        if (need_restart) {
+            lv_obj_t* note = lv_label_create(row);
+            lv_label_set_text(note, tr("需重启", "Restart"));
+            lv_obj_set_style_text_color(note, lv_color_make(230, 180, 80), 0);
+            lv_obj_set_style_text_font(note, FONT(10), 0);
+        }
+    }
+
+    ff_status_label = lv_label_create(tab);
+    lv_label_set_text(ff_status_label, tr("修改后已自动保存到 config.json", "Changes auto-saved to config.json"));
+    lv_obj_set_style_text_color(ff_status_label, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(ff_status_label, FONT(11), 0);
+}
+
+static void build_tracing_tab(lv_obj_t* tab) {
+    apply_dark_style(tab);
+    lv_obj_set_style_pad_all(tab, 16, 0);
+    lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(tab, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_gap(tab, 10, 0);
+
+    lv_obj_t* filter_row = lv_obj_create(tab);
+    lv_obj_set_size(filter_row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(filter_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(filter_row, 0, 0);
+    lv_obj_set_style_pad_all(filter_row, 0, 0);
+    lv_obj_set_style_pad_gap(filter_row, 8, 0);
+    lv_obj_set_flex_flow(filter_row, LV_FLEX_FLOW_ROW);
+    lv_obj_clear_flag(filter_row, LV_OBJ_FLAG_SCROLLABLE);
+
+    trace_filter_action_input = lv_textarea_create(filter_row);
+    lv_obj_set_size(trace_filter_action_input, SCALE(220), SCALE(36));
+    lv_textarea_set_one_line(trace_filter_action_input, true);
+    lv_textarea_set_placeholder_text(trace_filter_action_input, tr("按 action 过滤", "Filter by action"));
+    apply_input_style(trace_filter_action_input);
+
+    trace_filter_outcome_dd = lv_dropdown_create(filter_row);
+    lv_obj_set_size(trace_filter_outcome_dd, SCALE(120), SCALE(36));
+    lv_dropdown_set_options(trace_filter_outcome_dd, "all\nok\nfail\ntimeout");
+    lv_obj_add_event_cb(trace_filter_action_input, [](lv_event_t*) { refresh_tracing_view(); }, LV_EVENT_VALUE_CHANGED, nullptr);
+    lv_obj_add_event_cb(trace_filter_outcome_dd, [](lv_event_t*) { refresh_tracing_view(); }, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    lv_obj_t* row = lv_obj_create(tab);
+    lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_set_style_pad_gap(row, 8, 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* btn_ref = lv_button_create(row);
+    lv_obj_t* btn_exp = lv_button_create(row);
+    lv_obj_t* btn_clr = lv_button_create(row);
+    for (lv_obj_t* b : {btn_ref, btn_exp, btn_clr}) {
+        lv_obj_set_size(b, SCALE(100), SCALE(32));
+        lv_obj_set_style_bg_color(b, g_colors->btn_secondary, 0);
+        lv_obj_set_style_radius(b, 6, 0);
+    }
+    lv_label_set_text(lv_label_create(btn_ref), tr("刷新", "Refresh"));
+    lv_label_set_text(lv_label_create(btn_exp), tr("导出", "Export"));
+    lv_label_set_text(lv_label_create(btn_clr), tr("清空", "Clear"));
+    lv_obj_center(lv_obj_get_child(btn_ref, 0));
+    lv_obj_center(lv_obj_get_child(btn_exp, 0));
+    lv_obj_center(lv_obj_get_child(btn_clr, 0));
+
+    lv_obj_add_event_cb(btn_ref, [](lv_event_t*) { refresh_tracing_view(); }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(btn_exp, [](lv_event_t*) {
+        OPENFILENAMEA ofn{};
+        char path[MAX_PATH] = "traces-export.jsonl";
+        ofn.lStructSize = sizeof(ofn);
+        ofn.lpstrFile = path;
+        ofn.nMaxFile = MAX_PATH;
+        ofn.lpstrFilter = "JSONL\0*.jsonl\0All\0*.*\0";
+        ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+        if (!GetSaveFileNameA(&ofn)) return;
+        std::ifstream src(TraceManager::instance().get_trace_path(), std::ios::binary);
+        std::ofstream dst(path, std::ios::binary);
+        dst << src.rdbuf();
+        ui_log("[Tracing] Exported to %s", path);
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(btn_clr, [](lv_event_t*) {
+        std::ofstream trunc(TraceManager::instance().get_trace_path(), std::ios::trunc);
+        trunc.close();
+        if (trace_list_ta) lv_textarea_set_text(trace_list_ta, "");
+        ui_log("[Tracing] traces.jsonl cleared");
+    }, LV_EVENT_CLICKED, nullptr);
+
+    trace_list_ta = lv_textarea_create(tab);
+    lv_obj_set_width(trace_list_ta, LV_PCT(100));
+    lv_obj_set_height(trace_list_ta, LV_PCT(100));
+    lv_obj_set_flex_grow(trace_list_ta, 1);
+    lv_textarea_set_text_selection(trace_list_ta, true);
+    apply_input_style(trace_list_ta);
+    refresh_tracing_view();
+}
+
+static void build_kb_tab(lv_obj_t* tab) {
+    apply_dark_style(tab);
+    lv_obj_set_style_pad_all(tab, 16, 0);
+    lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(tab, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_gap(tab, 10, 0);
+
+    kb_docs_label = lv_label_create(tab);
+    lv_label_set_text_fmt(kb_docs_label, "Docs: %d | Sources: %d", KbStore::instance().doc_count(), KbStore::instance().source_count());
+    lv_obj_set_style_text_color(kb_docs_label, g_colors->accent, 0);
+    lv_obj_set_style_text_font(kb_docs_label, CJK_FONT, 0);
+
+    lv_obj_t* row_btn = lv_obj_create(tab);
+    lv_obj_set_size(row_btn, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_btn, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_btn, 0, 0);
+    lv_obj_set_style_pad_all(row_btn, 0, 0);
+    lv_obj_set_style_pad_gap(row_btn, 8, 0);
+    lv_obj_set_flex_flow(row_btn, LV_FLEX_FLOW_ROW);
+    lv_obj_clear_flag(row_btn, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* btn_add = lv_button_create(row_btn);
+    lv_obj_set_size(btn_add, SCALE(140), SCALE(34));
+    lv_obj_set_style_bg_color(btn_add, g_colors->btn_secondary, 0);
+    lv_label_set_text(lv_label_create(btn_add), tr("添加文件", "Add File"));
+    lv_obj_center(lv_obj_get_child(btn_add, 0));
+    lv_obj_add_event_cb(btn_add, [](lv_event_t*) {
+        OPENFILENAMEA ofn{};
+        char path[MAX_PATH] = {0};
+        ofn.lStructSize = sizeof(ofn);
+        ofn.lpstrFile = path;
+        ofn.nMaxFile = MAX_PATH;
+        ofn.lpstrFilter = "Docs\0*.md;*.txt\0All\0*.*\0";
+        ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+        if (!GetOpenFileNameA(&ofn)) return;
+        std::string err;
+        if (!KbStore::instance().add_source_file(path, err)) ui_log("[KB] Add source failed: %s", err.c_str());
+        else ui_log("[KB] Added source: %s", path);
+        if (kb_docs_label) lv_label_set_text_fmt(kb_docs_label, "Docs: %d | Sources: %d", KbStore::instance().doc_count(), KbStore::instance().source_count());
+    }, LV_EVENT_CLICKED, nullptr);
+
+    kb_search_input = lv_textarea_create(tab);
+    lv_obj_set_width(kb_search_input, LV_PCT(100));
+    lv_textarea_set_one_line(kb_search_input, true);
+    lv_textarea_set_placeholder_text(kb_search_input, tr("输入关键词", "Keyword"));
+    apply_input_style(kb_search_input);
+
+    lv_obj_t* btn_search = lv_button_create(tab);
+    lv_obj_set_size(btn_search, SCALE(120), SCALE(34));
+    lv_obj_set_style_bg_color(btn_search, g_colors->btn_action, 0);
+    lv_label_set_text(lv_label_create(btn_search), tr("搜索", "Search"));
+    lv_obj_center(lv_obj_get_child(btn_search, 0));
+    lv_obj_add_event_cb(btn_search, [](lv_event_t*) {
+        if (!kb_search_input || !kb_result_ta) return;
+        const char* kw = lv_textarea_get_text(kb_search_input);
+        auto rs = KbStore::instance().search_keyword(kw, 10);
+        std::string out;
+        for (const auto& d : rs) {
+            out += "- " + d.path + "\n";
+        }
+        if (out.empty()) out = "(no result)";
+        lv_textarea_set_text(kb_result_ta, out.c_str());
+    }, LV_EVENT_CLICKED, nullptr);
+
+    kb_result_ta = lv_textarea_create(tab);
+    lv_obj_set_width(kb_result_ta, LV_PCT(100));
+    lv_obj_set_height(kb_result_ta, LV_PCT(100));
+    lv_obj_set_flex_grow(kb_result_ta, 1);
+    lv_textarea_set_text_selection(kb_result_ta, true);
+    apply_input_style(kb_result_ta);
+}
+
 /* ═══════════════════════════════════════════════════════════════
  *  ABOUT TAB (with garlic branding)
  * ═══════════════════════════════════════════════════════════════ */
@@ -2079,6 +2637,74 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_t* lbl_copy2 = lv_label_create(tab);
     lv_label_set_text(lbl_copy2, "Copyright 2026 AnyClaw Project");
     apply_hint_label(lbl_copy2);
+
+    /* P2-31: AnyClaw self-update check (GitHub release) */
+    lv_obj_t* btn_app_update = lv_button_create(tab);
+    lv_obj_set_size(btn_app_update, LV_PCT(100), 36);
+    lv_obj_set_style_bg_color(btn_app_update, lv_color_make(60, 95, 150), 0);
+    lv_obj_set_style_radius(btn_app_update, 6, 0);
+    lv_obj_add_event_cb(btn_app_update, [](lv_event_t* e) {
+        (void)e;
+        static const char* kCurrentVersion = "v2.0.1";
+        static const char* kApi = "https://api.github.com/repos/IwanFlag/AnyClaw_Tools/releases/latest";
+        char response[16384] = {0};
+        int result = http_get(kApi, response, sizeof(response), 10);
+        if (result != 200) {
+            ui_log("[Update] Check failed (http=%d). Open release page manually.", result);
+            ShellExecuteA(nullptr, "open", "https://github.com/IwanFlag/AnyClaw_Tools/releases", nullptr, nullptr, SW_SHOWNORMAL);
+            return;
+        }
+        char tag[128] = {0};
+        char html_url[512] = {0};
+        json_extract_string(response, "tag_name", tag, sizeof(tag));
+        json_extract_string(response, "html_url", html_url, sizeof(html_url));
+        if (!tag[0]) snprintf(tag, sizeof(tag), "(unknown)");
+        if (!html_url[0]) snprintf(html_url, sizeof(html_url), "%s", "https://github.com/IwanFlag/AnyClaw_Tools/releases");
+        bool same = strcmp(tag, kCurrentVersion) == 0;
+        ui_log("[Update] AnyClaw current=%s latest=%s", kCurrentVersion, tag);
+        if (!same) {
+            ui_log("[Update] New version available, opening release page");
+            ShellExecuteA(nullptr, "open", html_url, nullptr, nullptr, SW_SHOWNORMAL);
+        } else {
+            ui_log("[Update] Already latest version");
+        }
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* l_app_upd = lv_label_create(btn_app_update);
+    lv_label_set_text(l_app_upd, "Check AnyClaw Updates");
+    lv_obj_set_style_text_font(l_app_upd, CJK_FONT, 0);
+    lv_obj_center(l_app_upd);
+
+    lv_obj_t* btn_app_download = lv_button_create(tab);
+    lv_obj_set_size(btn_app_download, LV_PCT(100), 36);
+    lv_obj_set_style_bg_color(btn_app_download, lv_color_make(70, 125, 95), 0);
+    lv_obj_set_style_radius(btn_app_download, 6, 0);
+    lv_obj_add_event_cb(btn_app_download, [](lv_event_t* e) {
+        (void)e;
+        static const char* kApi = "https://api.github.com/repos/IwanFlag/AnyClaw_Tools/releases/latest";
+        char response[32768] = {0};
+        int result = http_get(kApi, response, sizeof(response), 10);
+        if (result != 200) {
+            ui_log("[Update] Download link query failed (http=%d), opening releases page", result);
+            ShellExecuteA(nullptr, "open", "https://github.com/IwanFlag/AnyClaw_Tools/releases", nullptr, nullptr, SW_SHOWNORMAL);
+            return;
+        }
+        char asset_url[1024] = {0};
+        json_extract_string(response, "browser_download_url", asset_url, sizeof(asset_url));
+        if (!asset_url[0]) {
+            char html_url[512] = {0};
+            json_extract_string(response, "html_url", html_url, sizeof(html_url));
+            if (!html_url[0]) snprintf(html_url, sizeof(html_url), "%s", "https://github.com/IwanFlag/AnyClaw_Tools/releases");
+            ui_log("[Update] No direct asset URL found, opening release page");
+            ShellExecuteA(nullptr, "open", html_url, nullptr, nullptr, SW_SHOWNORMAL);
+            return;
+        }
+        ui_log("[Update] Opening latest asset URL");
+        ShellExecuteA(nullptr, "open", asset_url, nullptr, nullptr, SW_SHOWNORMAL);
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* l_app_dl = lv_label_create(btn_app_download);
+    lv_label_set_text(l_app_dl, "Download Latest AnyClaw Asset");
+    lv_obj_set_style_text_font(l_app_dl, CJK_FONT, 0);
+    lv_obj_center(l_app_dl);
 
     /* P2-30: Skill version check button */
     lv_obj_t* btn_ver_check = lv_button_create(tab);
@@ -2455,6 +3081,9 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_t* tab_perm = lv_tabview_add_tab(settings_tabs, "Permissions");
     lv_obj_t* tab_model = lv_tabview_add_tab(settings_tabs, "Model");
     lv_obj_t* tab_log = lv_tabview_add_tab(settings_tabs, tr("日志", "Log"));
+    lv_obj_t* tab_ff = lv_tabview_add_tab(settings_tabs, tr("开关", "Feature"));
+    lv_obj_t* tab_trace = lv_tabview_add_tab(settings_tabs, tr("追踪", "Tracing"));
+    lv_obj_t* tab_kb = lv_tabview_add_tab(settings_tabs, tr("知识库", "KB"));
     lv_obj_t* tab_about = lv_tabview_add_tab(settings_tabs, "About");
 
     /* Build each tab */
@@ -2462,6 +3091,9 @@ void ui_settings_init(lv_obj_t* parent) {
     build_permissions_tab(tab_perm);
     build_model_tab(tab_model);
     build_log_tab(tab_log);
+    build_feature_tab(tab_ff);
+    build_tracing_tab(tab_trace);
+    build_kb_tab(tab_kb);
     build_about_tab(tab_about);
 
     /* Initially hidden */

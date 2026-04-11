@@ -132,6 +132,8 @@ inline int SCALE(int px) { return px; }  /* DPI-aware: no double-scaling */
 /* Model & API Key globals */
 extern char g_selected_model[256];
 extern char g_api_key[256];
+extern bool g_app_auth_email;
+extern bool g_app_auth_calendar;
 
 /* Config persistence */
 void save_theme_config();
@@ -159,6 +161,10 @@ void secure_zero(void* ptr, size_t size);
 /* Session management */
 bool app_abort_session(const char* session_key);  /* Abort/reset specific session */
 bool app_abort_all_sessions();                     /* Reset all sessions */
+bool app_cron_list(char* output, int out_size);
+bool app_cron_run(const char* cron_id, char* output, int out_size);
+bool app_cron_enable(const char* cron_id, bool enable, char* output, int out_size);
+bool app_cron_delete(const char* cron_id, char* output, int out_size);
 
 /* Workspace management (WS-01) */
 std::string workspace_get_root();

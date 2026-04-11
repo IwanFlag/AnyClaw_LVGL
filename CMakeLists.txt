@@ -111,6 +111,7 @@ set(APP_SOURCES
     src/remote_protocol.cpp
     src/remote_tcp_channel.cpp
     src/kb_store.cpp
+    src/output_renderer.cpp
 )
 
 set(APP_FONT_SOURCES
@@ -157,7 +158,7 @@ if(MSVC)
         kernel32 user32 gdi32 winmm imm32 ole32 oleaut32 version uuid
         advapi32 setupapi shell32 dinput8
         dwmapi comctl32 dbghelp ws2_32 comdlg32
-        gdiplus winhttp wininet bcrypt
+        gdiplus winhttp wininet bcrypt iphlpapi
     )
 else()
     target_link_libraries(AnyClaw_LVGL PRIVATE
@@ -165,7 +166,7 @@ else()
         kernel32 user32 gdi32 winmm imm32 ole32 oleaut32 version uuid
         advapi32 setupapi shell32 dinput8
         dwmapi comctl32 dbghelp ws2_32 comdlg32
-        gdiplus winhttp wininet bcrypt
+        gdiplus winhttp wininet bcrypt iphlpapi
         -static-libgcc -static-libstdc++
     )
 endif()

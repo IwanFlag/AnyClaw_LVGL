@@ -25,6 +25,7 @@ struct RemoteTcpChannel::Impl {
     SOCKET sock = INVALID_SOCKET;
     RemoteTcpConfig cfg;
     std::string last_err;
+    std::string last_rx;
     bool wsa_ready = false;
 };
 
@@ -134,6 +135,10 @@ bool RemoteTcpChannel::start(const RemoteTcpConfig& cfg) {
                     Sleep(1000);
                     continue;
                 }
+                {
+                    std::lock_guard<std::mutex> lk(p_->mtx);
+                    p_->last_rx.assign(buf, r);
+                }
             }
 
             int hb = 2;
@@ -165,4 +170,19 @@ std::string RemoteTcpChannel::last_error() const {
     if (!p_) return "";
     std::lock_guard<std::mutex> lk(p_->mtx);
     return p_->last_err;
+}
+
+bool RemoteTcpChannel::send_text_frame(const char* channel, const char* payload) {
+    if (!p_ || !channel || !channel[0] || !payload) return false;
+    if (p_->sock == INVALID_SOCKET) return false;
+    char frame[1024];
+    snprintf(frame, sizeof(frame), "CH:%s|%s\n", channel, payload);
+    int sent = send(p_->sock, frame, (int)strlen(frame), 0);
+    return sent > 0;
+}
+
+std::string RemoteTcpChannel::last_rx_frame() const {
+    if (!p_) return "";
+    std::lock_guard<std::mutex> lk(p_->mtx);
+    return p_->last_rx;
 }

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="100" viewBox="0 0 400 100">
+  <defs>
+    <linearGradient id="bubbleGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2B5C3E"/>
+      <stop offset="100%" stop-color="#1F4A30"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="400" height="100" fill="#0F1117" rx="8"/>
+  <!-- User bubble -->
+  <rect x="56" y="14" width="290" height="56" rx="16" fill="url(#bubbleGrad)" filter="url(#shadow)"/>
+  <!-- Text -->
+  <text x="72" y="38" font-family="sans-serif" font-size="13" fill="#E8ECF4">帮我分析一下这个项目的架构</text>
+  <text x="72" y="56" font-family="sans-serif" font-size="13" fill="#E8ECF4">设计，有哪些可以优化的地方？</text>
+  <!-- Timestamp -->
+  <text x="310" y="82" font-family="sans-serif" font-size="10" fill="#6B7280" text-anchor="end">14:32</text>
+  <!-- Avatar circle -->
+  <circle cx="370" y="0" cy="40" r="16" fill="#6C9FFF"/>
+  <text x="370" y="45" font-family="sans-serif" font-size="14" fill="#fff" text-anchor="middle">🔵</text>
+</svg>

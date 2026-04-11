@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <filesystem>
+#include <process.h>
 
 /* ── Custom models JSON path (relative to exe dir) ── */
 #define CUSTOM_ADD_MODELS_FILE "assets/custom_add_models.json"
@@ -31,10 +33,13 @@ static const char* default_models[] = {
     "liquid/lfm-2.5-1.2b-thinking:free",            /* LiquidAI 推理 */
     "liquid/lfm-2.5-1.2b-instruct:free",            /* LiquidAI 指令 */
     "google/gemma-3n-e4b-it:free",                  /* Google 最新小 */
+    "gemma-local-2b",                               /* llama.cpp local */
+    "gemma-local-9b",                               /* llama.cpp local */
+    "gemma-local-27b",                              /* llama.cpp local */
     "meta-llama/llama-3.2-3b-instruct:free",        /* Meta 最小 */
     nullptr
 };
-static const int default_count = 21;
+static const int default_count = 24;
 
 /* ── Cached model list ──────────────────────────────────────── */
 static char model_cache[MODEL_MAX_COUNT][MODEL_MAX_NAME_LEN];
@@ -469,6 +474,127 @@ bool model_is_custom(int index) {
     for (int i = 0; default_models[i]; i++) {
         if (strcmp(name, default_models[i]) == 0) return false;
     }
+    return true;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ *  Gemma Local (llama.cpp) runtime
+ * ═══════════════════════════════════════════════════════════════ */
+static PROCESS_INFORMATION g_llama_pi = {};
+static char g_llama_model_name[64] = {0};
+static const int GEMMA_LOCAL_PORT = 18800;
+
+static bool file_exists_a(const char* path) {
+    if (!path || !path[0]) return false;
+    DWORD a = GetFileAttributesA(path);
+    return (a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY));
+}
+
+static bool gemma_local_model_file(const char* model_name, char* out, int out_size) {
+    if (!out || out_size <= 0) return false;
+    out[0] = '\0';
+    if (!gemma_local_is_model(model_name)) return false;
+    const char* userprofile = std::getenv("USERPROFILE");
+    if (!userprofile) return false;
+    const char* file_name = "gemma-2-2b-it-q4_k_m.gguf";
+    if (strstr(model_name, "9b")) file_name = "gemma-2-9b-it-q4_k_m.gguf";
+    else if (strstr(model_name, "27b")) file_name = "gemma-2-27b-it-q4_k_m.gguf";
+    snprintf(out, out_size, "%s\\.anyclaw\\models\\gemma\\%s", userprofile, file_name);
+    return true;
+}
+
+static bool gemma_local_find_server_bin(char* out, int out_size) {
+    if (!out || out_size <= 0) return false;
+    out[0] = '\0';
+    const char* userprofile = std::getenv("USERPROFILE");
+    char c1[MAX_PATH] = {0}, c2[MAX_PATH] = {0};
+    if (userprofile) {
+        snprintf(c1, sizeof(c1), "%s\\.anyclaw\\llama\\llama-server.exe", userprofile);
+        snprintf(c2, sizeof(c2), "%s\\.anyclaw\\bin\\llama-server.exe", userprofile);
+    }
+    const char* candidates[] = {
+        c1, c2,
+        "tools\\llama-server.exe",
+        "bundled\\llama\\llama-server.exe",
+        nullptr
+    };
+    for (int i = 0; candidates[i]; i++) {
+        if (file_exists_a(candidates[i])) {
+            snprintf(out, out_size, "%s", candidates[i]);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool gemma_local_is_model(const char* model_name) {
+    return model_name && strstr(model_name, "gemma-local-") == model_name;
+}
+
+bool gemma_local_server_running() {
+    if (!g_llama_pi.hProcess) return false;
+    return WaitForSingleObject(g_llama_pi.hProcess, 0) == WAIT_TIMEOUT;
+}
+
+int gemma_local_server_port() { return GEMMA_LOCAL_PORT; }
+
+void gemma_local_server_stop() {
+    if (!g_llama_pi.hProcess) return;
+    if (gemma_local_server_running()) {
+        TerminateProcess(g_llama_pi.hProcess, 0);
+        WaitForSingleObject(g_llama_pi.hProcess, 2000);
+    }
+    CloseHandle(g_llama_pi.hProcess);
+    CloseHandle(g_llama_pi.hThread);
+    g_llama_pi = {};
+    g_llama_model_name[0] = '\0';
+    LOG_I("GEMMA_LOCAL", "llama-server stopped");
+}
+
+bool gemma_local_server_start(const char* model_name, char* err_out, int err_size) {
+    if (err_out && err_size > 0) err_out[0] = '\0';
+    if (!gemma_local_is_model(model_name)) return false;
+
+    if (gemma_local_server_running() && strcmp(g_llama_model_name, model_name) == 0) {
+        return true;
+    }
+    if (gemma_local_server_running()) {
+        gemma_local_server_stop();
+    }
+
+    char model_path[MAX_PATH] = {0};
+    if (!gemma_local_model_file(model_name, model_path, sizeof(model_path)) || !file_exists_a(model_path)) {
+        if (err_out && err_size > 0) snprintf(err_out, err_size, "Gemma model missing: %s", model_path);
+        return false;
+    }
+
+    char server_bin[MAX_PATH] = {0};
+    if (!gemma_local_find_server_bin(server_bin, sizeof(server_bin))) {
+        if (err_out && err_size > 0) snprintf(err_out, err_size, "llama-server.exe not found");
+        return false;
+    }
+
+    STARTUPINFOA si{};
+    si.cb = sizeof(si);
+    PROCESS_INFORMATION pi{};
+    char cmd[1024] = {0};
+    snprintf(cmd, sizeof(cmd),
+             "\"%s\" -m \"%s\" --host 127.0.0.1 --port %d --ctx-size 4096",
+             server_bin, model_path, GEMMA_LOCAL_PORT);
+    BOOL ok = CreateProcessA(nullptr, cmd, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi);
+    if (!ok) {
+        if (err_out && err_size > 0) snprintf(err_out, err_size, "CreateProcess failed: %lu", GetLastError());
+        return false;
+    }
+    g_llama_pi = pi;
+    snprintf(g_llama_model_name, sizeof(g_llama_model_name), "%s", model_name);
+    Sleep(1000);
+    if (!gemma_local_server_running()) {
+        if (err_out && err_size > 0) snprintf(err_out, err_size, "llama-server exited immediately");
+        gemma_local_server_stop();
+        return false;
+    }
+    LOG_I("GEMMA_LOCAL", "llama-server started model=%s port=%d", model_name, GEMMA_LOCAL_PORT);
     return true;
 }
 

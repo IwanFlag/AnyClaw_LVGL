@@ -7,7 +7,7 @@ REM Usage: run this file from cmd/powershell
 REM =============================================================
 
 for %%I in ("%~dp0..\..") do set "PROJECT_DIR=%%~fI"
-set "BUILD_DIR=%PROJECT_DIR%\out\windows"
+set "BUILD_DIR=%PROJECT_DIR%\build\windows\out"
 set "CMAKE_BIN=cmake"
 set "GENERATOR="
 set "GEN_ARGS="

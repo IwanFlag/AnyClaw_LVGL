@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="950" height="520" viewBox="0 0 950 520">
+  <defs>
+    <style>
+      text{font-family:'Inter','Segoe UI',sans-serif;fill:#E8ECF4}
+      .t2{fill:#8B92A8} .t3{fill:#6B7280} .accent{fill:#3DD68C} .info{fill:#6C9FFF}
+    </style>
+  </defs>
+  <rect width="950" height="520" rx="12" fill="#0F1117"/>
+  <!-- Tab Bar -->
+  <rect x="0" y="0" width="950" height="44" rx="12" fill="#13151E"/>
+  <rect x="0" y="32" width="950" height="12" fill="#13151E"/>
+  <text x="30" y="28" font-size="13" fill="#8B92A8">General</text>
+  <text x="100" y="28" font-size="13" fill="#8B92A8">Permissions</text>
+  <text x="200" y="28" font-size="13" fill="#8B92A8">Model</text>
+  <text x="275" y="28" font-size="13" fill="#8B92A8">Feature</text>
+  <text x="355" y="28" font-size="13" fill="#8B92A8">Tracing</text>
+  <text x="435" y="28" font-size="13" fill="#8B92A8">Log</text>
+  <text x="485" y="28" font-size="13" fill="#8B92A8">KB</text>
+  <text x="525" y="28" font-size="13" font-weight="600" class="accent">About</text>
+  <rect x="521" y="40" width="44" height="2" rx="1" fill="#3DD68C"/>
+  <line x1="0" y1="44" x2="950" y2="44" stroke="#1E2230" stroke-width="1"/>
+
+  <!-- Brand -->
+  <text x="420" y="110" font-size="64">🧄</text>
+  <text y="155" font-size="28" font-weight="700" text-anchor="middle" x="475">AnyClaw</text>
+  <text x="475" y="180" font-size="16" class="t2" text-anchor="middle">v2.2.1</text>
+
+  <!-- Tech Stack -->
+  <rect x="280" y="200" width="390" height="48" rx="8" fill="#1A1D27"/>
+  <text x="296" y="216" font-size="11" class="t2">Technology Stack</text>
+  <text x="296" y="236" font-size="13">SDL2  •  LVGL  •  OpenClaw</text>
+
+  <!-- Build Info -->
+  <rect x="24" y="264" width="902" height="100" rx="8" fill="#1A1D27"/>
+  <text x="40" y="288" font-size="13" font-weight="600">Build Information</text>
+  <text x="40" y="312" font-size="12" class="t2">Branch:</text>
+  <text x="120" y="312" font-size="12" font-family="monospace">main</text>
+  <text x="40" y="336" font-size="12" class="t2">Commit:</text>
+  <text x="120" y="336" font-size="12" font-family="monospace">a3f7c2e</text>
+  <text x="400" y="312" font-size="12" class="t2">Build Date:</text>
+  <text x="500" y="312" font-size="12">2026-04-10 14:32 UTC</text>
+  <text x="400" y="336" font-size="12" class="t2">Platform:</text>
+  <text x="500" y="336" font-size="12">Linux x86_64</text>
+
+  <!-- GitHub -->
+  <rect x="24" y="380" width="902" height="48" rx="8" fill="#1A1D27"/>
+  <text x="40" y="408" font-size="12" class="t2">GitHub:</text>
+  <text x="120" y="408" font-size="12" class="info">github.com/anyclaw/gateway</text>
+
+  <!-- License -->
+  <rect x="24" y="444" width="902" height="48" rx="8" fill="#1A1D27"/>
+  <text x="40" y="472" font-size="12" class="t2">License:</text>
+  <rect x="120" y="458" width="90" height="20" rx="10" fill="#3DD68C20"/>
+  <text x="130" y="473" font-size="11" class="accent">Apache 2.0</text>
+</svg>

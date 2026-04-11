@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap');
+  t{font-family:'Noto Sans SC','SF Pro Display','PingFang SC',sans-serif}
+  .t{fill:#2D1B14;font-weight:700}.t2{fill:#2D1B14;font-weight:600}
+  .s{fill:#8B7355;font-size:12px}.s2{fill:#C4A882;font-size:11px}
+  .l{fill:#2D1B14;font-size:14px}.l2{fill:#2D1B14;font-size:13px}
+  .a{fill:#FF7F50}.a2{fill:#FFB347}.p{fill:#FF6B8A}
+  .g{fill:#7ECFB3}.lv{fill:#B8A9E8}
+  .w{fill:#FFFFFF}.dim{fill:#C4A882}
+</style>
+<defs>
+  <filter id="shadow" x="-8%" y="-8%" width="116%" height="120%">
+    <feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#D4A574" flood-opacity="0.15"/>
+  </filter>
+  <filter id="shadow2" x="-5%" y="-5%" width="110%" height="115%">
+    <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#D4A574" flood-opacity="0.12"/>
+  </filter>
+  <linearGradient id="accentGrad" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#FF7F50"/><stop offset="100%" stop-color="#FFB347"/>
+  </linearGradient>
+  <linearGradient id="peachGrad" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#FFF8F3"/><stop offset="100%" stop-color="#FFE8D6"/>
+  </linearGradient>
+  <linearGradient id="cardGrad" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#FFFFFF"/><stop offset="100%" stop-color="#FFF8F3"/>
+  </linearGradient>
+  <linearGradient id="pinkGrad" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#FF6B8A"/><stop offset="100%" stop-color="#FFB347"/>
+  </linearGradient>
+  <linearGradient id="mintGrad" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#7ECFB3"/><stop offset="100%" stop-color="#B8E8D0"/>
+  </linearGradient>
+</defs>
+<rect width="900" height="600" fill="#FFF8F3"/>
+
+<rect width="900" height="600" fill="url(#peachGrad)"/>
+<rect x="200" y="60" width="500" height="480" rx="28" fill="#FFFFFF" filter="url(#shadow2)" stroke="#F0E0D0" stroke-width="1"/>
+<rect x="270" y="95" width="30" height="30" rx="15" fill="#FF7F50"/><text x="285.0" y="114.0" text-anchor="middle" fill="#FFF" font-size="11">●</text><line x1="305" y1="110" x2="525" y2="110" stroke="#FF7F50" stroke-width="2"/>
+<rect x="535" y="95" width="30" height="30" rx="15" fill="#FF7F50"/><text x="550.0" y="114.0" text-anchor="middle" fill="#FFF" font-size="11">●</text><line x1="570" y1="110" x2="595" y2="110" stroke="#F0E0D0" stroke-width="2" stroke-dasharray="8,4"/>
+<text x="605" y="115" text-anchor="end" class="s2">Step 4/6</text>
+
+<text x="450" y="160" text-anchor="middle" class="t" font-size="22">本地模型 (可选) 🧠</text>
+<text x="450" y="185" text-anchor="middle" class="s">离线也能用，隐私更安全</text>
+
+<!-- 开关 -->
+<text x="280" y="215" text-anchor="start" class="l">启用 Gemma 本地推理</text>
+<!-- Switch ON -->
+<rect x="560" y="205" width="48" height="26" rx="13" fill="#FF7F50"/>
+<circle cx="578" cy="218" r="10" fill="white"/>
+
+<!-- 选项卡片 -->
+<rect x="260" y="240" width="380" height="100" rx="16" fill="#FFFFFF" filter="url(#shadow2)" stroke="#F0E0D0" stroke-width="1"/>
+<text x="285" y="270" text-anchor="start" class="l">☑</text><text x="310" y="270" text-anchor="start" class="l2">Gemma 3 E4B</text><rect x="520" y="258" width="100" height="24" rx="12" fill="#FFF1E8"/><text x="570.0" y="274.0" text-anchor="middle" class="#8B7355" font-size="11">入门 · 8GB</text>
+<text x="285" y="310" text-anchor="start" class="dim">☐</text><text x="310" y="310" text-anchor="start" class="dim">Gemma 3 26B MoE</text><rect x="520" y="298" width="110" height="24" rx="12" fill="#FFF1E8"/><text x="575.0" y="314.0" text-anchor="middle" class="#C4A882" font-size="11">中档 · 16GB</text>
+
+<!-- 下载进度条 -->
+<rect x="260" y="360" width="380" height="10" rx="5" fill="#FFF1E8"/><rect x="260" y="360" width="240" height="10" rx="5" fill="url(#accentGrad)"/>
+<text x="280" y="390" text-anchor="start" class="s">62% · 1.2GB / 2.0GB</text>
+<text x="280" y="410" text-anchor="start" class="s2">来源: HuggingFace Mirror</text>
+
+<line x1="250" y1="470" x2="650" y2="470" stroke="#F0E0D0" stroke-width="1"/>
+<rect x="250" y="485" width="120" height="38" rx="20" fill="#FFF1E8" stroke="#F0E0D0" stroke-width="1"/><text x="310.0" y="509.0" text-anchor="middle" class="l2" font-size="13">退出向导 👋</text>
+<rect x="410" y="485" width="100" height="38" rx="19" fill="url(#mintGrad)"/><text x="460.0" y="509.0" text-anchor="middle" fill="#2D1B14" font-size="13">← Back</text>
+<rect x="520" y="485" width="120" height="38" rx="19" fill="url(#accentGrad)"/><text x="580.0" y="509.0" text-anchor="middle" class="w" font-size="13">Skip ⏭</text>
+
+<text x="180" y="90" text-anchor="middle" font-size="14">✨</text>
+
+</svg>

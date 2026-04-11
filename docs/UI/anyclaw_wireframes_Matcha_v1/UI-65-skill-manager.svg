@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="620" height="420" viewBox="0 0 620 420">
+  <defs>
+    <style>
+      .bg { fill: #0F1117; }
+      .panel { fill: #1A1D27; }
+      .raised { fill: #1E2230; }
+      .surface { fill: #13151E; }
+      .text { fill: #E8ECF4; font-family: 'Segoe UI', sans-serif; font-size: 14px; }
+      .text2 { fill: #8B92A8; font-family: 'Segoe UI', sans-serif; font-size: 12px; }
+      .text3 { fill: #6B7280; font-family: 'Segoe UI', sans-serif; font-size: 11px; }
+      .title { fill: #E8ECF4; font-family: 'Segoe UI', sans-serif; font-size: 16px; font-weight: 600; }
+      .accent { fill: #3DD68C; }
+      .info { fill: #6C9FFF; }
+      .danger { fill: #FF6B6B; }
+    </style>
+    <linearGradient id="btnAccent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3DD68C"/>
+      <stop offset="100%" stop-color="#2BB876"/>
+    </linearGradient>
+    <linearGradient id="switchOn" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3DD68C"/>
+      <stop offset="100%" stop-color="#2BB876"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect class="bg" width="620" height="420" rx="12"/>
+  <!-- Header -->
+  <text class="title" x="20" y="36">Skill 管理</text>
+  <rect x="480" y="18" width="120" height="30" rx="6" fill="url(#btnAccent)"/>
+  <text fill="#0F1117" font-family="Segoe UI, sans-serif" font-size="12px" font-weight="600" x="495" y="38">🏪 ClawHub 浏览</text>
+  <!-- Status -->
+  <text class="text2" x="20" y="66">已安装 <tspan fill="#3DD68C" font-weight="600">4</tspan> 个 Skill</text>
+  <!-- Skill 1 - Active -->
+  <rect class="panel" x="20" y="80" width="580" height="70" rx="10"/>
+  <text class="text" x="36" y="104">📊 chart-image</text>
+  <rect x="160" y="92" width="48" height="18" rx="9" fill="#13151E" stroke="#3DD68C" stroke-width="1"/>
+  <text fill="#3DD68C" font-family="Segoe UI, sans-serif" font-size="10px" x="168" y="105">v1.2.0</text>
+  <text class="text2" x="36" y="124">生成发布级图表图片，支持折线/柱状/饼图等多种类型</text>
+  <text class="text3" x="36" y="140">已安装 · 最后使用: 2 小时前</text>
+  <!-- Switch ON -->
+  <rect x="530" y="100" width="44" height="24" rx="12" fill="url(#switchOn)"/>
+  <circle cx="560" cy="112" r="10" fill="#E8ECF4"/>
+  <!-- Skill 2 - Active -->
+  <rect class="panel" x="20" y="160" width="580" height="70" rx="10"/>
+  <text class="text" x="36" y="184">✍️ writing-assistant</text>
+  <rect x="220" y="172" width="48" height="18" rx="9" fill="#13151E" stroke="#3DD68C" stroke-width="1"/>
+  <text fill="#3DD68C" font-family="Segoe UI, sans-serif" font-size="10px" x="228" y="185">v2.0.1</text>
+  <text class="text2" x="36" y="204">AI 驱动的写作团队，管理专业写作工具链</text>
+  <text class="text3" x="36" y="220">已安装 · 最后使用: 1 天前</text>
+  <!-- Switch ON -->
+  <rect x="530" y="180" width="44" height="24" rx="12" fill="url(#switchOn)"/>
+  <circle cx="560" cy="192" r="10" fill="#E8ECF4"/>
+  <!-- Skill 3 - Disabled -->
+  <rect class="panel" x="20" y="240" width="580" height="70" rx="10" opacity="0.6"/>
+  <text class="text" x="36" y="264" fill="#8B92A8">🎬 video-frames</text>
+  <rect x="170" y="252" width="48" height="18" rx="9" fill="#13151E" stroke="#6B7280" stroke-width="1"/>
+  <text fill="#6B7280" font-family="Segoe UI, sans-serif" font-size="10px" x="178" y="265">v1.0.0</text>
+  <text class="text3" x="36" y="284">从视频中提取帧或短片段</text>
+  <text class="text3" x="36" y="300">已禁用</text>
+  <!-- Switch OFF -->
+  <rect x="530" y="260" width="44" height="24" rx="12" fill="#2A2D3A"/>
+  <circle cx="544" cy="272" r="10" fill="#6B7280"/>
+  <!-- Skill 4 - Active -->
+  <rect class="panel" x="20" y="320" width="580" height="70" rx="10"/>
+  <text class="text" x="36" y="344">🌤️ weather</text>
+  <rect x="138" y="332" width="48" height="18" rx="9" fill="#13151E" stroke="#3DD68C" stroke-width="1"/>
+  <text fill="#3DD68C" font-family="Segoe UI, sans-serif" font-size="10px" x="146" y="345">v1.1.0</text>
+  <text class="text2" x="36" y="364">通过 wttr.in 或 Open-Meteo 获取天气和预报</text>
+  <text class="text3" x="36" y="380">已安装 · 最后使用: 3 天前</text>
+  <!-- Switch ON -->
+  <rect x="530" y="340" width="44" height="24" rx="12" fill="url(#switchOn)"/>
+  <circle cx="560" cy="352" r="10" fill="#E8ECF4"/>
+</svg>

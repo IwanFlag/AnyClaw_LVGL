@@ -34,4 +34,7 @@ void license_init();
 /* Get human-readable remaining time string (e.g., "11.5h remaining") */
 void license_get_remaining_str(char* buf, int buf_size);
 
+/* Get primary machine id (MAC-like string) for HW key flow. */
+bool license_get_machine_id(char* buf, int buf_size);
+
 #endif /* LICENSE_H */
