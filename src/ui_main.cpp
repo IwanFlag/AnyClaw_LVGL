@@ -2024,7 +2024,10 @@ static void attachment_collect_files(const std::string& root,
             continue;
         }
         if (it->is_regular_file(ec) && !ec) {
-            out.push_back(it->path().string());
+            std::string fp = it->path().string();
+            if (permissions().is_path_allowed(fp.c_str(), false)) {
+                out.push_back(fp);
+            }
         }
         ++it;
     }
@@ -2058,6 +2061,10 @@ static void submit_prompt_to_chat(const char* text) {
                 for (const auto& fp : files) {
                     if (take >= kMaxAttachItems) break;
                     if (!seen.insert(fp).second) continue;
+                    if (!permissions().is_path_allowed(fp.c_str(), false)) {
+                        att += "  - " + fp + " (skipped: permission denied)\n";
+                        continue;
+                    }
                     std::error_code fec;
                     uint64_t sz = (uint64_t)std::filesystem::file_size(fp, fec);
                     if (fec) continue;
@@ -2076,6 +2083,10 @@ static void submit_prompt_to_chat(const char* text) {
             } else {
                 const std::string fp = a.path;
                 if (!seen.insert(fp).second) continue;
+                if (!permissions().is_path_allowed(fp.c_str(), false)) {
+                    att += "- " + fp + " [skipped: permission denied]\n";
+                    continue;
+                }
                 std::error_code fec;
                 uint64_t sz = (uint64_t)std::filesystem::file_size(fp, fec);
                 if (fec) sz = 0;
