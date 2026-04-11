@@ -1017,8 +1017,34 @@ static bool install_nodejs_if_missing(char* output, int out_size) {
             continue;
         }
         ui_progress_update("Node.js Setup", "Verifying node --version", 90);
-        /* Refresh PATH so newly installed node is found */
-        exec_cmd("set PATH=%PATH%", output, sizeof(output), 3000);
+        /* FIX: Child processes inherit parent env, can't see PATH updated by msiexec.
+         * Check standard Node.js install dirs directly, bypassing stale PATH. */
+        {
+            std::string prog_files = std::getenv("PROGRAMFILES") ? std::getenv("PROGRAMFILES") : "";
+            std::string local_app  = std::getenv("LOCALAPPDATA") ? std::getenv("LOCALAPPDATA") : "";
+            std::string candidates[3];
+            int nc = 0;
+            if (!prog_files.empty()) candidates[nc++] = prog_files + "\\nodejs\\node.exe";
+            if (!local_app.empty())  candidates[nc++] = local_app  + "\\Programs\\NodeJS\\node.exe";
+            candidates[nc++] = "C:\\Program Files\\nodejs\\node.exe";
+            for (int di = 0; di < nc; di++) {
+                if (GetFileAttributesA(candidates[di].c_str()) != INVALID_FILE_ATTRIBUTES) {
+                    char ver_buf[64] = {0};
+                    std::string ver_cmd = std::string("\"") + candidates[di] + "\" --version";
+                    if (exec_cmd(ver_cmd.c_str(), ver_buf, sizeof(ver_buf), 5000) && ver_buf[0]) {
+                        /* Found — add dir to PATH for subsequent commands */
+                        std::string node_dir = candidates[di];
+                        size_t pos = node_dir.rfind('\\');
+                        if (pos != std::string::npos) node_dir = node_dir.substr(0, pos);
+                        const char* cur = std::getenv("PATH");
+                        if (cur && strstr(cur, node_dir.c_str()) == nullptr) {
+                            _putenv_s("PATH", (node_dir + ";" + cur).c_str());
+                        }
+                        ui_log("[Setup] Node.js found at %s, ver=%s", candidates[di].c_str(), ver_buf);
+                    }
+                }
+            }
+        }
         if (app_check_nodejs(node_ver, sizeof(node_ver))) {
             ui_progress_finish("Node.js Setup", true, "Node.js installed");
             return true;
@@ -1078,6 +1104,26 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
     if (!install_nodejs_if_missing(output, out_size)) {
         ui_progress_finish("OpenClaw Setup", false, output);
         return false;
+    }
+
+    /* FIX: Ensure npm global prefix is in PATH for subsequent openclaw commands.
+     * npm install -g installs to the npm prefix dir, which may not be in our stale PATH. */
+    {
+        char npm_prefix[512] = {0};
+        if (exec_cmd("npm prefix -g", npm_prefix, sizeof(npm_prefix), 5000) && npm_prefix[0]) {
+            char* nl = strchr(npm_prefix, '\r');
+            if (nl) *nl = '\0';
+            nl = strchr(npm_prefix, '\n');
+            if (nl) *nl = '\0';
+            if (fs::exists(npm_prefix)) {
+                const char* cur_path = std::getenv("PATH");
+                if (cur_path && strstr(cur_path, npm_prefix) == nullptr) {
+                    std::string new_path = std::string(npm_prefix) + ";" + cur_path;
+                    _putenv_s("PATH", new_path.c_str());
+                    ui_log("[Setup] Added npm global prefix to PATH: %s", npm_prefix);
+                }
+            }
+        }
     }
 
     char cmd[512];
