@@ -1056,6 +1056,10 @@ static lv_obj_t* g_loading_label = nullptr;
 static lv_timer_t* g_loading_timer = nullptr;
 static DWORD g_loading_start_tick = 0;
 static float g_loading_angle = 0.0f;
+static std::mutex g_loading_live_mtx;
+static std::string g_loading_live_step;
+static int g_loading_live_pct = -1;
+static std::atomic<bool> g_loading_startup_done(false);
 
 /* Hide loading overlay */
 static void loading_hide() {
@@ -1068,6 +1072,8 @@ static void loading_timer_cb(lv_timer_t* t) {
     (void)t;
     if (!g_loading_overlay) return;
 
+    DWORD now = GetTickCount();
+
     /* Rotate garlic icon */
     g_loading_angle += 6.0f;  /* 6° per tick = full rotation in ~1s at 16ms interval */
     if (g_loading_angle >= 360.0f) g_loading_angle -= 360.0f;
@@ -1076,35 +1082,51 @@ static void loading_timer_cb(lv_timer_t* t) {
     }
 
     /* Update loading text dots animation */
+    std::string live_step;
+    int live_pct = -1;
+    bool startup_done = g_loading_startup_done.load();
+    {
+        std::lock_guard<std::mutex> lk(g_loading_live_mtx);
+        live_step = g_loading_live_step;
+        live_pct = g_loading_live_pct;
+    }
+    if (startup_done && now - g_loading_start_tick > 700) {
+        loading_hide();
+        return;
+    }
+
     if (g_loading_label) {
         DWORD elapsed = GetTickCount() - g_loading_start_tick;
-        int dots = (int)((elapsed / 500) % 4);
-        char buf[128];
-        const char* phase = "Starting OpenClaw";
-        if (elapsed > 9000) phase = "Checking Gateway status";
-        else if (elapsed > 3000) phase = "Initializing runtime modules";
-        snprintf(buf, sizeof(buf), "%s%.*s\nUI is ready. Finishing background startup.", phase, dots, "...");
+        char buf[192];
+        if (!live_step.empty()) {
+            int pct = (live_pct < 0) ? 0 : live_pct;
+            snprintf(buf, sizeof(buf), "%s (%d%%)\nUI is ready. Finishing background startup.", live_step.c_str(), pct);
+        } else {
+            int dots = (int)((elapsed / 500) % 4);
+            const char* phase = "Starting OpenClaw";
+            if (elapsed > 9000) phase = "Checking Gateway status";
+            else if (elapsed > 3000) phase = "Initializing runtime modules";
+            snprintf(buf, sizeof(buf), "%s%.*s\nUI is ready. Finishing background startup.", phase, dots, "...");
+        }
         lv_label_set_text(g_loading_label, buf);
     }
 
     /* Check status every 2 seconds */
     static DWORD last_check = 0;
-    DWORD now = GetTickCount();
     if (now - last_check < 2000) return;
     last_check = now;
 
-    OpenClawInfo info = app_detect_openclaw();
-    ClawStatus status = app_check_status(info);
-
-    if (status == ClawStatus::Ready || status == ClawStatus::Busy) {
+    char health_buf[96] = {0};
+    bool gateway_ok = (http_get(GATEWAY_HEALTH_URL, health_buf, sizeof(health_buf), 1) == 200);
+    if (gateway_ok) {
         LOG_I("Loading", "OpenClaw ready, hiding overlay");
         loading_hide();
-    } else if (status == ClawStatus::Error || status == ClawStatus::NotInstalled) {
-        /* If error/not installed for >15s, still hide overlay (don't block forever) */
-        if (now - g_loading_start_tick > 15000) {
-            LOG_W("Loading", "OpenClaw not ready after 15s, hiding overlay (status=%d)", (int)status);
-            loading_hide();
-        }
+        return;
+    }
+    /* If still not ready for too long, hide overlay to keep app interactive. */
+    if (now - g_loading_start_tick > 12000) {
+        LOG_W("Loading", "Gateway still offline after 12s, hiding overlay");
+        loading_hide();
     }
 }
 
@@ -1145,6 +1167,12 @@ static void loading_show() {
 
     g_loading_start_tick = GetTickCount();
     g_loading_angle = 0.0f;
+    g_loading_startup_done.store(false);
+    {
+        std::lock_guard<std::mutex> lk(g_loading_live_mtx);
+        g_loading_live_step.clear();
+        g_loading_live_pct = -1;
+    }
 
     /* Start rotation + status check timer (60fps) */
     if (g_loading_timer) lv_timer_del(g_loading_timer);
@@ -1547,24 +1575,44 @@ static void ui_log_flush_timer_cb(lv_timer_t* t) {
             if (!g_progress_queue.empty()) local.swap(g_progress_queue);
         }
         for (const auto& ev : local) {
-            if (!lp_progress_panel || !lp_progress_bar) continue;
-            lv_obj_clear_flag(lp_progress_panel, LV_OBJ_FLAG_HIDDEN);
-            if (lp_progress_title) lv_label_set_text_fmt(lp_progress_title, "Task: %s", ev.task[0] ? ev.task : "Long Task");
-            if (lp_progress_step) lv_label_set_text_fmt(lp_progress_step, "Step: %s", ev.step[0] ? ev.step : "Running...");
             int pct = ev.percent;
             if (pct < 0) pct = 0;
             if (pct > 100) pct = 100;
-            lv_bar_set_value(lp_progress_bar, pct, LV_ANIM_ON);
-            if (lp_progress_result) {
-                if (ev.type == 1) {
-                    lv_label_set_text(lp_progress_result, ev.result[0] ? ev.result : (ev.ok ? "Done" : "Failed"));
-                    lv_obj_set_style_text_color(lp_progress_result, ev.ok ? lv_color_make(120, 220, 150) : lv_color_make(255, 120, 120), 0);
-                } else {
-                    lv_label_set_text(lp_progress_result, "");
+            if (lp_progress_panel && lp_progress_bar) {
+                lv_obj_clear_flag(lp_progress_panel, LV_OBJ_FLAG_HIDDEN);
+                if (lp_progress_title) lv_label_set_text_fmt(lp_progress_title, "Task: %s", ev.task[0] ? ev.task : "Long Task");
+                if (lp_progress_step) lv_label_set_text_fmt(lp_progress_step, "Step: %s", ev.step[0] ? ev.step : "Running...");
+                lv_bar_set_value(lp_progress_bar, pct, LV_ANIM_ON);
+                if (lp_progress_result) {
+                    if (ev.type == 1) {
+                        lv_label_set_text(lp_progress_result, ev.result[0] ? ev.result : (ev.ok ? "Done" : "Failed"));
+                        lv_obj_set_style_text_color(lp_progress_result, ev.ok ? lv_color_make(120, 220, 150) : lv_color_make(255, 120, 120), 0);
+                    } else {
+                        lv_label_set_text(lp_progress_result, "");
+                    }
                 }
             }
 
             wizard_progress_mirror_from_event(ev, pct);
+
+            if (strstr(ev.task, "Startup")) {
+                {
+                    std::lock_guard<std::mutex> lk(g_loading_live_mtx);
+                    if (ev.type == 1) {
+                        g_loading_live_step = ev.result[0] ? ev.result : "Startup complete";
+                        g_loading_live_pct = 100;
+                    } else {
+                        g_loading_live_step = ev.step[0] ? ev.step : "Background startup";
+                        g_loading_live_pct = pct;
+                    }
+                }
+                if (status_label && ev.step[0]) {
+                    lv_label_set_text(status_label, ev.step);
+                }
+                if (ev.type == 1) {
+                    g_loading_startup_done.store(true);
+                }
+            }
 
             if (mode_boot_progress_panel && strstr(ev.task, "Boot Check")) {
                 lv_obj_clear_flag(mode_boot_progress_panel, LV_OBJ_FLAG_HIDDEN);

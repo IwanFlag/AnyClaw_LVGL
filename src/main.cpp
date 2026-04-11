@@ -627,6 +627,7 @@ int main(int argc, char* argv[]) {
     /* Defer heavy startup work to worker thread so UI stays responsive. */
     lv_timer_create([](lv_timer_t* t) {
         std::thread([]() {
+            ui_progress_begin("Startup", "Gateway preflight", 5);
             /* OpenClaw single-instance + auto-start */
             {
                 int node_count = app_count_node_processes();
@@ -634,25 +635,33 @@ int main(int argc, char* argv[]) {
                 bool gateway_alive = (http_get(GATEWAY_HEALTH_URL, health_buf, sizeof(health_buf), 1) == 200);
                 if (gateway_alive) {
                     LOG_I("MAIN", "Gateway already healthy, skipping startup (node_count=%d)", node_count);
+                    ui_progress_update("Startup", "Gateway already healthy", 22);
                 } else {
                     LOG_I("MAIN", "Gateway offline, trying auto-start (node_count=%d)", node_count);
+                    ui_progress_update("Startup", "Gateway offline, starting...", 18);
                     if (app_start_gateway()) {
                         LOG_I("MAIN", "Gateway started successfully");
+                        ui_progress_update("Startup", "Gateway startup complete", 30);
                     } else {
                         LOG_W("MAIN", "Failed to auto-start Gateway (skip aggressive node cleanup)");
+                        ui_progress_update("Startup", "Gateway start failed (continuing)", 30);
                     }
                 }
             }
 
             health_start();
+            ui_progress_update("Startup", "Health monitor online", 38);
             tray_set_state(TrayState::Yellow);
             tray_balloon("AnyClaw", "已启动，正在检测 OpenClaw 状态...", 3000);
 
+            ui_progress_update("Startup", "Loading license", 46);
             license_init();
+            ui_progress_update("Startup", "License loaded", 56);
 
             {
                 std::string ws_root = workspace_get_root();
                 if (!ws_root.empty()) {
+                    ui_progress_update("Startup", "Workspace init", 66);
                     workspace_init(ws_root.c_str());
                     LOG_I("MAIN", "Workspace: %s", ws_root.c_str());
 
@@ -665,19 +674,25 @@ int main(int argc, char* argv[]) {
                     if (!loaded) {
                         permissions().save();
                     }
+                    ui_progress_update("Startup", "Permissions ready", 80);
                     workspace_sync_managed_sections();
                     workspace_sync_runtime_config_from_permissions();
                     feature_flags_init();
+                    ui_progress_update("Startup", "Feature flags loaded", 90);
+                } else {
+                    ui_progress_update("Startup", "Workspace not configured", 72);
                 }
             }
 
             if (!license_is_valid()) {
                 LOG_W("MAIN", "License expired, dialog will be shown on UI thread");
                 s_need_license_dialog.store(true);
+                ui_progress_finish("Startup", false, "Startup ready (license dialog required)");
             } else {
                 char remain[64];
                 license_get_remaining_str(remain, sizeof(remain));
                 LOG_I("MAIN", "License valid: %s", remain);
+                ui_progress_finish("Startup", true, "Background startup ready");
             }
         }).detach();
         lv_timer_del(t);
