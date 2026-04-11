@@ -5937,6 +5937,55 @@ static std::string build_boot_check_detail_text(const std::vector<BootCheckResul
     return text;
 }
 
+static std::string build_boot_check_live_text(const std::vector<BootCheckResult>& done, int running_idx) {
+    const char* kNames[9] = {
+        "Node.js", "npm", "OpenClaw", "Gateway Port", "Config Directory",
+        "Workspace", "Disk Space", "Network", "SDL2.dll"
+    };
+    std::string text;
+    text.reserve(2200);
+    for (int i = 0; i < 9; ++i) {
+        text += "• ";
+        text += kNames[i];
+        text += "  ";
+        if (i < (int)done.size()) {
+            const auto& r = done[(size_t)i];
+            if (r.status == BootCheckStatus::Ok) text += "✓ ";
+            else if (r.status == BootCheckStatus::Warn) text += "⚠ ";
+            else text += "✗ ";
+            text += r.message;
+            if (r.fix_applied) text += " [auto-fixed]";
+        } else if (i == running_idx) {
+            text += "checking...";
+        } else {
+            text += "waiting...";
+        }
+        text += "\n";
+    }
+    return text;
+}
+
+static BootCheckResult run_boot_check_by_index(int idx) {
+    switch (idx) {
+        case 0: return check_nodejs_version();
+        case 1: return check_npm();
+        case 2: return check_openclaw();
+        case 3: return check_gateway_port();
+        case 4: return check_config_dir();
+        case 5: return check_workspace();
+        case 6: return check_disk_space();
+        case 7: return check_network();
+        case 8: return check_sdl2dll();
+        default: {
+            BootCheckResult r;
+            r.check_name = "Unknown";
+            r.status = BootCheckStatus::Error;
+            r.message = "Invalid check index";
+            return r;
+        }
+    }
+}
+
 static void work_boot_check_cb(lv_event_t* e) {
     (void)e;
     if (g_boot_check_running.exchange(true)) {
@@ -5953,7 +6002,35 @@ static void work_boot_check_cb(lv_event_t* e) {
         TraceSpan span("boot_check_run_and_fix", "work_mode");
         ui_progress_begin("Boot Check", "Running environment checks", 5);
         BootCheckManager mgr;
-        auto results = mgr.run_and_fix();
+        std::vector<BootCheckResult> results;
+        results.reserve(9);
+        const char* check_names[9] = {
+            "Node.js", "npm", "OpenClaw", "Gateway Port", "Config Directory",
+            "Workspace", "Disk Space", "Network", "SDL2.dll"
+        };
+        for (int i = 0; i < 9; ++i) {
+            char step[96] = {0};
+            snprintf(step, sizeof(step), "Checking %s (%d/9)", check_names[i], i + 1);
+            int pct = 5 + (i * 80) / 9;
+            ui_progress_update("Boot Check", step, pct);
+            {
+                std::lock_guard<std::mutex> lk(g_boot_detail_mtx);
+                g_boot_detail_text = build_boot_check_live_text(results, i);
+            }
+            g_boot_detail_dirty.store(true);
+
+            BootCheckResult r = run_boot_check_by_index(i);
+            if (r.status != BootCheckStatus::Ok && r.auto_fix_available) {
+                mgr.auto_fix(r);
+            }
+            results.push_back(r);
+
+            {
+                std::lock_guard<std::mutex> lk(g_boot_detail_mtx);
+                g_boot_detail_text = build_boot_check_live_text(results, -1);
+            }
+            g_boot_detail_dirty.store(true);
+        }
         work_boot_export_report(results);
         int ok = 0;
         int warn = 0;
