@@ -16,24 +16,24 @@ static PermValue default_value(PermKey key) {
     switch (key) {
         case PermKey::FS_READ_WORKSPACE:   return PermValue::Allow;
         case PermKey::FS_WRITE_WORKSPACE:  return PermValue::Allow;
-        case PermKey::FS_READ_EXTERNAL:    return PermValue::Ask;
-        case PermKey::FS_WRITE_EXTERNAL:   return PermValue::Ask;
-        case PermKey::EXEC_SHELL:          return PermValue::Ask;
-        case PermKey::EXEC_INSTALL:        return PermValue::Deny;
-        case PermKey::EXEC_DELETE:         return PermValue::Deny;
+        case PermKey::FS_READ_EXTERNAL:    return PermValue::Allow;
+        case PermKey::FS_WRITE_EXTERNAL:   return PermValue::Allow;
+        case PermKey::EXEC_SHELL:          return PermValue::Allow;
+        case PermKey::EXEC_INSTALL:        return PermValue::Allow;
+        case PermKey::EXEC_DELETE:         return PermValue::Allow;
         case PermKey::NET_OUTBOUND:        return PermValue::Allow;
-        case PermKey::NET_INBOUND:         return PermValue::Ask;
-        case PermKey::NET_INTRANET:        return PermValue::Ask;
-        case PermKey::DEVICE_CAMERA:       return PermValue::Ask;
-        case PermKey::DEVICE_MIC:          return PermValue::Ask;
-        case PermKey::DEVICE_SCREEN:       return PermValue::Ask;
-        case PermKey::DEVICE_USB_STORAGE:  return PermValue::Deny;
-        case PermKey::DEVICE_REMOTE_NODE:  return PermValue::Ask;
-        case PermKey::DEVICE_NEW_DEVICE:   return PermValue::Ask;
+        case PermKey::NET_INBOUND:         return PermValue::Allow;
+        case PermKey::NET_INTRANET:        return PermValue::Allow;
+        case PermKey::DEVICE_CAMERA:       return PermValue::Allow;
+        case PermKey::DEVICE_MIC:          return PermValue::Allow;
+        case PermKey::DEVICE_SCREEN:       return PermValue::Allow;
+        case PermKey::DEVICE_USB_STORAGE:  return PermValue::Allow;
+        case PermKey::DEVICE_REMOTE_NODE:  return PermValue::Allow;
+        case PermKey::DEVICE_NEW_DEVICE:   return PermValue::Allow;
         case PermKey::CLIPBOARD_READ:      return PermValue::Allow;
         case PermKey::CLIPBOARD_WRITE:     return PermValue::Allow;
-        case PermKey::SYSTEM_MODIFY:       return PermValue::Deny;
-        default: return PermValue::Deny;
+        case PermKey::SYSTEM_MODIFY:       return PermValue::Allow;
+        default: return PermValue::Allow;
     }
 }
 
@@ -213,12 +213,12 @@ bool Permissions::load() {
         }
     }
 
-    /* Migration: v3 baseline uses secure defaults for risky operations. */
-    if (schema < 3) {
+    /* Migration: v4 baseline switches to permissive defaults for local-first flow. */
+    if (schema < 4) {
         for (int i = 0; i < (int)PermKey::COUNT; i++) {
             values_[i] = default_value((PermKey)i);
         }
-        perm_audit_log("perm_migrate", "permission_schema", "upgrade_to_v3_secure_defaults");
+        perm_audit_log("perm_migrate", "permission_schema", "upgrade_to_v4_permissive_defaults");
         save();
     }
 
@@ -253,7 +253,7 @@ bool Permissions::save() const {
 
     f << "{\n"
       << "  \"version\": 1,\n"
-      << "  \"permission_schema\": 3,\n"
+      << "  \"permission_schema\": 4,\n"
       << "  \"workspace_root\": \"" << workspace_root_ << "\",\n"
       << "  \"permissions\": {\n";
 

@@ -563,7 +563,7 @@ int main(int argc, char* argv[]) {
             SDL_SetWindowPosition(g_window, wx, wy);
             LOG_I("MAIN", "Restored window position: (%d, %d) [saved (%d,%d) clamped]", wx, wy, saved_x, saved_y);
         } else {
-            SDL_SetWindowPosition(g_window, 20, (screen_h - win_h) / 2 - 20);
+            SDL_SetWindowPosition(g_window, (screen_w - win_w) / 2, (screen_h - win_h) / 2);
         }
         SDL_RaiseWindow(g_window);
         
@@ -620,73 +620,67 @@ int main(int argc, char* argv[]) {
 
     LOG_I("MAIN", "GUI initialized. System tray active.");
 
-    /* OpenClaw single-instance + auto-start */
-    {
-        int node_count = app_count_node_processes();
-        if (node_count > 0) {
-            LOG_W("MAIN", "Found %d node.exe, cleaning up for single-instance", node_count);
-            app_kill_duplicate_openclaw();
-            Sleep(1000); /* brief pause after kill */
-        }
+    /* Defer heavy startup work so first frame can render quickly. */
+    lv_timer_create([](lv_timer_t* t) {
+        /* OpenClaw single-instance + auto-start */
+        {
+            int node_count = app_count_node_processes();
+            if (node_count > 0) {
+                LOG_W("MAIN", "Found %d node.exe, cleaning up for single-instance", node_count);
+                app_kill_duplicate_openclaw();
+                Sleep(500);
+            }
 
-        /* Auto-start OpenClaw Gateway if not running */
-        if (app_count_node_processes() == 0) {
-            LOG_I("MAIN", "OpenClaw not running, auto-starting Gateway...");
-            if (app_start_gateway()) {
-                LOG_I("MAIN", "Gateway started successfully");
+            if (app_count_node_processes() == 0) {
+                LOG_I("MAIN", "OpenClaw not running, auto-starting Gateway...");
+                if (app_start_gateway()) LOG_I("MAIN", "Gateway started successfully");
+                else LOG_W("MAIN", "Failed to auto-start Gateway");
             } else {
-                LOG_W("MAIN", "Failed to auto-start Gateway");
+                LOG_I("MAIN", "OpenClaw already running, skipping auto-start");
             }
+        }
+
+        health_start();
+        tray_set_state(TrayState::Yellow);
+        tray_balloon("AnyClaw", "已启动，正在检测 OpenClaw 状态...", 3000);
+
+        license_init();
+
+        {
+            std::string ws_root = workspace_get_root();
+            if (!ws_root.empty()) {
+                workspace_init(ws_root.c_str());
+                LOG_I("MAIN", "Workspace: %s", ws_root.c_str());
+
+                if (!workspace_lock_acquire()) {
+                    LOG_W("MAIN", "Workspace lock acquire failed, continuing in read-mostly mode");
+                }
+
+                permissions().set_workspace_root(ws_root.c_str());
+                bool loaded = permissions().load();
+                if (!loaded) {
+                    permissions().save();
+                }
+                workspace_sync_managed_sections();
+                workspace_sync_runtime_config_from_permissions();
+                feature_flags_init();
+            }
+        }
+
+        if (!license_is_valid()) {
+            LOG_W("MAIN", "License expired! Showing activation dialog.");
+            extern void ui_show_license_dialog();
+            lv_timer_create([](lv_timer_t* t2) {
+                ui_show_license_dialog();
+                lv_timer_del(t2);
+            }, 1000, nullptr);
         } else {
-            LOG_I("MAIN", "OpenClaw already running, skipping auto-start");
+            char remain[64];
+            license_get_remaining_str(remain, sizeof(remain));
+            LOG_I("MAIN", "License valid: %s", remain);
         }
-    }
-
-    /* Start health monitoring */
-    health_start();
-    tray_set_state(TrayState::Yellow);  /* Start in checking state */
-    tray_balloon("AnyClaw", "已启动，正在检测 OpenClaw 状态...", 3000);
-
-    /* License check */
-    license_init();
-
-    /* Workspace health check & initialization */
-    {
-        std::string ws_root = workspace_get_root();
-        if (!ws_root.empty()) {
-            workspace_init(ws_root.c_str());
-            LOG_I("MAIN", "Workspace: %s", ws_root.c_str());
-
-            if (!workspace_lock_acquire()) {
-                LOG_W("MAIN", "Workspace lock acquire failed, continuing in read-mostly mode");
-            }
-
-            /* PERM-01: initialize permission boundary with workspace root */
-            permissions().set_workspace_root(ws_root.c_str());
-            bool loaded = permissions().load();
-            if (!loaded) {
-                permissions().save(); /* write defaults on first run */
-            }
-            workspace_sync_managed_sections();
-            workspace_sync_runtime_config_from_permissions();
-
-            /* FLAG-01: Initialize feature flags */
-            feature_flags_init();
-        }
-    }
-    if (!license_is_valid()) {
-        LOG_W("MAIN", "License expired! Showing activation dialog.");
-        /* Show license dialog after a brief delay (let UI render first) */
-        extern void ui_show_license_dialog();
-        lv_timer_create([](lv_timer_t* t) {
-            ui_show_license_dialog();
-            lv_timer_del(t);
-        }, 1000, nullptr);
-    } else {
-        char remain[64];
-        license_get_remaining_str(remain, sizeof(remain));
-        LOG_I("MAIN", "License valid: %s", remain);
-    }
+        lv_timer_del(t);
+    }, 50, nullptr);
 
     /* Register SDL event watch — fires BEFORE LVGL's sdl_event_handler consumes events */
     extern void ui_process_wheel_scroll();
