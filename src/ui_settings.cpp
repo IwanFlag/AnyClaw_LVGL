@@ -523,11 +523,93 @@ static void build_general_tab(lv_obj_t* tab) {
         make_kv_row("Workspace Status", gen_workspace_status);
     }
 
-    /* ── Application Authorization (P2) ── */
+    /* ── Application Authorization (UI-43) ── */
     {
         extern bool g_app_auth_email;
         extern bool g_app_auth_calendar;
         extern void save_theme_config();
+
+        lv_obj_t* auth_title = lv_label_create(tab);
+        lv_label_set_text(auth_title, "Application Authorization");
+        apply_section_label(auth_title);
+
+        auto make_auth_card = [&](const char* icon, const char* name, const char* rec, bool* bound_flag) {
+            lv_obj_t* card = lv_obj_create(tab);
+            lv_obj_set_size(card, LV_PCT(100), LV_SIZE_CONTENT);
+            lv_obj_set_style_bg_color(card, g_colors->input_bg, 0);
+            lv_obj_set_style_border_color(card, g_colors->panel_border, 0);
+            lv_obj_set_style_border_width(card, 1, 0);
+            lv_obj_set_style_radius(card, 10, 0);
+            lv_obj_set_style_pad_all(card, 10, 0);
+            lv_obj_set_style_pad_gap(card, 8, 0);
+            lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+            lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+            lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+
+            lv_obj_t* row_head = lv_obj_create(card);
+            lv_obj_set_size(row_head, LV_PCT(100), LV_SIZE_CONTENT);
+            lv_obj_set_style_bg_opa(row_head, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_width(row_head, 0, 0);
+            lv_obj_set_style_pad_all(row_head, 0, 0);
+            lv_obj_set_style_pad_gap(row_head, 8, 0);
+            lv_obj_set_flex_flow(row_head, LV_FLEX_FLOW_ROW);
+            lv_obj_set_flex_align(row_head, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+            lv_obj_clear_flag(row_head, LV_OBJ_FLAG_SCROLLABLE);
+
+            lv_obj_t* lbl_name = lv_label_create(row_head);
+            lv_label_set_text_fmt(lbl_name, "%s %s", icon, name);
+            lv_obj_set_style_text_font(lbl_name, CJK_FONT, 0);
+            lv_obj_set_style_text_color(lbl_name, g_colors->text, 0);
+
+            lv_obj_t* lbl_rec = lv_label_create(card);
+            lv_label_set_text_fmt(lbl_rec, "推荐交互方式: %s", rec);
+            apply_hint_label(lbl_rec);
+
+            lv_obj_t* row_btn = lv_obj_create(card);
+            lv_obj_set_size(row_btn, LV_PCT(100), LV_SIZE_CONTENT);
+            lv_obj_set_style_bg_opa(row_btn, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_width(row_btn, 0, 0);
+            lv_obj_set_style_pad_all(row_btn, 0, 0);
+            lv_obj_set_style_pad_gap(row_btn, 8, 0);
+            lv_obj_set_flex_flow(row_btn, LV_FLEX_FLOW_ROW);
+            lv_obj_set_flex_align(row_btn, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+            lv_obj_clear_flag(row_btn, LV_OBJ_FLAG_SCROLLABLE);
+
+            lv_obj_t* btn_allow = lv_button_create(row_btn);
+            lv_obj_set_size(btn_allow, SCALE(90), SCALE(30));
+            lv_obj_set_style_bg_color(btn_allow, lv_color_make(60, 130, 220), 0);
+            lv_obj_set_style_radius(btn_allow, 8, 0);
+            lv_obj_t* lbl_allow = lv_label_create(btn_allow);
+            lv_label_set_text(lbl_allow, "授权");
+            lv_obj_set_style_text_font(lbl_allow, CJK_FONT, 0);
+            lv_obj_center(lbl_allow);
+            lv_obj_add_event_cb(btn_allow, [](lv_event_t* e) {
+                bool* f = (bool*)lv_event_get_user_data(e);
+                if (!f) return;
+                *f = true;
+                save_theme_config();
+                ui_log("[Auth] application authorized");
+            }, LV_EVENT_CLICKED, bound_flag);
+
+            lv_obj_t* btn_deny = lv_button_create(row_btn);
+            lv_obj_set_size(btn_deny, SCALE(90), SCALE(30));
+            lv_obj_set_style_bg_color(btn_deny, lv_color_make(170, 80, 80), 0);
+            lv_obj_set_style_radius(btn_deny, 8, 0);
+            lv_obj_t* lbl_deny = lv_label_create(btn_deny);
+            lv_label_set_text(lbl_deny, "拒绝");
+            lv_obj_set_style_text_font(lbl_deny, CJK_FONT, 0);
+            lv_obj_center(lbl_deny);
+            lv_obj_add_event_cb(btn_deny, [](lv_event_t* e) {
+                bool* f = (bool*)lv_event_get_user_data(e);
+                if (!f) return;
+                *f = false;
+                save_theme_config();
+                ui_log("[Auth] application denied");
+            }, LV_EVENT_CLICKED, bound_flag);
+        };
+
+        make_auth_card("📧", "Outlook", "CLI", &g_app_auth_email);
+        make_auth_card("📅", "Calendar", "MCP", &g_app_auth_calendar);
 
         gen_auth_email_sw = lv_switch_create(tab);
         lv_obj_set_size(gen_auth_email_sw, SCALE(50), SCALE(26));
