@@ -1066,6 +1066,8 @@ static int g_loading_live_pct = -1;
 static std::atomic<bool> g_loading_startup_done(false);
 static bool g_loading_hidden_by_user = false;
 static bool g_loading_details_collapsed = false;
+static bool g_loading_fade_active = false;
+static int g_loading_fade_opa = 220;
 
 /* Hide loading overlay */
 static void loading_hide() {
@@ -1098,6 +1100,11 @@ static void loading_toggle_details_cb(lv_event_t* e) {
     loading_apply_layout_mode();
 }
 
+static void loading_start_fade() {
+    if (!g_loading_overlay || g_loading_fade_active) return;
+    g_loading_fade_active = true;
+}
+
 static const char* loading_stage_reset_text() {
     return (g_lang == Lang::CN)
         ? "○ 网关\n○ 许可证\n○ 工作区\n○ 功能开关\n○ 收尾完成"
@@ -1108,6 +1115,16 @@ static const char* loading_stage_reset_text() {
 static void loading_timer_cb(lv_timer_t* t) {
     (void)t;
     if (!g_loading_overlay) return;
+    if (g_loading_fade_active) {
+        g_loading_fade_opa -= 12;
+        if (g_loading_fade_opa < 0) g_loading_fade_opa = 0;
+        lv_obj_set_style_opa(g_loading_overlay, (lv_opa_t)g_loading_fade_opa, 0);
+        if (g_loading_fade_opa <= 0) {
+            g_loading_fade_active = false;
+            loading_hide();
+        }
+        return;
+    }
 
     DWORD now = GetTickCount();
 
@@ -1128,7 +1145,7 @@ static void loading_timer_cb(lv_timer_t* t) {
         live_pct = g_loading_live_pct;
     }
     if (startup_done && now - g_loading_start_tick > 700) {
-        loading_hide();
+        loading_start_fade();
         return;
     }
 
@@ -1201,7 +1218,7 @@ static void loading_timer_cb(lv_timer_t* t) {
     /* UI-thread friendly: avoid network probing here. Worker startup events drive hide timing. */
     if (now - g_loading_start_tick > 12000) {
         LOG_W("Loading", "Startup card timeout after 12s, hiding");
-        loading_hide();
+        loading_start_fade();
     }
 }
 
@@ -1300,6 +1317,8 @@ static void loading_show() {
     g_loading_angle = 0.0f;
     g_loading_hidden_by_user = false;
     g_loading_details_collapsed = false;
+    g_loading_fade_active = false;
+    g_loading_fade_opa = 220;
     g_loading_startup_done.store(false);
     {
         std::lock_guard<std::mutex> lk(g_loading_live_mtx);
@@ -1308,6 +1327,7 @@ static void loading_show() {
     }
     if (g_loading_bar) lv_bar_set_value(g_loading_bar, 2, LV_ANIM_OFF);
     if (g_loading_stage_list) lv_label_set_text(g_loading_stage_list, loading_stage_reset_text());
+    lv_obj_set_style_opa(g_loading_overlay, (lv_opa_t)g_loading_fade_opa, 0);
     loading_apply_layout_mode();
 
     /* Start rotation + status check timer (60fps) */
