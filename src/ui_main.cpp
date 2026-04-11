@@ -1162,6 +1162,12 @@ static lv_obj_t* mode_lbl_work_next_step = nullptr;
 static lv_obj_t* mode_ta_work_script = nullptr;
 static lv_obj_t* mode_ta_trace_recent = nullptr;
 static lv_obj_t* mode_lbl_boot_report_hint = nullptr;
+static lv_obj_t* mode_boot_progress_panel = nullptr;
+static lv_obj_t* mode_boot_progress_task = nullptr;
+static lv_obj_t* mode_boot_progress_step = nullptr;
+static lv_obj_t* mode_boot_progress_result = nullptr;
+static lv_obj_t* mode_boot_progress_bar = nullptr;
+static lv_obj_t* mode_boot_progress_list = nullptr;
 static lv_obj_t* mode_ta_work_prompt = nullptr;
 static lv_obj_t* mode_lbl_work_md_output = nullptr;
 static lv_obj_t* mode_lbl_work_renderer = nullptr;
@@ -1317,6 +1323,9 @@ static std::vector<AttachmentQueueItem> g_attachment_failed_cache;
 static std::vector<SentAttachmentItem> g_sent_attachments;
 static std::vector<AppliedWriteBackup> g_step_write_backups;
 static std::atomic<bool> g_boot_check_running(false);
+static std::mutex g_boot_detail_mtx;
+static std::string g_boot_detail_text;
+static std::atomic<bool> g_boot_detail_dirty(false);
 static unsigned int g_remote_stub_session_seq = 1;
 static char g_remote_stub_session_id[64] = "";
 static char g_remote_stub_auth_token[64] = "";
@@ -1546,6 +1555,30 @@ static void ui_log_flush_timer_cb(lv_timer_t* t) {
             }
 
             wizard_progress_mirror_from_event(ev, pct);
+
+            if (mode_boot_progress_panel && strstr(ev.task, "Boot Check")) {
+                lv_obj_clear_flag(mode_boot_progress_panel, LV_OBJ_FLAG_HIDDEN);
+                if (mode_boot_progress_task) lv_label_set_text_fmt(mode_boot_progress_task, "Task: %s", ev.task[0] ? ev.task : "Boot Check");
+                if (mode_boot_progress_step) lv_label_set_text_fmt(mode_boot_progress_step, "Step: %s", ev.step[0] ? ev.step : "Running...");
+                if (mode_boot_progress_bar) lv_bar_set_value(mode_boot_progress_bar, pct, LV_ANIM_ON);
+                if (mode_boot_progress_result) {
+                    if (ev.type == 1) {
+                        lv_label_set_text(mode_boot_progress_result, ev.result[0] ? ev.result : (ev.ok ? "Done" : "Failed"));
+                        lv_obj_set_style_text_color(mode_boot_progress_result, ev.ok ? lv_color_make(120, 220, 150) : lv_color_make(255, 120, 120), 0);
+                    } else {
+                        lv_label_set_text(mode_boot_progress_result, "");
+                    }
+                }
+            }
+        }
+
+        if (g_boot_detail_dirty.exchange(false) && mode_boot_progress_list) {
+            std::string local_detail;
+            {
+                std::lock_guard<std::mutex> lk(g_boot_detail_mtx);
+                local_detail = g_boot_detail_text;
+            }
+            lv_textarea_set_text(mode_boot_progress_list, local_detail.c_str());
         }
     }
 }
@@ -5886,12 +5919,36 @@ static void work_chat_send_cb(lv_event_t* e) {
     lv_textarea_set_text(mode_ta_work_chat_input, "");
 }
 
+static std::string build_boot_check_detail_text(const std::vector<BootCheckResult>& results) {
+    std::string text;
+    text.reserve(2048);
+    for (const auto& r : results) {
+        const char* s = (r.status == BootCheckStatus::Ok) ? "✓" :
+                        (r.status == BootCheckStatus::Warn) ? "⚠" : "✗";
+        text += s;
+        text += " ";
+        text += r.check_name;
+        text += "  ";
+        text += r.message;
+        if (r.fix_applied) text += "  [auto-fixed]";
+        text += "\n";
+    }
+    if (text.empty()) text = "No boot check results.";
+    return text;
+}
+
 static void work_boot_check_cb(lv_event_t* e) {
     (void)e;
     if (g_boot_check_running.exchange(true)) {
         ui_log("[BootCheck] Health check is already running");
         return;
     }
+    if (mode_boot_progress_panel) lv_obj_clear_flag(mode_boot_progress_panel, LV_OBJ_FLAG_HIDDEN);
+    if (mode_boot_progress_task) lv_label_set_text(mode_boot_progress_task, "Task: Boot Check");
+    if (mode_boot_progress_step) lv_label_set_text(mode_boot_progress_step, "Step: Starting...");
+    if (mode_boot_progress_result) lv_label_set_text(mode_boot_progress_result, "");
+    if (mode_boot_progress_bar) lv_bar_set_value(mode_boot_progress_bar, 5, LV_ANIM_OFF);
+    if (mode_boot_progress_list) lv_textarea_set_text(mode_boot_progress_list, "Preparing checks...\n");
     std::thread([]() {
         TraceSpan span("boot_check_run_and_fix", "work_mode");
         ui_progress_begin("Boot Check", "Running environment checks", 5);
@@ -5908,6 +5965,11 @@ static void work_boot_check_cb(lv_event_t* e) {
         }
         char summary[160] = {0};
         snprintf(summary, sizeof(summary), "BootCheck: %d ok / %d warn / %d error", ok, warn, err);
+        {
+            std::lock_guard<std::mutex> lk(g_boot_detail_mtx);
+            g_boot_detail_text = build_boot_check_detail_text(results);
+        }
+        g_boot_detail_dirty.store(true);
         ui_progress_update("Boot Check", summary, 85);
         ui_progress_finish("Boot Check", err == 0, summary);
         if (err > 0) span.set_outcome("warn");
@@ -10395,6 +10457,57 @@ void app_ui_init() {
         lv_obj_add_event_cb(btn_open_boot_report, work_boot_open_report_cb, LV_EVENT_CLICKED, nullptr);
         mode_lbl_boot_report_hint = aw_label_wrap_create(sec_runtime, "Report: (not generated yet)", LABEL_HINT, 100);
         lv_obj_set_style_text_color(mode_lbl_boot_report_hint, c->text_dim, 0);
+        mode_boot_progress_panel = lv_obj_create(sec_runtime);
+        lv_obj_set_width(mode_boot_progress_panel, card_w - 24);
+        lv_obj_set_height(mode_boot_progress_panel, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_color(mode_boot_progress_panel, c->input_bg, 0);
+        lv_obj_set_style_bg_opa(mode_boot_progress_panel, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(mode_boot_progress_panel, 1, 0);
+        lv_obj_set_style_border_color(mode_boot_progress_panel, c->panel_border, 0);
+        lv_obj_set_style_radius(mode_boot_progress_panel, SCALE(10), 0);
+        lv_obj_set_style_pad_all(mode_boot_progress_panel, SCALE(10), 0);
+        lv_obj_set_style_pad_gap(mode_boot_progress_panel, SCALE(6), 0);
+        lv_obj_set_flex_flow(mode_boot_progress_panel, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(mode_boot_progress_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_clear_flag(mode_boot_progress_panel, LV_OBJ_FLAG_SCROLLABLE);
+
+        mode_boot_progress_task = lv_label_create(mode_boot_progress_panel);
+        lv_label_set_text(mode_boot_progress_task, "Task: Boot Check");
+        lv_obj_set_style_text_color(mode_boot_progress_task, c->text, 0);
+        lv_obj_set_style_text_font(mode_boot_progress_task, CJK_FONT_SMALL, 0);
+
+        mode_boot_progress_step = lv_label_create(mode_boot_progress_panel);
+        lv_label_set_text(mode_boot_progress_step, "Step: idle");
+        lv_obj_set_style_text_color(mode_boot_progress_step, c->text_dim, 0);
+        lv_obj_set_style_text_font(mode_boot_progress_step, CJK_FONT_SMALL, 0);
+
+        mode_boot_progress_bar = lv_bar_create(mode_boot_progress_panel);
+        lv_obj_set_width(mode_boot_progress_bar, LV_PCT(100));
+        lv_obj_set_height(mode_boot_progress_bar, SCALE(8));
+        lv_obj_set_style_radius(mode_boot_progress_bar, SCALE(4), 0);
+        lv_obj_set_style_bg_color(mode_boot_progress_bar, c->panel_border, LV_PART_MAIN);
+        lv_obj_set_style_bg_color(mode_boot_progress_bar, c->accent, LV_PART_INDICATOR);
+        lv_bar_set_range(mode_boot_progress_bar, 0, 100);
+        lv_bar_set_value(mode_boot_progress_bar, 0, LV_ANIM_OFF);
+
+        mode_boot_progress_result = lv_label_create(mode_boot_progress_panel);
+        lv_label_set_text(mode_boot_progress_result, "");
+        lv_obj_set_style_text_font(mode_boot_progress_result, CJK_FONT_SMALL, 0);
+        lv_obj_set_style_text_color(mode_boot_progress_result, c->text_dim, 0);
+
+        mode_boot_progress_list = lv_textarea_create(mode_boot_progress_panel);
+        lv_obj_set_width(mode_boot_progress_list, LV_PCT(100));
+        lv_obj_set_height(mode_boot_progress_list, SCALE(110));
+        lv_textarea_set_one_line(mode_boot_progress_list, false);
+        lv_textarea_set_text(mode_boot_progress_list, "No checks run yet.");
+        lv_obj_set_style_radius(mode_boot_progress_list, SCALE(8), 0);
+        lv_obj_set_style_bg_color(mode_boot_progress_list, c->panel, 0);
+        lv_obj_set_style_border_width(mode_boot_progress_list, 1, 0);
+        lv_obj_set_style_border_color(mode_boot_progress_list, c->panel_border, 0);
+        lv_obj_set_style_text_font(mode_boot_progress_list, CJK_FONT_SMALL, 0);
+        lv_obj_set_style_text_color(mode_boot_progress_list, c->text, 0);
+        lv_obj_add_state(mode_boot_progress_list, LV_STATE_DISABLED);
+        lv_obj_add_flag(mode_boot_progress_panel, LV_OBJ_FLAG_HIDDEN);
         lv_obj_t* btn_retry_failed_attach = aw_btn_create(sec_runtime, "Retry Failed Attachments", BTN_SECONDARY, SCALE(220), SCALE(34));
         lv_obj_add_event_cb(btn_retry_failed_attach, work_retry_failed_attachments_cb, LV_EVENT_CLICKED, nullptr);
 
