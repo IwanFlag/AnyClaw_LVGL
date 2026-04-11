@@ -11736,17 +11736,10 @@ void app_ui_init() {
     /* ═══ FOOTER (minimal) ═══ */
     {
         char footer_text[128];
-        char remain[64];
-        license_get_remaining_str(remain, sizeof(remain));
-        snprintf(footer_text, sizeof(footer_text), "AnyClaw v2.0.1 | LVGL 9.6 + SDL2 | %s", remain);
+        snprintf(footer_text, sizeof(footer_text), "AnyClaw v2.0.1 | LVGL 9.6 + SDL2");
         lv_obj_t* footer = lv_label_create(scr);
         lv_label_set_text(footer, footer_text);
-        int64_t secs = license_remaining_seconds();
-        if (secs > 0 && secs < 3600) {
-            lv_obj_set_style_text_color(footer, lv_color_make(220, 80, 80), 0);  /* Red when <1h */
-        } else {
-            lv_obj_set_style_text_color(footer, c->text_dim, 0);
-        }
+        lv_obj_set_style_text_color(footer, c->text_dim, 0);
         lv_obj_set_style_text_font(footer, CJK_FONT_SMALL, 0);
         lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -8);
     }
@@ -11756,7 +11749,10 @@ void app_ui_init() {
 
     /* Initial refresh - populates task list */
     run_proactive_startup_once();
-    app_refresh_status();
+    lv_timer_create([](lv_timer_t* t) {
+        app_refresh_status();
+        lv_timer_del(t);
+    }, 220, nullptr);
     sync_ai_mode_dropdowns();
     apply_mode_switch_visuals();
 
