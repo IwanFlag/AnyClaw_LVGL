@@ -5640,11 +5640,16 @@ static void stream_timer_cb(lv_timer_t* timer) {
     if (InterlockedCompareExchange(&g_ask_feedback_pending, 0, 1)) {
         char answer[256] = {0};
         bool ok = ask_mode_confirm_action(g_ask_feedback_reason, g_ask_feedback_suggestion, g_ask_feedback_options, answer, sizeof(answer));
+        const char* normalized = answer;
+        if (!normalized[0]) normalized = ok ? "allow" : "reject";
+        else if (_stricmp(normalized, "approve_plan") == 0 || _stricmp(normalized, "plan_confirm") == 0) normalized = "plan_confirm";
+        else if (_stricmp(normalized, "adjust_plan") == 0 || _stricmp(normalized, "plan_modify") == 0) normalized = "plan_modify";
+        else if (_stricmp(normalized, "cancel") == 0 || _stricmp(normalized, "deny") == 0 || _stricmp(normalized, "reject") == 0) normalized = "reject";
         char escaped[320] = {0};
         int ei = 0;
-        for (int i = 0; answer[i] && ei < (int)sizeof(escaped) - 2; i++) {
-            if (answer[i] == '"' || answer[i] == '\\') escaped[ei++] = '\\';
-            escaped[ei++] = answer[i];
+        for (int i = 0; normalized[i] && ei < (int)sizeof(escaped) - 2; i++) {
+            if (normalized[i] == '"' || normalized[i] == '\\') escaped[ei++] = '\\';
+            escaped[ei++] = normalized[i];
         }
         escaped[ei] = '\0';
         snprintf(g_pending_feedback_payload, sizeof(g_pending_feedback_payload),
@@ -6026,7 +6031,8 @@ static std::string build_plan_mode_prompt(const char* raw) {
         "1) First output one compact JSON block:\n"
         "{\"type\":\"plan\",\"goal\":\"...\",\"steps\":[\"...\"],\"risk\":\"...\",\"est_time\":\"...\"}\n"
         "2) Then output one compact JSON confirmation block:\n"
-        "{\"type\":\"ask_feedback\",\"reason\":\"Confirm plan before execution\",\"suggestion\":\"Choose one option\",\"options\":[\"approve_plan\",\"adjust_plan\",\"cancel\"]}\n"
+        "{\"type\":\"ask_feedback\",\"reason\":\"Confirm plan before execution\",\"suggestion\":\"Choose one option\",\"options\":[\"plan_confirm\",\"plan_modify\",\"cancel\"]}\n"
+        "   (compat aliases accepted: approve_plan -> plan_confirm, adjust_plan -> plan_modify)\n"
         "3) Do not execute tools before approval.\n"
         "User task:\n" + user_task;
 }
@@ -11484,7 +11490,7 @@ void app_ui_init() {
     lv_label_set_text(ce_icon, "🧄🦞");
     lv_obj_set_style_text_font(ce_icon, CJK_FONT, 0);
     lv_obj_t* ce_text = lv_label_create(mode_chat_empty_card);
-    lv_label_set_text(ce_text, "龙虾要吃蒜蓉的 - 有什么我能帮你？");
+    lv_label_set_text(ce_text, "龙虾要吃蒜蓉的 🧄🦞 — 你的AI助手已就位！");
     lv_obj_set_style_text_color(ce_text, c->text_dim, 0);
     lv_obj_set_style_text_font(ce_text, CJK_FONT_SMALL, 0);
     lv_obj_t* ce_suggest_row = lv_obj_create(mode_chat_empty_card);
