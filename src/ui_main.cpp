@@ -1056,6 +1056,7 @@ static lv_obj_t* g_loading_label = nullptr;
 static lv_obj_t* g_loading_bar = nullptr;
 static lv_obj_t* g_loading_stage_list = nullptr;
 static lv_obj_t* g_loading_hide_btn = nullptr;
+static lv_obj_t* g_loading_toggle_btn = nullptr;
 static lv_timer_t* g_loading_timer = nullptr;
 static DWORD g_loading_start_tick = 0;
 static float g_loading_angle = 0.0f;
@@ -1064,6 +1065,7 @@ static std::string g_loading_live_step;
 static int g_loading_live_pct = -1;
 static std::atomic<bool> g_loading_startup_done(false);
 static bool g_loading_hidden_by_user = false;
+static bool g_loading_details_collapsed = false;
 
 /* Hide loading overlay */
 static void loading_hide() {
@@ -1075,6 +1077,25 @@ static void loading_manual_hide_cb(lv_event_t* e) {
     (void)e;
     g_loading_hidden_by_user = true;
     loading_hide();
+}
+
+static void loading_apply_layout_mode() {
+    if (!g_loading_overlay) return;
+    if (g_loading_stage_list) {
+        if (g_loading_details_collapsed) lv_obj_add_flag(g_loading_stage_list, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_clear_flag(g_loading_stage_list, LV_OBJ_FLAG_HIDDEN);
+    }
+    lv_obj_set_height(g_loading_overlay, g_loading_details_collapsed ? SCALE(210) : SCALE(300));
+    if (g_loading_toggle_btn) {
+        lv_obj_t* lbl = lv_obj_get_child(g_loading_toggle_btn, 0);
+        if (lbl) lv_label_set_text(lbl, g_loading_details_collapsed ? "▸" : "▾");
+    }
+}
+
+static void loading_toggle_details_cb(lv_event_t* e) {
+    (void)e;
+    g_loading_details_collapsed = !g_loading_details_collapsed;
+    loading_apply_layout_mode();
 }
 
 /* Loading timer: rotate icon + check status */
@@ -1216,6 +1237,16 @@ static void loading_show() {
         lv_obj_set_style_text_font(hide_lbl, CJK_FONT_SMALL, 0);
         lv_obj_center(hide_lbl);
 
+        g_loading_toggle_btn = lv_button_create(top_row);
+        lv_obj_set_size(g_loading_toggle_btn, SCALE(28), SCALE(22));
+        lv_obj_set_style_bg_color(g_loading_toggle_btn, lv_color_make(56, 62, 80), 0);
+        lv_obj_set_style_radius(g_loading_toggle_btn, SCALE(6), 0);
+        lv_obj_add_event_cb(g_loading_toggle_btn, loading_toggle_details_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* toggle_lbl = lv_label_create(g_loading_toggle_btn);
+        lv_label_set_text(toggle_lbl, "▾");
+        lv_obj_set_style_text_font(toggle_lbl, CJK_FONT_SMALL, 0);
+        lv_obj_center(toggle_lbl);
+
         /* Garlic icon centered */
         g_loading_icon = lv_image_create(g_loading_overlay);
         lv_image_set_src(g_loading_icon, "A:assets/garlic_48.png");
@@ -1253,6 +1284,7 @@ static void loading_show() {
     g_loading_start_tick = GetTickCount();
     g_loading_angle = 0.0f;
     g_loading_hidden_by_user = false;
+    g_loading_details_collapsed = false;
     g_loading_startup_done.store(false);
     {
         std::lock_guard<std::mutex> lk(g_loading_live_mtx);
@@ -1261,6 +1293,7 @@ static void loading_show() {
     }
     if (g_loading_bar) lv_bar_set_value(g_loading_bar, 2, LV_ANIM_OFF);
     if (g_loading_stage_list) lv_label_set_text(g_loading_stage_list, "○ Gateway\n○ License\n○ Workspace\n○ Feature flags\n○ Finalize");
+    loading_apply_layout_mode();
 
     /* Start rotation + status check timer (60fps) */
     if (g_loading_timer) lv_timer_del(g_loading_timer);
