@@ -710,7 +710,7 @@ bool app_get_current_model(char* model_out, int out_size) {
     if (!model_out || out_size <= 0) return false;
     model_out[0] = '\0';
     char output[512];
-    if (exec_cmd("openclaw config get agents.defaults.model.primary", output, sizeof(output))) {
+    if (exec_cmd("openclaw config get agents.defaults.model.primary", output, sizeof(output), 1200)) {
         char* start = output;
         while (*start == '"' || *start == ' ' || *start == '\n' || *start == '\r') start++;
         char* end = start + strlen(start) - 1;
@@ -728,7 +728,7 @@ bool app_get_current_model(char* model_out, int out_size) {
  * Calls the callback for each model found. Returns total count. */
 int app_get_all_models(void (*cb)(const char* model_id, void* ctx), void* ctx) {
     char output[8192] = {0};
-    if (!exec_cmd("openclaw config get models", output, sizeof(output))) {
+    if (!exec_cmd("openclaw config get models", output, sizeof(output), 1200)) {
         LOG_W("OpenClaw", "Failed to read models config");
         return 0;
     }
