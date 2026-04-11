@@ -82,6 +82,7 @@ struct EnvCheckResult {
     bool node_version_ok;
     bool npm_ok;
     bool openclaw_ok;
+    bool gateway_ok;
     char node_ver[64];
     char npm_ver[32];
     char openclaw_ver[64];

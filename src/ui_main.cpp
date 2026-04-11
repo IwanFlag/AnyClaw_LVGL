@@ -6592,6 +6592,12 @@ static const I18n W_NET_OK       = {"Network: OK ✓", "网络：正常 ✓"};
 static const I18n W_NET_FAIL     = {"Network: Unreachable", "网络不可达"};
 static const I18n W_OC_OK        = {"OpenClaw %s ✓", "OpenClaw %s ✓"};
 static const I18n W_OC_NOT_INST  = {"OpenClaw not installed", "未安装 OpenClaw"};
+static const I18n W_GW_OK        = {"Gateway: running ✓", "Gateway: 运行中 ✓"};
+static const I18n W_GW_DOWN      = {"Gateway: not running", "Gateway: 未运行"};
+static const I18n W_GW_INIT_BTN  = {"Initialize Gateway", "初始化 Gateway"};
+static const I18n W_GW_INITING   = {"Initializing gateway...", "正在初始化 Gateway..."};
+static const I18n W_GW_INIT_OK   = {"Gateway initialized ✓", "Gateway 初始化完成 ✓"};
+static const I18n W_GW_INIT_FAIL = {"Gateway init failed", "Gateway 初始化失败"};
 static const I18n W_INSTALL_NET  = {"Download from network (recommended)", "从网络下载（推荐）"};
 static const I18n W_INSTALL_LOCAL= {"Use bundled package (offline)", "使用本地包（离线）"};
 static const I18n W_INSTALLING   = {"Installing... (please wait)", "正在安装...（请稍候）"};
@@ -6774,6 +6780,41 @@ static void wiz_install_poll_cb(lv_timer_t* t) {
         lv_timer_del(g_wiz_install_poll_timer);
         g_wiz_install_poll_timer = nullptr;
     }
+}
+
+/* ── Gateway init (async, for users with OC already installed) ── */
+static void wiz_gw_init_cb(lv_event_t* e) {
+    (void)e;
+    if (g_wiz_install_running.load()) return;
+
+    /* Disable the init button */
+    lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
+    lv_obj_add_state(btn, LV_STATE_DISABLED);
+    lv_obj_t* lbl = lv_obj_get_child(btn, 0);
+    if (lbl) lv_label_set_text(lbl, tr(W_GW_INITING));
+
+    g_wiz_install_running.store(true);
+    wizard_set_next_enabled(false);
+
+    std::thread([btn]() {
+        char output[512] = {0};
+        bool ok = app_init_openclaw(output, sizeof(output));
+
+        /* Re-enable button and update label */
+        lv_obj_clear_state(btn, LV_STATE_DISABLED);
+        lv_obj_t* lbl = lv_obj_get_child(btn, 0);
+
+        if (ok) {
+            if (lbl) lv_label_set_text(lbl, tr(W_GW_INIT_OK));
+            lv_obj_set_style_bg_color(btn, lv_color_make(34, 197, 94), 0);
+            wizard_set_next_enabled(true);
+        } else {
+            if (lbl) lv_label_set_text(lbl, output[0] ? output : tr(W_GW_INIT_FAIL));
+            lv_obj_set_style_text_color(lbl, lv_color_make(220, 80, 80), 0);
+        }
+
+        g_wiz_install_running.store(false);
+    }).detach();
 }
 
 static void wiz_cancel_install_cb(lv_event_t* e) {
@@ -7049,6 +7090,28 @@ static void wizard_build_step_detect() {
         char buf[128];
         snprintf(buf, sizeof(buf), tr(W_OC_OK), env.openclaw_ver);
         wizard_add_status_row(g_wizard_content, buf, lv_color_make(0, 220, 60));
+
+        /* ═══ 3b. Gateway health (only if OC is installed) ═══ */
+        char gw_resp[128] = {0};
+        int gw_code = http_get("http://127.0.0.1:18789/health", gw_resp, sizeof(gw_resp), 2);
+        bool gw_ok = (gw_code > 0 && gw_code < 500);
+        env.gateway_ok = gw_ok;
+
+        wizard_add_status_row(g_wizard_content,
+            gw_ok ? tr(W_GW_OK) : tr(W_GW_DOWN),
+            gw_ok ? lv_color_make(0, 220, 60) : lv_color_make(220, 180, 40));
+
+        if (!gw_ok && net_ok) {
+            lv_obj_t* gw_btn = lv_button_create(g_wizard_content);
+            lv_obj_set_size(gw_btn, SCALE(220), SCALE(38));
+            lv_obj_set_style_bg_color(gw_btn, lv_color_make(59, 130, 246), 0);
+            lv_obj_set_style_radius(gw_btn, 8, 0);
+            lv_obj_t* gw_lbl = lv_label_create(gw_btn);
+            lv_label_set_text(gw_lbl, tr(W_GW_INIT_BTN));
+            lv_obj_set_style_text_font(gw_lbl, CJK_FONT, 0);
+            lv_obj_center(gw_lbl);
+            lv_obj_add_event_cb(gw_btn, wiz_gw_init_cb, LV_EVENT_CLICKED, nullptr);
+        }
     } else {
         wizard_add_status_row(g_wizard_content, tr(W_OC_NOT_INST), lv_color_make(220, 40, 40));
     }
@@ -7239,7 +7302,7 @@ static void wizard_build_step_detect() {
     }
 
     /* ═══ Block Next if any critical check fails ═══ */
-    bool all_ok = env.node_ok && env.node_version_ok && net_ok && env.openclaw_ok;
+    bool all_ok = env.node_ok && env.node_version_ok && net_ok && env.openclaw_ok && env.gateway_ok;
     wizard_set_next_enabled(all_ok);
 }
 
