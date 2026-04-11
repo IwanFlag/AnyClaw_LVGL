@@ -125,8 +125,12 @@ static bool exec_cmd_local(const char* cmd, char* output, int out_size, DWORD ti
     char tmp[4096];
     DWORD start = GetTickCount();
 
+    bool timed_out = false;
     while (total < (DWORD)out_size - 1) {
-        if (GetTickCount() - start > timeout_ms) break;
+        if (GetTickCount() - start > timeout_ms) {
+            timed_out = true;
+            break;
+        }
 
         DWORD avail = 0;
         if (!PeekNamedPipe(hRead, nullptr, 0, nullptr, &avail, nullptr) || avail == 0) {
@@ -155,10 +159,15 @@ static bool exec_cmd_local(const char* cmd, char* output, int out_size, DWORD ti
 
     if (output && out_size > 0) output[total] = '\0';
 
+    if (timed_out) {
+        TerminateProcess(pi.hProcess, 1);
+        LOG_W("SESSION", "exec timeout: %s (%lums)", cmd, (unsigned long)timeout_ms);
+    }
+
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
     CloseHandle(hRead);
-    return total > 0;
+    return !timed_out && total > 0;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -173,10 +182,11 @@ bool SessionManager::refresh() {
     sessions_.clear();
     last_error_.clear();
 
+    static const DWORD kSessionListTimeoutMs = 3000;
     char output[16384] = {0};
     bool ok = exec_cmd_local(
         "openclaw gateway call sessions.list --json",
-        output, sizeof(output), 12000
+        output, sizeof(output), kSessionListTimeoutMs
     );
 
     if (!ok || output[0] == '\0') {
@@ -186,7 +196,12 @@ bool SessionManager::refresh() {
         return false;
     }
 
-    return parse_json(output);
+    bool parsed = parse_json(output);
+    if (!parsed) {
+        last_error_ = "Invalid sessions JSON";
+        span.set_fail();
+    }
+    return parsed;
 }
 
 bool SessionManager::parse_json(const char* json) {
@@ -247,7 +262,11 @@ bool SessionManager::parse_json(const char* json) {
     }
 
     LOG_I("SESSION", "Parsed %d sessions from Gateway", count);
-    return count > 0;
+    if (count == 0) {
+        /* Empty list is a valid idle state. */
+        return (strstr(json, "[") != nullptr && strstr(json, "]") != nullptr);
+    }
+    return true;
 }
 
 std::vector<SessionInfo> SessionManager::active_sessions(long long threshold_ms) const {
