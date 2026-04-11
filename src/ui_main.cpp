@@ -1144,21 +1144,9 @@ static void loading_timer_cb(lv_timer_t* t) {
         lv_label_set_text(g_loading_stage_list, stage_buf);
     }
 
-    /* Check status every 2 seconds */
-    static DWORD last_check = 0;
-    if (now - last_check < 2000) return;
-    last_check = now;
-
-    char health_buf[96] = {0};
-    bool gateway_ok = (http_get(GATEWAY_HEALTH_URL, health_buf, sizeof(health_buf), 1) == 200);
-    if (gateway_ok) {
-        LOG_I("Loading", "OpenClaw ready, hiding overlay");
-        loading_hide();
-        return;
-    }
-    /* If still not ready for too long, hide overlay to keep app interactive. */
+    /* UI-thread friendly: avoid network probing here. Worker startup events drive hide timing. */
     if (now - g_loading_start_tick > 12000) {
-        LOG_W("Loading", "Gateway still offline after 12s, hiding overlay");
+        LOG_W("Loading", "Startup card timeout after 12s, hiding");
         loading_hide();
     }
 }
