@@ -6468,7 +6468,7 @@ static void create_title_bar(lv_obj_t* scr) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  Setup Wizard — First-launch 6-step onboarding
+ *  Setup Wizard — First-launch 5-step onboarding
  * ═══════════════════════════════════════════════════════════════ */
 
 #define WIZARD_STEPS 5
@@ -6548,8 +6548,8 @@ static bool is_wizard_completed() {
     if (!f.is_open()) return false;
     std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
     f.close();
-    return content.find("\"wizard_completed\"") != std::string::npos &&
-           content.find("true") != std::string::npos;
+    /* FIX: Use precise substring to avoid false positives from other "true" values */
+    return content.find("\"wizard_completed\": true") != std::string::npos;
 }
 
 static void save_wizard_completed() {
@@ -7841,6 +7841,11 @@ static void wizard_close_cb(lv_event_t* e) {
     if (g_wiz_install_running.load()) {
         app_request_setup_cancel();
     }
+    /* FIX: Clean up install poll timer to prevent leak + idle polling */
+    if (g_wiz_install_poll_timer) {
+        lv_timer_del(g_wiz_install_poll_timer);
+        g_wiz_install_poll_timer = nullptr;
+    }
     if (g_wizard_modal) {
         lv_obj_del(g_wizard_modal);
         g_wizard_modal = nullptr;
@@ -7866,6 +7871,9 @@ void ui_show_setup_wizard() {
     /* FIX P2: Pre-fill wizard state from saved config */
     if (g_api_key[0] && !g_wizard_api_key[0]) {
         snprintf(g_wizard_api_key, sizeof(g_wizard_api_key), "%s", g_api_key);
+    }
+    if (g_selected_model[0] && !g_wizard_model_name[0]) {
+        snprintf(g_wizard_model_name, sizeof(g_wizard_model_name), "%s", g_selected_model);
     }
     lv_obj_t* scr = lv_screen_active();
 

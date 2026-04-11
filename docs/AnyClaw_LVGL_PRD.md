@@ -555,14 +555,13 @@ LED 判断逻辑复用 §2.3.3 的 Session 检测结果：
 
 #### 2.4.2 首次启动向导
 - **功能编号：** WIZ-01 **优先级：** P1 **状态：** ✅ 已实现
-- 6步引导（全屏遮罩 + 居中弹窗，深色风格 #1E2530 圆角12，支持拖拽移动）：
+- 5步引导（全屏遮罩 + 居中弹窗，深色风格 #1E2530 圆角12）：
   1. **语言选择** — 中文/English 两个按钮，默认 EN
-  2. **OpenClaw 检测** — 自动检测，显示状态（Running/Detected/Not Found）+ LED + 版本号 + 端口
-  3. **API 密钥** — 密码模式输入框（sk-or-...）
-  4. **模型选择** — dropdown（10个预设模型：gemini/claude/gpt/deepseek/qwen/llama 等）
-  5. **用户画像** — 昵称输入 + 时区 dropdown（26个时区，默认 UTC+8 Asia/Shanghai）
-  6. **确认** — 配置摘要 + "Get Started" 绿色按钮
-- 顶部步骤指示器（Step 1/6），底部上一步/下一步按钮
+  2. **OpenClaw 检测** — 自动检测 Node.js/npm/Network/OpenClaw/Gateway，显示状态 LED + 版本号，支持向导内安装（Auto Install / 本地包）与进度显示
+  3. **模型 & API 密钥** — 模型 dropdown（由 model_manager 动态加载）+ Provider 动态提示 + API Key 密码模式输入框
+  4. **本地模型（可选）** — Gemma 4 本地安装开关 + 2B/9B/27B 勾选，可 Skip
+  5. **个人信息 & 确认** — 昵称输入 + 时区 dropdown（26个时区，默认 UTC+8） + 配置摘要 + "Get Started" 绿色按钮
+- 顶部步骤指示器（Step 1/5），底部上一步/下一步按钮
 - 首次启动自动弹出（检查 config.json `wizard_completed` 字段，不存在或 false 则显示）
 - 完成后标记 `wizard_completed: true` 写入 config.json，后续跳过
 - `save_theme_config()` 持久化 wizard_completed 字段，`load_theme_config()` 启动时读取
