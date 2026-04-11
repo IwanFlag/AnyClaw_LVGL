@@ -1055,6 +1055,7 @@ static lv_obj_t* g_loading_icon = nullptr;
 static lv_obj_t* g_loading_label = nullptr;
 static lv_obj_t* g_loading_bar = nullptr;
 static lv_obj_t* g_loading_stage_list = nullptr;
+static lv_obj_t* g_loading_hide_btn = nullptr;
 static lv_timer_t* g_loading_timer = nullptr;
 static DWORD g_loading_start_tick = 0;
 static float g_loading_angle = 0.0f;
@@ -1062,11 +1063,18 @@ static std::mutex g_loading_live_mtx;
 static std::string g_loading_live_step;
 static int g_loading_live_pct = -1;
 static std::atomic<bool> g_loading_startup_done(false);
+static bool g_loading_hidden_by_user = false;
 
 /* Hide loading overlay */
 static void loading_hide() {
     if (g_loading_timer) { lv_timer_del(g_loading_timer); g_loading_timer = nullptr; }
     if (g_loading_overlay) { lv_obj_add_flag(g_loading_overlay, LV_OBJ_FLAG_HIDDEN); }
+}
+
+static void loading_manual_hide_cb(lv_event_t* e) {
+    (void)e;
+    g_loading_hidden_by_user = true;
+    loading_hide();
 }
 
 /* Loading timer: rotate icon + check status */
@@ -1174,6 +1182,31 @@ static void loading_show() {
         lv_obj_set_flex_align(g_loading_overlay, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
         lv_obj_move_foreground(g_loading_overlay);
 
+        lv_obj_t* top_row = lv_obj_create(g_loading_overlay);
+        lv_obj_set_size(top_row, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(top_row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(top_row, 0, 0);
+        lv_obj_set_style_pad_all(top_row, 0, 0);
+        lv_obj_set_style_pad_gap(top_row, SCALE(8), 0);
+        lv_obj_set_flex_flow(top_row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(top_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(top_row, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* top_title = lv_label_create(top_row);
+        lv_label_set_text(top_title, "Background startup");
+        lv_obj_set_style_text_color(top_title, lv_color_make(170, 178, 198), 0);
+        lv_obj_set_style_text_font(top_title, CJK_FONT_SMALL, 0);
+
+        g_loading_hide_btn = lv_button_create(top_row);
+        lv_obj_set_size(g_loading_hide_btn, SCALE(28), SCALE(22));
+        lv_obj_set_style_bg_color(g_loading_hide_btn, lv_color_make(56, 62, 80), 0);
+        lv_obj_set_style_radius(g_loading_hide_btn, SCALE(6), 0);
+        lv_obj_add_event_cb(g_loading_hide_btn, loading_manual_hide_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* hide_lbl = lv_label_create(g_loading_hide_btn);
+        lv_label_set_text(hide_lbl, "×");
+        lv_obj_set_style_text_font(hide_lbl, CJK_FONT_SMALL, 0);
+        lv_obj_center(hide_lbl);
+
         /* Garlic icon centered */
         g_loading_icon = lv_image_create(g_loading_overlay);
         lv_image_set_src(g_loading_icon, "A:assets/garlic_48.png");
@@ -1210,6 +1243,7 @@ static void loading_show() {
 
     g_loading_start_tick = GetTickCount();
     g_loading_angle = 0.0f;
+    g_loading_hidden_by_user = false;
     g_loading_startup_done.store(false);
     {
         std::lock_guard<std::mutex> lk(g_loading_live_mtx);
