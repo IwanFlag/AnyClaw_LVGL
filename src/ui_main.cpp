@@ -7626,16 +7626,15 @@ static void wizard_update_step() {
     /* Update title */
     lv_label_set_text(g_wizard_title, tr(wizard_step_titles[g_wizard_step]));
 
-    /* Build step content */
+    /* Build step content — default-enable Next before build so build functions can override */
+    wizard_set_next_enabled(true);
     switch (g_wizard_step) {
         case 0: wizard_build_step_lang(); break;
-        case 1: wizard_build_step_detect(); break;
+        case 1: wizard_build_step_detect(); break;     /* May override: wizard_set_next_enabled(all_ok) */
         case 2: wizard_build_step_model_api(); break;  /* Combined Model + API Key */
         case 3: wizard_build_step_profile(); break;
         case 4: wizard_build_step_summary(); break;
     }
-    /* FIX P5: Default-enable Next AFTER step build to avoid one-frame flicker */
-    wizard_set_next_enabled(true);
 
     /* Update buttons */
     if (g_wizard_step == 0) {
