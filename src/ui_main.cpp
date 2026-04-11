@@ -1098,6 +1098,12 @@ static void loading_toggle_details_cb(lv_event_t* e) {
     loading_apply_layout_mode();
 }
 
+static const char* loading_stage_reset_text() {
+    return (g_lang == Lang::CN)
+        ? "○ 网关\n○ 许可证\n○ 工作区\n○ 功能开关\n○ 收尾完成"
+        : "○ Gateway\n○ License\n○ Workspace\n○ Feature flags\n○ Finalize";
+}
+
 /* Loading timer: rotate icon + check status */
 static void loading_timer_cb(lv_timer_t* t) {
     (void)t;
@@ -1180,9 +1186,15 @@ static void loading_timer_cb(lv_timer_t* t) {
         const char* features = (p >= 90) ? "✓" : (p >= 82 ? "•" : "○");
         const char* finish = startup_done ? "✓" : (p >= 95 ? "•" : "○");
         char stage_buf[320];
-        snprintf(stage_buf, sizeof(stage_buf),
-                 "%s Gateway\n%s License\n%s Workspace\n%s Feature flags\n%s Finalize",
-                 gateway, license, workspace, features, finish);
+        if (g_lang == Lang::CN) {
+            snprintf(stage_buf, sizeof(stage_buf),
+                     "%s 网关\n%s 许可证\n%s 工作区\n%s 功能开关\n%s 收尾完成",
+                     gateway, license, workspace, features, finish);
+        } else {
+            snprintf(stage_buf, sizeof(stage_buf),
+                     "%s Gateway\n%s License\n%s Workspace\n%s Feature flags\n%s Finalize",
+                     gateway, license, workspace, features, finish);
+        }
         lv_label_set_text(g_loading_stage_list, stage_buf);
     }
 
@@ -1223,7 +1235,7 @@ static void loading_show() {
         lv_obj_clear_flag(top_row, LV_OBJ_FLAG_SCROLLABLE);
 
         lv_obj_t* top_title = lv_label_create(top_row);
-        lv_label_set_text(top_title, "Background startup");
+        lv_label_set_text(top_title, g_lang == Lang::CN ? "后台启动中" : "Background startup");
         lv_obj_set_style_text_color(top_title, lv_color_make(170, 178, 198), 0);
         lv_obj_set_style_text_font(top_title, CJK_FONT_SMALL, 0);
 
@@ -1256,7 +1268,10 @@ static void loading_show() {
 
         /* Loading text */
         g_loading_label = lv_label_create(g_loading_overlay);
-        lv_label_set_text(g_loading_label, "Starting OpenClaw...\nUI is ready. Finishing background startup.");
+        lv_label_set_text(g_loading_label,
+                          g_lang == Lang::CN
+                            ? "正在启动 OpenClaw...\n界面已可用，后台继续初始化。"
+                            : "Starting OpenClaw...\nUI is ready. Finishing background startup.");
         lv_obj_set_style_text_color(g_loading_label, lv_color_make(180, 185, 200), 0);
         lv_obj_set_style_text_font(g_loading_label, CJK_FONT_SMALL, 0);
         lv_label_set_long_mode(g_loading_label, LV_LABEL_LONG_WRAP);
@@ -1271,7 +1286,7 @@ static void loading_show() {
         lv_obj_set_style_bg_color(g_loading_bar, lv_color_make(104, 188, 132), LV_PART_INDICATOR);
 
         g_loading_stage_list = lv_label_create(g_loading_overlay);
-        lv_label_set_text(g_loading_stage_list, "○ Gateway\n○ License\n○ Workspace\n○ Feature flags\n○ Finalize");
+        lv_label_set_text(g_loading_stage_list, loading_stage_reset_text());
         lv_obj_set_style_text_color(g_loading_stage_list, lv_color_make(150, 160, 185), 0);
         lv_obj_set_style_text_font(g_loading_stage_list, CJK_FONT_SMALL, 0);
         lv_obj_set_width(g_loading_stage_list, LV_PCT(100));
@@ -1292,7 +1307,7 @@ static void loading_show() {
         g_loading_live_pct = -1;
     }
     if (g_loading_bar) lv_bar_set_value(g_loading_bar, 2, LV_ANIM_OFF);
-    if (g_loading_stage_list) lv_label_set_text(g_loading_stage_list, "○ Gateway\n○ License\n○ Workspace\n○ Feature flags\n○ Finalize");
+    if (g_loading_stage_list) lv_label_set_text(g_loading_stage_list, loading_stage_reset_text());
     loading_apply_layout_mode();
 
     /* Start rotation + status check timer (60fps) */
