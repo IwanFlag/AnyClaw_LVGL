@@ -20,6 +20,8 @@
 #include <filesystem>
 #include <algorithm>
 #include <unordered_set>
+#include <sstream>
+#include <cctype>
 #include <windows.h>
 #include <commdlg.h>
 #include <shlobj.h>
@@ -2929,6 +2931,33 @@ static void work_empty_example_cb(lv_event_t* e) {
     lv_obj_scroll_to_view(mode_ta_work_prompt, LV_ANIM_OFF);
 }
 
+static bool work_find_outside_path_in_text(const char* detail, std::string& path_out) {
+    path_out.clear();
+    if (!detail || !detail[0]) return false;
+    std::string s = detail;
+    std::replace(s.begin(), s.end(), '\n', ' ');
+    std::replace(s.begin(), s.end(), '\t', ' ');
+    std::istringstream iss(s);
+    std::string tok;
+    while (iss >> tok) {
+        while (!tok.empty() && (tok.front() == '"' || tok.front() == '\'' || tok.front() == '(' || tok.front() == '[' || tok.front() == '{')) {
+            tok.erase(tok.begin());
+        }
+        while (!tok.empty() && (tok.back() == '"' || tok.back() == '\'' || tok.back() == ')' || tok.back() == ']' || tok.back() == '}' || tok.back() == ',' || tok.back() == ';')) {
+            tok.pop_back();
+        }
+        if (tok.empty()) continue;
+        bool looks_path = (tok.size() >= 3 && std::isalpha((unsigned char)tok[0]) && tok[1] == ':' && (tok[2] == '\\' || tok[2] == '/')) ||
+                          (!tok.empty() && (tok[0] == '\\' || tok[0] == '/'));
+        if (!looks_path) continue;
+        if (!permissions().is_path_allowed(tok.c_str(), false)) {
+            path_out = tok;
+            return true;
+        }
+    }
+    return false;
+}
+
 static void work_add_step_card(const char* action, const char* detail, bool done, bool write_op) {
     if (!mode_work_step_stream) return;
     const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
@@ -2973,10 +3002,20 @@ static void work_add_step_card(const char* action, const char* detail, bool done
 
     lv_obj_t* info = lv_label_create(card);
     lv_label_set_text(info, detail && detail[0] ? detail : "");
-    lv_obj_set_style_text_color(info, c->text_dim, 0);
+    std::string out_path;
+    bool outside_path = work_find_outside_path_in_text(detail, out_path);
+    lv_obj_set_style_text_color(info, outside_path ? c->btn_close : c->text_dim, 0);
     lv_obj_set_style_text_font(info, CJK_FONT_SMALL, 0);
     lv_label_set_long_mode(info, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(info, LV_PCT(100));
+    if (outside_path) {
+        lv_obj_t* warn = lv_label_create(card);
+        lv_label_set_text_fmt(warn, "⚠ Path outside workspace: %s", out_path.c_str());
+        lv_obj_set_style_text_color(warn, c->btn_close, 0);
+        lv_obj_set_style_text_font(warn, CJK_FONT_SMALL, 0);
+        lv_label_set_long_mode(warn, LV_LABEL_LONG_WRAP);
+        lv_obj_set_width(warn, LV_PCT(100));
+    }
 
     if (write_op) {
         lv_obj_t* row = lv_obj_create(card);
