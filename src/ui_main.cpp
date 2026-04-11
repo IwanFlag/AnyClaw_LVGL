@@ -1079,8 +1079,11 @@ static void loading_timer_cb(lv_timer_t* t) {
     if (g_loading_label) {
         DWORD elapsed = GetTickCount() - g_loading_start_tick;
         int dots = (int)((elapsed / 500) % 4);
-        char buf[64];
-        snprintf(buf, sizeof(buf), "Starting OpenClaw%.*s", dots, "...");
+        char buf[128];
+        const char* phase = "Starting OpenClaw";
+        if (elapsed > 9000) phase = "Checking Gateway status";
+        else if (elapsed > 3000) phase = "Initializing runtime modules";
+        snprintf(buf, sizeof(buf), "%s%.*s\nUI is ready. Finishing background startup.", phase, dots, "...");
         lv_label_set_text(g_loading_label, buf);
     }
 
@@ -1129,9 +1132,11 @@ static void loading_show() {
 
         /* Loading text */
         g_loading_label = lv_label_create(g_loading_overlay);
-        lv_label_set_text(g_loading_label, "Starting OpenClaw...");
+        lv_label_set_text(g_loading_label, "Starting OpenClaw...\nUI is ready. Finishing background startup.");
         lv_obj_set_style_text_color(g_loading_label, lv_color_make(180, 185, 200), 0);
-        lv_obj_set_style_text_font(g_loading_label, CJK_FONT, 0);
+        lv_obj_set_style_text_font(g_loading_label, CJK_FONT_SMALL, 0);
+        lv_label_set_long_mode(g_loading_label, LV_LABEL_LONG_WRAP);
+        lv_obj_set_width(g_loading_label, SCALE(420));
         lv_obj_align(g_loading_label, LV_ALIGN_CENTER, 0, 30);
     } else {
         lv_obj_clear_flag(g_loading_overlay, LV_OBJ_FLAG_HIDDEN);
@@ -3439,6 +3444,7 @@ static bool ask_mode_confirm_action(const char* reason, const char* suggestion, 
     lv_obj_add_event_cb(btn_reject, ask_feedback_reject_cb, LV_EVENT_CLICKED, &ctx);
     lv_obj_t* btn_submit = aw_btn_create(row_btn, "发送", BTN_PRIMARY, SCALE(120), SCALE(34));
     lv_obj_add_event_cb(btn_submit, ask_feedback_submit_cb, LV_EVENT_CLICKED, &ctx);
+    lv_obj_add_state(btn_submit, LV_STATE_FOCUSED);
 
     lv_obj_t* lbl_timeout = lv_label_create(box);
     lv_label_set_text(lbl_timeout, "⏱ 60秒未选择将自动拒绝");
@@ -5963,9 +5969,9 @@ static std::string build_boot_check_live_text(const std::vector<BootCheckResult>
             text += r.message;
             if (r.fix_applied) text += " [auto-fixed]";
         } else if (i == running_idx) {
-            text += "checking...";
+            text += "Checking...";
         } else {
-            text += "waiting...";
+            text += "Waiting...";
         }
         text += "\n";
     }
@@ -7212,7 +7218,7 @@ int ui_permission_confirm(const char* perm_key, const char* target) {
     volatile int decision = 0;
     PermDialogCtx ctx = {&decision, overlay};
 
-    auto add_btn = [&](const char* text, lv_color_t bg, lv_event_cb_t cb) {
+    auto add_btn = [&](const char* text, lv_color_t bg, lv_event_cb_t cb) -> lv_obj_t* {
         lv_obj_t* b = lv_button_create(btn_row);
         lv_obj_set_height(b, SCALE(38));
         lv_obj_set_flex_grow(b, 1);
@@ -7225,11 +7231,15 @@ int ui_permission_confirm(const char* perm_key, const char* target) {
         lv_obj_set_style_text_font(t, CJK_FONT_SMALL, 0);
         lv_obj_center(t);
         lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, &ctx);
+        return b;
     };
 
-    add_btn("拒绝", c->btn_close, perm_dialog_deny_cb);
-    add_btn("此次授权", c->btn_action, perm_dialog_allow_once_cb);
-    add_btn("永久授权", c->btn_add, perm_dialog_allow_persist_cb);
+    lv_obj_t* btn_deny = add_btn("拒绝", c->btn_close, perm_dialog_deny_cb);
+    lv_obj_t* btn_once = add_btn("此次授权", c->btn_action, perm_dialog_allow_once_cb);
+    lv_obj_t* btn_perm = add_btn("永久授权", c->btn_add, perm_dialog_allow_persist_cb);
+    (void)btn_deny;
+    (void)btn_perm;
+    lv_obj_add_state(btn_once, LV_STATE_FOCUSED);
 
     lv_obj_t* lbl_timeout = lv_label_create(box);
     lv_label_set_text(lbl_timeout, "⏱ 60秒超时自动拒绝");
@@ -9351,7 +9361,7 @@ static void wizard_build_step_detect() {
         lv_obj_set_style_text_color(g_wiz_install_progress_task, g_colors->accent, 0);
 
         g_wiz_install_progress_step = lv_label_create(g_wiz_install_progress_panel);
-        lv_label_set_text(g_wiz_install_progress_step, "Step: Waiting");
+        lv_label_set_text(g_wiz_install_progress_step, "Step: Waiting...");
         lv_obj_set_style_text_font(g_wiz_install_progress_step, CJK_FONT_SMALL, 0);
         lv_obj_set_style_text_color(g_wiz_install_progress_step, g_colors->text_dim, 0);
 
@@ -9561,7 +9571,7 @@ static void wizard_build_step_gemma() {
     lv_obj_set_style_text_color(g_wiz_install_progress_task, g_colors->accent, 0);
 
     g_wiz_install_progress_step = lv_label_create(g_wiz_install_progress_panel);
-    lv_label_set_text(g_wiz_install_progress_step, "Step: Waiting");
+    lv_label_set_text(g_wiz_install_progress_step, "Step: Waiting...");
     lv_obj_set_style_text_font(g_wiz_install_progress_step, CJK_FONT_SMALL, 0);
     lv_obj_set_style_text_color(g_wiz_install_progress_step, g_colors->text_dim, 0);
 
@@ -9598,7 +9608,7 @@ static void wizard_build_step_gemma() {
         (void)e;
         app_request_setup_cancel();
         ui_log("[Gemma] Cancel requested by user");
-        if (g_wiz_install_progress_step) lv_label_set_text(g_wiz_install_progress_step, "Step: Cancel requested...");
+        if (g_wiz_install_progress_step) lv_label_set_text(g_wiz_install_progress_step, "Step: Cancel requested");
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_cancel_dl = lv_label_create(g_wiz_install_progress_cancel_btn);
     lv_label_set_text(lbl_cancel_dl, g_lang == Lang::CN ? "取消下载" : "Cancel Download");
@@ -10641,7 +10651,7 @@ void app_ui_init() {
         lv_obj_set_style_text_font(mode_boot_progress_task, CJK_FONT_SMALL, 0);
 
         mode_boot_progress_step = lv_label_create(mode_boot_progress_panel);
-        lv_label_set_text(mode_boot_progress_step, "Step: idle");
+        lv_label_set_text(mode_boot_progress_step, "Step: Waiting...");
         lv_obj_set_style_text_color(mode_boot_progress_step, c->text_dim, 0);
         lv_obj_set_style_text_font(mode_boot_progress_step, CJK_FONT_SMALL, 0);
 
