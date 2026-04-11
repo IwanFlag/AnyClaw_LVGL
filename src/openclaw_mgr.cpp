@@ -891,7 +891,7 @@ bool app_check_nodejs_version_ok(const char* version) {
 }
 
 /* ── Find bundled openclaw tarball ─────────────────────────── */
-/* Searches relative to exe dir for bundled/openclaw-*.tgz */
+/* Searches relative to exe dir for bundled/openclaw-*.tgz, returns absolute path */
 static bool find_bundled_tarball(char* path_out, int out_size) {
     if (!path_out || out_size <= 0) return false;
     path_out[0] = '\0';
@@ -906,11 +906,16 @@ static bool find_bundled_tarball(char* path_out, int out_size) {
     };
 
     for (int i = 0; search_paths[i]; i++) {
-        /* Check if file exists using stdio */
         FILE* f = fopen(search_paths[i], "rb");
         if (f) {
             fclose(f);
-            strncpy(path_out, search_paths[i], out_size - 1);
+            /* FIX: Convert to absolute path so child processes (sandbox CWD) can find it */
+            char abs_path[MAX_PATH] = {0};
+            if (_fullpath(abs_path, search_paths[i], MAX_PATH)) {
+                strncpy(path_out, abs_path, out_size - 1);
+            } else {
+                strncpy(path_out, search_paths[i], out_size - 1);
+            }
             path_out[out_size - 1] = '\0';
             LOG_I("OpenClaw", "Found bundled tarball: %s", path_out);
             return true;
@@ -1098,12 +1103,43 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
         return false;
     }
 
-    ui_progress_begin("OpenClaw Setup", "Pre-check environment", 3);
+    bool is_local = (strcmp(mode, "local") == 0);
 
-    /* Check Node.js first; if missing, auto install */
-    if (!install_nodejs_if_missing(output, out_size)) {
-        ui_progress_finish("OpenClaw Setup", false, output);
-        return false;
+    ui_progress_begin("OpenClaw Setup", "Pre-check environment", is_local ? 3 : 6);
+
+    /* ── Node.js pre-check ── */
+    if (is_local) {
+        /* Local (offline): do NOT auto-download Node.js — just verify it exists */
+        char node_ver[64] = {0};
+        if (!app_check_nodejs(node_ver, sizeof(node_ver))) {
+            snprintf(output, out_size,
+                     "Node.js not found. Offline install requires Node.js pre-installed.\n"
+                     "Download: https://nodejs.org/ (LTS >= v22)");
+            ui_progress_finish("OpenClaw Setup", false, output);
+            return false;
+        }
+        if (!app_check_nodejs_version_ok(node_ver)) {
+            snprintf(output, out_size,
+                     "Node.js %s is too old (need >= v22). Offline install cannot auto-update.\n"
+                     "Download: https://nodejs.org/ (LTS >= v22)", node_ver);
+            ui_progress_finish("OpenClaw Setup", false, output);
+            return false;
+        }
+        char npm_ver[32] = {0};
+        if (!exec_cmd("npm --version", npm_ver, sizeof(npm_ver)) || !npm_ver[0]) {
+            snprintf(output, out_size,
+                     "npm not found. Offline install requires npm.\n"
+                     "Install Node.js from https://nodejs.org/ (includes npm)");
+            ui_progress_finish("OpenClaw Setup", false, output);
+            return false;
+        }
+        ui_log("[Setup] Local pre-check OK: Node %s, npm %s", node_ver, npm_ver);
+    } else {
+        /* Network/auto: auto-download Node.js if missing */
+        if (!install_nodejs_if_missing(output, out_size)) {
+            ui_progress_finish("OpenClaw Setup", false, output);
+            return false;
+        }
     }
 
     /* FIX: Ensure npm global prefix is in PATH for subsequent openclaw commands.
@@ -1135,16 +1171,18 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
 
     /* Mode: local (bundled) */
     if (strcmp(mode, "local") == 0) {
-        ui_progress_update("OpenClaw Setup", "Installing from bundled package", 45);
+        ui_progress_update("OpenClaw Setup", "Locating bundled package", 30);
         char tarball[256] = {0};
         if (!find_bundled_tarball(tarball, sizeof(tarball))) {
-            snprintf(output, out_size, "Bundled OpenClaw package not found");
+            snprintf(output, out_size, "Bundled OpenClaw package not found (bundled\\openclaw.tgz)");
             ui_progress_finish("OpenClaw Setup", false, output);
             return false;
         }
+        ui_progress_update("OpenClaw Setup", "Installing from bundled package", 50);
         snprintf(cmd, sizeof(cmd), "npm install -g \"%s\"", tarball);
         LOG_I("Setup", "Installing from bundled: %s", tarball);
         ok = exec_cmd(cmd, output, out_size, 120000);
+        if (ok) ui_progress_update("OpenClaw Setup", "Package installed", 80);
     }
     /* Mode: network */
     else if (strcmp(mode, "network") == 0) {

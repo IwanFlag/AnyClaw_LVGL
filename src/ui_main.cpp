@@ -7024,10 +7024,18 @@ static void wiz_install_oc_cb(lv_event_t* e) {
         if (ok && !app_is_setup_cancelled()) {
             ui_progress_update("OpenClaw Setup", "Initializing gateway", 88);
             char init_out[512] = {0};
-            ok = app_init_openclaw(init_out, sizeof(init_out));
-            if (ok) g_wizard_oc_installed_now = true;
-            ui_progress_finish("OpenClaw Setup", ok, ok ? "OpenClaw ready" : init_out);
-            if (!ok) snprintf(output, sizeof(output), "%s", init_out);
+            bool gw_ok = app_init_openclaw(init_out, sizeof(init_out));
+            if (gw_ok) {
+                g_wizard_oc_installed_now = true;
+                ui_progress_finish("OpenClaw Setup", true, "OpenClaw ready");
+            } else {
+                /* FIX: Don't overwrite install success — report gateway issue separately */
+                ui_progress_finish("OpenClaw Setup", false, init_out);
+                char combined[1024] = {0};
+                snprintf(combined, sizeof(combined), "Installed OK. Gateway init failed: %s", init_out);
+                snprintf(output, sizeof(output), "%s", combined);
+            }
+            ok = gw_ok;
         } else if (app_is_setup_cancelled()) {
             snprintf(output, sizeof(output), "已取消安装");
             ui_progress_finish("OpenClaw Setup", false, output);
