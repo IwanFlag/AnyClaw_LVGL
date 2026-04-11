@@ -735,20 +735,20 @@ void save_theme_config() {
         f << "  \"wizard_completed\": " << (g_wizard_completed ? "true" : "false") << ",\n";
         f << "  \"control_mode\": " << (int)g_control_mode << ",\n";
         f << "  \"llm_access_mode\": " << (int)g_llm_access_mode << ",\n";
-        f << "  \"profile_user_name\": \"" << g_profile_user_name << "\",\n";
-        f << "  \"profile_user_role\": \"" << g_profile_user_role << "\",\n";
-        f << "  \"profile_user_persona\": \"" << g_profile_user_persona << "\",\n";
-        f << "  \"profile_ai_name\": \"" << g_profile_ai_name << "\",\n";
-        f << "  \"profile_ai_role\": \"" << g_profile_ai_role << "\",\n";
-        f << "  \"profile_ai_persona\": \"" << g_profile_ai_persona << "\",\n";
-        f << "  \"profile_ai_skills\": \"" << g_profile_ai_skills << "\",\n";
-        f << "  \"profile_user_avatar\": \"" << g_profile_user_avatar << "\",\n";
-        f << "  \"profile_ai_avatar\": \"" << g_profile_ai_avatar << "\",\n";
+        f << "  \"profile_user_name\": \"" << json_escape(g_profile_user_name) << "\",\n";
+        f << "  \"profile_user_role\": \"" << json_escape(g_profile_user_role) << "\",\n";
+        f << "  \"profile_user_persona\": \"" << json_escape(g_profile_user_persona) << "\",\n";
+        f << "  \"profile_ai_name\": \"" << json_escape(g_profile_ai_name) << "\",\n";
+        f << "  \"profile_ai_role\": \"" << json_escape(g_profile_ai_role) << "\",\n";
+        f << "  \"profile_ai_persona\": \"" << json_escape(g_profile_ai_persona) << "\",\n";
+        f << "  \"profile_ai_skills\": \"" << json_escape(g_profile_ai_skills) << "\",\n";
+        f << "  \"profile_user_avatar\": \"" << json_escape(g_profile_user_avatar) << "\",\n";
+        f << "  \"profile_ai_avatar\": \"" << json_escape(g_profile_ai_avatar) << "\",\n";
         f << "  \"gemma_install_opt_in\": " << (g_gemma_install_opt_in ? 1 : 0) << ",\n";
         f << "  \"gemma_model_mask\": " << g_gemma_model_mask << ",\n";
         f << "  \"remote_guard_armed\": " << (g_remote_guard_armed ? 1 : 0) << ",\n";
-        f << "  \"model_name\": \"" << (g_selected_model[0] ? g_selected_model : "") << "\",\n";
-        f << "  \"api_key\": \"" << (g_api_key[0] ? g_api_key : "") << "\",\n";
+        f << "  \"model_name\": \"" << json_escape(g_selected_model) << "\",\n";
+        f << "  \"api_key\": \"" << json_escape(g_api_key) << "\",\n";
         f << "  \"restore_last_session\": " << (g_restore_last_session ? 1 : 0) << "\n";
         f << "}\n";
         f.close();
@@ -6769,6 +6769,11 @@ static void wiz_install_poll_cb(lv_timer_t* t) {
         wizard_set_next_enabled(true);
         wizard_go_step(g_wizard_step);
     }
+    /* FIX P3: Clean up timer — install finished (success or cancel), no more polling needed */
+    if (g_wiz_install_poll_timer) {
+        lv_timer_del(g_wiz_install_poll_timer);
+        g_wiz_install_poll_timer = nullptr;
+    }
 }
 
 static void wiz_cancel_install_cb(lv_event_t* e) {
@@ -7400,7 +7405,8 @@ static void wizard_gemma_skip_cb(lv_event_t* e) {
     g_gemma_model_mask = 0;
     update_gemma_recommend_visuals();
     ui_log("[Wizard] Gemma install skipped by user");
-    if (g_wizard_step == 2) wizard_go_step(3);
+    /* FIX P6: Use relative step instead of hardcoded indices */
+    if (g_wizard_step == 2) wizard_go_step(g_wizard_step + 1);
 }
 
 /* ── Step 5: User Profile ── */
@@ -7619,7 +7625,6 @@ static void wizard_update_step() {
 
     /* Update title */
     lv_label_set_text(g_wizard_title, tr(wizard_step_titles[g_wizard_step]));
-    wizard_set_next_enabled(true);
 
     /* Build step content */
     switch (g_wizard_step) {
@@ -7629,6 +7634,8 @@ static void wizard_update_step() {
         case 3: wizard_build_step_profile(); break;
         case 4: wizard_build_step_summary(); break;
     }
+    /* FIX P5: Default-enable Next AFTER step build to avoid one-frame flicker */
+    wizard_set_next_enabled(true);
 
     /* Update buttons */
     if (g_wizard_step == 0) {
@@ -7823,6 +7830,10 @@ void ui_show_setup_wizard() {
     g_wizard_step = 0;
     g_wizard_oc_installed_now = false; /* Reset install tracking */
     g_wizard_session_finished = false;
+    /* FIX P2: Pre-fill wizard state from saved config */
+    if (g_api_key[0] && !g_wizard_api_key[0]) {
+        snprintf(g_wizard_api_key, sizeof(g_wizard_api_key), "%s", g_api_key);
+    }
     lv_obj_t* scr = lv_screen_active();
 
     /* Full-screen overlay */
