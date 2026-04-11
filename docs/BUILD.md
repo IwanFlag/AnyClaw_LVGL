@@ -208,12 +208,39 @@ git clone --depth 1 https://<TOKEN>@github.com/IwanFlag/AnyClaw_LVGL.git
 
 ## Git 备忘
 
-某些环境 `git clone` 走 HTTPS 会遇到 `GnuTLS recv error (-110)`。已验证的替代方案：
+### Ubuntu 上 git push/pull 卡住或报 TLS 错误
+
+**现象：** `git clone`、`git push`、`git pull` 报 `GnuTLS recv error (-110): The TLS connection was non-properly terminated`，或长时间卡住无响应。
+
+**原因：** Ubuntu 24.04 默认的 git 编译时链接的是 `libcurl-gnutls.so.4`（GnuTLS 版），与 GitHub 的 TLS 握手有已知兼容问题。HTTPS 小请求（API 调用）可能正常，但大数据传输（clone/push）容易中断。
+
+**解决方案：改用 SSH 协议。**
 
 ```bash
-# shallow clone（推荐，避开了 GnuTLS 问题）
+# 1. 生成 SSH key（如果没有）
+ssh-keygen -t ed25519 -C "your_email@example.com" -f ~/.ssh/id_ed25519 -N ""
+
+# 2. 添加到 GitHub
+cat ~/.ssh/id_ed25519.pub
+# 复制输出 → GitHub → Settings → SSH and GPG keys → New SSH key → 粘贴
+
+# 3. 验证
+ssh -T git@github.com
+
+# 4. 切换远程地址
+git remote set-url origin git@github.com:IwanFlag/AnyClaw_LVGL.git
+```
+
+> **不要尝试替换 libcurl**——Ubuntu 的 `libcurl.so.4` 和 `libcurl-gnutls.so.4` 都同时依赖 OpenSSL 和 GnuTLS，替换无效。
+
+### 其他 workaround（临时方案）
+
+如果暂时无法用 SSH，可用以下方法：
+
+```bash
+# shallow clone（避开了部分 GnuTLS 问题）
 git clone --depth 1 https://<TOKEN>@github.com/IwanFlag/AnyClaw_LVGL.git
 
-# 或增大 HTTP 缓冲区
+# 增大 HTTP 缓冲区
 git config --global http.postBuffer 524288000
 ```
