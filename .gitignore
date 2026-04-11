@@ -1,11 +1,7 @@
-# Build directories
-build/
+# Build output (not committed)
+out/
 build-mingw/
 build-windows/
-build_mingw/
-cmake-build-*/
-!build-windows/README.md
-!build-mingw/README.md
 
 # IDE
 .vs/
@@ -41,26 +37,12 @@ Thumbs.db
 
 # Temp/debug files
 *.log
-*.txt
 *.bak
 *.orig
 *.tmp
 !docs/*.md
 !thirdparty/**/*.txt
-!tools/README.md
 !LICENSE*
-
-# Scripts (dev-only, not part of build)
-*.ps1
-*.cs
-*.js
-!package.json
-!tools/common/*.ps1
-!tools/common/*.sh
-!tools/windows/*.bat
-!tools/linux/*.sh
-!tools/linux/*.cmake
-tools/windows/.env-path.bat
 
 # Python dev scripts
 *.py

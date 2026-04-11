@@ -7,8 +7,8 @@ set(CMAKE_CXX_STANDARD 17)
 # ═══════════════════════════════════════════════════════════════
 # Options
 # ═══════════════════════════════════════════════════════════════
-set(SDL2_CROSS_PREFIX "/opt/sdl2-mingw" CACHE PATH "SDL2 MinGW cross-compile install prefix")
-set(SDL2_BUNDLED_PREFIX "${CMAKE_SOURCE_DIR}/thirdparty/SDL2")
+set(SDL2_CROSS_PREFIX "${CMAKE_SOURCE_DIR}/thirdparty/sdl2-mingw" CACHE PATH "SDL2 MinGW cross-compile install prefix")
+set(SDL2_BUNDLED_PREFIX "${CMAKE_SOURCE_DIR}/thirdparty/sdl2-windows")
 
 # Resolve SDL include/lib layout for both Linux cross-build and Windows native build.
 set(SDL2_INCLUDE_DIRS "")
