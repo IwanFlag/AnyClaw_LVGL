@@ -1053,6 +1053,8 @@ static bool g_maximized = false;          /* Track maximize state */
 static lv_obj_t* g_loading_overlay = nullptr;
 static lv_obj_t* g_loading_icon = nullptr;
 static lv_obj_t* g_loading_label = nullptr;
+static lv_obj_t* g_loading_bar = nullptr;
+static lv_obj_t* g_loading_stage_list = nullptr;
 static lv_timer_t* g_loading_timer = nullptr;
 static DWORD g_loading_start_tick = 0;
 static float g_loading_angle = 0.0f;
@@ -1110,6 +1112,29 @@ static void loading_timer_cb(lv_timer_t* t) {
         }
         lv_label_set_text(g_loading_label, buf);
     }
+    if (g_loading_bar) {
+        int bar_pct = live_pct;
+        if (bar_pct < 0) {
+            DWORD elapsed = GetTickCount() - g_loading_start_tick;
+            bar_pct = (elapsed > 12000) ? 95 : (int)(elapsed / 140);
+        }
+        if (bar_pct < 0) bar_pct = 0;
+        if (bar_pct > 100) bar_pct = 100;
+        lv_bar_set_value(g_loading_bar, bar_pct, LV_ANIM_ON);
+    }
+    if (g_loading_stage_list) {
+        int p = (live_pct < 0) ? 0 : live_pct;
+        const char* gateway = (p >= 30) ? "✓" : (p >= 10 ? "•" : "○");
+        const char* license = (p >= 56) ? "✓" : (p >= 40 ? "•" : "○");
+        const char* workspace = (p >= 80) ? "✓" : (p >= 60 ? "•" : "○");
+        const char* features = (p >= 90) ? "✓" : (p >= 82 ? "•" : "○");
+        const char* finish = startup_done ? "✓" : (p >= 95 ? "•" : "○");
+        char stage_buf[320];
+        snprintf(stage_buf, sizeof(stage_buf),
+                 "%s Gateway\n%s License\n%s Workspace\n%s Feature flags\n%s Finalize",
+                 gateway, license, workspace, features, finish);
+        lv_label_set_text(g_loading_stage_list, stage_buf);
+    }
 
     /* Check status every 2 seconds */
     static DWORD last_check = 0;
@@ -1160,6 +1185,21 @@ static void loading_show() {
         lv_label_set_long_mode(g_loading_label, LV_LABEL_LONG_WRAP);
         lv_obj_set_width(g_loading_label, SCALE(420));
         lv_obj_align(g_loading_label, LV_ALIGN_CENTER, 0, 30);
+
+        g_loading_bar = lv_bar_create(g_loading_overlay);
+        lv_obj_set_size(g_loading_bar, SCALE(360), SCALE(8));
+        lv_bar_set_range(g_loading_bar, 0, 100);
+        lv_bar_set_value(g_loading_bar, 2, LV_ANIM_OFF);
+        lv_obj_set_style_radius(g_loading_bar, 999, 0);
+        lv_obj_set_style_bg_color(g_loading_bar, lv_color_make(45, 50, 64), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(g_loading_bar, lv_color_make(104, 188, 132), LV_PART_INDICATOR);
+        lv_obj_align(g_loading_bar, LV_ALIGN_CENTER, 0, 82);
+
+        g_loading_stage_list = lv_label_create(g_loading_overlay);
+        lv_label_set_text(g_loading_stage_list, "○ Gateway\n○ License\n○ Workspace\n○ Feature flags\n○ Finalize");
+        lv_obj_set_style_text_color(g_loading_stage_list, lv_color_make(150, 160, 185), 0);
+        lv_obj_set_style_text_font(g_loading_stage_list, CJK_FONT_SMALL, 0);
+        lv_obj_align(g_loading_stage_list, LV_ALIGN_CENTER, 0, 160);
     } else {
         lv_obj_clear_flag(g_loading_overlay, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(g_loading_overlay);
@@ -1173,6 +1213,8 @@ static void loading_show() {
         g_loading_live_step.clear();
         g_loading_live_pct = -1;
     }
+    if (g_loading_bar) lv_bar_set_value(g_loading_bar, 2, LV_ANIM_OFF);
+    if (g_loading_stage_list) lv_label_set_text(g_loading_stage_list, "○ Gateway\n○ License\n○ Workspace\n○ Feature flags\n○ Finalize");
 
     /* Start rotation + status check timer (60fps) */
     if (g_loading_timer) lv_timer_del(g_loading_timer);
