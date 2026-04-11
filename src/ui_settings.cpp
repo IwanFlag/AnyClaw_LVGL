@@ -3121,7 +3121,7 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_clear_flag(title_bar, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t* title = lv_label_create(title_bar);
-    lv_label_set_text(title, "Settings");
+    lv_label_set_text(title, tr("设置", "Settings"));
     lv_obj_set_style_text_color(title, g_colors->accent, 0);
     lv_obj_set_style_text_font(title, CJK_FONT, 0);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 15, 0);
