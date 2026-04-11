@@ -6,6 +6,24 @@
 
 ---
 
+## Git 拉取备忘
+
+某些环境（如服务器/容器）`git clone` 默认走 HTTPS 时会遇到 TLS 问题（`GnuTLS recv error (-110)`），但 `curl` 和 GitHub API 正常。已验证的替代方案：
+
+```bash
+# 普通 clone 失败时，用 --depth 1 + token 嵌入 URL 即可成功
+git clone --depth 1 https://<TOKEN>@github.com/IwanFlag/AnyClaw_LVGL.git
+
+# 如果需要完整历史（非 shallow），去掉 --depth 即可
+git clone https://<TOKEN>@github.com/IwanFlag/AnyClaw_LVGL.git
+```
+
+**原因**：Git 默认使用 GnuTLS，与部分环境的 TLS 配置不兼容；`--depth 1` 走的 pack 协议路径不同，避开了问题。若后续遇到类似问题，也可尝试：
+- `git config --global http.sslVerify false`（临时跳过证书验证，不推荐生产环境）
+- 编译 git 时改用 OpenSSL 而非 GnuTLS
+
+---
+
 ## 任务执行协议
 
 | 原则 | 说明 |
