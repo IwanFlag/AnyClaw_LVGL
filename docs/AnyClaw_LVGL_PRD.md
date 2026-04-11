@@ -1,6 +1,6 @@
 # AnyClaw LVGL — 产品需求文档 (PRD)
 
-> 版本：v2.0.1 | 最后更新：2026-04-11
+> 版本：v2.0.2 | 最后更新：2026-04-11
 
 ---
 
@@ -1369,4 +1369,157 @@ AnyClaw 区别于普通局域网聊天工具的差异化能力。
 | 跨平台 | 当前仅 Windows，Linux AnyClaw 能否与 Windows 互通？ |
 | 大文件传输 | 2GB 视频会不会卡死聊天？需要限速或后台传输 |
 | 消息持久化 | 消息存本地还是纯内存？是否永久保存？ |
+
+### A.8 竞品功能吸收（2026-04-11）
+
+对 Ollama、LM Studio、Cursor、Claude 四个产品的横向对比，筛选 AnyClaw 应当吸收的功能方向。
+
+#### 总览
+
+| # | 功能方向 | 来源 | 优先级 | 对标产品 |
+|---|---------|------|--------|---------|
+| 1 | MCP Client | LM Studio | 🔴 高 | LM Studio |
+| 2 | 本地模型推理引擎 | Ollama + LM Studio | 🔴 高 | Ollama / LM Studio |
+| 3 | OpenAI 兼容 API 服务端 | LM Studio + Ollama | 🔴 高 | LM Studio / Ollama |
+| 4 | RAG 文档聊天体验 | LM Studio | 🔴 高 | LM Studio |
+| 5 | SDK / API 文档 | LM Studio | 🟡 中 | LM Studio |
+| 6 | Headless 模式 | LM Studio | 🟡 中 | LM Studio |
+| 7 | 跨平台 | LM Studio + Ollama | 🟡 中 | LM Studio / Ollama |
+| 8 | 竞品参考——Cursor Composer | Cursor | 🟡 中 | Cursor |
+| 9 | 模型格式兼容（GGUF/MLX） | LM Studio | 🟢 低 | LM Studio |
+| 10 | 多模态能力 | Claude | 🟢 低 | Claude |
+| 11 | 模型社区生态 | Ollama | 🟢 低 | Ollama |
+
+#### 1. MCP Client（Model Context Protocol）
+
+**来源：** LM Studio 0.4.x 已支持 MCP Client，用户可安装 MCP Server 并与本地模型配合使用。
+
+**现状：** AnyClaw 的工具调用完全依赖 OpenClaw Gateway 内置的 Skill 系统，没有接入 MCP 协议。
+
+**吸收价值：**
+- MCP 正在成为 LLM 工具调用的事实标准协议（Claude Desktop、Cursor、LM Studio 均已支持）
+- 接入 MCP 后，AnyClaw 可直接复用社区已有的 MCP Server（数据库查询、浏览器控制、文件系统等），无需逐个开发 Skill
+- 降低 AnyClaw 工具生态的建设成本
+
+**设计方向：**
+- AnyClaw 内置 MCP Client，支持配置 MCP Server 列表
+- MCP Server 的工具注册到 Agent 工具池，与现有 Skill 并行
+- MCP Server 的权限纳入 AnyClaw 三层权限体系管控（§9）
+- 安装/卸载 MCP Server 可通过 GUI 完成
+
+#### 2. 本地模型推理引擎
+
+**来源：** Ollama 是纯本地推理引擎，一行命令完成模型下载+运行；LM Studio 内置 llama.cpp + MLX 运行时，GUI 内完成模型管理和推理。
+
+**现状：** AnyClaw §5.4 规划了 Gemma 本地模型安装（2B/9B/27B），但只覆盖"下载安装"，不包含推理运行时。用户装完模型后仍需外部推理服务。
+
+**吸收价值：**
+- 当前架构下，本地模型 = 安装 Gemma + 依赖外部推理服务 → 门槛高
+- 对标 Ollama/LM Studio，用户期望"装完就能跑"
+- 本地推理是"数据不离开本地"核心价值的最后一环
+
+**设计方向：**
+- 集成轻量推理引擎（如 llama.cpp 作为库内嵌，非外部进程）
+- GUI 内完成：模型搜索 → 下载 → 加载 → 聊天，全流程不离开 AnyClaw
+- 推理引擎的选择需考虑体积（嵌入 exe 后总体积 < 100MB）
+- 与 Gateway 模式并行：本地推理走本地通道，云端推理走 Gateway
+
+#### 3. OpenAI 兼容 API 服务端
+
+**来源：** LM Studio（端口 1234）和 Ollama（端口 11434）均提供 OpenAI 兼容 REST API，使得 VSCode 插件、其他 App 可直连本地模型。
+
+**现状：** AnyClaw 只做 Client（消费 Gateway API），不对外暴露服务端接口。
+
+**吸收价值：**
+- 暴露本地 API 端口 → VSCode 插件、浏览器扩展、其他桌面 App 可消费 AnyClaw 的 Agent 能力
+- 生态扩展的关键基础设施——没有 API 就没有插件生态
+- 与"本地推理引擎"配合：本地模型 + 本地 API = 完全离线的 AI 服务能力
+
+**设计方向：**
+- 可选开启本地 OpenAI 兼容 API（默认关闭，Settings 中开启）
+- 端口可配置（默认 18800 以上，避免与 Gateway 18789 冲突）
+- API 认证：本地 token，防止局域网内其他设备未授权访问
+- 两种后端路由：本地推理引擎 / Gateway Agent → 用户选择
+
+#### 4. RAG 文档聊天体验
+
+**来源：** LM Studio 支持拖入文档直接对话（离线 RAG），体验流畅。
+
+**现状：** AnyClaw §16.4 有本地知识库 V1（关键词检索 + 固定前缀截断拼接到上下文），但检索排序粗糙、上下文构建原始。
+
+**吸收价值：**
+- LM Studio 的文档 RAG 体验是当前本地 AI 的标杆——拖入即问，无需配置
+- AnyClaw 的知识库 V1 还需要用户手动建立索引，门槛远高于 LM Studio
+- RAG 是非编程用户（学生/职场）的核心使用场景之一
+
+**设计方向（V2 升级）：**
+- 聊天窗口支持拖入文档（PDF/Word/TXT/Markdown），自动解析并建立向量索引
+- 检索排序升级：频次 + 首次命中位置 + 文件名命中 + 语义相似度综合评分
+- 上下文构建升级：命中片段截取（而非固定前缀截断）
+- 片段去重 + 总长度预算控制
+- 文档管理面板：已导入文档列表、重建索引、删除
+
+#### 5. SDK / API 文档
+
+**来源：** LM Studio 提供 `lmstudio-python` 和 `lmstudio-js` 两个官方 SDK。
+
+**现状：** AnyClaw 纯 GUI 应用，无 SDK、无 API 文档。
+
+**吸收价值：**
+- 有 SDK 意味着开发者可以二次集成 AnyClaw 的 Agent 能力
+- 为未来生态扩展打基础（插件、脚本、自动化）
+
+**设计方向：**
+- 短期：完善 §3 OpenAI 兼容 API 的文档
+- 中期：提供 Python/JS 薄封装 SDK
+- 长期：建立开发者社区和插件市场
+
+#### 6. Headless 模式
+
+**来源：** LM Studio 提供 `llmster`（无 GUI 版本），适用于服务器/CI 环境。
+
+**现状：** AnyClaw 是纯 GUI 应用，无服务端模式。
+
+**吸收价值：**
+- 适配 NAS、树莓派、云服务器等无显示器场景
+- 与远程协作功能（§16）互补——Headless 实例作为远程 Agent 节点
+- CI/CD 集成场景（开发者的自动化流水线）
+
+**设计方向：**
+- 提供命令行模式：`AnyClaw_LVGL.exe --headless --port 18800`
+- 无 GUI 时提供 HTTP API + WebSocket
+- 与远程协作功能结合：Headless 实例可通过 LM Link 类协议被 GUI 实例发现和连接
+
+#### 7. 跨平台
+
+**来源：** LM Studio（macOS/Windows/Linux）、Ollama（macOS/Windows/Linux）均三平台。
+
+**现状：** AnyClaw 仅支持 Windows（MSYS2 编译）。虽有交叉编译（MinGW → Windows），但无 Linux/macOS 原生版本。
+
+**吸收价值：**
+- 用户群扩展：macOS 开发者、Linux 运维人员
+- 与 LAN Chat 跨平台互通需求一致（§A.7 待定问题）
+- LVGL 本身支持多平台，技术上可行
+
+**设计方向：**
+- 短期：Linux 原生编译支持（已有的 `build-linux.sh` 需完善）
+- 中期：macOS 原生编译（需替换 SDL2 + Win32 API 调用）
+- 注意：托盘、文件对话框、进程管理等模块有平台差异，需要抽象层
+
+#### 11. 模型社区生态
+
+**来源：** Ollama 的 `ollama pull` 一行命令完成模型下载+可用，模型库丰富。
+
+**现状：** AnyClaw 的模型管理是下拉框选择 + 手动填 API Key，没有"搜索→下载→可用"的一键流程。
+
+**吸收价值：**
+- Ollama 的模型生态吸引力在于"开箱即用"——用户不需要理解 API/Provider/Key 的概念
+- AnyClaw 当前的模型选择对新手不友好（需要理解 OpenRouter、Provider、API Key 的关系）
+- 降低模型使用门槛是"简单"核心价值的直接体现
+
+**设计方向：**
+- 模型浏览器：GUI 内搜索/浏览可用模型（含 OpenRouter 云端 + 本地可下载模型）
+- 一键流程：选中模型 → 自动检测 Provider → 引导填 Key → 可用
+- 本地模型：类似 Ollama 的体验，选中即下载+加载+可用
+- 模型推荐：根据用户硬件（RAM/GPU）推荐合适模型
 
