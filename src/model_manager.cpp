@@ -737,10 +737,10 @@ double failover_calc_score(const ModelHealth* h) {
     int total = h->success_count + h->fail_count;
     double stability = (total > 0) ? (double)h->success_count / total : 0.5;
 
-    /* Speed: 1 - (latency / 30000), clamped to [0, 1] */
+    /* Speed: 1 - (latency / 15000), clamped to [0, 1] */
     double speed = 0.5; /* default if no data */
     if (h->last_latency_ms > 0 && total > 0) {
-        speed = 1.0 - (double)h->last_latency_ms / 30000.0;
+        speed = 1.0 - (double)h->last_latency_ms / 15000.0;
         if (speed < 0.0) speed = 0.0;
         if (speed > 1.0) speed = 1.0;
     }
@@ -784,7 +784,7 @@ const char* failover_get_next_healthy(const char* current_model) {
               (g_failover_models[i].success_count + g_failover_models[i].fail_count > 0)
                   ? (double)g_failover_models[i].success_count / (g_failover_models[i].success_count + g_failover_models[i].fail_count)
                   : 0.5,
-              1.0 - (double)g_failover_models[i].last_latency_ms / 30000.0,
+              1.0 - (double)g_failover_models[i].last_latency_ms / 15000.0,
               get_capability_score(g_failover_models[i].model_name),
               g_failover_models[i].is_healthy);
 
