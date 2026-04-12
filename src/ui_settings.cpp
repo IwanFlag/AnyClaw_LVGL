@@ -2663,7 +2663,7 @@ static void build_about_tab(lv_obj_t* tab) {
         char file_buf[MAX_PATH] = {0};
         SYSTEMTIME st;
         GetLocalTime(&st);
-        snprintf(file_buf, sizeof(file_buf), "AnyClaw_Migration_v2.0.1_%04d%02d%02d.zip",
+        snprintf(file_buf, sizeof(file_buf), "AnyClaw_Migration_v2.2.1_%04d%02d%02d.zip",
                  st.wYear, st.wMonth, st.wDay);
         ZeroMemory(&ofn, sizeof(ofn));
         ofn.lStructSize = sizeof(ofn);
@@ -2727,7 +2727,7 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_set_style_radius(btn_app_update, 6, 0);
     lv_obj_add_event_cb(btn_app_update, [](lv_event_t* e) {
         (void)e;
-        static const char* kCurrentVersion = "v2.0.1";
+        static const char* kCurrentVersion = "v2.2.1";
         static const char* kApi = "https://api.github.com/repos/IwanFlag/AnyClaw_Tools/releases/latest";
         char response[16384] = {0};
         int result = http_get(kApi, response, sizeof(response), 10);

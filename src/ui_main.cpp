@@ -1020,7 +1020,7 @@ static const I18n STR_TITLE       = {"AnyClaw Desktop Manager", "AnyClaw 桌面�
 static const I18n STR_LOG         = {"Log", "日志"};
 // STR_VERSION, STR_PORT removed — no longer displayed on main panel
 static const I18n STR_PATH        = {"Path", "路径"};
-static const I18n STR_FOOTER      = {"AnyClaw v2.0.1 | LVGL 9.6 + SDL2", "AnyClaw v2.0.1 | LVGL 9.6 + SDL2"};
+static const I18n STR_FOOTER      = {"AnyClaw v2.2.1 | LVGL 9.6 + SDL2", "AnyClaw v2.2.1 | LVGL 9.6 + SDL2"};
 static const I18n STR_AUTOREFRESH = {"Auto-refresh: 30s", "自动刷新: 30s"};
 static const I18n STR_CHECKING    = {"Checking...", "检查中..."};
 static const I18n STR_READY       = {"Ready", "就绪"};
@@ -8022,7 +8022,7 @@ void ui_show_about_dialog() {
     const ThemeColors* c = g_colors;
 
     static const I18n S_ABOUT_TITLE = {"About", "关于"};
-    static const I18n S_VERSION = {"Version v2.0.1", "版本 v2.0.1"};
+    static const I18n S_VERSION = {"Version v2.2.1", "版本 v2.2.1"};
     static const I18n S_SLOGAN = {"Your OpenClaw Desktop Manager", "龙虾要吃蒜蓉的 🧄🦞"};
     static const I18n S_CLOSE = {"Close", "关闭"};
 
@@ -8994,6 +8994,8 @@ static bool* g_wiz_im_active_connected = nullptr;
 /* Widget refs per step */
 static lv_obj_t* g_wiz_btn_cn = nullptr;
 static lv_obj_t* g_wiz_btn_en = nullptr;
+static lv_obj_t* g_wiz_btn_kr = nullptr;
+static lv_obj_t* g_wiz_btn_jp = nullptr;
 static lv_obj_t* g_wiz_detect_lbl = nullptr;
 static lv_obj_t* g_wiz_api_ta = nullptr;
 static lv_obj_t* g_wiz_model_dd = nullptr;
@@ -9217,15 +9219,38 @@ static void wiz_lang_cn_cb(lv_event_t* e) {
     (void)e;
     g_wizard_lang_sel = 0;
     g_lang = Lang::CN;
-    lv_obj_set_style_bg_color(g_wiz_btn_cn, lv_color_make(59, 130, 246), 0);
-    lv_obj_set_style_bg_color(g_wiz_btn_en, lv_color_make(50, 55, 75), 0);
+    if (g_wiz_btn_cn) lv_obj_set_style_bg_color(g_wiz_btn_cn, lv_color_make(59, 130, 246), 0);
+    if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, lv_color_make(50, 55, 75), 0);
+    if (g_wiz_btn_kr) lv_obj_set_style_bg_color(g_wiz_btn_kr, lv_color_make(50, 55, 75), 0);
+    if (g_wiz_btn_jp) lv_obj_set_style_bg_color(g_wiz_btn_jp, lv_color_make(50, 55, 75), 0);
 }
 static void wiz_lang_en_cb(lv_event_t* e) {
     (void)e;
     g_wizard_lang_sel = 1;
     g_lang = Lang::EN;
-    lv_obj_set_style_bg_color(g_wiz_btn_en, lv_color_make(59, 130, 246), 0);
-    lv_obj_set_style_bg_color(g_wiz_btn_cn, lv_color_make(50, 55, 75), 0);
+    if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, lv_color_make(59, 130, 246), 0);
+    if (g_wiz_btn_cn) lv_obj_set_style_bg_color(g_wiz_btn_cn, lv_color_make(50, 55, 75), 0);
+    if (g_wiz_btn_kr) lv_obj_set_style_bg_color(g_wiz_btn_kr, lv_color_make(50, 55, 75), 0);
+    if (g_wiz_btn_jp) lv_obj_set_style_bg_color(g_wiz_btn_jp, lv_color_make(50, 55, 75), 0);
+}
+static void wiz_lang_kr_cb(lv_event_t* e) {
+    (void)e;
+    g_wizard_lang_sel = 2;
+    g_lang = Lang::KR;
+    if (g_wiz_btn_kr) lv_obj_set_style_bg_color(g_wiz_btn_kr, lv_color_make(59, 130, 246), 0);
+    if (g_wiz_btn_cn) lv_obj_set_style_bg_color(g_wiz_btn_cn, lv_color_make(50, 55, 75), 0);
+    if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, lv_color_make(50, 55, 75), 0);
+    if (g_wiz_btn_jp) lv_obj_set_style_bg_color(g_wiz_btn_jp, lv_color_make(50, 55, 75), 0);
+}
+static void wiz_lang_jp_cb(lv_event_t* e) {
+    (void)e;
+    g_wizard_lang_sel = 3;
+    g_lang = Lang::JP;
+    if (g_wiz_btn_jp) lv_obj_set_style_bg_color(g_wiz_btn_jp, lv_color_make(59, 130, 246), 0);
+    if (g_wiz_btn_cn) lv_obj_set_style_bg_color(g_wiz_btn_cn, lv_color_make(50, 55, 75), 0);
+    if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, lv_color_make(50, 55, 75), 0);
+    if (g_wiz_btn_kr) lv_obj_set_style_bg_color(g_wiz_btn_kr, lv_color_make(50, 55, 75), 0);
+}
 }
 
 static void wizard_build_step_lang() {
@@ -9264,6 +9289,26 @@ static void wizard_build_step_lang() {
     lv_label_set_text(lbl_en, "English");
     lv_obj_set_style_text_font(lbl_en, CJK_FONT, 0);
     lv_obj_center(lbl_en);
+
+    g_wiz_btn_kr = lv_button_create(row);
+    lv_obj_set_size(g_wiz_btn_kr, SCALE(140), SCALE(44));
+    lv_obj_set_style_bg_color(g_wiz_btn_kr, (g_wizard_lang_sel == 2) ? lv_color_make(59, 130, 246) : lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_radius(g_wiz_btn_kr, 8, 0);
+    lv_obj_add_event_cb(g_wiz_btn_kr, wiz_lang_kr_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_kr = lv_label_create(g_wiz_btn_kr);
+    lv_label_set_text(lbl_kr, "한국어");
+    lv_obj_set_style_text_font(lbl_kr, CJK_FONT, 0);
+    lv_obj_center(lbl_kr);
+
+    g_wiz_btn_jp = lv_button_create(row);
+    lv_obj_set_size(g_wiz_btn_jp, SCALE(140), SCALE(44));
+    lv_obj_set_style_bg_color(g_wiz_btn_jp, (g_wizard_lang_sel == 3) ? lv_color_make(59, 130, 246) : lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_radius(g_wiz_btn_jp, 8, 0);
+    lv_obj_add_event_cb(g_wiz_btn_jp, wiz_lang_jp_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_jp = lv_label_create(g_wiz_btn_jp);
+    lv_label_set_text(lbl_jp, "日本語");
+    lv_obj_set_style_text_font(lbl_jp, CJK_FONT, 0);
+    lv_obj_center(lbl_jp);
 }
 
 /* ── Step 1: OpenClaw Detection ── */
@@ -12237,7 +12282,7 @@ void app_ui_init() {
     /* ═══ FOOTER (minimal) ═══ */
     {
         char footer_text[128];
-        snprintf(footer_text, sizeof(footer_text), "AnyClaw v2.0.1 | LVGL 9.6 + SDL2");
+        snprintf(footer_text, sizeof(footer_text), "AnyClaw v2.2.1 | LVGL 9.6 + SDL2");
         lv_obj_t* footer = lv_label_create(scr);
         lv_label_set_text(footer, footer_text);
         lv_obj_set_style_text_color(footer, c->text_dim, 0);
@@ -12265,7 +12310,7 @@ void app_ui_init() {
     g_refresh_timer = lv_timer_create(auto_refresh_cb, g_refresh_interval_ms, nullptr);
     if (!g_ui_log_flush_timer) g_ui_log_flush_timer = lv_timer_create(ui_log_flush_timer_cb, 120, nullptr);
 
-    ui_log("[Ready] AnyClaw LVGL v2.0.1 - Bilingual mode");
+    ui_log("[Ready] AnyClaw LVGL v2.2.1 - Bilingual mode");
     ui_log("[Task] Task list initialized");
 
     /* ═══ Create title bar LAST - ensures it's above all panels ═══ */
