@@ -1957,50 +1957,13 @@ score = 100 (base)
 
 ---
 
-
-## 18. 分发与增长
-
-- **功能编号：** GROW-01 **优先级：** P0 **状态：** 🆕 待实施
-
-### 18.1 目标用户触达
-
-| 用户群 | 来源渠道 | 核心诉求 |
-|--------|---------|---------|
-| OpenClaw 现有用户 | GitHub / OpenClaw Discord | 更好的 GUI 体验 |
-| 学生 | V2EX / 掘金 / 校园社群 | 免费 + 写论文/做作业 |
-| 职场用户 | 小红书 / 知乎 / 公众号 | 效率工具 + 简单好用 |
-| 开发者 | GitHub / Hacker News / Product Hunt | 编程工作台 + 开源 |
-
-### 18.2 渠道策略
-
-| 渠道 | 动作 | 成本 | 优先级 |
-|------|------|------|--------|
-| ai-bot.cn | 提交收录（AI智能体 + AI编程工具 两个分类） | 免费 | P0 |
-| GitHub | 开源客户端核心 / Releases + README | 免费 | P0 |
-| OpenClaw 社区 | Discord / GitHub Discussions 推广 | 免费 | P0 |
-| V2EX / 掘金 | 产品介绍 + 使用体验文章 | 免费 | P1 |
-| Product Hunt | 海外发布 | 免费 | P1 |
-
-### 18.3 差异化传播点
-
-| 渠道 | 主打卖点 |
-|------|---------|
-| ai-bot.cn | "不只是聊天窗口，AI 帮你干活还能看到它干了什么" |
-| OpenClaw 社区 | "免费客户端，权限系统 + 双模式 + IM 集成" |
-| 学生渠道 | "零成本 AI 助手，帮写论文、做 PPT、分析数据" |
-| 开发者渠道 | "20MB 原生 GUI，不是 300MB 的 Electron 套壳" |
-
-
----
-
-
-## 新增章节：Feature Flags 功能开关
+## 18. Feature Flags 功能开关
 
 - **功能编号：** FF-01 **优先级：** P1 **状态：** ✅ 已实现
 
 功能开关系统支持低风险灰度发布，允许在不重新编译的情况下启用/禁用特定功能。
 
-### 预定义开关（6 个）
+### 18.1 预定义开关（6 个）
 
 | 开关名 | 描述 | 默认值 | 需要重启 |
 |--------|------|--------|---------|
@@ -2011,7 +1974,8 @@ score = 100 (base)
 | `kb_knowledge_base` | 知识库 | OFF | 否 |
 | `remote_collab` | 远程协作 | OFF | **是** |
 
-### 配置存储
+### 18.2 配置存储
+
 `config.json` 中的 `feature_flags` 对象：
 ```json
 {
@@ -2026,7 +1990,7 @@ score = 100 (base)
 }
 ```
 
-### 核心 API
+### 18.3 核心 API
 
 | 方法 | 说明 |
 |------|------|
@@ -2040,17 +2004,15 @@ score = 100 (base)
 - `feature_flags_init()` 在 `main()` 中早期调用
 - 标记 `requires_restart=true` 的开关变更需要重启应用才能生效
 
-
 ---
 
-
-## 新增章节：Tracing 可观测性追踪
+## 19. Tracing 可观测性追踪
 
 - **功能编号：** OBS-01 **优先级：** P1 **状态：** ✅ 已实现
 
 追踪系统记录应用内关键操作的性能和结果数据，用于排障和性能分析。
 
-### 架构
+### 19.1 架构
 
 ```
 TraceSpan (RAII)  →  TraceManager (singleton)
@@ -2058,7 +2020,8 @@ TraceSpan (RAII)  →  TraceManager (singleton)
                           └── traces.jsonl (persistent, APPDATA)
 ```
 
-### 数据结构
+### 19.2 数据结构
+
 ```cpp
 struct TraceEvent {
     std::string ts;          // ISO-8601 时间戳（含毫秒）
@@ -2070,115 +2033,80 @@ struct TraceEvent {
 };
 ```
 
-### Ring Buffer
+### 19.3 Ring Buffer
+
 - 容量：1000 事件，满时循环覆盖
 - 线程安全：`CRITICAL_SECTION` 保护
 - 每 50 个事件自动 flush 到文件（防崩溃丢失）
 
-### 文件输出
+### 19.4 文件输出
+
 - 路径：`%APPDATA%\AnyClaw_LVGL\traces.jsonl`
 - 格式：JSON Lines（每行一个 JSON 对象），追加写入模式
 
-### RAII TraceSpan
+### 19.5 RAII TraceSpan
+
 ```cpp
 { TraceSpan span("http_post_stream", url); ... }  // 自动记录 outcome=ok
 TraceSpan span("perm_check", cmd);
 if (!ok) span.set_fail();                          // 手动控制 outcome
 ```
 
-### 便捷宏
+### 19.6 便捷宏
+
 ```cpp
 TRACE("action", "target");                    // RAII span
 TRACE_RECORD("action", "target", ms, "ok");   // 手动记录
 ```
 
-### 已集成追踪的操作
+### 19.7 已集成追踪的操作
+
 - `health_check_cycle`：每轮健康检查
 - `session_refresh` / `session_abort` / `session_abort_all`：会话管理
 - `boot_check_run_and_fix`：启动健康检查
 - `http_post_stream`：聊天 SSE 流式请求
 
-
 ---
 
+## 20. 分发与增长
 
-## 新增章节：LAN Chat 局域网聊天
+- **功能编号：** GROW-01 **优先级：** P0 **状态：** 🆕 待实施
 
-- **功能编号：** LAN-CHAT-01 **状态：** ⏸️ 暂不实施（已迁附录候选）
-- 本功能不纳入当前版本正文交付，详细设计见附录 `A.6`。
+### 20.1 目标用户触达
 
+| 用户群 | 来源渠道 | 核心诉求 |
+|--------|---------|---------|
+| OpenClaw 现有用户 | GitHub / OpenClaw Discord | 更好的 GUI 体验 |
+| 学生 | V2EX / 掘金 / 校园社群 | 免费 + 写论文/做作业 |
+| 职场用户 | 小红书 / 知乎 / 公众号 | 效率工具 + 简单好用 |
+| 开发者 | GitHub / Hacker News / Product Hunt | 编程工作台 + 开源 |
+
+### 20.2 渠道策略
+
+| 渠道 | 动作 | 成本 | 优先级 |
+|------|------|------|--------|
+| ai-bot.cn | 提交收录（AI智能体 + AI编程工具 两个分类） | 免费 | P0 |
+| GitHub | 开源客户端核心 / Releases + README | 免费 | P0 |
+| OpenClaw 社区 | Discord / GitHub Discussions 推广 | 免费 | P0 |
+| V2EX / 掘金 | 产品介绍 + 使用体验文章 | 免费 | P1 |
+| Product Hunt | 海外发布 | 免费 | P1 |
+
+### 20.3 差异化传播点
+
+| 渠道 | 主打卖点 |
+|------|---------|
+| ai-bot.cn | "不只是聊天窗口，AI 帮你干活还能看到它干了什么" |
+| OpenClaw 社区 | "免费客户端，权限系统 + 双模式 + IM 集成" |
+| 学生渠道 | "零成本 AI 助手，帮写论文、做 PPT、分析数据" |
+| 开发者渠道 | "20MB 原生 GUI，不是 300MB 的 Electron 套壳" |
 
 ---
-
-
-## 新增章节：FTP 传输
-
-- **功能编号：** FTP-01 **状态：** ⏸️ 暂不实施（已迁附录候选）
-- 本功能不纳入当前版本正文交付，详细设计见附录 `A.6`。
-
-
----
-
 
 ## 附录
 
 ### A.1 项目目录结构
 
-```
-AnyClaw_LVGL/
-├── CMakeLists.txt              # CMake 构建配置
-├── src/                        # 源代码
-│   ├── main.cpp                # 程序入口、窗口创建、主循环
-│   ├── ui_main.cpp             # 主界面 UI
-│   ├── ui_settings.cpp         # 设置页 UI
-│   ├── tray.cpp / tray.h       # 系统托盘
-│   ├── health.cpp / health.h   # 健康检查
-│   ├── openclaw_mgr.cpp        # OpenClaw Gateway 进程管理
-│   ├── http_client.cpp         # HTTP 客户端封装
-│   ├── autostart.cpp           # 开机自启动
-│   ├── selfcheck.cpp / .h      # 启动自检
-│   ├── boot_check.cpp / .h     # 启动健康检查（9 项 + 自动修复）
-│   ├── model_manager.cpp / .h  # 模型管理 + Failover
-│   ├── permissions.cpp / .h    # 权限系统（19 项细粒度控制）
-│   ├── license.cpp / .h        # 授权验证（HMAC-SHA256）
-│   ├── feature_flags.cpp / .h  # 功能开关系统
-│   ├── tracing.cpp / .h        # 可观测性追踪
-│   ├── session_manager.cpp/.h  # 会话管理
-│   ├── workspace.cpp / .h      # 工作区管理
-│   ├── migration.cpp / .h      # 迁移导出/导入
-│   ├── remote_protocol.cpp/.h  # 远程会话协议
-│   ├── remote_tcp_channel.cpp/.h # 远程 TCP 通道
-│   ├── kb_store.cpp / .h       # 本地知识库
-│   ├── garlic_dock.cpp / .h    # 贴边大蒜头
-│   ├── lan_chat_client.cpp/.h  # 局域网聊天客户端
-│   ├── lan_chat_types.h        # LAN 聊天类型定义
-│   ├── lan_chat_protocol.cpp/.h # LAN 聊天协议
-│   ├── ftp_client.cpp / .h     # FTP 传输
-│   ├── app_config.h            # 宏开关集中管理
-│   ├── app.h                   # 公共声明
-│   ├── app_log.h               # 日志宏
-│   ├── lang.h                  # 国际化定义
-│   ├── theme.h                 # 主题色定义
-│   ├── markdown.h              # Markdown 渲染
-│   ├── icon_config.h           # 图标配置
-│   ├── json_util.cpp           # JSON 工具
-│   ├── utf8_util.cpp           # UTF-8 工具
-│   ├── cjk_font_data.h         # CJK 字体数据
-│   ├── lv_conf.h               # LVGL 配置
-│   ├── resource.h              # Windows 资源 ID
-│   └── widgets/                # 通用控件
-│       ├── aw_button.h
-│       ├── aw_input.h
-│       ├── aw_panel.h
-│       ├── aw_label.h
-│       ├── aw_common.h
-│       └── aw_form.h
-├── assets/                     # 运行时资源
-├── thirdparty/                 # LVGL + SDL2
-├── tools/                      # 构建脚本
-├── artifacts/                  # 构建产物
-└── docs/                       # 文档
-```
+见 `build/README.md`（构建系统文档）。
 
 ### A.2 Gateway 与 Session 架构
 
@@ -2216,8 +2144,6 @@ AnyClaw (GUI)
 
 ### A.5 竞品功能吸收
 
-对 Ollama、LM Studio、Cursor、Claude、Hermes Agent 五个产品的横向对比，筛选 AnyClaw 应当吸收的功能方向：
-
 | # | 功能方向 | 来源 | 优先级 |
 |---|---------|------|--------|
 | 1 | MCP Client | LM Studio | 🔴 高 |
@@ -2230,92 +2156,18 @@ AnyClaw (GUI)
 
 ### A.6 LAN/FTP 候选设计（暂不实施）
 
-> 说明：以下内容保留为后续候选方案，不纳入当前版本正文交付范围。
-
 #### A.6.1 LAN Chat（LAN-CHAT-01）
 
 **定位：** 同局域网内 AnyClaw 用户之间直接通信，不走 Gateway，不走公网。
 
-**架构：**
 - 基于 TCP/UDP 的 Client-Host 模型
-- TCP 用于聊天消息传输
-- UDP 用于局域网自动发现
-
-**Host 模式：**
-- 监听 TCP 端口接收客户端连接（backlog=8）
-- 监听 UDP 端口响应发现请求
-- 发现协议：收到 `ANYCLAW_DISCOVER` UDP 包 → 回复 `ANYCLAW_HOST|{port}`
-
-**Client 模式：**
-- TCP 连接到指定 host:port
-- 连接后发送 `HELLO|nickname` 注册
-- 独立接收线程处理消息
-
-**消息类型：**
-
-| 类型 | 协议命令 | 说明 |
-|------|---------|------|
-| 注册 | `HELLO\|nick` | 连接时发送 |
-| 群聊 | `BROADCAST\|from\|\|\|text` | 广播给所有人 |
-| 私聊 | `PRIVATE\|from\|to\|\|text` | 点对点消息 |
-| 建群 | `GROUP_CREATE\|from\|\|group\|` | 创建主题群 |
-| 加群 | `GROUP_JOIN\|from\|\|group\|` | 加入群 |
-| 群消息 | `GROUP_MSG\|from\|\|group\|text` | 群内消息 |
-
-**事件回调：**
-```cpp
-using EventCallback = std::function<void(const LanChatEvent&)>;
-```
-
-**身份绑定模型：**
-```
-device_id = SHA256(MAC + salt) 前 16 字符
-signature = HMAC(MAC, nickname)
-广播：{ nickname, device_id, signature }
-```
+- TCP 用于聊天消息传输，UDP 用于局域网自动发现
+- 支持群聊、私聊、建群、文件传输
+- 发现协议：`ANYCLAW_DISCOVER` → `ANYCLAW_HOST|{port}`
 
 #### A.6.2 FTP 传输（FTP-01）
 
-基于 WinINet 的 FTP 传输候选方案。
-
-**功能：**
-- 单文件上传/下载
-- 目录递归上传（`recursive_upload=true`）
-- 进度回调（百分比 + 步骤文本）
-- 支持取消（`std::atomic<bool>& cancel_flag`）
-- FTPS 支持（`use_ftps=true`，使用 `INTERNET_FLAG_SECURE`）
-- 断点续传（`resume_download=true`）
-
-**核心 API：**
-```cpp
-bool ftp_transfer_file(const FtpTransferConfig& cfg,
-                       std::atomic<bool>& cancel_flag,
-                       std::string& error_out,
-                       FtpProgressCallback on_progress);
-```
-
-**配置结构：**
-```cpp
-struct FtpTransferConfig {
-    std::string host;
-    int port = 21;
-    std::string username, password;
-    std::string remote_path, local_path;
-    bool upload = false;
-    bool use_ftps = false;
-    bool recursive_upload = false;
-    bool resume_download = true;
-};
-```
-
-**聊天能力（历史讨论保留）：**
-| 能力 | 说明 |
-|------|------|
-| 群聊 | 同 LAN 内公开频道 |
-| 私聊 | 点对点消息 |
-| 建群 | 用户自建主题群 |
-| 文件传输 | 局域网高速传输，断点续传 |
-| AI 群助手 | 群内共享 Agent（规划中） |
+基于 WinINet 的 FTP 传输候选方案，支持单文件/目录递归上传下载、FTPS、断点续传。
 
 ### A.7 暂不实施项
 
@@ -2325,10 +2177,9 @@ struct FtpTransferConfig {
 | LIC-02 | ⏸️ | 离线硬件指纹授权，当前方案已满足 |
 | SANDBOX-01 | ⏸️ | Docker 安全沙箱，v2.0 靠权限系统兜底 |
 | STREAM-01 | ⏸️ | 自建流媒体通道，当前依赖 Windows 原生方案 |
-| LAN-CHAT-01 | ⏸️ | 局域网聊天迁入附录候选，暂不实施 |
-| FTP-01 | ⏸️ | FTP 传输迁入附录候选，暂不实施 |
+| LAN-CHAT-01 | ⏸️ | 局域网聊天，见附录 A.6 |
+| FTP-01 | ⏸️ | FTP 传输，见附录 A.6 |
 
 ---
 
-
-> **文档完成。** PRD v2.2.1 合并了原始 PRD v2.2.0（2568 行）、逐章补充（1147 行）和 UI 布局 Wireframe（970 行），修正了权限系统和 License 系统的描述错误，新增了 Feature Flags、Tracing、KB Store V1、Model Failover 等章节，并将 LAN Chat/FTP 迁入附录候选。
+> **文档完成。** PRD v2.2.1 含 20 章正文 + 7 节附录。
