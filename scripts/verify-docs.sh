@@ -62,10 +62,12 @@ echo ""
 echo "[2/3] 功能编号完整性检查"
 
 # Extract feature IDs from PRD (pattern: XX-NNN like CI-01, WORK-01, PERM-01)
-PRD_IDS=$(grep -oP '\b[A-Z]{2,10}-\d{2}\b' "${PRD}" | sort -u)
+# Exclude UI-XX (those are UI numbers, checked separately in step 3)
+PRD_IDS=$(grep -oP '\b[A-Z]{2,10}-\d{2}\b' "${PRD}" | grep -v '^UI-' | sort -u)
 
 # Extract feature IDs from Design index table (first column of table rows)
-DESIGN_INDEX_IDS=$(grep -oP '^\|?\s*([A-Z]{2,10}-\d{2})' "${DESIGN}" | grep -oP '[A-Z]{2,10}-\d{2}' | sort -u)
+# Exclude UI-XX and rows with "—" placeholder
+DESIGN_INDEX_IDS=$(grep -oP '^\|?\s*([A-Z]{2,10}-\d{2})' "${DESIGN}" | grep -oP '[A-Z]{2,10}-\d{2}' | grep -v '^UI-' | sort -u)
 
 # Find IDs in PRD but not in Design index
 MISSING_IN_DESIGN=""
