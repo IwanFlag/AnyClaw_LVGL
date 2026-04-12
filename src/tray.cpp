@@ -709,6 +709,26 @@ static HMENU create_tray_menu(TrayState state) {
         }
     }
     append_owner_item(hMenu, IDM_TRAY_BASE, statusText, true, false, ledColor);
+
+    /* Model name (sub-status) */
+    {
+        extern void app_get_current_model(char* buf, int buf_size);
+        char model_buf[128] = {0};
+        app_get_current_model(model_buf, sizeof(model_buf));
+        if (model_buf[0]) {
+            /* Shorten: take last segment */
+            const char* short_name = model_buf;
+            const char* last_slash = strrchr(model_buf, '/');
+            if (last_slash && strlen(last_slash + 1) > 3) short_name = last_slash + 1;
+            wchar_t model_w[128] = {0};
+            MultiByteToWideChar(CP_UTF8, 0, short_name, -1, model_w, 127);
+            wchar_t label_w[160] = {0};
+            if (g_lang == Lang::CN) swprintf_s(label_w, L"  Model: %ls", model_w);
+            else swprintf_s(label_w, L"  Model: %ls", model_w);
+            append_owner_item(hMenu, IDM_TRAY_BASE + 1, label_w, true, false, RGB(120, 120, 130));
+        }
+    }
+
     append_owner_sep(hMenu);
 
     /* Start/Stop toggle */
@@ -718,9 +738,9 @@ static HMENU create_tray_menu(TrayState state) {
             ? (g_lang == Lang::CN ? L"停止 Gateway" : L"Stop Gateway")
             : (g_lang == Lang::CN ? L"启动 Gateway" : L"Start Gateway"));
 
-    /* Restart Gateway (right after Stop) */
+    /* Restart OpenClaw */
     append_owner_item(hMenu, IDM_RESTART_OC,
-        g_lang == Lang::CN ? L"\x91CD\x542F Gateway" : L"Restart Gateway");
+        g_lang == Lang::CN ? L"\x91CD\x542F OpenClaw" : L"Restart OpenClaw");
 
     /* Refresh status */
     append_owner_item(hMenu, IDM_REFRESH_STATUS,
@@ -730,8 +750,10 @@ static HMENU create_tray_menu(TrayState state) {
     append_owner_item(hMenu, IDM_AUTO_START,
         g_lang == Lang::CN ? L"\u5F00\u673A\u81EA\u542F" : L"Boot Start",
         false, g_autoStartChecked);
-    /* P2-24: Window topmost toggle */
-    bool topmost = app_is_topmost();
+    /* Window topmost toggle */
+    append_owner_item(hMenu, IDM_ALWAYS_TOP,
+        g_lang == Lang::CN ? L"\u7F6E\u9876\u7A97\u53E3" : L"Pin on Top",
+        false, app_is_topmost());
     append_owner_sep(hMenu);
     append_owner_item(hMenu, IDM_OPEN_SETTINGS,
         g_lang == Lang::CN ? L"\u6253\u5F00\u8BBE\u7F6E" : L"Settings");

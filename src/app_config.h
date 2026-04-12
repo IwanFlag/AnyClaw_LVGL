@@ -22,6 +22,18 @@
 #define TITLE_BAR_PAD_ALL       0       /* Title bar inner padding */
 #define TITLE_BAR_BORDER_W      0       /* Title bar border width */
 
+/* ── Left Navigation Bar ────────────────────────────────────── */
+#define NAV_BAR_W_BASE          56      /* Left nav bar width (pre-SCALE) */
+#define NAV_ICON_BTN_SIZE_BASE  40      /* Nav icon button size (pre-SCALE) */
+#define NAV_ICON_BTN_RADIUS     10      /* Nav icon button corner radius */
+#define NAV_ICON_GAP_BASE       4       /* Gap between nav buttons */
+#define NAV_QUICK_AREA_H_BASE   96      /* Bottom quick-access area height (pre-SCALE) */
+
+/* ── Title Bar Status Area ──────────────────────────────────── */
+#define TITLE_LED_SIZE_BASE     10      /* Status LED size in title bar (pre-SCALE) */
+#define TITLE_LED_GAP_BASE      16      /* Space before LED from right controls */
+#define TITLE_MODEL_W_BASE      120     /* Model name label width in title bar (pre-SCALE) */
+
 /* ── Panel Layout ───────────────────────────────────────────── */
 #define LEFT_PANEL_DEFAULT_W    240     /* Left panel default width */
 #define SPLITTER_W_BASE         6       /* Splitter bar width (pre-SCALE) */
