@@ -2124,7 +2124,8 @@ static void submit_prompt_to_chat(const char* text) {
     }
     std::string kb_ctx = KbStore::instance().build_context_snippet(text, 3, 1000);
     if (!kb_ctx.empty()) {
-        payload = kb_ctx + "\nUser request:\n" + text;
+        /* Prepend KB context but preserve any attachment info already appended to payload */
+        payload = kb_ctx + "\nUser request:\n" + payload;
         ui_log("[KB] Attached local context to chat request");
     }
     chat_start_stream(payload.c_str());
@@ -6169,6 +6170,14 @@ static void work_vertical_splitter_cb(lv_event_t* e) {
         lv_indev_get_point(indev, &p);
         start_y = p.y;
         start_step_h = g_work_step_stream_h;
+        /* Highlight splitter on press */
+        if (mode_work_splitter) lv_obj_set_style_bg_color(mode_work_splitter, lv_color_make(130, 170, 255), 0);
+        return;
+    }
+    if (code == LV_EVENT_RELEASED || code == LV_EVENT_LEAVE) {
+        /* Reset splitter color on release */
+        const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
+        if (mode_work_splitter) lv_obj_set_style_bg_color(mode_work_splitter, c->input_bg, 0);
         return;
     }
     if (code != LV_EVENT_PRESSING) return;
@@ -11023,6 +11032,7 @@ void app_ui_init() {
         lv_obj_add_flag(mode_work_splitter, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_event_cb(mode_work_splitter, work_vertical_splitter_cb, LV_EVENT_PRESSED, nullptr);
         lv_obj_add_event_cb(mode_work_splitter, work_vertical_splitter_cb, LV_EVENT_PRESSING, nullptr);
+        lv_obj_add_event_cb(mode_work_splitter, work_vertical_splitter_cb, LV_EVENT_RELEASED, nullptr);
 
         mode_sec_work_console = aw_form_section_create(mode_panel_work, "Output Area", card_w);
         mode_work_output_wrap = lv_obj_create(mode_sec_work_console);
