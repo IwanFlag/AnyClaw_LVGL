@@ -1665,7 +1665,7 @@ LVGL 模态弹窗，阻断启动。如"未检测到 Node.js，请安装后重新
   │  │                             │  │  _                      │   │  │
   │  └─────────────────────────────┘  └─────────────────────────┘   │  │
   │                                                                  │  │
-  │         [ Auto Install ]  [ bundled/ 离线 ]  [ 本地路径 ]        │  │
+  │         [ 在线安装（推荐） ]  [ bundled/ 离线 ]  [ 本地路径 ]        │  │
   │                                                                  │  │
   └──────────────────────────────────────────────────────────────────┘  │
 ```
@@ -1673,7 +1673,7 @@ LVGL 模态弹窗，阻断启动。如"未检测到 Node.js，请安装后重新
 **终端组件：** monospace 字体(JetBrains Mono) + surface 色背景 + 自动滚动到底部 + 可选中复制。
 **CLI 日志重定向：** 所有 CLI 子进程 stdout/stderr 同时写入终端组件 + `logs/app.log`。
 **安装按钮：**
-- Auto Install: 在线下载 Node.js + npm install -g openclaw
+- 在线安装（推荐）: 在线下载 Node.js + npm install -g openclaw
 - bundled/ 离线: 解压 node-win-x64.zip + npm install bundled/openclaw.tgz
 - 本地路径: 用户指定已安装的 node/openclaw 路径
 
