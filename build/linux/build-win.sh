@@ -3,11 +3,11 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 VERSION="${1:-v2.0.0}"
-BUILD_DIR="${ROOT_DIR}/out/mingw"
+BUILD_DIR="${ROOT_DIR}/build/linux/out"
 TOOLCHAIN="${ROOT_DIR}/build/toolchain-mingw64.cmake"
 EXE_PATH="${BUILD_DIR}/bin/AnyClaw_LVGL.exe"
 SDL_PATH="${BUILD_DIR}/bin/SDL2.dll"
-ARTIFACTS_DIR="${ROOT_DIR}/out/package"
+ARTIFACTS_DIR="${ROOT_DIR}/build/linux/artifacts"
 
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
@@ -28,5 +28,5 @@ fi
 
 TIMESTAMP=$(date '+%Y%m%d_%H%M')
 ZIP_NAME="AnyClaw_LVGL_${VERSION}_${TIMESTAMP}.zip"
-cd "${ARTIFACTS_DIR}" && zip -r "${ROOT_DIR}/out/${ZIP_NAME}" .
-echo "[OK] Package: out/${ZIP_NAME}"
+cd "${ARTIFACTS_DIR}" && zip -r "${ARTIFACTS_DIR}/${ZIP_NAME}" .
+echo "[OK] Package: build/linux/artifacts/${ZIP_NAME}"

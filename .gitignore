@@ -2,6 +2,8 @@
 out/
 build-mingw/
 build-windows/
+build/linux/out/
+build/windows/out/
 
 # IDE
 .vs/
@@ -17,6 +19,8 @@ Thumbs.db
 
 # Release zips
 *.zip
+!build/linux/artifacts/*.zip
+!build/windows/artifacts/*.zip
 
 # Compiled objects
 *.exe

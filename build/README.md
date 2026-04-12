@@ -11,11 +11,13 @@
 
 ## 目录约定
 
+- `build/linux/`：Linux 构建脚本与产物
+- `build/linux/out/`：Linux 交叉编译中间产物（不提交）
+- `build/linux/artifacts/`：Linux 交叉编译打包产物 zip（提交）
 - `build/windows/`：Windows 一键构建与打包脚本
+- `build/windows/out/`：Windows 编译中间产物（不提交）
+- `build/windows/artifacts/`：Windows 打包产物 zip（提交）
 - `build/windows/tools/`：Windows 构建运行时工具缓存（例如 SDL2 运行库）
-- `build/windows/out/`：Windows 编译中间产物与可执行文件输出
-- `build/windows/artifacts/`：Windows 打包产物（zip）
-- `build/linux/`：Linux 构建脚本
 
 ## Windows 一键构建打包
 

@@ -8,7 +8,8 @@ set -e
 
 PROJECT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 VERSION="${1:-v2.0.0}"
-BUILD_DIR="${PROJECT_DIR}/out/mingw"
+BUILD_DIR="${PROJECT_DIR}/build/linux/out"
+ARTIFACTS_DIR="${PROJECT_DIR}/build/linux/artifacts"
 TOOLCHAIN="${PROJECT_DIR}/build/toolchain-mingw64.cmake"
 BIN_DIR="${BUILD_DIR}/bin"
 
@@ -129,9 +130,10 @@ if [ -f "${BIN_DIR}/AnyClaw_LVGL.exe" ]; then
 
     # 打包
     cd "${PKG_DIR}"
-    zip -r "${BIN_DIR}/${ZIP_NAME}" .
+    mkdir -p "${ARTIFACTS_DIR}"
+    zip -r "${ARTIFACTS_DIR}/${ZIP_NAME}" .
     rm -rf "${PKG_DIR}"
-    echo "  ✅ Package: ${BIN_DIR}/${ZIP_NAME} ($(du -h "${BIN_DIR}/${ZIP_NAME}" | cut -f1))"
+    echo "  ✅ Package: build/linux/artifacts/${ZIP_NAME} ($(du -h "${ARTIFACTS_DIR}/${ZIP_NAME}" | cut -f1))"
     echo "     Contents: AnyClaw_LVGL.exe + SDL2.dll + assets/app_icon.png"
 else
     echo "  ❌ Binary not found, skipping package"
@@ -181,7 +183,7 @@ echo "  Binary:    ${BIN_DIR}/AnyClaw_LVGL.exe ($(du -h "${BIN_DIR}/AnyClaw_LVGL
 if [ -f "${BIN_DIR}/SDL2.dll" ]; then
     echo "  DLL:       ${BIN_DIR}/SDL2.dll ($(du -h "${BIN_DIR}/SDL2.dll" | cut -f1))"
 fi
-echo "  Package:   ${BIN_DIR}/${ZIP_NAME}"
+echo "  Package:   ${ARTIFACTS_DIR}/${ZIP_NAME}"
 echo "  Layout:    AnyClaw_LVGL.exe / SDL2.dll / assets/app_icon.png"
 if [ -f "${SCREENSHOT}" ]; then
     echo "  Screenshot: ${SCREENSHOT}"

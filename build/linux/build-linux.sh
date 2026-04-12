@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-BUILD_DIR="${ROOT_DIR}/out/linux"
+BUILD_DIR="${ROOT_DIR}/build/linux/out"
 
 rm -rf "${BUILD_DIR}"
 mkdir -p "${BUILD_DIR}"
