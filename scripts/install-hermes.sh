@@ -119,12 +119,29 @@ provider:
   base_url: "https://api.nousresearch.com/v1"
 
 model:
-  # 可选模型（限免）:
-  #   xiaomi/mimo-v2-pro   — 推理最强，适合复杂任务
-  #   xiaomi/mimo-v2-omni  — 多模态（图像/视频/音频理解）
-  #   xiaomi/mimo-v2-flash — 速度最快，适合日常对话
+  # Xiaomi MiMo-V2 系列（限免）
   primary: "xiaomi/mimo-v2-pro"
   fallback: "xiaomi/mimo-v2-flash"
+  # 可用模型:
+  #   xiaomi/mimo-v2-pro   — 推理最强，1M 长上下文，复杂任务首选
+  #   xiaomi/mimo-v2-omni  — 全模态理解（图像/视频/音频+文本）
+  #   xiaomi/mimo-v2-flash — 速度最快，日常对话/轻量任务
+  available:
+    - id: "xiaomi/mimo-v2-pro"
+      name: "MiMo-V2 Pro"
+      description: "推理旗舰，1M 长上下文，深度 Agent 优化"
+      context_window: 1048576
+      capabilities: [chat, tools, reasoning]
+    - id: "xiaomi/mimo-v2-omni"
+      name: "MiMo-V2 Omni"
+      description: "全模态理解，图像/视频/音频+文本"
+      context_window: 1048576
+      capabilities: [chat, tools, reasoning, vision, audio, video]
+    - id: "xiaomi/mimo-v2-flash"
+      name: "MiMo-V2 Flash"
+      description: "极速响应，轻量任务首选"
+      context_window: 262144
+      capabilities: [chat, tools]
 
 agent:
   name: "AnyClaw-Hermes"
@@ -236,6 +253,7 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 echo -e "  运行时端口:   ${CYAN}:18790${NC}"
 echo -e "  默认模型:     ${CYAN}xiaomi/mimo-v2-pro${NC}"
+echo -e "  可用模型:     ${CYAN}Pro / Omni / Flash${NC}"
 echo -e "  配置文件:     ${CYAN}$HERMES_CONFIG_DIR/config.yaml${NC}"
 echo -e "  工作区:       ${CYAN}$HERMES_WORKSPACE${NC}"
 echo ""
