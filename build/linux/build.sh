@@ -80,7 +80,11 @@ if [ -f "${BIN_DIR}/AnyClaw_LVGL.exe" ]; then
     rm -rf "${PKG_DIR}"
     mkdir -p "${PKG_DIR}/assets"
     cp AnyClaw_LVGL.exe "${PKG_DIR}/"
-    cp SDL2.dll "${PKG_DIR}/"
+    if [ -f "SDL2.dll" ]; then
+        cp SDL2.dll "${PKG_DIR}/"
+    else
+        echo "  ⚠ SDL2.dll not found, package will need it at runtime"
+    fi
 
     # 复制 assets/app_icon.png + garlic_icon.png + oc_icon + tray/*.png
     if [ -f "${PROJECT_DIR}/assets/app_icon.png" ]; then
@@ -174,7 +178,9 @@ echo ""
 echo "════════════════════════════════════════════════════════"
 echo "  ✅ Build complete!"
 echo "  Binary:    ${BIN_DIR}/AnyClaw_LVGL.exe ($(du -h "${BIN_DIR}/AnyClaw_LVGL.exe" | cut -f1))"
-echo "  DLL:       ${BIN_DIR}/SDL2.dll ($(du -h "${BIN_DIR}/SDL2.dll" | cut -f1))"
+if [ -f "${BIN_DIR}/SDL2.dll" ]; then
+    echo "  DLL:       ${BIN_DIR}/SDL2.dll ($(du -h "${BIN_DIR}/SDL2.dll" | cut -f1))"
+fi
 echo "  Package:   ${BIN_DIR}/${ZIP_NAME}"
 echo "  Layout:    AnyClaw_LVGL.exe / SDL2.dll / assets/app_icon.png"
 if [ -f "${SCREENSHOT}" ]; then
