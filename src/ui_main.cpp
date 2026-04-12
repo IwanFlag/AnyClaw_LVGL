@@ -2042,6 +2042,21 @@ static void attachment_collect_files(const std::string& root,
     }
 }
 
+/* Truncate text snippet: prefer line boundary (max 50 lines), fallback to byte limit */
+static std::string truncate_snippet(const std::string& raw, uint64_t max_bytes) {
+    if (raw.size() <= max_bytes) return raw;
+    int line_count = 0;
+    uint64_t cut = 0;
+    for (uint64_t i = 0; i < raw.size() && i < max_bytes; i++) {
+        if (raw[i] == '\n') {
+            line_count++;
+            if (line_count >= 50) { cut = i; break; }
+        }
+    }
+    if (cut == 0) cut = max_bytes; /* no line boundary found, hard cut */
+    return raw.substr(0, cut);
+}
+
 static void submit_prompt_to_chat(const char* text) {
     if (!text || !text[0]) return;
     if (is_streaming_now()) {
@@ -2055,8 +2070,8 @@ static void submit_prompt_to_chat(const char* text) {
         constexpr int kMaxAttachItems = 10;
         constexpr int kMaxDirExpandFiles = 20;
         constexpr int kMaxDirDepth = 2;
-        constexpr uint64_t kMaxTotalSnippetBytes = 8192;
-        constexpr uint64_t kMaxSingleSnippetBytes = 1024;
+        constexpr uint64_t kMaxTotalSnippetBytes = 32768;
+        constexpr uint64_t kMaxSingleSnippetBytes = 4096;
         std::string att = "\n\nAttached files for this request:\n";
         std::unordered_set<std::string> seen;
         uint64_t total_snippet_bytes = 0;
@@ -2083,7 +2098,7 @@ static void submit_prompt_to_chat(const char* text) {
                     if (can_snip) {
                         std::ifstream f(fp, std::ios::binary);
                         std::string snippet((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-                        if (snippet.size() > kMaxSingleSnippetBytes) snippet.resize(kMaxSingleSnippetBytes);
+                        snippet = truncate_snippet(snippet, kMaxSingleSnippetBytes);
                         total_snippet_bytes += (uint64_t)snippet.size();
                         att += "    snippet:\n    ```text\n" + snippet + "\n    ```\n";
                     }
@@ -2106,7 +2121,7 @@ static void submit_prompt_to_chat(const char* text) {
                     std::ifstream f(fp, std::ios::binary);
                     if (f.is_open()) {
                         std::string snippet((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-                        if (snippet.size() > kMaxSingleSnippetBytes) snippet.resize(kMaxSingleSnippetBytes);
+                        snippet = truncate_snippet(snippet, kMaxSingleSnippetBytes);
                         total_snippet_bytes += (uint64_t)snippet.size();
                         att += "  snippet:\n  ```text\n" + snippet + "\n  ```\n";
                     }
@@ -5447,34 +5462,9 @@ static unsigned __stdcall chat_api_thread(void* arg) {
     std::string gw_token = read_gateway_token();
     int gw_port = read_gateway_port();
 
-    /* Escape user message for JSON */
-    char escaped_msg[2048] = {0};
-    int ei = 0;
-    for (int i = 0; user_msg[i] && ei < 2000; i++) {
-        switch (user_msg[i]) {
-            case '"':  escaped_msg[ei++] = '\\'; escaped_msg[ei++] = '"'; break;
-            case '\\': escaped_msg[ei++] = '\\'; escaped_msg[ei++] = '\\'; break;
-            case '\n': escaped_msg[ei++] = '\\'; escaped_msg[ei++] = 'n'; break;
-            case '\r': break;
-            default:   escaped_msg[ei++] = user_msg[i]; break;
-        }
-    }
-    escaped_msg[ei] = '\0';
-
-    /* Build request JSON — inject AI interaction mode prompt */
-    const char* sys_prompt = ai_mode_system_prompt();
-    char escaped_sys[2048] = {0};
-    int si = 0;
-    for (int i = 0; sys_prompt[i] && si < 2000; i++) {
-        switch (sys_prompt[i]) {
-            case '"':  escaped_sys[si++] = '\\'; escaped_sys[si++] = '"'; break;
-            case '\\': escaped_sys[si++] = '\\'; escaped_sys[si++] = '\\'; break;
-            case '\n': escaped_sys[si++] = '\\'; escaped_sys[si++] = 'n'; break;
-            case '\r': break;
-            default:   escaped_sys[si++] = sys_prompt[i]; break;
-        }
-    }
-    escaped_sys[si] = '\0';
+    /* Escape user message and system prompt for JSON (dynamic std::string) */
+    std::string escaped_msg = json_escape(user_msg);
+    std::string escaped_sys = json_escape(ai_mode_system_prompt());
 
     /* Decide route: gateway(openclaw:main) or local llama.cpp */
     char route_model[256] = {0};
@@ -5502,11 +5492,11 @@ static unsigned __stdcall chat_api_thread(void* arg) {
     }
 
     /* Build request JSON — OpenAI-compatible format */
-    char json_body[4096];
     const char* model_id = use_gemma_local ? route_model : "openclaw:main";
-    snprintf(json_body, sizeof(json_body),
-        "{\"model\":\"%s\",\"messages\":[{\"role\":\"system\",\"content\":\"%s\"},{\"role\":\"user\",\"content\":\"%s\"}],\"stream\":true}",
-        model_id, escaped_sys, escaped_msg);
+    std::string json_body = "{\"model\":\"" + std::string(model_id) +
+        "\",\"messages\":[{\"role\":\"system\",\"content\":\"" + escaped_sys +
+        "\"},{\"role\":\"user\",\"content\":\"" + escaped_msg +
+        "\"}],\"stream\":true}";
 
     /* Build request URL */
     char url[256];
@@ -5527,7 +5517,7 @@ static unsigned __stdcall chat_api_thread(void* arg) {
 
     /* Call streaming API */
     DWORD tick_start = GetTickCount();
-    int status = http_post_stream(url, json_body, auth_header, sse_chunk_cb, nullptr, 60);
+    int status = http_post_stream(url, json_body.c_str(), auth_header, sse_chunk_cb, nullptr, 60);
     DWORD tick_elapsed = GetTickCount() - tick_start;
 
     char stream_snapshot[16384] = {0};
@@ -5557,10 +5547,8 @@ static unsigned __stdcall chat_api_thread(void* arg) {
                     Sleep(3000); /* wait for gateway restart */
                     stream_buf_clear();
                     InterlockedExchange(&g_stream_new_data, 0);
-                    snprintf(json_body, sizeof(json_body),
-                        "{\"model\":\"openclaw:main\",\"messages\":[{\"role\":\"system\",\"content\":\"%s\"},{\"role\":\"user\",\"content\":\"%s\"}],\"stream\":true}",
-                        escaped_sys, escaped_msg);
-                    status = http_post_stream(url, json_body, auth_header, sse_chunk_cb, nullptr, 60);
+                    json_body = "{\"model\":\"openclaw:main\",\"messages\":[{\"role\":\"system\",\"content\":\"" + escaped_sys + "\"},{\"role\":\"user\",\"content\":\"" + escaped_msg + "\"}],\"stream\":true}";
+                    status = http_post_stream(url, json_body.c_str(), auth_header, sse_chunk_cb, nullptr, 60);
                     DWORD fe = GetTickCount() - tick_start;
                     ui_log("[Chat] Failover result: HTTP %d (%lums)", status, fe);
                     stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
@@ -5578,7 +5566,7 @@ static unsigned __stdcall chat_api_thread(void* arg) {
                     Sleep(3000);
                     stream_buf_clear();
                     InterlockedExchange(&g_stream_new_data, 0);
-                    status = http_post_stream(url, json_body, auth_header, sse_chunk_cb, nullptr, 60);
+                    status = http_post_stream(url, json_body.c_str(), auth_header, sse_chunk_cb, nullptr, 60);
                     stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
                 }
             }

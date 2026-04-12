@@ -352,10 +352,10 @@ model 固定为 `openclaw:main`，由 Gateway 路由到配置的 Agent。
 - 超时保护：30s 无数据 或 总耗时 > 45s → 强制终止，显示"⚠️ AI 回复超时，请重试。"
 
 **上下文窗口管理：**
-- 发送给 LLM 的上下文采用滑动窗口策略：取最近 N 条消息，按 token 数截断
-- 截断阈值由模型 context window 决定（默认保留最近 20 条或 8000 tokens，取先到者）
-- 被截断的历史保留在 chat_history buffer 中，用户仍可滚动查看
-- 持久化上限 50 条，内存 buffer 上限 4096 条
+- AnyClaw 每次请求仅发送当前消息（+ system prompt），上下文维护由 Gateway/Agent 运行时负责
+- AnyClaw 侧的 chat_history 仅用于 UI 显示气泡和磁盘持久化（`chat_history.json`），不参与构建发给 Gateway 的 messages 数组
+- 持久化上限 50 条，内存 buffer 上限 4096 字节
+- 用户消息和 system prompt 通过 `std::string` 动态拼接，无固定长度限制
 
 **并发会话：**
 - 支持多个 Session 同时存在（主聊天 + Work 任务 + Cron 触发的 Session）
@@ -836,7 +836,7 @@ Agent 有三层记忆机制，各自边界清晰：
 | **知识库** | KB 索引 | 本地文件 | 持久化 | 用户导入的参考资料 |
 
 **对话记忆管理：**
-- 滑动窗口截断（见 §4.2 上下文窗口管理）
+- 上下文由 Gateway/Agent 运行时管理，AnyClaw 仅发送当前消息（见 §4.2）
 - Session 结束后不自动持久化到文件（除非 Agent 主动写入 MEMORY.md）
 
 **长期记忆维护：**

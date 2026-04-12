@@ -724,6 +724,24 @@ int main(int argc, char* argv[]) {
             return 0;
         }
 
+        /* Display changed (dragged to different DPI monitor) — re-read DPI and relayout */
+        if (event->type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED) {
+            int new_dpi = 100;
+            {
+                HDC hdc = GetDC(NULL);
+                if (hdc) {
+                    int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+                    if (dpi > 0) new_dpi = dpi * 100 / 96;
+                    ReleaseDC(NULL, hdc);
+                }
+            }
+            LOG_I("WIN", "Display changed, new DPI scale: %d%%", new_dpi);
+            app_set_dpi_scale(new_dpi);
+            extern void ui_relayout_all();
+            ui_relayout_all();
+            return 0;
+        }
+
         /* Window expose/move — force LVGL refresh to prevent ghost images during drag */
         if (event->type == SDL_WINDOWEVENT &&
             (event->window.event == SDL_WINDOWEVENT_EXPOSED ||
