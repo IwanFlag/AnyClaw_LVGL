@@ -100,6 +100,25 @@ info "配置 Nous Portal + Xiaomi MiMo-V2..."
 HERMES_CONFIG_DIR="$HOME/.hermes"
 mkdir -p "$HERMES_CONFIG_DIR"
 
+# 引导用户获取 API Key
+echo ""
+echo -e "  ${YELLOW}📌 获取 Nous Portal API Key:${NC}"
+echo -e "  1. 访问 ${CYAN}https://portal.nousresearch.com${NC}"
+echo -e "  2. 注册/登录账号"
+echo -e "  3. 进入 API Keys 页面，创建新 Key"
+echo -e "  4. 复制 Key 粘贴到下方"
+echo ""
+echo -e "  ${GREEN}MiMo-V2 Pro/Omni/Flash 限免两周（4月10日起）${NC}"
+echo ""
+
+read -rp "请输入 Nous Portal API Key（留空跳过，稍后 hermes setup 配置）: " NOUS_API_KEY
+
+# 读取用户时区
+SYSTEM_TZ=$(timedatectl show -p Timezone --value 2>/dev/null || echo "Asia/Shanghai")
+echo ""
+read -rp "时区 [默认: $SYSTEM_TZ]: " USER_TZ
+USER_TZ="${USER_TZ:-$SYSTEM_TZ}"
+
 # 检查是否已有配置
 if [ -f "$HERMES_CONFIG_DIR/config.yaml" ] || [ -f "$HERMES_CONFIG_DIR/config.json" ]; then
     warn "检测到已有配置文件，跳过自动配置"
@@ -107,7 +126,7 @@ if [ -f "$HERMES_CONFIG_DIR/config.yaml" ] || [ -f "$HERMES_CONFIG_DIR/config.js
 else
     info "生成默认配置..."
 
-    cat > "$HERMES_CONFIG_DIR/config.yaml" << 'EOF'
+    cat > "$HERMES_CONFIG_DIR/config.yaml" << EOF
 # Hermes Agent 配置 — AnyClaw 一键安装生成
 # 文档: https://hermes-agent.nousresearch.com
 
@@ -115,7 +134,7 @@ provider:
   name: nous-portal
   # Nous Portal 提供免费 MiMo-V2 调用（限免期内）
   # 如需 API Key，访问 https://portal.nousresearch.com 获取
-  api_key: ""
+  api_key: "${NOUS_API_KEY}"
   base_url: "https://api.nousresearch.com/v1"
 
 model:
@@ -145,7 +164,7 @@ model:
 
 agent:
   name: "AnyClaw-Hermes"
-  timezone: "Asia/Shanghai"
+  timezone: "$USER_TZ"
 
 gateway:
   port: 18790
@@ -254,6 +273,7 @@ echo ""
 echo -e "  运行时端口:   ${CYAN}:18790${NC}"
 echo -e "  默认模型:     ${CYAN}xiaomi/mimo-v2-pro${NC}"
 echo -e "  可用模型:     ${CYAN}Pro / Omni / Flash${NC}"
+echo -e "  API Key:      ${CYAN}$( [ -n "$NOUS_API_KEY" ] && echo '已配置 ✓' || echo '未配置，运行 hermes setup' )${NC}"
 echo -e "  配置文件:     ${CYAN}$HERMES_CONFIG_DIR/config.yaml${NC}"
 echo -e "  工作区:       ${CYAN}$HERMES_WORKSPACE${NC}"
 echo ""
