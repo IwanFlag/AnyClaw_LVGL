@@ -138,6 +138,16 @@ extern bool g_app_auth_calendar;
 /* Config persistence */
 void save_theme_config();
 
+/* Toast notification types */
+enum class ToastType { Info, Success, Warning, Error };
+
+/* Toast notifications (thread-safe, auto-dismiss) */
+void ui_toast(const char* text, ToastType type = ToastType::Info, int duration_ms = 3000);
+void ui_toast_info(const char* text);
+void ui_toast_success(const char* text);
+void ui_toast_warn(const char* text);
+void ui_toast_error(const char* text);
+
 /* Settings UI functions */
 void ui_settings_init(lv_obj_t* parent);
 void ui_settings_open();

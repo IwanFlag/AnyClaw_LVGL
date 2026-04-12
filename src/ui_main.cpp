@@ -977,7 +977,9 @@ static void theme_dropdown_cb(lv_event_t* e) {
     }
     save_theme_config();
     apply_theme_to_all();
-    ui_log("[Theme] Switched to %s", sel == 0 ? "Matcha_v1" : (sel == 1 ? "Peachy_v2" : "Classic"));
+    const char* theme_name = sel == 0 ? "Matcha_v1" : (sel == 1 ? "Peachy_v2" : "Classic");
+    ui_log("[Theme] Switched to %s", theme_name);
+    ui_toast_success(g_lang == Lang::CN ? "主题已切换" : "Theme switched");
 }
 
 /* Called from settings UI to add theme dropdown */
@@ -1740,6 +1742,7 @@ static void ui_log_flush_timer_cb(lv_timer_t* t) {
     (void)t;
     if (g_ui_thread_id != 0 && GetCurrentThreadId() == g_ui_thread_id) {
         ui_log_flush_pending();
+        toast_flush_pending();
         std::deque<PendingProgressEvent> local;
         {
             std::lock_guard<std::mutex> lk(g_progress_queue_mtx);
@@ -1919,6 +1922,143 @@ void ui_progress_finish(const char* task, bool ok, const char* result) {
 }
 
 void update_ui_language();
+
+/* ════════════════════════════════════════════════════════════
+ *  Toast Notification System (UI-37)
+ *
+ *  轻量级应用内通知：底部弹出，自动消失。
+ *  线程安全：任意线程调用 ui_toast()，UI 线程渲染。
+ * ════════════════════════════════════════════════════════════ */
+enum class ToastType { Info, Success, Warning, Error };
+
+struct PendingToast {
+    char text[512];
+    ToastType type;
+    int duration_ms;
+};
+static std::mutex g_toast_queue_mtx;
+static std::deque<PendingToast> g_toast_queue;
+static lv_obj_t* g_toast_container = nullptr;
+static lv_obj_t* g_toast_label = nullptr;
+static lv_timer_t* g_toast_timer = nullptr;
+
+static void toast_timer_cb(lv_timer_t* t) {
+    (void)t;
+    if (g_toast_container) {
+        lv_obj_add_flag(g_toast_container, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (g_toast_timer) {
+        lv_timer_del(g_toast_timer);
+        g_toast_timer = nullptr;
+    }
+}
+
+static void toast_render(const char* text, ToastType type, int duration_ms) {
+    const ThemeColors* c = g_colors;
+    if (!g_toast_container) {
+        /* Create once at screen bottom center */
+        lv_obj_t* scr = lv_screen_active();
+        g_toast_container = lv_obj_create(scr);
+        lv_obj_set_style_bg_opa(g_toast_container, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(g_toast_container, 1, 0);
+        lv_obj_set_style_radius(g_toast_container, SCALE(8), 0);
+        lv_obj_set_style_pad_all(g_toast_container, SCALE(10), 0);
+        lv_obj_set_style_pad_hor(g_toast_container, SCALE(16), 0);
+        lv_obj_set_style_shadow_width(g_toast_container, SCALE(12), 0);
+        lv_obj_set_style_shadow_color(g_toast_container, lv_color_make(0, 0, 0), 0);
+        lv_obj_set_style_shadow_opa(g_toast_container, LV_OPA_30, 0);
+        lv_obj_clear_flag(g_toast_container, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_add_flag(g_toast_container, LV_OBJ_FLAG_FLOATING);
+
+        g_toast_label = lv_label_create(g_toast_container);
+        lv_label_set_long_mode(g_toast_label, LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_text_font(g_toast_label, CJK_FONT_SMALL, 0);
+    }
+
+    /* Set text */
+    lv_label_set_text(g_toast_label, text);
+
+    /* Color by type */
+    lv_color_t bg, border, txt;
+    switch (type) {
+        case ToastType::Success:
+            bg = lv_color_make(0x1A, 0x2E, 0x1A);
+            border = lv_color_make(0x3D, 0xD6, 0x8C);
+            txt = lv_color_make(0xB6, 0xF2, 0xCC);
+            break;
+        case ToastType::Warning:
+            bg = lv_color_make(0x2E, 0x2A, 0x1A);
+            border = lv_color_make(0xE6, 0xC8, 0x4B);
+            txt = lv_color_make(0xF2, 0xE6, 0xB6);
+            break;
+        case ToastType::Error:
+            bg = lv_color_make(0x2E, 0x1A, 0x1A);
+            border = lv_color_make(0xFF, 0x6B, 0x6B);
+            txt = lv_color_make(0xFF, 0xB6, 0xB6);
+            break;
+        default: /* Info */
+            bg = c->panel;
+            border = c->panel_border;
+            txt = c->text;
+            break;
+    }
+    lv_obj_set_style_bg_color(g_toast_container, bg, 0);
+    lv_obj_set_style_border_color(g_toast_container, border, 0);
+    lv_obj_set_style_text_color(g_toast_label, txt, 0);
+
+    /* Size: content-width, max 40% of window */
+    int max_w = WIN_W * 40 / 100;
+    lv_obj_set_width(g_toast_label, max_w);
+    lv_obj_set_width(g_toast_container, LV_SIZE_CONTENT);
+    lv_obj_set_height(g_toast_container, LV_SIZE_CONTENT);
+
+    /* Position: bottom center */
+    lv_obj_align(g_toast_container, LV_ALIGN_BOTTOM_MID, 0, -SCALE(24));
+
+    /* Show */
+    lv_obj_clear_flag(g_toast_container, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(g_toast_container);
+
+    /* Auto-dismiss timer */
+    if (g_toast_timer) lv_timer_del(g_toast_timer);
+    g_toast_timer = lv_timer_create(toast_timer_cb, duration_ms, nullptr);
+    lv_timer_set_repeat_count(g_toast_timer, 1);
+}
+
+static void toast_flush_pending() {
+    std::lock_guard<std::mutex> lk(g_toast_queue_mtx);
+    while (!g_toast_queue.empty()) {
+        const auto& t = g_toast_queue.front();
+        toast_render(t.text, t.type, t.duration_ms);
+        g_toast_queue.pop_front();
+        /* Only render the latest toast if multiple queued */
+    }
+}
+
+/* Public API: show a toast notification. Thread-safe. */
+void ui_toast(const char* text, ToastType type, int duration_ms) {
+    if (!text || !text[0]) return;
+    if (duration_ms <= 0) duration_ms = 3000;
+
+    /* If called from UI thread, render directly */
+    if (g_ui_thread_id != 0 && GetCurrentThreadId() == g_ui_thread_id) {
+        toast_render(text, type, duration_ms);
+        return;
+    }
+    /* Otherwise enqueue for UI thread to flush */
+    std::lock_guard<std::mutex> lk(g_toast_queue_mtx);
+    PendingToast t{};
+    strncpy(t.text, text, sizeof(t.text) - 1);
+    t.type = type;
+    t.duration_ms = duration_ms;
+    g_toast_queue.push_back(t);
+}
+
+/* Convenience wrappers */
+void ui_toast_info(const char* text)    { ui_toast(text, ToastType::Info, 3000); }
+void ui_toast_success(const char* text) { ui_toast(text, ToastType::Success, 3000); }
+void ui_toast_warn(const char* text)    { ui_toast(text, ToastType::Warning, 4000); }
+void ui_toast_error(const char* text)   { ui_toast(text, ToastType::Error, 5000); }
 
 /* ── Window control button callbacks ── */
 static void btn_minimize_cb(lv_event_t* e) {
@@ -6847,8 +6987,10 @@ static void session_abort_cb(lv_event_t* e) {
             bool ok = app_abort_session(g_tasks[i].session_key);
             if (ok) {
                 ui_log("[Session] Aborted: %.60s", g_tasks[i].session_key);
+                ui_toast_warn(g_lang == Lang::CN ? "会话已终止" : "Session aborted");
             } else {
                 ui_log("[Session] Abort failed: %.60s", g_tasks[i].session_key);
+                ui_toast_error(g_lang == Lang::CN ? "终止失败" : "Abort failed");
                 lv_label_set_text(lv_obj_get_child(btn, 0), "✕");
                 lv_obj_clear_state(btn, LV_STATE_DISABLED);
             }
