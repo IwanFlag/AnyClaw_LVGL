@@ -24,6 +24,7 @@ Thumbs.db
 *.o
 *.a
 *.obj
+!thirdparty/sdl2-mingw/lib/*.a
 
 # Screenshots and debug images
 *.png
