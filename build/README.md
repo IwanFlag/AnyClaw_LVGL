@@ -16,7 +16,10 @@ AnyClaw_LVGL/
 ├── src/                          # 应用源码 (C/C++)
 ├── ui/                           # UI 定义
 ├── assets/                       # 运行时资源 (PNG 图标 + 字体文件等)
-├── bundled/                      # 离线安装包
+├── bundled/                      # 离线安装包 + 工作区模板
+│   ├── node-win-x64.zip          #   Node.js v22.14.0 便携版 (~34MB)
+│   ├── openclaw.tgz              #   OpenClaw npm 包 (~45MB)
+│   └── workspace/                #   首次启动工作区模板
 ├── tools/                        # 辅助脚本 (keygen 等)
 ├── thirdparty/                   # 第三方依赖（全部提交到仓库）
 │   ├── lvgl/                     #   LVGL 源码

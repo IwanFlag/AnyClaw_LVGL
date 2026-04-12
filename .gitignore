@@ -21,10 +21,11 @@ build/windows/out/
 *.o
 *.obj
 
-# Release zip（build 产物例外）
+# Release zip（build 产物例外 + bundled 离线包例外）
 *.zip
 !build/linux/artifacts/*.zip
 !build/windows/artifacts/*.zip
+!bundled/*.zip
 
 # 图片（assets 和 docs 内的除外）
 *.png
