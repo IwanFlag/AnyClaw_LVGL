@@ -336,7 +336,8 @@ bool license_is_valid() {
     if (g_license_expiry > 0) {
         return (int64_t)time(NULL) < g_license_expiry;
     }
-    return false;
+    /* expiry <= 0: trial period, always valid (PRD §15.6) */
+    return true;
 }
 
 int64_t license_remaining_seconds() {
@@ -352,7 +353,7 @@ int64_t license_remaining_seconds() {
             return remain > 0 ? remain : 0;
         }
     }
-    if (g_license_expiry <= 0) return 0;
+    if (g_license_expiry <= 0) return 9999999; /* trial period, unlimited (PRD §15.6) */
     int64_t now = (int64_t)time(NULL);
     int64_t remaining = g_license_expiry - now;
     return remaining > 0 ? remaining : 0;
@@ -372,6 +373,10 @@ void license_get_remaining_str(char* buf, int buf_size) {
     int64_t secs = license_remaining_seconds();
     if (secs <= 0) {
         snprintf(buf, buf_size, "Expired");
+        return;
+    }
+    if (secs >= 9999999) {
+        snprintf(buf, buf_size, "Trial");
         return;
     }
     double hours = secs / 3600.0;
