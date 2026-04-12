@@ -200,6 +200,12 @@ static int FOOTER_H = 30;
 /* ═══ Model & API Key globals ═══ */
 char g_selected_model[256] = {0};   /* Currently selected model name */
 char g_api_key[256] = {0};          /* OpenRouter API key */
+
+/* Safe zero wrappers for cross-unit cleanup (avoid sizeof on extern globals) */
+void app_secure_zero_sensitive() {
+    secure_zero(g_api_key, sizeof(g_api_key));
+    secure_zero(g_selected_model, sizeof(g_selected_model));
+}
 enum ControlMode { CONTROL_USER = 0, CONTROL_AI = 1 };
 enum LlmAccessMode { LLM_GATEWAY = 0, LLM_DIRECT_API = 1 };
 enum AiInteractionMode { AIMODE_AUTONOMOUS = 0, AIMODE_ASK = 1, AIMODE_PLAN = 2 };
@@ -720,14 +726,23 @@ static void search_next_cb(lv_event_t* e) {
 }
 
 /* ═══ Pre-window-creation config loaders ═══ */
+/* Read config once, extract multiple fields (avoid repeated file I/O) */
+static std::string g_preconfig_cache;
+
+static const std::string& get_preconfig() {
+    if (g_preconfig_cache.empty()) {
+        std::ifstream f(get_config_path());
+        if (f.is_open()) {
+            g_preconfig_cache.assign((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+            f.close();
+        }
+    }
+    return g_preconfig_cache;
+}
 
 void load_window_config(int* w, int* h) {
-    std::ifstream f(get_config_path());
-    if (!f.is_open()) return;
-    std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    f.close();
-
-    /* FIX 1: Use robust JSON extraction */
+    const std::string& content = get_preconfig();
+    if (content.empty()) return;
     int ww = json_extract_int(content.c_str(), "window_w", -1);
     int wh = json_extract_int(content.c_str(), "window_h", -1);
     if (ww >= 400 && ww <= 5000 && wh >= 300 && wh <= 4000) {
@@ -738,24 +753,16 @@ void load_window_config(int* w, int* h) {
 }
 
 void load_exit_confirm_config() {
-    std::ifstream f(get_config_path());
-    if (!f.is_open()) return;
-    std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    f.close();
-
-    /* FIX 1: Use robust JSON extraction */
+    const std::string& content = get_preconfig();
+    if (content.empty()) return;
     int val = json_extract_int(content.c_str(), "exit_confirm", -1);
     if (val >= 0) g_exit_confirm_enabled = (val == 1);
     LOG_I("CONFIG", "Exit confirmation: %s", g_exit_confirm_enabled ? "ON" : "OFF");
 }
 
 void load_dpi_config() {
-    std::ifstream f(get_config_path());
-    if (!f.is_open()) return;
-    std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    f.close();
-
-    /* FIX 1: Use robust JSON extraction */
+    const std::string& content = get_preconfig();
+    if (content.empty()) return;
     int val = json_extract_int(content.c_str(), "dpi_scale", -1);
     if (val == 100 || val == 125 || val == 150) {
         g_dpi_scale = val;
@@ -3617,7 +3624,7 @@ static bool ask_mode_confirm_action(const char* reason, const char* suggestion, 
     lv_obj_clear_flag(row_opt, LV_OBJ_FLAG_SCROLLABLE);
 
     volatile int decision = 0;
-    static char answer[256];
+    static thread_local char answer[256];
     answer[0] = '\0';
     AskFeedbackDialogCtx ctx = {&decision, answer, sizeof(answer), nullptr};
     auto add_opt = [&](const char* txt) {

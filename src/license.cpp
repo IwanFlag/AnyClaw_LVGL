@@ -260,16 +260,15 @@ static void license_save_to_config() {
 
 /* Base32 decode (RFC 4648, no padding required) */
 static int base32_decode(const char* input, unsigned char* output, int output_max) {
-    /* Build lookup table */
-    static unsigned char b32table[256];
-    static bool table_init = false;
-    if (!table_init) {
-        memset(b32table, 0xFF, sizeof(b32table));
-        for (int i = 0; i < 26; i++) b32table['A' + i] = i;
-        for (int i = 0; i < 26; i++) b32table['a' + i] = i;
-        for (int i = 0; i < 10; i++) b32table['2' + i] = 26 + i;
-        table_init = true;
-    }
+    /* Build lookup table (thread-safe via static init) */
+    static const unsigned char* b32table = []() -> unsigned char* {
+        static unsigned char table[256];
+        memset(table, 0xFF, sizeof(table));
+        for (int i = 0; i < 26; i++) table['A' + i] = (unsigned char)i;
+        for (int i = 0; i < 26; i++) table['a' + i] = (unsigned char)i;
+        for (int i = 0; i < 10; i++) table['2' + i] = (unsigned char)(26 + i);
+        return table;
+    }();
 
     int in_len = (int)strlen(input);
     int out_idx = 0;

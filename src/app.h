@@ -157,6 +157,7 @@ int utf8_safe_truncate(const char* str, int max_bytes);
 
 /* Secure memory clearing */
 void secure_zero(void* ptr, size_t size);
+void app_secure_zero_sensitive();  /* Zero API key + model name (cross-unit safe) */
 
 /* Session management */
 bool app_abort_session(const char* session_key);  /* Abort/reset specific session */

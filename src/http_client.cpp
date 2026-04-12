@@ -124,7 +124,7 @@ static int http_request(const char* method, const char* url,
         int chunk_count = 0;
         while (true) {
             /* FIX: Check abort flag — allows watchdog to kill stuck streams */
-            if (g_stream_done) {
+            if (InterlockedCompareExchange(&g_stream_done, 0, 0)) {
                 LOG_W("HTTP", "Stream abort: g_stream_done set, exiting read loop");
                 break;
             }

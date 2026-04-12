@@ -1030,8 +1030,7 @@ int main(int argc, char* argv[]) {
     }
 
     /* FIX 3: Clear sensitive data from memory */
-    secure_zero(g_api_key, sizeof(g_api_key));
-    secure_zero(g_selected_model, sizeof(g_selected_model));
+    app_secure_zero_sensitive();
 
     /* Cleanup */
     workspace_lock_release();

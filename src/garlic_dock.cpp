@@ -93,9 +93,13 @@ static void load_bitmaps() {
 
     for (auto& rel : body_names) {
         if (p && !g_body_bmp) {
+            char dir[MAX_PATH];
+            size_t dir_len = (size_t)(p - exe_path + 1);
+            if (dir_len >= MAX_PATH) dir_len = MAX_PATH - 1;
+            memcpy(dir, exe_path, dir_len);
+            dir[dir_len] = '\0';
             char path[MAX_PATH];
-            strncpy(path, exe_path, MAX_PATH);
-            strncpy(path + (p - exe_path + 1), rel, MAX_PATH - (p - exe_path + 1));
+            snprintf(path, MAX_PATH, "%s%s", dir, rel);
             g_body_bmp = load_png_bitmap(path, &g_body_w, &g_body_h);
             if (g_body_bmp) {
                 LOG_I("GARLIC", "Body bitmap loaded: %dx%d from %s", g_body_w, g_body_h, path);
@@ -106,9 +110,13 @@ static void load_bitmaps() {
     }
     for (auto& rel : sprout_names) {
         if (p && !g_sprout_bmp) {
+            char dir[MAX_PATH];
+            size_t dir_len = (size_t)(p - exe_path + 1);
+            if (dir_len >= MAX_PATH) dir_len = MAX_PATH - 1;
+            memcpy(dir, exe_path, dir_len);
+            dir[dir_len] = '\0';
             char path[MAX_PATH];
-            strncpy(path, exe_path, MAX_PATH);
-            strncpy(path + (p - exe_path + 1), rel, MAX_PATH - (p - exe_path + 1));
+            snprintf(path, MAX_PATH, "%s%s", dir, rel);
             g_sprout_bmp = load_png_bitmap(path, &g_sprout_w, &g_sprout_h);
             if (g_sprout_bmp) {
                 LOG_I("GARLIC", "Sprout bitmap loaded: %dx%d from %s", g_sprout_w, g_sprout_h, path);

@@ -25,8 +25,8 @@ static const char* json_find_key(const char* json, const char* key) {
         
         if (depth == 1 && strncmp(p, pattern, strlen(pattern)) == 0) {
             const char* after = p + strlen(pattern);
-            /* FIX P4: Ensure key is a complete token (not a prefix of a longer key) */
-            if (*after != '"' && *after != '\0') { p++; continue; }
+            /* FIX P4: Ensure key is a complete token (not a prefix of a longer key like "window_width" matching "window_w") */
+            if (*after != '"' && *after != '\0' && !isspace((unsigned char)*after) && *after != ':') { p++; continue; }
             while (*after == ' ' || *after == '\t' || *after == '\n' || *after == '\r') after++;
             if (*after == ':') {
                 after++;
