@@ -1,16 +1,32 @@
 # ============================================================
 # AnyClaw x Hermes Agent Installer (Windows PowerShell)
 # Usage: Right-click -> Run as Administrator
+# Save this file with CRLF line endings (Windows)
 # ============================================================
 #Requires -RunAsAdministrator
 
 $ErrorActionPreference = "Continue"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-function Info  { param($m) Write-Host "[INFO] $m" -ForegroundColor Cyan }
-function Ok    { param($m) Write-Host "[OK]   $m" -ForegroundColor Green }
-function Warn  { param($m) Write-Host "[!]    $m" -ForegroundColor Yellow }
-function Fail  { param($m) Write-Host "[ERR]  $m" -ForegroundColor Red }
+function Info {
+    param($m)
+    Write-Host "[INFO] $m" -ForegroundColor Cyan
+}
+
+function Ok {
+    param($m)
+    Write-Host "[OK]   $m" -ForegroundColor Green
+}
+
+function Warn {
+    param($m)
+    Write-Host "[!]    $m" -ForegroundColor Yellow
+}
+
+function Fail {
+    param($m)
+    Write-Host "[ERR]  $m" -ForegroundColor Red
+}
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
@@ -21,7 +37,11 @@ Write-Host ""
 # ---- 1. Check / Install WSL2 ----
 Info "Checking WSL2..."
 
-$wslExists = $null -ne (Get-Command wsl -ErrorAction SilentlyContinue)
+$wslExists = $false
+$wslCmd = Get-Command wsl -ErrorAction SilentlyContinue
+if ($null -ne $wslCmd) {
+    $wslExists = $true
+}
 
 if (-not $wslExists) {
     Warn "WSL not installed. Installing..."
@@ -40,25 +60,31 @@ if (-not $wslExists) {
 }
 
 # Test if WSL actually works
-$wslTest = $null
-try { $wslTest = wsl echo "ok" 2>&1 } catch { $wslTest = $null }
+$wslTest = ""
+try {
+    $wslTest = wsl echo "ok" 2>&1
+}
+catch {
+    $wslTest = ""
+}
 
 if ($wslTest -match "ok") {
     Ok "WSL is working"
-} else {
-    Warn "WSL command exists but not functional. Enabling required features..."
-    
+}
+else {
+    Warn "WSL command exists but not functional."
+    Warn "Enabling required Windows features..."
     $features = @("Microsoft-Windows-Subsystem-Linux", "VirtualMachinePlatform")
     foreach ($f in $features) {
-        $state = (Get-WindowsOptionalFeature -Online -FeatureName $f -ErrorAction SilentlyContinue).State
-        if ($state -ne "Enabled") {
+        $featInfo = Get-WindowsOptionalFeature -Online -FeatureName $f -ErrorAction SilentlyContinue
+        if ($null -eq $featInfo -or $featInfo.State -ne "Enabled") {
             Info "Enabling $f ..."
             Enable-WindowsOptionalFeature -Online -FeatureName $f -NoRestart -All 2>&1 | Out-Null
-        } else {
+        }
+        else {
             Ok "$f already enabled"
         }
     }
-    
     Write-Host ""
     Warn "============================================"
     Warn "  Restart required to activate WSL!"
@@ -72,21 +98,33 @@ if ($wslTest -match "ok") {
 }
 
 # Check Ubuntu distro
-$distros = $null
-try { $distros = wsl --list --quiet 2>&1 } catch {}
+$distros = ""
+try {
+    $distros = wsl --list --quiet 2>&1
+}
+catch {
+    $distros = ""
+}
 
-if (-not ($distros -match "Ubuntu")) {
+$hasUbuntu = $distros -match "Ubuntu"
+
+if (-not $hasUbuntu) {
     Info "Installing Ubuntu (may take a few minutes)..."
     Warn "You will be asked to set a Linux username and password"
     wsl --install -d Ubuntu 2>&1 | Out-Null
-    
     Info "Waiting for Ubuntu to initialize..."
     $maxWait = 120
     $waited = 0
     while ($waited -lt $maxWait) {
         Start-Sleep -Seconds 5
         $waited += 5
-        $check = wsl -d Ubuntu echo "ready" 2>&1
+        $check = ""
+        try {
+            $check = wsl -d Ubuntu echo "ready" 2>&1
+        }
+        catch {
+            $check = ""
+        }
         if ($check -match "ready") {
             Ok "Ubuntu installed"
             break
@@ -94,11 +132,11 @@ if (-not ($distros -match "Ubuntu")) {
         Write-Host "." -NoNewline
     }
     Write-Host ""
-    
     if ($waited -ge $maxWait) {
         Warn "Ubuntu install may still be in progress. Verify later."
     }
-} else {
+}
+else {
     Ok "Ubuntu already installed"
 }
 
@@ -117,17 +155,20 @@ if (-not (Test-Path $bashScript)) {
 Info "Copying script to WSL..."
 
 $winPath = $bashScript -replace '\\', '/'
-$driveLetter = $winPath.Substring(0,1).ToLower()
+$driveLetter = $winPath.Substring(0, 1).ToLower()
 $wslPath = "/mnt/$driveLetter" + $winPath.Substring(2)
 
-$copyResult = wsl -e bash -c "cp '$wslPath' /tmp/install-hermes.sh && chmod +x /tmp/install-hermes.sh && echo OK" 2>&1
+$copyCmd = "cp '$wslPath' /tmp/install-hermes.sh && chmod +x /tmp/install-hermes.sh && echo OK"
+$copyResult = wsl -e bash -c $copyCmd 2>&1
 
 if ($copyResult -match "OK") {
     Ok "Script copied"
-} else {
+}
+else {
     Info "Trying pipe method..."
     $scriptContent = Get-Content $bashScript -Raw -Encoding UTF8
-    $scriptContent | wsl -e bash -c "cat > /tmp/install-hermes.sh && chmod +x /tmp/install-hermes.sh && echo OK" 2>&1 | Out-Null
+    $pipeCmd = "cat > /tmp/install-hermes.sh && chmod +x /tmp/install-hermes.sh"
+    $scriptContent | wsl -e bash -c $pipeCmd 2>&1 | Out-Null
     Ok "Script copied"
 }
 
@@ -155,7 +196,8 @@ if ($exitCode -eq 0) {
     Write-Host "  Open WSL terminal:  wsl" -ForegroundColor Cyan
     Write-Host "  Check status:       wsl -e hermes gateway status" -ForegroundColor Cyan
     Write-Host ""
-} else {
+}
+else {
     Fail "Installation failed (exit code: $exitCode)"
     Warn "Please run manually in WSL: bash /tmp/install-hermes.sh"
 }
