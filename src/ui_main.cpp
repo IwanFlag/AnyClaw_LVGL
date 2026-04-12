@@ -262,16 +262,16 @@ static const ThemeColors THEME_DARK = {
 
 static const ThemeColors THEME_LIGHT = {
     /* Peachy_v2 */
-    /* bg */          {0xFF, 0xF7, 0xF2},
+    /* bg */          {0xFF, 0xF8, 0xF3},
     /* panel */       {0xFF, 0xFF, 0xFF},
     /* panel_border */{0xF1, 0xD9, 0xCA},
     /* input_bg */    {0xFF, 0xFB, 0xF8},
     /* text */        {0x2A, 0x1F, 0x1A},
     /* text_dim */    {0x8A, 0x6E, 0x62},
     /* text_hint */   {0xB3, 0x9D, 0x93},
-    /* accent */      {0xFF, 0x9F, 0x7A},
+    /* accent */      {0xFF, 0x7F, 0x50},
     /* section_label*/{0xF5, 0x8A, 0x62},
-    /* btn_action */  {0xFF, 0x9F, 0x7A},
+    /* btn_action */  {0xFF, 0x7F, 0x50},
     /* btn_secondary*/{0xF7, 0xE8, 0xDF},
     /* btn_close */   {0xE5, 0x64, 0x64},
     /* btn_add */     {0xF5, 0x8A, 0x62},
@@ -1285,10 +1285,11 @@ static void loading_show() {
         lv_obj_set_style_text_font(toggle_lbl, CJK_FONT_SMALL, 0);
         lv_obj_center(toggle_lbl);
 
-        /* Garlic icon centered */
+        /* Garlic icon centered — 21% of overlay height */
         g_loading_icon = lv_image_create(g_loading_overlay);
         lv_image_set_src(g_loading_icon, "A:assets/garlic_48.png");
-        lv_obj_set_size(g_loading_icon, 64, 64);
+        int loading_icon_px = SCALE(300) * 21 / 100;  /* overlay_h × 21% */
+        lv_obj_set_size(g_loading_icon, loading_icon_px, loading_icon_px);
         lv_image_set_scale(g_loading_icon, 256); /* 100% */
         lv_obj_align(g_loading_icon, LV_ALIGN_TOP_MID, 0, 0);
 
@@ -1593,8 +1594,9 @@ static void task_tooltip_create(TaskItem* t) {
     lv_obj_add_flag(tip, LV_OBJ_FLAG_EVENT_BUBBLE);
     lv_obj_clear_flag(tip, LV_OBJ_FLAG_CLICKABLE);
 
-    /* Size based on content */
-    lv_obj_set_size(tip, 320, LV_SIZE_CONTENT);
+    /* Size based on content — 22% of window width */
+    lv_obj_set_width(tip, LV_PCT(22));
+    lv_obj_set_height(tip, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(tip, lv_color_make(20, 22, 35), 0);
     lv_obj_set_style_border_color(tip, lv_color_make(60, 65, 90), 0);
     lv_obj_set_style_border_width(tip, 1, 0);
@@ -4228,7 +4230,7 @@ static void relayout_panels() {
     if (mode_ta_ai_persona) lv_obj_set_width(mode_ta_ai_persona, profile_w);
     if (mode_ta_ai_skills) lv_obj_set_width(mode_ta_ai_skills, profile_w);
     if (mode_ta_work_prompt) lv_obj_set_width(mode_ta_work_prompt, profile_w);
-    int work_chat_w = g_work_chat_collapsed ? SCALE(40) : SCALE(320);
+    int work_chat_w = g_work_chat_collapsed ? SCALE(40) : (content_w * 38 / 100);
     if (mode_work_chat_panel) {
         lv_obj_set_width(mode_work_chat_panel, work_chat_w);
         lv_obj_set_pos(mode_work_chat_panel, std::max(SCALE(8), content_w - work_chat_w - SCALE(8)), SCALE(8));
@@ -6151,7 +6153,8 @@ static void work_chat_toggle_cb(lv_event_t* e) {
     (void)e;
     if (!mode_work_chat_panel || !mode_ta_work_chat_feed || !mode_ta_work_chat_input) return;
     g_work_chat_collapsed = !g_work_chat_collapsed;
-    lv_obj_set_width(mode_work_chat_panel, g_work_chat_collapsed ? SCALE(40) : SCALE(320));
+    int cw = std::max(200, RIGHT_PANEL_W - CHAT_GAP * 2);
+    lv_obj_set_width(mode_work_chat_panel, g_work_chat_collapsed ? SCALE(40) : (cw * 38 / 100));
     lv_obj_set_height(mode_work_chat_panel, g_work_chat_collapsed ? SCALE(40) : SCALE(220));
     if (mode_btn_work_chat_toggle) {
         lv_obj_t* lbl = lv_obj_get_child(mode_btn_work_chat_toggle, 0);
@@ -11362,9 +11365,10 @@ void app_ui_init() {
 
         mode_work_chat_panel = aw_form_section_create(mode_panel_work, "Work Chat Panel", card_w);
         lv_obj_add_flag(mode_work_chat_panel, LV_OBJ_FLAG_FLOATING);
-        lv_obj_set_width(mode_work_chat_panel, SCALE(320));
+        int work_panel_w = content_w * 38 / 100;
+        lv_obj_set_width(mode_work_chat_panel, work_panel_w);
         lv_obj_set_height(mode_work_chat_panel, SCALE(220));
-        lv_obj_set_pos(mode_work_chat_panel, std::max(SCALE(8), content_w - SCALE(328)), SCALE(8));
+        lv_obj_set_pos(mode_work_chat_panel, std::max(SCALE(8), content_w - work_panel_w - SCALE(8)), SCALE(8));
         mode_btn_work_chat_toggle = aw_btn_create(mode_work_chat_panel, "<", BTN_SECONDARY, SCALE(36), SCALE(30));
         lv_obj_add_event_cb(mode_btn_work_chat_toggle, work_chat_toggle_cb, LV_EVENT_CLICKED, nullptr);
         mode_lbl_work_chat_state = lv_label_create(mode_work_chat_panel);
