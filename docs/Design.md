@@ -1665,7 +1665,8 @@ LVGL 模态弹窗，阻断启动。如"未检测到 Node.js，请安装后重新
   │  │                             │  │  _                      │   │  │
   │  └─────────────────────────────┘  └─────────────────────────┘   │  │
   │                                                                  │  │
-  │         [ 在线安装（推荐） ]  [ bundled/ 离线 ]  [ 本地路径 ]        │  │
+  │         [ 在线安装（推荐） ]  [ bundled/ 离线安装 ]                    │  │
+  │         扫描结果自动刷新 · 找不到？手动指定路径 >                      │  │
   │                                                                  │  │
   └──────────────────────────────────────────────────────────────────┘  │
 ```
@@ -1674,8 +1675,15 @@ LVGL 模态弹窗，阻断启动。如"未检测到 Node.js，请安装后重新
 **CLI 日志重定向：** 所有 CLI 子进程 stdout/stderr 同时写入终端组件 + `logs/app.log`。
 **安装按钮：**
 - 在线安装（推荐）: 在线下载 Node.js + npm install -g openclaw
-- bundled/ 离线: 解压 node-win-x64.zip + npm install bundled/openclaw.tgz
-- 本地路径: 用户指定已安装的 node/openclaw 路径
+- bundled/ 离线安装: 解压 node-win-x64.zip + npm install bundled/openclaw.tgz
+- 手动指定路径: 文字链，兜底入口，弹出文件选择器指定 node.exe 和 openclaw 路径
+
+**自动扫描逻辑（检测结果自动刷新）：**
+1. PATH 中查找 `node` 和 `openclaw` 命令
+2. npm 全局目录查找
+3. 常见安装位置扫描（Program Files、AppData 等）
+4. bundled/ 目录检测
+5. 扫描完成 → 更新 LED 状态，找到就标 ✅
 
 **检测结果样式：**
 
