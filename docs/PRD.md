@@ -36,7 +36,7 @@ AnyClaw 是面向**学生**和**职场用户**的 AI 桌面管家。兼具 **通
 
 **产品公式：**
 ```
-通用 AI 工作台（Chat + Work）+ OpenClaw（AI 管家）= AnyClaw
+通用 AI 工作台（Chat + Work）+ Agent 运行时（OpenClaw / Hermes）= AnyClaw
 ```
 
 | 模式 | 角色 | 内容 |
@@ -46,21 +46,34 @@ AnyClaw 是面向**学生**和**职场用户**的 AI 桌面管家。兼具 **通
 
 **Work 模式不限于编程。** 学生写论文、职场做报告、开发者写代码——任务类型不同，但 AI 干活并展示执行过程的模式是通用的。
 
-### 1.2 AnyClaw 与 OpenClaw 的关系
+### 1.2 AnyClaw 与 Agent 运行时的关系
 
-AnyClaw 和 OpenClaw 是**两个独立组件**，职责不同：
+AnyClaw 是 **GUI 客户端（壳子）**，不自己实现 Agent 逻辑。它通过 Agent 运行时来获得 AI 能力。
+
+**当前支持两种运行时，用户可在设置中切换：**
+
+| 运行时 | 本质 | 端口 | 默认 |
+|--------|------|------|------|
+| **OpenClaw Gateway** | 成熟的 Agent 平台（守护进程 + 内置 Agent） | :18789 | ✅ 默认 |
+| **Hermes Agent** | Nous Research 开源 Agent 框架（自进化技能 + 持久记忆） | :18790 | 可选 |
+
+**组件关系：**
 
 | 组件 | 本质 | 类比 |
 |------|------|------|
-| **AnyClaw** | GUI 客户端（壳子） | 浏览器 |
-| **OpenClaw** | Agent 平台（运行时框架） | 操作系统 |
+| **AnyClaw** | GUI 客户端 | 浏览器 |
+| **OpenClaw** | Agent 平台（运行时 A） | 操作系统 A |
+| **Hermes Agent** | Agent 框架（运行时 B） | 操作系统 B |
 | **Gateway** | OpenClaw 的守护进程 | 系统服务 |
-| **Agent** | Gateway 管理的 AI 实例 | 应用程序 |
+| **Agent** | 运行时管理的 AI 实例 | 应用程序 |
 | **LLM** | Agent 调用的底层模型 | CPU |
 
-**为什么需要两个？** AnyClaw 提供图形界面和用户体验，OpenClaw 提供 AI 能力和工具调用运行时。AnyClaw 不自己实现 Agent 逻辑，而是通过 Gateway 借助 OpenClaw 的能力。
+**为什么要两个运行时？**
+- AnyClaw 提供统一的图形界面和用户体验
+- 用户根据需求选择：OpenClaw 成熟稳定（权限/Cron/Heartbeat 完善），Hermes 更智能（自进化技能/持久记忆/复杂工作流）
+- 两个运行时独立运行，Session 不互通，配置各自管理
 
-**安装 AnyClaw 不代表自动安装了 OpenClaw。** 首次启动向导会引导用户安装 OpenClaw。
+**安装 AnyClaw 不代表自动安装了运行时。** 首次启动向导会引导用户安装 OpenClaw（默认运行时）。Hermes 集成在设置中可选开启。
 
 > 设计 → UI-05（环境检测）
 
@@ -83,6 +96,7 @@ AnyClaw 和 OpenClaw 是**两个独立组件**，职责不同：
 | v2.0 | Chat/Work 双模式、权限系统、本地模型、向导、Model Failover | ✅ 已发布 |
 | v2.1 | Diff 可视化、数据表格、Ask 模式弹窗深化 | 🔧 规划中 |
 | v2.2 | 搜索结果渲染、文件操作渲染、WebRenderer | ⏳ 规划中 |
+| v2.3 | Hermes Agent 集成（双运行时并行） | ⏳ 规划中 |
 | v3.0 | AnyClaw 自身成为 Agent 平台（Direct API）、全自主执行 | ⏳ 长期目标 |
 
 ### 1.5 明确排除项
@@ -1127,19 +1141,80 @@ struct ResourceLimits {
 
 ### 12.1 平台概述
 
+AnyClaw 支持两种 Agent 运行时并行，用户在设置中选择：
+
 ```
 AnyClaw (GUI)
-  ├→ Chat/SSE    → HTTP POST + SSE  → Gateway :18789  → Agent → LLM API
-  ├→ Health      → HTTP GET /health → Gateway :18789
-  ├→ Sessions    → CLI 子进程调用   → openclaw gateway call
-  ├→ Config      → CLI 子进程调用   → openclaw config set/get
-  ├→ License     → 本地内存验证     → 不走 Gateway
+  ├→ Chat/SSE    → HTTP POST + SSE  → 运行时（选定端口） → Agent → LLM API
+  ├→ Health      → HTTP GET /health → 运行时（选定端口）
+  ├→ Sessions    → CLI 子进程调用   → openclaw gateway call（仅 OpenClaw 模式）
+  ├→ Config      → CLI 子进程调用   → openclaw config set/get（仅 OpenClaw 模式）
+  ├→ License     → 本地内存验证     → 不走运行时
   ├→ KB 检索     → 本地文件搜索    → 不走网络
   ├→ Failover    → HTTP POST       → OpenRouter API（直连）
   └→ 本地模型    → HTTP POST + SSE  → llama-server :18800 → GGUF
 ```
 
-### 12.2 Gateway 守护进程
+**运行时路由：**
+
+```
+                    ┌── OpenClaw Gateway :18789（默认）
+AnyClaw → 配置读取 ─┤
+                    └── Hermes Agent   :18790（可选）
+```
+
+### 12.1.5 运行时系统
+
+**功能编号：** RT-01 **优先级：** P1 **状态：** 🔧 规划中
+
+AnyClaw 通过运行时抽象层管理 Agent 生命周期。用户选择运行时后，所有聊天/工具调用/Session 管理均走对应运行时。
+
+**运行时对比：**
+
+| 维度 | OpenClaw Gateway | Hermes Agent |
+|------|-----------------|--------------|
+| 开源协议 | Apache 2.0 | MIT |
+| Agent 人格 | SOUL.md / AGENTS.md 文件驱动 | 内置人格系统 + 可配置 |
+| 工具系统 | exec/read/write/web_fetch/browser/cron/message 等 | 自有工具 + 可扩展 |
+| 权限系统 | AnyClaw 19 项权限 + 工作区沙箱 | Hermes 原生权限 |
+| Session | Gateway 内存管理，支持多 Session | Hermes Session 管理 |
+| Sub-Agent | sessions_spawn，深度 1 层 | Hermes 原生子代理 |
+| 记忆 | MEMORY.md + memory/ 日志 | 持久记忆 + 自动技能生成 |
+| 定时任务 | Cron 系统（cron list/add/remove） | 待定 |
+| IM 集成 | Telegram/Discord/WhatsApp | 待定 |
+| 推荐模型 | 任意（OpenRouter/xiaomi 等） | MiMo-V2（已官方集成） |
+| 成熟度 | ✅ 稳定 | 🔧 早期集成 |
+
+**切换逻辑：**
+
+```
+用户在 Settings → Runtime 切换
+  → 停止当前运行时进程
+  → 启动新运行时进程
+  → AnyClaw 重新连接（健康检查）
+  → 更新 config.json 的 active_runtime 字段
+  → Session 不迁移（各自独立）
+```
+
+**配置字段（config.json）：**
+
+```json
+{
+  "active_runtime": "openclaw",
+  "hermes_port": 18790,
+  "hermes_enabled": false
+}
+```
+
+**首次启动向导更新：**
+- Step 2（环境检测）增加运行时选择：OpenClaw（默认推荐）或 Hermes Agent
+- 选 Hermes 时引导安装 Hermes Agent 并配置
+
+### 12.2 运行时守护进程
+
+当前活跃运行时由 `config.json` 的 `active_runtime` 字段决定。
+
+#### 12.2.1 OpenClaw Gateway
 
 **进程管理：**
 - 一键启动、停止、重启（`openclaw gateway start/stop`）
@@ -1167,13 +1242,13 @@ Gateway 进程存在 + HTTP 200:
 
 ### 12.3 网络通信
 
-| 场景 | 目标 | 协议 | 超时 |
-|------|------|------|------|
-| 聊天（云端） | Gateway :18789 | HTTP POST + SSE, OpenAI 格式 | 流式 45s |
-| 健康检查 | Gateway :18789 | HTTP GET /health | 3s |
-| 会话管理 | openclaw CLI | 子进程 + JSON | 12s |
-| Failover 探针 | OpenRouter API | HTTP POST, OpenAI 格式 | 12s |
-| 配置更新 | openclaw CLI | `openclaw config set` | 8s |
+| 场景 | 目标（OpenClaw 模式） | 目标（Hermes 模式） | 协议 | 超时 |
+|------|----------------------|-------------------|------|------|
+| 聊天（云端） | Gateway :18789 | Hermes :18790 | HTTP POST + SSE, OpenAI 格式 | 流式 45s |
+| 健康检查 | Gateway :18789 | Hermes :18790 | HTTP GET /health | 3s |
+| 会话管理 | openclaw CLI | Hermes REST API | 子进程 + JSON / HTTP | 12s |
+| Failover 探针 | OpenRouter API | OpenRouter API | HTTP POST, OpenAI 格式 | 12s |
+| 配置更新 | openclaw CLI | config.json 直写 | `openclaw config set` / 文件写入 | 8s |
 
 **Gateway 通信协议（OpenAI 兼容）：**
 ```http
