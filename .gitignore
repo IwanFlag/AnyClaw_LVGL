@@ -1,10 +1,3 @@
-# Build output (not committed)
-out/
-build-mingw/
-build-windows/
-build/linux/out/
-build/windows/out/
-
 # IDE
 .vs/
 .vscode/
@@ -17,49 +10,55 @@ CMakeSettings.json
 Thumbs.db
 *.DS_Store
 
-# Release zips
+# Build 中间产物（不提交）
+out/
+build-mingw/
+build-windows/
+build/linux/out/
+build/windows/out/
+
+# 编译产物对象
+*.o
+*.obj
+
+# Release zip（build 产物例外）
 *.zip
 !build/linux/artifacts/*.zip
 !build/windows/artifacts/*.zip
 
-# Compiled objects
-*.exe
-*.dll
-*.o
-*.a
-*.obj
-!thirdparty/sdl2-mingw/lib/*.a
-
-# Screenshots and debug images
+# 图片（assets 和 docs 内的除外）
 *.png
 *.bmp
 *.jpg
 *.jpeg
-!docs/*.png
-!docs/*.svg
 !assets/**/*.png
 !assets/**/*.ico
+!docs/*.png
+!docs/*.svg
 
-# Temp/debug files
+# 临时文件
 *.log
 *.bak
 *.orig
 *.tmp
-!docs/*.md
-!thirdparty/**/*.txt
-!LICENSE*
 
-# Python dev scripts
-*.py
-!setup.py
-!tools/keygen.py
-
-# Font source files
+# 字体源文件
 *.ttf
 *.ttc
-!thirdparty/lvgl/**
 
-# LVGL test artifacts
+# Python
+*.py
+!tools/keygen.py
+
+# 保留规则
+!docs/*.md
+!thirdparty/**/*.txt
+!thirdparty/lvgl/**
+!thirdparty/sdl2-mingw/lib/*.a
+!thirdparty/sdl2-mingw/bin/*.dll
+!LICENSE*
+
+# LVGL 测试
 thirdparty/lvgl/tests/
 
 # Misc
