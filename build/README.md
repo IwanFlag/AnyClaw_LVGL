@@ -2,6 +2,13 @@
 
 本目录用于统一存放构建工具、构建脚本和构建产物。
 
+> **⚠️ 编译规则：每次编译必须使用编译+打包脚本，不要执行单独编译的脚本。**
+>
+> | 平台 | 命令 |
+> |------|------|
+> | Windows 原生 | `build\windows\build-package.bat` |
+> | Linux 交叉编译 | `bash build/linux/build.sh [version]` |
+
 ## 目录约定
 
 - `build/windows/`：Windows 一键构建与打包脚本
