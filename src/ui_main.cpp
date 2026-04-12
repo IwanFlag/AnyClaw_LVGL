@@ -8816,6 +8816,23 @@ static std::atomic<bool> g_wiz_dl_running(false);
 static lv_obj_t* g_wiz_dl_node_btn = nullptr;
 static lv_obj_t* g_wiz_dl_oc_btn = nullptr;
 
+/* Step indicator bar widgets */
+static lv_obj_t* g_wizard_step_bar = nullptr;
+static lv_obj_t* g_wizard_step_dots[WIZARD_STEPS] = {nullptr};
+static lv_obj_t* g_wizard_step_labels[WIZARD_STEPS] = {nullptr};
+static lv_obj_t* g_wizard_step_lines[WIZARD_STEPS - 1] = {nullptr};
+
+static const I18n wizard_step_short_names[WIZARD_STEPS] = {
+    {"Language", "语言"},
+    {"Env", "环境"},
+    {"Model", "模型"},
+    {"Local", "本地模型"},
+    {"IM", "IM"},
+    {"Confirm", "确认"}
+};
+
+static void wizard_update_step_bar(int current_step);
+
 static void wizard_progress_mirror_from_event(const PendingProgressEvent& ev, int pct) {
     if (!g_wizard_modal || !g_wiz_install_progress_panel || !g_wiz_install_progress_bar) return;
     bool is_setup_task = (strstr(ev.task, "Setup") || strstr(ev.task, "Node.js"));
@@ -10175,6 +10192,45 @@ static void wizard_build_step_profile() {
 
 /* Refresh summary text when returning to step 6 */
 /* ── Build step content ── */
+static void wizard_update_step_bar(int current_step) {
+    if (!g_wizard_step_bar) return;
+    for (int i = 0; i < WIZARD_STEPS; i++) {
+        if (!g_wizard_step_dots[i]) continue;
+        bool done = (i < current_step);
+        bool active = (i == current_step);
+        if (done) {
+            /* Completed: accent filled */
+            lv_obj_set_style_bg_color(g_wizard_step_dots[i], g_colors->accent, 0);
+            lv_obj_set_style_bg_opa(g_wizard_step_dots[i], LV_OPA_COVER, 0);
+            lv_obj_set_style_border_width(g_wizard_step_dots[i], 0, 0);
+        } else if (active) {
+            /* Current: accent filled + glow effect via larger radius */
+            lv_obj_set_style_bg_color(g_wizard_step_dots[i], g_colors->accent, 0);
+            lv_obj_set_style_bg_opa(g_wizard_step_dots[i], LV_OPA_COVER, 0);
+            lv_obj_set_style_border_width(g_wizard_step_dots[i], 0, 0);
+            lv_obj_set_style_radius(g_wizard_step_dots[i], LV_RADIUS_CIRCLE, 0);
+            lv_obj_set_size(g_wizard_step_dots[i], SCALE(14), SCALE(14));
+        } else {
+            /* Future: outline only */
+            lv_obj_set_style_bg_opa(g_wizard_step_dots[i], LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_width(g_wizard_step_dots[i], 2, 0);
+            lv_obj_set_style_border_color(g_wizard_step_dots[i], g_colors->panel_border, 0);
+            lv_obj_set_style_radius(g_wizard_step_dots[i], LV_RADIUS_CIRCLE, 0);
+            lv_obj_set_size(g_wizard_step_dots[i], SCALE(12), SCALE(12));
+        }
+        /* Update label color */
+        if (g_wizard_step_labels[i]) {
+            lv_obj_set_style_text_color(g_wizard_step_labels[i],
+                active ? g_colors->accent : (done ? g_colors->text : g_colors->text_dim), 0);
+        }
+        /* Update connecting lines */
+        if (i < WIZARD_STEPS - 1 && g_wizard_step_lines[i]) {
+            lv_obj_set_style_bg_color(g_wizard_step_lines[i],
+                done ? g_colors->accent : g_colors->panel_border, 0);
+        }
+    }
+}
+
 static void wizard_update_step() {
     if (!g_wizard_content || !g_wizard_step_label || !g_wizard_title) return;
 
@@ -10222,6 +10278,9 @@ static void wizard_update_step() {
     char step_text[32];
     snprintf(step_text, sizeof(step_text), tr(W_STEP_FMT), g_wizard_step + 1, WIZARD_STEPS);
     lv_label_set_text(g_wizard_step_label, step_text);
+
+    /* Update step indicator bar */
+    wizard_update_step_bar(g_wizard_step);
 
     /* Update title */
     lv_label_set_text(g_wizard_title, tr(wizard_step_titles[g_wizard_step]));
@@ -10457,8 +10516,8 @@ void ui_show_setup_wizard() {
     lv_obj_clear_flag(g_wizard_modal, LV_OBJ_FLAG_SCROLLABLE);
 
     /* Centered dialog box */
-    int box_w = SCALE(520);
-    int box_h = SCALE(420);
+    int box_w = SCALE(560);
+    int box_h = SCALE(480);
     g_wizard_box = lv_obj_create(g_wizard_modal);
     lv_obj_set_size(g_wizard_box, box_w, box_h);
     lv_obj_set_pos(g_wizard_box, (WIN_W - box_w) / 2, (WIN_H - box_h) / 2);
@@ -10481,30 +10540,38 @@ void ui_show_setup_wizard() {
     lv_obj_set_style_pad_all(header, 0, 0);
     lv_obj_clear_flag(header, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Step indicator (top-left) */
-    g_wizard_step_label = lv_label_create(header);
-    char step_text[32];
-    snprintf(step_text, sizeof(step_text), tr(W_STEP_FMT), 1, WIZARD_STEPS);
-    lv_label_set_text(g_wizard_step_label, step_text);
-    lv_obj_set_style_text_color(g_wizard_step_label, g_colors->accent, 0);
-    lv_obj_set_style_text_font(g_wizard_step_label, FONT(12), 0);
-    lv_obj_align(g_wizard_step_label, LV_ALIGN_LEFT_MID, 20, 0);
+    /* Brand icon (top-left) */
+    lv_obj_t* wiz_icon = lv_image_create(header);
+    lv_image_set_src(wiz_icon, "A:assets/garlic_32.png");
+    lv_obj_align(wiz_icon, LV_ALIGN_LEFT_MID, 16, 0);
 
-    /* Title (after step label) */
+    /* Title (after icon) */
     g_wizard_title = lv_label_create(header);
     lv_label_set_text(g_wizard_title, tr(wizard_step_titles[0]));
     lv_obj_set_style_text_color(g_wizard_title, g_colors->text, 0);
     lv_obj_set_style_text_font(g_wizard_title, CJK_FONT, 0);
-    lv_obj_align(g_wizard_title, LV_ALIGN_LEFT_MID, SCALE(130), 0);
+    lv_obj_align(g_wizard_title, LV_ALIGN_LEFT_MID, SCALE(52), 0);
+
+    /* Step counter (right of title) */
+    g_wizard_step_label = lv_label_create(header);
+    char step_text[32];
+    snprintf(step_text, sizeof(step_text), tr(W_STEP_FMT), 1, WIZARD_STEPS);
+    lv_label_set_text(g_wizard_step_label, step_text);
+    lv_obj_set_style_text_color(g_wizard_step_label, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(g_wizard_step_label, FONT(11), 0);
+    lv_obj_align(g_wizard_step_label, LV_ALIGN_RIGHT_MID, -SCALE(110), 0);
 
     g_wizard_btn_close = lv_button_create(header);
     lv_obj_set_size(g_wizard_btn_close, SCALE(98), SCALE(32));
-    lv_obj_set_style_bg_color(g_wizard_btn_close, lv_color_make(220, 80, 80), 0);
+    lv_obj_set_style_bg_opa(g_wizard_btn_close, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(g_wizard_btn_close, 1, 0);
+    lv_obj_set_style_border_color(g_wizard_btn_close, g_colors->panel_border, 0);
     lv_obj_set_style_radius(g_wizard_btn_close, 8, 0);
     lv_obj_align(g_wizard_btn_close, LV_ALIGN_RIGHT_MID, -12, 0);
     lv_obj_add_event_cb(g_wizard_btn_close, wizard_close_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* close_lbl = lv_label_create(g_wizard_btn_close);
     lv_label_set_text(close_lbl, "退出向导");
+    lv_obj_set_style_text_color(close_lbl, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(close_lbl, CJK_FONT_SMALL, 0);
     lv_obj_center(close_lbl);
 
@@ -10518,10 +10585,79 @@ void ui_show_setup_wizard() {
     lv_obj_set_style_pad_all(sep, 0, 0);
     lv_obj_clear_flag(sep, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* ── Content area ── */
+    /* ── Step indicator bar ── */
+    int step_bar_y = SCALE(56) + 1;
+    int step_bar_h = SCALE(48);
+    g_wizard_step_bar = lv_obj_create(g_wizard_box);
+    lv_obj_set_size(g_wizard_step_bar, box_w, step_bar_h);
+    lv_obj_set_pos(g_wizard_step_bar, 0, step_bar_y);
+    lv_obj_set_style_bg_opa(g_wizard_step_bar, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(g_wizard_step_bar, 0, 0);
+    lv_obj_set_style_pad_all(g_wizard_step_bar, 0, 0);
+    lv_obj_clear_flag(g_wizard_step_bar, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Calculate spacing: distribute dots evenly across the bar */
+    int dot_size = SCALE(12);
+    int bar_pad = SCALE(40);
+    int usable_w = box_w - bar_pad * 2;
+    int step_spacing = usable_w / (WIZARD_STEPS - 1);
+
+    for (int i = 0; i < WIZARD_STEPS; i++) {
+        int cx = bar_pad + i * step_spacing;
+
+        /* Connecting line (before this dot, except first) */
+        if (i > 0) {
+            int line_x = bar_pad + (i - 1) * step_spacing + dot_size / 2 + 2;
+            int line_w = step_spacing - dot_size - 4;
+            if (line_w > 0) {
+                g_wizard_step_lines[i - 1] = lv_obj_create(g_wizard_step_bar);
+                lv_obj_set_size(g_wizard_step_lines[i - 1], line_w, 2);
+                lv_obj_set_pos(g_wizard_step_lines[i - 1], line_x, SCALE(6));
+                lv_obj_set_style_bg_color(g_wizard_step_lines[i - 1],
+                    (i - 1 < g_wizard_step) ? g_colors->accent : g_colors->panel_border, 0);
+                lv_obj_set_style_bg_opa(g_wizard_step_lines[i - 1], LV_OPA_COVER, 0);
+                lv_obj_set_style_border_width(g_wizard_step_lines[i - 1], 0, 0);
+                lv_obj_set_style_radius(g_wizard_step_lines[i - 1], 1, 0);
+                lv_obj_set_style_pad_all(g_wizard_step_lines[i - 1], 0, 0);
+                lv_obj_clear_flag(g_wizard_step_lines[i - 1], LV_OBJ_FLAG_SCROLLABLE);
+            }
+        }
+
+        /* Dot */
+        g_wizard_step_dots[i] = lv_obj_create(g_wizard_step_bar);
+        int this_dot = (i == g_wizard_step) ? SCALE(14) : dot_size;
+        lv_obj_set_size(g_wizard_step_dots[i], this_dot, this_dot);
+        lv_obj_set_pos(g_wizard_step_dots[i], cx - this_dot / 2, SCALE(2));
+        lv_obj_set_style_radius(g_wizard_step_dots[i], LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_border_width(g_wizard_step_dots[i], 0, 0);
+        lv_obj_set_style_pad_all(g_wizard_step_dots[i], 0, 0);
+        lv_obj_clear_flag(g_wizard_step_dots[i], LV_OBJ_FLAG_SCROLLABLE);
+        if (i <= g_wizard_step) {
+            lv_obj_set_style_bg_color(g_wizard_step_dots[i], g_colors->accent, 0);
+            lv_obj_set_style_bg_opa(g_wizard_step_dots[i], LV_OPA_COVER, 0);
+        } else {
+            lv_obj_set_style_bg_opa(g_wizard_step_dots[i], LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_width(g_wizard_step_dots[i], 2, 0);
+            lv_obj_set_style_border_color(g_wizard_step_dots[i], g_colors->panel_border, 0);
+        }
+
+        /* Label under dot */
+        g_wizard_step_labels[i] = lv_label_create(g_wizard_step_bar);
+        lv_label_set_text(g_wizard_step_labels[i], tr(wizard_step_short_names[i]));
+        lv_obj_set_style_text_font(g_wizard_step_labels[i], FONT(10), 0);
+        lv_obj_set_style_text_color(g_wizard_step_labels[i],
+            (i == g_wizard_step) ? g_colors->accent : (i < g_wizard_step ? g_colors->text : g_colors->text_dim), 0);
+        /* Position label centered under the dot */
+        lv_obj_update_layout(g_wizard_step_labels[i]);
+        int lbl_w = lv_obj_get_width(g_wizard_step_labels[i]);
+        lv_obj_set_pos(g_wizard_step_labels[i], cx - lbl_w / 2, SCALE(20));
+    }
+
+    /* ── Content area (shifted down for step bar) ── */
+    int content_y = step_bar_y + step_bar_h + 4;
     g_wizard_content = lv_obj_create(g_wizard_box);
-    lv_obj_set_size(g_wizard_content, box_w - 40, box_h - SCALE(56) - SCALE(64));
-    lv_obj_set_pos(g_wizard_content, 20, SCALE(56) + 12);
+    lv_obj_set_size(g_wizard_content, box_w - 40, box_h - content_y - SCALE(64));
+    lv_obj_set_pos(g_wizard_content, 20, content_y);
     lv_obj_set_style_bg_opa(g_wizard_content, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(g_wizard_content, 0, 0);
     lv_obj_set_style_radius(g_wizard_content, 0, 0);
