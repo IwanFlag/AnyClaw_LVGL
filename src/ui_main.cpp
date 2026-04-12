@@ -1236,7 +1236,10 @@ static void loading_show() {
     if (!g_loading_overlay) {
         lv_obj_t* scr = lv_screen_active();
         g_loading_overlay = lv_obj_create(scr);
-        lv_obj_set_size(g_loading_overlay, SCALE(460), SCALE(300));
+        /* Loading overlay — 32% × 37% of window */
+        int overlay_w = WIN_W * 32 / 100;
+        int overlay_h = WIN_H * 37 / 100;
+        lv_obj_set_size(g_loading_overlay, overlay_w, overlay_h);
         lv_obj_align(g_loading_overlay, LV_ALIGN_TOP_RIGHT, -SCALE(16), TITLE_H + SCALE(8));
         lv_obj_set_style_bg_color(g_loading_overlay, lv_color_make(15, 18, 28), 0);
         lv_obj_set_style_bg_opa(g_loading_overlay, 220, 0);
@@ -1288,7 +1291,7 @@ static void loading_show() {
         /* Garlic icon centered — 21% of overlay height */
         g_loading_icon = lv_image_create(g_loading_overlay);
         lv_image_set_src(g_loading_icon, "A:assets/garlic_48.png");
-        int loading_icon_px = SCALE(300) * 21 / 100;  /* overlay_h × 21% */
+        int loading_icon_px = overlay_h * 21 / 100;  /* overlay_h × 21% */
         lv_obj_set_size(g_loading_icon, loading_icon_px, loading_icon_px);
         lv_image_set_scale(g_loading_icon, 256); /* 100% */
         lv_obj_align(g_loading_icon, LV_ALIGN_TOP_MID, 0, 0);
@@ -2260,7 +2263,9 @@ static void open_remote_arm_modal() {
     lv_obj_clear_flag(g_remote_arm_modal, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t* box = lv_obj_create(g_remote_arm_modal);
-    lv_obj_set_size(box, std::min(SCALE(560), WIN_W - 48), SCALE(250));
+    int remote_box_w = std::min(WIN_W * 39 / 100, WIN_W - 48);
+    int remote_box_h = WIN_H * 31 / 100;
+    lv_obj_set_size(box, remote_box_w, remote_box_h);
     lv_obj_center(box);
     lv_obj_set_style_bg_color(box, c->panel, 0);
     lv_obj_set_style_border_color(box, c->panel_border, 0);
@@ -3602,7 +3607,7 @@ static bool ask_mode_confirm_action(const char* reason, const char* suggestion, 
     }
 
     lv_obj_t* overlay = nullptr;
-    lv_obj_t* box = create_dialog(lv_screen_active(), "AnyClaw Ask Feedback", SCALE(640), 0, &overlay);
+    lv_obj_t* box = create_dialog(lv_screen_active(), "AnyClaw Ask Feedback", 0, 0, &overlay);
     if (!box || !overlay) return false;
     const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
 
@@ -3886,7 +3891,7 @@ static void open_voice_manual_dialog() {
     if (g_voice_input_overlay) return;
     lv_obj_t* box = create_dialog(lv_screen_active(),
                                   g_lang == Lang::CN ? "语音输入（转文字）" : "Voice Input (to text)",
-                                  SCALE(520), 0, &g_voice_input_overlay);
+                                  0, 0, &g_voice_input_overlay);
     if (!box) return;
     lv_obj_t* hint = lv_label_create(box);
     lv_label_set_text(hint, g_lang == Lang::CN
@@ -7314,7 +7319,7 @@ static void dialog_drag_cb(lv_event_t* e) {
  */
 static lv_obj_t* create_dialog(lv_obj_t* parent, const char* title, int w, int h, lv_obj_t** out_overlay) {
     const ThemeColors* c = g_colors;
-    if (w <= 0) w = SCALE(520);
+    if (w <= 0) w = WIN_W * DIALOG_W_PCT / 100;
 
     /* Full-screen overlay */
     lv_obj_t* overlay = lv_obj_create(parent);
@@ -7455,7 +7460,7 @@ int ui_permission_confirm(const char* perm_key, const char* target) {
     }
 
     lv_obj_t* overlay = nullptr;
-    lv_obj_t* box = create_dialog(scr, "AnyClaw 权限确认", SCALE(620), 0, &overlay);
+    lv_obj_t* box = create_dialog(scr, "AnyClaw 权限确认", 0, 0, &overlay);
     if (!box || !overlay) {
         in_dialog = false;
         return -1;
@@ -7612,9 +7617,9 @@ static void show_disclaimer(lv_obj_t* parent) {
     lv_obj_set_style_pad_all(modal, 0, 0);
     lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Disclaimer box */
+    /* Disclaimer box — 41% × 50% of window */
     lv_obj_t* box = lv_obj_create(modal);
-    lv_obj_set_size(box, SCALE(600), SCALE(400));
+    lv_obj_set_size(box, WIN_W * DIALOG_W_PCT / 100, WIN_H * DIALOG_H_PCT / 100);
     lv_obj_set_pos(box, (WIN_W - 600) / 2, (WIN_H - 400) / 2);
     lv_obj_set_style_bg_color(box, lv_color_make(30, 35, 50), 0);
     lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
@@ -7719,10 +7724,12 @@ static void show_startup_error(lv_obj_t* parent) {
     lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
     g_startup_error_modal = modal;
 
-    /* Error box */
+    /* Error box — 34% × 35% of window */
+    int err_w = WIN_W * 34 / 100;
+    int err_h = WIN_H * 35 / 100;
     lv_obj_t* box = lv_obj_create(modal);
-    lv_obj_set_size(box, SCALE(500), SCALE(280));
-    lv_obj_set_pos(box, (WIN_W - 500) / 2, (WIN_H - 280) / 2);
+    lv_obj_set_size(box, err_w, err_h);
+    lv_obj_set_pos(box, (WIN_W - err_w) / 2, (WIN_H - err_h) / 2);
     lv_obj_set_style_bg_color(box, lv_color_make(0x1E, 0x25, 0x30), 0);
     lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(box, 1, 0);
@@ -7809,7 +7816,7 @@ void ui_show_exit_dialog() {
     static const I18n S_EXIT_BTN = {"Exit", "退出"};
     static const I18n S_CANCEL = {"Cancel", "取消"};
 
-    lv_obj_t* box = create_dialog(lv_screen_active(), tr(S_EXIT_TITLE), SCALE(520), 0, &g_exit_dialog_modal);
+    lv_obj_t* box = create_dialog(lv_screen_active(), tr(S_EXIT_TITLE), 0, 0, &g_exit_dialog_modal);
 
     lv_obj_t* lbl_msg = lv_label_create(box);
     lv_label_set_text(lbl_msg, tr(S_EXIT_MSG));
@@ -7877,7 +7884,7 @@ void ui_show_about_dialog() {
     static const I18n S_SLOGAN = {"Your OpenClaw Desktop Manager", "龙虾要吃蒜蓉的 🧄🦞"};
     static const I18n S_CLOSE = {"Close", "关闭"};
 
-    lv_obj_t* box = create_dialog(lv_screen_active(), tr(S_ABOUT_TITLE), SCALE(520), 0, &g_about_dialog);
+    lv_obj_t* box = create_dialog(lv_screen_active(), tr(S_ABOUT_TITLE), 0, 0, &g_about_dialog);
 
     /* Brand title */
     lv_obj_t* lbl_title = lv_label_create(box);
@@ -7981,7 +7988,7 @@ void ui_show_license_dialog() {
     if (g_license_dialog) return;
     const ThemeColors* c = g_colors;
 
-    lv_obj_t* box = create_dialog(lv_screen_active(), "License Activation", SCALE(520), 0, &g_license_dialog);
+    lv_obj_t* box = create_dialog(lv_screen_active(), "License Activation", 0, 0, &g_license_dialog);
 
     /* Title */
     lv_obj_t* lbl_title = lv_label_create(box);
@@ -10021,7 +10028,7 @@ static void wizard_im_open_token_dialog(const char* title, char* token_buf, size
     g_wiz_im_active_connected = connected_flag;
 
     lv_obj_t* box = create_dialog(g_wizard_modal ? g_wizard_modal : lv_screen_active(),
-                                  title, SCALE(500), 0, &g_wiz_im_token_overlay);
+                                  title, 0, 0, &g_wiz_im_token_overlay);
     if (!box) return;
     lv_obj_t* hint = lv_label_create(box);
     lv_label_set_text(hint, g_lang == Lang::CN ? "请输入 Bot Token，保存后标记为已连接。" : "Enter Bot token and save.");
