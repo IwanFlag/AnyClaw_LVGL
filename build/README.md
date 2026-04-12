@@ -54,8 +54,49 @@ AnyClaw_LVGL/
 
 ### 系统包（apt，不可提交到仓库）
 
+**基础编译依赖：**
 ```bash
 apt-get install mingw-w64 libsdl2-dev zip cmake
+```
+
+**Wine（用于 headless 截图测试，可选）：**
+
+Wine 不在 Ubuntu 默认仓库中，需要从 WineHQ 安装：
+
+```bash
+# 1. 启用 32 位架构
+dpkg --add-architecture i386
+
+# 2. 添加 WineHQ GPG Key
+mkdir -pm755 /etc/apt/keyrings
+wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key
+
+# 3. 添加 WineHQ 仓库源（以 Ubuntu 24.04 Noble 为例）
+wget -NP /etc/apt/sources.list.d/ \
+  https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources
+
+# 4. 安装 Wine Stable
+apt-get update
+apt-get install -y --install-recommends winehq-stable
+
+# 5. 验证
+wine --version
+```
+
+**不同 Ubuntu 版本的仓库源：**
+
+| Ubuntu 版本 | 源文件 |
+|------------|--------|
+| 24.04 (Noble) | `winehq-noble.sources` |
+| 22.04 (Jammy) | `winehq-jammy.sources` |
+| 20.04 (Focal) | `winehq-focal.sources` |
+
+**Wine 配合 Xvfb 用于 headless 截图：**
+```bash
+apt-get install xvfb
+Xvfb :99 -screen 0 1920x1080x24 &
+export DISPLAY=:99
+wine AnyClaw_LVGL.exe  # 无显示器环境运行 + 截图
 ```
 
 ### 仓库内依赖（已提交，无需下载）
