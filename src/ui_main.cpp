@@ -191,7 +191,7 @@ static int SPLITTER_W = SPLITTER_W_BASE;
 static int GAP = GAP_BASE;
 static int CHAT_GAP = CHAT_GAP_BASE;
 static int CHAT_MSG_MARGIN = CHAT_MSG_MARGIN_BASE;
-static int LEFT_PANEL_W = LEFT_PANEL_DEFAULT_W;
+static int LEFT_PANEL_W = 240; /* Overwritten by pct calc in init */
 static int RIGHT_PANEL_W = 830;
 static int PANEL_TOP = 56;
 static int PANEL_H = 450;
@@ -4166,12 +4166,22 @@ void ui_relayout_all() {
 static void relayout_panels() {
     if (!left_panel || !right_panel || !splitter) return;
 
-    int min_panel = SCALE(200);
-    int nav_w = SCALE(NAV_BAR_W_BASE);
+    /* Recompute from percentages */
+    TITLE_H   = std::max(WIN_H * TITLE_H_PCT / 100, SCALE(TITLE_H_MIN));
+    PANEL_TOP = TITLE_H + SCALE(8);
+    PANEL_H   = WIN_H - PANEL_TOP - FOOTER_H - SCALE(16);
+
+    int nav_w   = std::max(WIN_W * NAV_W_PCT / 100, SCALE(NAV_W_MIN));
     int avail_w = WIN_W - nav_w;
+    PANEL_GAP   = std::max(WIN_W * SAFE_PAD_PCT / 100, SCALE(GAP_BASE));
+    SPLITTER_W  = std::max((int)(WIN_W * SPLITTER_W_PCT / 100), SCALE(SPLITTER_W_MIN));
+
+    LEFT_PANEL_W  = std::max(avail_w * LEFT_PANEL_PCT / 100, SCALE(LEFT_PANEL_MIN_W));
     RIGHT_PANEL_W = avail_w - LEFT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W;
-    if (RIGHT_PANEL_W < min_panel) { RIGHT_PANEL_W = min_panel; LEFT_PANEL_W = avail_w - RIGHT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W; }
-    if (LEFT_PANEL_W < min_panel) { LEFT_PANEL_W = min_panel; RIGHT_PANEL_W = avail_w - LEFT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W; }
+    if (RIGHT_PANEL_W < SCALE(RIGHT_PANEL_MIN_W)) {
+        RIGHT_PANEL_W = SCALE(RIGHT_PANEL_MIN_W);
+        LEFT_PANEL_W = avail_w - RIGHT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W;
+    }
 
     /* Move & resize left nav */
     if (left_nav) {
@@ -8647,12 +8657,12 @@ static void create_title_bar(lv_obj_t* scr) {
         int right_x = wc_base_x - top_gap;
 
         /* Status LED in title bar */
-        int led_sz = SCALE(TITLE_LED_SIZE_BASE);
+        int led_sz = TITLE_H * TITLE_LED_PCT / 100;
         led_ok = lv_led_create(title_bar);
         lv_obj_set_size(led_ok, led_sz, led_sz);
         lv_led_set_color(led_ok, lv_color_make(200, 200, 60));
         lv_led_off(led_ok);
-        right_x -= SCALE(TITLE_LED_GAP_BASE);
+        right_x -= led_sz + SCALE(6);
         lv_obj_set_pos(led_ok, right_x, top_y + (wc_btn_h - led_sz) / 2);
 
         /* Model name (short) */
@@ -8660,7 +8670,6 @@ static void create_title_bar(lv_obj_t* scr) {
             char gw_model_buf[128] = {0};
             app_get_current_model(gw_model_buf, sizeof(gw_model_buf));
             if (gw_model_buf[0]) {
-                /* Shorten model name: take last segment after last / */
                 const char* short_name = gw_model_buf;
                 const char* last_slash = strrchr(gw_model_buf, '/');
                 if (last_slash && strlen(last_slash + 1) > 3) short_name = last_slash + 1;
@@ -8668,7 +8677,7 @@ static void create_title_bar(lv_obj_t* scr) {
                     const char* last_dot = strrchr(gw_model_buf, '.');
                     if (last_dot && strlen(last_dot + 1) > 3) short_name = last_dot + 1;
                 }
-                int model_w = SCALE(TITLE_MODEL_W_BASE);
+                int model_w = WIN_W * TITLE_MODEL_W_PCT / 100;
                 lv_obj_t* title_model = lv_label_create(title_bar);
                 lv_label_set_text(title_model, short_name);
                 lv_obj_set_style_text_color(title_model, g_colors->text_dim, 0);
@@ -8678,7 +8687,7 @@ static void create_title_bar(lv_obj_t* scr) {
                 lv_obj_set_width(title_model, model_w - SCALE(8));
                 lv_label_set_long_mode(title_model, LV_LABEL_LONG_MODE_DOTS);
             } else {
-                right_x -= SCALE(TITLE_LED_GAP_BASE);
+                right_x -= led_sz + SCALE(6);
             }
         }
 
@@ -10781,20 +10790,11 @@ void app_ui_init() {
     load_theme_config();
     g_lang = Lang::EN;  /* Force English as default */
 
-    /* Apply DPI scaling to all layout constants */
+    /* DPI scale info */
     {
-        TITLE_H        = SCALE(48);
-        FOOTER_H       = SCALE(30);
-        PANEL_GAP      = SCALE(12);
-        SPLITTER_W     = SCALE(6);
-        GAP            = SCALE(12);
-        CHAT_GAP       = SCALE(6);
-        CHAT_MSG_MARGIN = SCALE(8);
-        MODE_BAR_H     = SCALE(36);
-        PANEL_TOP      = TITLE_H + SCALE(8);
         int s = app_get_dpi_scale();
         if (s != 100)
-            printf("[UI] DPI %d%%: TITLE_H=%d GAP=%d FOOTER_H=%d\n", s, TITLE_H, GAP, FOOTER_H);
+            printf("[UI] DPI %d%%\n", s);
     }
     {
         SDL_Window* win = app_get_window();
@@ -10805,12 +10805,27 @@ void app_ui_init() {
             WIN_H = (int)lv_display_get_vertical_resolution(NULL);
         }
     }
-    if (WIN_W < SCALE(800)) WIN_W = SCALE(800);   /* Clamp to reasonable minimum */
-    if (WIN_H < SCALE(500)) WIN_H = SCALE(500);
-    int init_nav_w = SCALE(NAV_BAR_W_BASE);
-    int init_avail = WIN_W - init_nav_w;
-    LEFT_PANEL_W = init_avail / 4;   /* Default 1:3 ratio of available space */
-    RIGHT_PANEL_W = init_avail - LEFT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W;
+    if (WIN_W < SCALE(WIN_MIN_W)) WIN_W = SCALE(WIN_MIN_W);
+    if (WIN_H < SCALE(WIN_MIN_H)) WIN_H = SCALE(WIN_MIN_H);
+
+    /* ── 百分比布局计算 ── */
+    TITLE_H     = std::max(WIN_H * TITLE_H_PCT / 100, SCALE(TITLE_H_MIN));
+    FOOTER_H    = SCALE(30);
+    MODE_BAR_H  = SCALE(36);
+    PANEL_TOP   = TITLE_H + SCALE(8);
+    PANEL_H     = WIN_H - PANEL_TOP - FOOTER_H - SCALE(16);
+
+    int nav_w   = std::max(WIN_W * NAV_W_PCT / 100, SCALE(NAV_W_MIN));
+    int avail_w = WIN_W - nav_w;
+    PANEL_GAP   = std::max(WIN_W * SAFE_PAD_PCT / 100, SCALE(GAP_BASE));
+    SPLITTER_W  = std::max((int)(WIN_W * SPLITTER_W_PCT / 100), SCALE(SPLITTER_W_MIN));
+
+    LEFT_PANEL_W  = std::max(avail_w * LEFT_PANEL_PCT / 100, SCALE(LEFT_PANEL_MIN_W));
+    RIGHT_PANEL_W = avail_w - LEFT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W;
+    if (RIGHT_PANEL_W < SCALE(RIGHT_PANEL_MIN_W)) {
+        RIGHT_PANEL_W = SCALE(RIGHT_PANEL_MIN_W);
+        LEFT_PANEL_W = avail_w - RIGHT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W;
+    }
     PANEL_H = WIN_H - TITLE_H - FOOTER_H - SCALE(24);
     if (PANEL_H < SCALE(300)) PANEL_H = SCALE(300);
     printf("[UI] Layout: window=%dx%d, left=%d, right=%d, panel_h=%d\n",
@@ -10834,10 +10849,10 @@ void app_ui_init() {
     lv_obj_clear_flag(div1, LV_OBJ_FLAG_SCROLLABLE);
 
     /* ═══ LEFT NAV: icon-only module navigation ═══ */
-    int nav_scaled = SCALE(NAV_BAR_W_BASE);
-    int nav_btn_sz = SCALE(NAV_ICON_BTN_SIZE_BASE);
-    int nav_gap = SCALE(NAV_ICON_GAP_BASE);
-    int nav_quick_h = SCALE(NAV_QUICK_AREA_H_BASE);
+    int nav_scaled = std::max(WIN_W * NAV_W_PCT / 100, SCALE(NAV_W_MIN));
+    int nav_btn_sz = nav_scaled * NAV_ICON_BTN_PCT / 100;
+    int nav_gap = nav_scaled * NAV_ICON_GAP_PCT / 100;
+    int nav_quick_h = PANEL_H * NAV_QUICK_AREA_H_PCT / 100;
 
     left_nav = lv_obj_create(scr);
     lv_obj_set_size(left_nav, nav_scaled, PANEL_H);

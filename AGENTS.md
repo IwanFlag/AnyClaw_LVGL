@@ -46,6 +46,65 @@ AnyClaw_LVGL/
 
 ---
 
+## 零、UI 布局设计规则（百分比分层）
+
+**核心：每个元素的尺寸 = 父容器尺寸 × 百分比，不写绝对像素。**
+
+### 容器层级树
+
+```
+窗口 (WIN_W × WIN_H)                          ← root
+├── 标题栏       = 100% × TITLE_H_PCT%
+└── 内容区       = 100% × (100 - TITLE_H_PCT)%
+    ├── 左导航   = NAV_W_PCT% × 100%
+    ├── 左面板   = LEFT_PANEL_PCT% × 100%      (of 可用宽度)
+    └── 右面板   = 剩余 × 100%
+        ├── 消息区 = 100% × CHAT_FEED_H_PCT%
+        │   ├── AI头像  = CHAT_AVATAR_PCT% (clamp MIN~MAX)
+        │   └── 气泡    = CHAT_BUBBLE_PCT% (of 消息区宽)
+        └── 输入区 = 100% × (100 - CHAT_FEED_H_PCT)%
+            ├── 输入框 = 100% × CHAT_INPUT_H_PCT%
+            └── 发送钮 = BTN_SEND_PCT% (of 输入区高)
+```
+
+### 命名约定
+
+| 后缀 | 含义 | 示例 |
+|------|------|------|
+| `*_PCT` | 占父容器百分比 (0-100) | `NAV_W_PCT 4` |
+| `*_MIN` | 最小像素值（防崩溃） | `NAV_W_MIN 40` |
+| `*_MS` | 毫秒 | `HEALTH_CHECK_DEFAULT_MS 30000` |
+| 无后缀 | SCALE'd 像素或纯常量 | `BTN_RADIUS 6` |
+
+### 字号规则
+
+字号 = 窗口高 × 比率 / 100，基准 800px → body 13px → 比率 163。
+
+| Token | PCT | 800px 时 | 最小值 |
+|-------|-----|---------|--------|
+| `FONT_DISPLAY_PCT` | 350 | 28px | 20 |
+| `FONT_H1_PCT` | 275 | 22px | 16 |
+| `FONT_BODY_PCT` | 163 | 13px | 11 |
+| `FONT_SMALL_PCT` | 138 | 11px | 10 |
+| `FONT_CAPTION_PCT` | 125 | 10px | 9 |
+
+### 规则总结
+
+1. 宽/高一律用父容器百分比，不用 px
+2. SCALE() 仅用于 DPI 缩放视觉细节（字号、圆角、间距基数）
+3. 百分比用 `_PCT` 后缀，最小值用 `_MIN` 后缀
+4. 控件尺寸 = 容器尺寸 × 百分比（按钮、图标、LED 全部如此）
+5. 字号 = 窗口高 × 百分比
+6. 所有常量集中在 `src/app_config.h`
+
+### 修改布局时
+
+1. 改 `app_config.h` 中的 `_PCT` 值
+2. 不要在 `.cpp` 中写死像素
+3. 新增控件必须定义 `_PCT` + `_MIN` 常量
+
+---
+
 ## 一、文档工作流
 
 ### 核心规则
