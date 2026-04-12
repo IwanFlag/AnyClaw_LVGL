@@ -61,7 +61,7 @@
 
 **第三层：界面设计**
 - §11 首次体验（UI-01~10）
-- §12 窗口系统（UI-11~13, UI-52~55, UI-63）
+- §12 窗口系统（UI-11~13, UI-52~56, UI-63）
 - §13 Chat 界面（UI-14~22）
 - §14 Work 界面（UI-23~30, UI-44）
 - §15 交互组件（UI-21, UI-22）
@@ -118,19 +118,32 @@
 
 > 需求 → PRD §3 主界面
 
-### 2.1 主题切换
+### 2.1 主题体系
 
-三套主题，通过 Settings General Tab 切换，即时生效无需重启。
+五套主题，三套主打 + 两套备选，通过 Settings General Tab 切换，即时生效无需重启。
+
+**主打主题（完整规格）：**
 
 | 主题 ID | 名称 | 定位 | 默认 |
 |---------|------|------|------|
-| `dark` | 暗色 (Mint Dark) | 主力主题，长时间使用 | ✅ 默认 |
-| `light` | 亮色 | 日间/高亮环境 | |
-| `classic` | 经典暗色 | 怀旧/低饱和度偏好 | |
+| `matcha` | 抹茶 Matcha v1 | 深色系，薄荷绿清新风，长时间使用 | ✅ 默认 |
+| `peachy` | 桃气 Peachy v2 | 暖色系，珊瑚橘苹果风，年轻人友好 | |
+| `mochi` | 糯 Mochi v3 | 米白系，奶茶棕温柔风，质感文艺 | |
 
-### 2.2 暗色主题 — 薄荷暗夜 (Mint Dark)
+**备选主题（精简规格）：**
 
-#### 基础色板
+| 主题 ID | 名称 | 定位 |
+|---------|------|------|
+| `dark` | 经典暗色 | 低饱和度偏好，VS Code 风 |
+| `light` | 亮色 | 日间/高亮环境 |
+
+---
+
+# 🍵 主题一：抹茶 Matcha v1（默认主打）
+
+> 需求 → PRD §3 主界面
+
+#### 2.2.1 基础色板
 
 | 语义 Token | 色值 | 用途 |
 |------------|------|------|
@@ -140,7 +153,7 @@
 | `raised` | `#1E2230` | 气泡、浮层、tooltip |
 | `overlay` | `#252A38` | hover 态、选中态 |
 
-#### 文字色
+#### 2.2.2 文字色
 
 | Token | 色值 | 用途 |
 |-------|------|------|
@@ -149,7 +162,7 @@
 | `text_tertiary` | `#6B7280` | 占位符、禁用态 |
 | `text_inverse` | `#0F1117` | 深色背景上的白字 |
 
-#### 强调色
+#### 2.2.3 强调色
 
 | Token | 色值 | 用途 |
 |-------|------|------|
@@ -159,7 +172,7 @@
 | `accent_subtle` | `#3DD68C1A` | 背景着色（10% opacity） |
 | `accent_secondary` | `#6C9FFF` | 辅助蓝、链接 |
 
-#### 语义色
+#### 2.2.4 语义色
 
 | Token | 色值 | 用途 |
 |-------|------|------|
@@ -168,7 +181,7 @@
 | `danger` | `#FF6B6B` | 错误、删除、Error |
 | `info` | `#6C9FFF` | 信息、Checking |
 
-#### 功能色
+#### 2.2.5 功能色
 
 | Token | 色值 | 用途 |
 |-------|------|------|
@@ -181,7 +194,7 @@
 | `disabled_bg` | `#1A1D2780` | 禁用态背景 |
 | `disabled_text` | `#6B728080` | 禁用态文字 |
 
-#### 用户气泡专用色
+#### 2.2.6 气泡专用色
 
 | Token | 色值 | 用途 |
 |-------|------|------|
@@ -190,7 +203,7 @@
 | `bubble_ai_bg` | `#1E2230` | AI 气泡底色 |
 | `bubble_ai_accent_bar` | `#3DD68C` | AI 气泡左侧竖线 |
 
-#### 阴影
+#### 2.2.7 阴影
 
 | Token | 值 | 用途 |
 |-------|-----|------|
@@ -199,56 +212,372 @@
 | `shadow_lg` | `0 8px 24px rgba(0,0,0,0.35)` | 弹窗、dropdown |
 | `shadow_glow` | `0 0 12px rgba(61,214,140,0.15)` | 焦点/品牌发光 |
 
-### 2.3 亮色主题
+#### 2.2.8 Matcha 控件色映射
+
+| 控件 | Default | Hover | Active | Disabled |
+|------|---------|-------|--------|----------|
+| 主按钮 | bg=accent, text=text_inverse | bg=accent_hover | bg=accent_active, scale(0.97) | bg=disabled_bg, text=disabled_text |
+| 次要按钮 | border=accent, text=accent | bg=accent_subtle | — | border=disabled_text |
+| 发送按钮 | bg=accent gradient, 40px 圆形 | bg=accent_hover, glow | bg=accent_active | — |
+| 输入框 | bg=surface, border=border | border=border_strong | border=accent, glow | bg=disabled_bg |
+| Switch 关闭 | bg=#373C55, thumb=#8B92A8 | — | — | — |
+| Switch 开启 | bg=accent, thumb=white | — | — | — |
+| 用户气泡 | gradient #2B5C3E→#1F4A30 | — | — | — |
+| AI 气泡 | bg=raised, 左侧 accent 竖线 | — | — | — |
+
+---
+
+# 🍑 主题二：桃气 Peachy v2
+
+> 需求 → PRD §3 主界面
+
+**设计理念：** "简单但不简陋，活泼但不花哨，温暖但不刺眼"
+
+- 🧡 **暖色系**：珊瑚橘主色 + 暖橙辅色 + 粉红点缀
+- 🍎 **苹果风**：大圆角 20-24px + 柔和阴影 + 暖白背景
+- 🐱 **萌系元素**：emoji 点缀 + 彩色脉冲动画 + 友好文案
+- 💫 **年轻化**：渐变按钮 + 弹性胶囊 + 装饰圆点
+
+### 2.3.1 基础色板
+
+| 语义 Token | 色值 | 用途 |
+|------------|------|------|
+| `bg` | `#FFF8F3` | 暖白背景 |
+| `surface` | `#FFF1E8` | 暖浅面，输入区 |
+| `panel` | `#FFFFFF` | 卡片、面板、弹窗 |
+| `raised` | `#FFF5EE` | 气泡、浮层、tooltip |
+| `overlay` | `#FFE8D6` | hover 态、选中态 |
+
+#### 2.3.2 文字色
+
+| Token | 色值 | 用途 |
+|-------|------|------|
+| `text_primary` | `#2D1B14` | 暖黑主文字 |
+| `text_secondary` | `#8B7355` | 暖灰次要文字 |
+| `text_tertiary` | `#B8A089` | 占位符、禁用态 |
+| `text_inverse` | `#FFFFFF` | 深色背景上的白字 |
+
+#### 2.3.3 强调色
+
+| Token | 色值 | 用途 |
+|-------|------|------|
+| `accent` | `#FF7F50` | 珊瑚橘主强调色 |
+| `accent_hover` | `#E86D3C` | 主按钮 hover |
+| `accent_active` | `#CC5A2A` | 主按钮 active |
+| `accent_subtle` | `#FF7F501A` | 背景着色（10% opacity） |
+| `accent_secondary` | `#FFB347` | 暖橙辅色 |
+| `accent_tertiary` | `#FF6B8A` | 粉红点缀 |
+
+#### 2.3.4 语义色
+
+| Token | 色值 | 用途 |
+|-------|------|------|
+| `success` | `#7ECFB3` | 薄荷绿，成功、完成 |
+| `warning` | `#FFB347` | 暖橙，警告、Busy |
+| `danger` | `#FF5C5C` | 暖红，错误、删除 |
+| `info` | `#B8A9E8` | 薰衣草紫，信息、Checking |
+
+#### 2.3.5 功能色
+
+| Token | 色值 | 用途 |
+|-------|------|------|
+| `border` | `#F0E0D0` | 暖边框 |
+| `border_strong` | `#E0C8B0` | 输入框焦点边框 |
+| `divider` | `#F5E6D8` | 分隔线 |
+| `focus_glow` | `#FF7F5030` | 焦点光晕 |
+| `hover_overlay` | `#FF7F500A` | 通用 hover 叠加 |
+| `active_overlay` | `#FF7F5014` | 通用 active 叠加 |
+| `disabled_bg` | `#FFF1E880` | 禁用态背景 |
+| `disabled_text` | `#B8A08980` | 禁用态文字 |
+
+#### 2.3.6 气泡专用色
+
+| Token | 色值 | 用途 |
+|-------|------|------|
+| `bubble_user_bg` | `#FFE8D6` | 用户气泡底色（暖杏） |
+| `bubble_user_bg_end` | `#FFD6BE` | 用户气泡渐变终点 |
+| `bubble_ai_bg` | `#FFFFFF` | AI 气泡底色（纯白） |
+| `bubble_ai_accent_bar` | `#FF7F50` | AI 气泡左侧竖线（珊瑚橘） |
+
+#### 2.3.7 阴影
+
+| Token | 值 | 用途 |
+|-------|-----|------|
+| `shadow_sm` | `0 1px 3px rgba(139,80,50,0.08)` | 卡片轻微浮起 |
+| `shadow_md` | `0 2px 8px rgba(139,80,50,0.12)` | 气泡、tooltip |
+| `shadow_lg` | `0 8px 24px rgba(139,80,50,0.18)` | 弹窗、dropdown |
+| `shadow_glow` | `0 0 12px rgba(255,127,80,0.15)` | 焦点/品牌发光 |
+
+#### 2.3.8 Peachy 控件色映射
+
+| 控件 | Default | Hover | Active | Disabled |
+|------|---------|-------|--------|----------|
+| 主按钮 | bg=accent, text=text_inverse, radius=12 | bg=accent_hover | bg=accent_active, scale(0.97) | bg=disabled_bg, text=disabled_text |
+| 次要按钮 | border=accent, text=accent | bg=accent_subtle | — | border=disabled_text |
+| 发送按钮 | bg=accent gradient, 40px 圆形 | bg=accent_hover, glow | bg=accent_active | — |
+| 输入框 | bg=panel, border=border, radius=12 | border=border_strong | border=accent, glow | bg=disabled_bg |
+| Switch 关闭 | bg=#E0D0C0, thumb=#B8A089 | — | — | — |
+| Switch 开启 | bg=accent, thumb=white | — | — | — |
+| 用户气泡 | bg=暖杏 #FFE8D6 | — | — | — |
+| AI 气泡 | bg=白色 #FFFFFF, 左侧 accent 竖线 | — | — | — |
+
+#### 2.3.9 Peachy 特色元素
+
+| 元素 | 说明 |
+|------|------|
+| 圆角放大 | 卡片/弹窗 radius=20px（Matcha 为 12px） |
+| 渐变按钮 | 主按钮使用 `linear-gradient(135deg, #FF7F50, #FFB347)` |
+| 装饰圆点 | 空状态、向导背景添加半透明装饰圆点 |
+| 暖色阴影 | 阴影色相偏暖（rgba 含暖棕分量） |
+| emoji 风格 | 操作图标优先使用 emoji（🍑🧡💫） |
+
+---
+
+# 🍡 主题三：糯 Mochi v3
+
+> 需求 → PRD §3 主界面
+
+**设计理念：** "温润如玉，静谧如茶，精致如器"
+
+- 🤎 **米白暖棕**：奶茶棕主色 + 香槟金辅色 + 豆沙粉点缀
+- 🫖 **茶道美学**：克制圆角 10-14px + 柔和阴影 + 米白留白
+- 📖 **文艺质感**：细线图标 + 衬线点缀 + 安静的高级感
+- 🎋 **侘寂风**：不张扬、不喧哗，越看越舒服
+
+**与现有主题的互补定位：**
+
+| 维度 | Matcha v1 | Peachy v2 | Mochi v3 |
+|------|-----------|-----------|----------|
+| 色温 | 冷（暗底绿调） | 暖（亮底橘调） | 中性暖（米白棕调） |
+| 情绪 | 清新、锐利、科技 | 活泼、可爱、社交 | 温柔、安静、文艺 |
+| 目标 | 效率型用户 | 年轻社交用户 | 阅读/写作型用户 |
+| 类比 | Linear / VS Code | Apple / Discord | Notion / Bear |
+
+### 2.4.1 基础色板
+
+| 语义 Token | 色值 | 用途 |
+|------------|------|------|
+| `bg` | `#FAF6F0` | 米白背景 |
+| `surface` | `#F3EDE4` | 浅暖面，输入区 |
+| `panel` | `#FFFDF9` | 卡片、面板（暖白） |
+| `raised` | `#EDE7DC` | 气泡、浮层、tooltip |
+| `overlay` | `#E4DDD0` | hover 态、选中态 |
+
+#### 2.4.2 文字色
+
+| Token | 色值 | 用途 |
+|-------|------|------|
+| `text_primary` | `#3D3226` | 深棕主文字 |
+| `text_secondary` | `#8B7D6B` | 暖灰次要文字 |
+| `text_tertiary` | `#B0A394` | 占位符、禁用态 |
+| `text_inverse` | `#FFFDF9` | 深色背景上的白字 |
+
+#### 2.4.3 强调色
+
+| Token | 色值 | 用途 |
+|-------|------|------|
+| `accent` | `#A67B5B` | 奶茶棕主强调色 |
+| `accent_hover` | `#8F6A4D` | 主按钮 hover |
+| `accent_active` | `#7A5A40` | 主按钮 active |
+| `accent_subtle` | `#A67B5B15` | 背景着色（8% opacity） |
+| `accent_secondary` | `#C9A96E` | 香槟金辅色 |
+| `accent_tertiary` | `#C4868C` | 豆沙粉点缀 |
+
+#### 2.4.4 语义色
+
+| Token | 色值 | 用途 |
+|-------|------|------|
+| `success` | `#7EA87A` | 苔藓绿，成功、完成 |
+| `warning` | `#C9A96E` | 香槟金，警告、Busy |
+| `danger` | `#C47070` | 砖红，错误、删除 |
+| `info` | `#7B98A6` | 青瓷蓝，信息、Checking |
+
+#### 2.4.5 功能色
+
+| Token | 色值 | 用途 |
+|-------|------|------|
+| `border` | `#D6CFC4` | 暖边框 |
+| `border_strong` | `#C4BBAD` | 输入框焦点边框 |
+| `divider` | `#E8E2D8` | 分隔线 |
+| `focus_glow` | `#A67B5B25` | 焦点光晕 |
+| `hover_overlay` | `#A67B5B08` | 通用 hover 叠加 |
+| `active_overlay` | `#A67B5B12` | 通用 active 叠加 |
+| `disabled_bg` | `#F3EDE480` | 禁用态背景 |
+| `disabled_text` | `#B0A39480` | 禁用态文字 |
+
+#### 2.4.6 气泡专用色
+
+| Token | 色值 | 用途 |
+|-------|------|------|
+| `bubble_user_bg` | `#E8DFD0` | 用户气泡底色（暖杏） |
+| `bubble_user_bg_end` | `#DDD2C0` | 用户气泡渐变终点 |
+| `bubble_ai_bg` | `#FFFDF9` | AI 气泡底色（暖白） |
+| `bubble_ai_accent_bar` | `#A67B5B` | AI 气泡左侧竖线（奶茶棕） |
+
+#### 2.4.7 阴影
+
+| Token | 值 | 用途 |
+|-------|-----|------|
+| `shadow_sm` | `0 1px 3px rgba(120,100,80,0.06)` | 卡片轻微浮起 |
+| `shadow_md` | `0 2px 8px rgba(120,100,80,0.10)` | 气泡、tooltip |
+| `shadow_lg` | `0 8px 24px rgba(120,100,80,0.14)` | 弹窗、dropdown |
+| `shadow_glow` | `0 0 12px rgba(166,123,91,0.12)` | 焦点/品牌发光 |
+
+#### 2.4.8 Mochi 控件色映射
+
+| 控件 | Default | Hover | Active | Disabled |
+|------|---------|-------|--------|----------|
+| 主按钮 | bg=accent, text=text_inverse, radius=8 | bg=accent_hover | bg=accent_active, scale(0.97) | bg=disabled_bg, text=disabled_text |
+| 次要按钮 | border=accent, text=accent | bg=accent_subtle | — | border=disabled_text |
+| 发送按钮 | bg=accent, 40px 圆形 | bg=accent_hover, glow | bg=accent_active | — |
+| 输入框 | bg=panel, border=border, radius=8 | border=border_strong | border=accent, glow | bg=disabled_bg |
+| Switch 关闭 | bg=#D6CFC4, thumb=#B0A394 | — | — | — |
+| Switch 开启 | bg=accent, thumb=white | — | — | — |
+| 用户气泡 | bg=暖杏 #E8DFD0 | — | — | — |
+| AI 气泡 | bg=暖白 #FFFDF9, 左侧 accent 竖线 | — | — | — |
+
+#### 2.4.9 Mochi 特色元素
+
+| 元素 | 说明 |
+|------|------|
+| 圆角克制 | 卡片/弹窗 radius=10px（介于 Matcha 12px 和更小之间） |
+| 纯色按钮 | 不用渐变，用 `bg=accent` 纯色，更安静 |
+| 细线图标 | 图标描边 1.5px（默认 2px），更精致 |
+| 暖色留白 | 大量 padding + bg 色差微妙（surface vs panel 差 5%） |
+| 豆沙粉点缀 | 特殊操作（收藏、标记）使用 accent_tertiary #C4868C |
+
+#### 2.4.10 Mochi 字体
+
+| 类型 | 主选 | 备选 | 回退 |
+|------|------|------|------|
+| 中文 | **思源宋体 SC** | LXGW WenKai | 思源黑体 SC, serif |
+| 英文 | **Lora** | Merriweather | Georgia, serif |
+| 等宽 | JetBrains Mono | Fira Code | Consolas, monospace |
+
+> Mochi 是三个主打主题中唯一使用衬线体的——思源宋体 + Lora 传递"安静阅读"的质感。标题用衬线，正文 UI 仍用 HarmonyOS Sans SC（可读性）。
+
+**混合策略：**
+
+| 场景 | 使用字体 |
+|------|---------|
+| 正文、消息、UI 控件 | HarmonyOS Sans SC / Plus Jakarta Sans（无衬线，保证可读性） |
+| 标题、品牌文案、About 页 | 思源宋体 SC / Lora（衬线，传递质感） |
+| 引用块、笔记 | 思源宋体 SC / Lora（衬线，阅读感） |
+| 代码块 | JetBrains Mono（等宽） |
+
+---
+
+# 🌑 备选主题
+
+### 2.5 经典暗色 (dark)
+
+> VS Code 风，低饱和度偏好。
+
+| Token | 色值 |
+|-------|------|
+| `bg` | `#1E1E1E` |
+| `surface` | `#252526` |
+| `panel` | `#2D2D30` |
+| `raised` | `#383838` |
+| `overlay` | `#404040` |
+| `text_primary` | `#CCCCCC` |
+| `text_secondary` | `#808080` |
+| `accent` | `#007ACC` |
+| `success` | `#4EC9B0` |
+| `warning` | `#CE9178` |
+| `danger` | `#F44336` |
+| `info` | `#569CD6` |
+| `bubble_user_bg` | `#264F78` |
+| `bubble_ai_bg` | `#2D2D30` |
+| `border` | `#3E3E42` |
+
+### 2.6 亮色 (light)
+
+> 日间/高亮环境。
 
 | Token | 色值 |
 |-------|------|
 | `bg` | `#F5F7FA` |
 | `surface` | `#EBEEF2` |
 | `panel` | `#FFFFFF` |
+| `raised` | `#FFFFFF` |
+| `overlay` | `#E2E5EA` |
 | `text_primary` | `#1A1D27` |
+| `text_secondary` | `#6B7280` |
 | `accent` | `#2BB673` |
+| `success` | `#16A34A` |
+| `warning` | `#D97706` |
 | `danger` | `#DC2626` |
+| `info` | `#3B82F6` |
+| `bubble_user_bg` | `#DCFCE7` |
+| `bubble_ai_bg` | `#F1F5F9` |
 | `border` | `#E2E5EA` |
 
-> 完整色板约 40 个 Token。切换时 300ms 全局色值过渡。
+### 2.7 怀旧暗色 (classic)
 
-### 2.4 经典暗色主题
+> 极简深灰，保留兼容。
 
 | Token | 色值 |
 |-------|------|
 | `bg` | `#2D2D2D` |
+| `surface` | `#333333` |
 | `panel` | `#3C3C3C` |
+| `raised` | `#444444` |
+| `overlay` | `#505050` |
 | `text_primary` | `#FFFFFF` |
+| `text_secondary` | `#B0B0B0` |
 | `accent` | `#82AAF0` |
+| `success` | `#4CAF50` |
+| `warning` | `#FFC107` |
+| `danger` | `#F44336` |
+| `info` | `#2196F3` |
+| `bubble_user_bg` | `#4070C0` |
+| `bubble_ai_bg` | `#3C3C3C` |
+| `border` | `#555555` |
 
-### 2.5 色彩使用规则
+---
+
+### 2.7 色彩使用规则
 
 | 规则 | 说明 |
 |------|------|
 | 同层元素不加边框 | `panel` 上的 `card` 不加 border |
 | 相邻层 1px 分隔线 | `divider` 色，opacity 4-8% |
-| 弹窗从 `panel` 层开始 | 遮罩 `rgba(0,0,0,0.6)` |
+| 弹窗从 `panel` 层开始 | 遮罩 Matcha `rgba(0,0,0,0.6)` / Peachy `rgba(0,0,0,0.3)` / Mochi `rgba(0,0,0,0.35)` |
 | 最多同时使用 3 种强调色 | accent + 1 语义色 + 1 功能色 |
 | 红色只用于危险/错误 | 不用于装饰 |
+| Peachy 圆角放大 | 卡片/弹窗 radius +8px 对比 Matcha |
+| Mochi 圆角微收敛 | 卡片/弹窗 radius -2px 对比 Matcha |
+| 主题切换 | 300ms 全局色值过渡，不硬切 |
 
-### 2.6 三套主题完整对照表
+### 2.8 三套主打主题完整对照表
 
-| Token | 暗色 (Mint Dark) | 亮色 | 经典暗色 |
-|-------|-----------------|------|---------|
-| `bg` | `#0F1117` | `#F5F7FA` | `#2D2D2D` |
-| `surface` | `#13151E` | `#EBEEF2` | `#333333` |
-| `panel` | `#1A1D27` | `#FFFFFF` | `#3C3C3C` |
-| `raised` | `#1E2230` | `#FFFFFF` | `#444444` |
-| `overlay` | `#252A38` | `#E2E5EA` | `#505050` |
-| `text_primary` | `#E8ECF4` | `#1A1D27` | `#FFFFFF` |
-| `text_secondary` | `#8B92A8` | `#6B7280` | `#B0B0B0` |
-| `accent` | `#3DD68C` | `#2BB673` | `#82AAF0` |
-| `success` | `#3DD68C` | `#16A34A` | `#4CAF50` |
-| `warning` | `#FFBE3D` | `#D97706` | `#FFC107` |
-| `danger` | `#FF6B6B` | `#DC2626` | `#F44336` |
-| `bubble_user_bg` | `#2B5C3E` | `#DCFCE7` | `#4070C0` |
-| `bubble_ai_bg` | `#1E2230` | `#F1F5F9` | `#3C3C3C` |
+| Token | 🍵 Matcha v1 | 🍑 Peachy v2 | 🍡 Mochi v3 |
+|-------|-------------|-------------|------------|
+| `bg` | `#0F1117` | `#FFF8F3` | `#FAF6F0` |
+| `surface` | `#13151E` | `#FFF1E8` | `#F3EDE4` |
+| `panel` | `#1A1D27` | `#FFFFFF` | `#FFFDF9` |
+| `raised` | `#1E2230` | `#FFF5EE` | `#EDE7DC` |
+| `overlay` | `#252A38` | `#FFE8D6` | `#E4DDD0` |
+| `text_primary` | `#E8ECF4` | `#2D1B14` | `#3D3226` |
+| `text_secondary` | `#8B92A8` | `#8B7355` | `#8B7D6B` |
+| `text_tertiary` | `#6B7280` | `#B8A089` | `#B0A394` |
+| `accent` | `#3DD68C` | `#FF7F50` | `#A67B5B` |
+| `accent_secondary` | `#6C9FFF` | `#FFB347` | `#C9A96E` |
+| `accent_tertiary` | — | `#FF6B8A` | `#C4868C` |
+| `success` | `#3DD68C` | `#7ECFB3` | `#7EA87A` |
+| `warning` | `#FFBE3D` | `#FFB347` | `#C9A96E` |
+| `danger` | `#FF6B6B` | `#FF5C5C` | `#C47070` |
+| `info` | `#6C9FFF` | `#B8A9E8` | `#7B98A6` |
+| `bubble_user_bg` | `#2B5C3E` | `#FFE8D6` | `#E8DFD0` |
+| `bubble_ai_bg` | `#1E2230` | `#FFFFFF` | `#FFFDF9` |
+| `border` | `#3DD68C0A` | `#F0E0D0` | `#D6CFC4` |
+| `focus_glow` | `#3DD68C30` | `#FF7F5030` | `#A67B5B25` |
+| 英文字体 | Plus Jakarta Sans | Nunito | Plus Jakarta Sans(正文) / Lora(标题) |
+| 中文字体 | HarmonyOS Sans SC | HarmonyOS Sans SC | HarmonyOS Sans SC(正文) / 思源宋体SC(标题) |
+| 圆角风格 | 标准 8/12/16px | 放大 12/20/22px | 微收敛 8/10/14px |
+| 阴影色相 | 冷黑 | 暖棕 | 暖棕（更淡） |
+| 按钮风格 | accent 渐变圆形 | 双色渐变圆形 | accent 纯色圆形 |
 
 ---
 
@@ -258,14 +587,56 @@
 
 ### 3.1 字体栈
 
+字体是主题的一部分，Matcha 和 Peachy 字体调性不同。
+
+#### Matcha v1 字体（清新锐利）
+
 | 类型 | 主选 | 备选 | 回退 |
 |------|------|------|------|
-| 中文 | HarmonyOS Sans SC | 思源黑体 | 微软雅黑, sans-serif |
+| 中文 | **HarmonyOS Sans SC** | 思源黑体 SC | PingFang SC, 微软雅黑, sans-serif |
+| 英文 | **Plus Jakarta Sans** | Inter | Segoe UI, sans-serif |
+| 等宽 | JetBrains Mono | Fira Code | Consolas, monospace |
+
+> Plus Jakarta Sans 比 Inter 更圆润有温度，比 Montserrat 更现代；HarmonyOS Sans SC 比微软雅黑清晰锐利，支持 Variable Weight。
+
+#### Peachy v2 字体（温暖亲和）
+
+| 类型 | 主选 | 备选 | 回退 |
+|------|------|------|------|
+| 中文 | **HarmonyOS Sans SC** | 思源黑体 SC | PingFang SC, 微软雅黑, sans-serif |
+| 英文 | **Nunito** | Quicksand | Segoe UI, sans-serif |
+| 等宽 | JetBrains Mono | Fira Code | Consolas, monospace |
+
+> Nunito 圆端设计，天然萌系，跟 Peachy 珊瑚橘暖色完美搭配。
+
+#### Mochi v3 字体（文艺质感）
+
+| 类型 | 主选 | 备选 | 回退 |
+|------|------|------|------|
+| 中文 UI 控件 | **HarmonyOS Sans SC** | 思源黑体 SC | PingFang SC, sans-serif |
+| 中文 标题/引用 | **思源宋体 SC** | LXGW WenKai | serif |
+| 英文 UI 控件 | **Plus Jakarta Sans** | Inter | Segoe UI, sans-serif |
+| 英文 标题/引用 | **Lora** | Merriweather | Georgia, serif |
+| 等宽 | JetBrains Mono | Fira Code | Consolas, monospace |
+
+> Mochi 是唯一混用衬线体的主题——UI 控件用无衬线保证可读性，标题和引用块用衬线传递阅读质感。
+
+#### 备选主题字体（通用）
+
+| 类型 | 主选 | 备选 | 回退 |
+|------|------|------|------|
+| 中文 | 思源黑体 SC | HarmonyOS Sans SC | 微软雅黑, sans-serif |
 | 英文 | Inter | SF Pro Display | Segoe UI, sans-serif |
 | 等宽 | JetBrains Mono | Fira Code | Consolas, monospace |
-| 图标 | LVGL Symbols | — | — |
 
-> 当前实现使用 Montserrat + 微软雅黑。建议 v2.3 升级到 Inter + HarmonyOS Sans。
+#### 字体打包策略
+
+| 方式 | 说明 |
+|------|------|
+| 构建时打包 | 字体文件（.ttf/.otf）放入 `assets/fonts/`，跟随编译打包到 zip |
+| 产物体积 | Plus Jakarta Sans ~90KB + HarmonyOS Sans SC ~4MB + Nunito ~75KB + JetBrains Mono ~300KB ≈ 4.5MB |
+| 主题切换 | 字体即时切换，无需重启，字体文件全部打包（按主题 ID 索引） |
+| 回退 | 字体文件缺失时使用系统回退字体，不阻塞启动 |
 
 ### 3.2 字号体系
 
@@ -325,6 +696,8 @@
 
 ### 4.2 圆角体系
 
+基础 Token（通用定义）：
+
 | Token | 值 | 用途 |
 |-------|-----|------|
 | `radius_sm` | 4px | 行内代码、小标签 |
@@ -333,6 +706,19 @@
 | `radius_xl` | 16px | 消息气泡 |
 | `radius_2xl` | 20px | 模态框 |
 | `radius_full` | 9999px | 胶囊标签、圆形头像 |
+
+主题倍率（实际值 = Token × 倍率）：
+
+| Token | Matcha v1 | Peachy v2 | Mochi v3 |
+|-------|-----------|-----------|----------|
+| `radius_sm` | 4px | 6px | 4px |
+| `radius_md` | 8px | 12px | 8px |
+| `radius_lg` | 12px | 20px | 10px |
+| `radius_xl` | 16px | 22px | 14px |
+| `radius_2xl` | 20px | 28px | 16px |
+| `radius_full` | 9999px | 9999px | 9999px |
+
+**风格总结：** Matcha 标准锐利 / Peachy 放大圆润 / Mochi 微收敛精致
 
 ### 4.3 尺寸常量
 
@@ -364,38 +750,146 @@
 
 > 需求 → PRD §3 主界面
 
-### 5.1 图标层级
+### 5.1 图标格式：SVG 优先
+
+**统一使用 SVG**，不用 PNG 图标（品牌吉祥物除外）。
+
+| 维度 | SVG | PNG |
+|------|-----|-----|
+| DPI 适配 | 天然矢量，任意缩放不失真 | 需要多套尺寸（1x/2x/3x） |
+| 文件大小 | 简单图标 < 1KB | 16px 就要几百字节 |
+| 主题换色 | 代码改 `fill` 即可 | 要重新切图 |
+| 动画 | 支持 CSS/代码驱动描边动画 | 不支持 |
+| 结论 | ✅ 所有 UI 图标 | 仅品牌吉祥物（大蒜/龙虾） |
+
+**品牌吉祥物用 PNG：** 大蒜、龙虾等角色插画复杂度高，SVG 路径太多反而大，用 PNG（48/96/128px 三套）。
+
+### 5.2 图标集
+
+使用 **Lucide Icons**（开源 SVG 图标集，4000+ 图标，24px 标准网格）作为基础图标集，按需裁剪为项目自用子集（约 120 个）。
+
+#### 通用 UI 图标
+
+| 场景 | 图标名 | 用途 |
+|------|--------|------|
+| 设置 | `settings` | 标题栏、菜单 |
+| 关闭 | `x` | 弹窗关闭、窗口控制 |
+| 最小化 | `minus` | 窗口控制 |
+| 最大化 | `square` | 窗口控制 |
+| 搜索 | `search` | 搜索框、Chat 搜索 |
+| 发送 | `send` | 发送按钮 |
+| 停止 | `square` (fill) | 流式中断 |
+| 复制 | `copy` | 消息操作 |
+| 粘贴 | `clipboard` | 剪贴板操作 |
+| 刷新 | `refresh-cw` | 重试、刷新 |
+| 菜单 | `more-vertical` | 上下文菜单 |
+| 返回 | `chevron-left` | 导航返回 |
+| 展开 | `chevron-down` | 下拉箭头 |
+| 折叠 | `chevron-up` | 下拉收起 |
+| 添加 | `plus` | 新建 Session/Cron |
+| 删除 | `trash-2` | 删除操作 |
+| 编辑 | `pencil` | 编辑文件 |
+| 下载 | `download` | 下载/导出 |
+| 上传 | `upload` | 文件上传 |
+| 链接 | `external-link` | 打开外部链接 |
+
+#### 操作类型图标（StepCard 用）
+
+| 操作 | 图标名 | Matcha 颜色 | Peachy 颜色 |
+|------|--------|------------|------------|
+| 读文件 | `file-text` | text_secondary | text_secondary |
+| 写文件 | `file-edit` | accent (#3DD68C) | accent (#FF7F50) |
+| 执行命令 | `terminal` | warning (#FFBE3D) | accent_secondary (#FFB347) |
+| 搜索 | `search` | info (#6C9FFF) | accent_tertiary (#B8A9E8) |
+| 成功 | `check-circle` | accent (#3DD68C) | success (#7ECFB3) |
+| 失败 | `x-circle` | danger (#FF6B6B) | danger (#FF5C5C) |
+| 进行中 | `loader-2` (spin) | accent (#3DD68C) | accent (#FF7F50) |
+| 等待确认 | `help-circle` | info (#6C9FFF) | accent_tertiary (#B8A9E8) |
+| 警告 | `alert-triangle` | warning (#FFBE3D) | accent_secondary (#FFB347) |
+| 信息 | `info` | info (#6C9FFF) | accent_tertiary (#B8A9E8) |
+
+#### 导航/区域图标
+
+| 区域 | 图标名 | 用途 |
+|------|--------|------|
+| Chat | `message-circle` | 模式切换 |
+| Work | `briefcase` | 模式切换 |
+| Session | `layers` | 左侧面板 |
+| Cron | `clock` | 左侧面板 |
+| Gateway | `radio` / `wifi` | Gateway 状态 |
+| 模型 | `cpu` | 模型配置 |
+| 权限 | `shield` | 权限设置 |
+| 工作区 | `folder` | 工作区管理 |
+| Skill | `puzzle` | Skill 管理 |
+| 日志 | `file-text` | Log Tab |
+| 关于 | `info` | About Tab |
+| 附件 | `paperclip` | Chat 输入区 |
+| 语音 | `mic` | Chat 输入区 |
+
+### 5.3 品牌吉祥物（大蒜 + 龙虾）
+
+品牌角色用 **PNG**，按主题换色：
+
+#### Matcha v1 大蒜
+
+| 尺寸 | 文件 | 色调 |
+|------|------|------|
+| 24px | `garlic_24_matcha.png` | 蒜瓣薄荷绿渐变，叶茎 `#3DD68C` |
+| 32px | `garlic_32_matcha.png` | 同上 |
+| 48px | `garlic_48_matcha.png` | 同上 + 高光 |
+| 96px | `garlic_96_matcha.png` | 品牌用，完整细节 |
+
+#### Peachy v2 大蒜
+
+| 尺寸 | 文件 | 色调 |
+|------|------|------|
+| 24px | `garlic_24_peachy.png` | 蒜瓣暖杏渐变，叶茎 `#FF7F50` |
+| 32px | `garlic_32_peachy.png` | 同上 |
+| 48px | `garlic_48_peachy.png` | 同上 + 暖色高光 |
+| 96px | `garlic_96_peachy.png` | 品牌用，完整细节 |
+
+#### Mochi v3 大蒜
+
+| 尺寸 | 文件 | 色调 |
+|------|------|------|
+| 24px | `garlic_24_mochi.png` | 蒜瓣奶茶棕渐变，叶茎 `#A67B5B` |
+| 32px | `garlic_32_mochi.png` | 同上 |
+| 48px | `garlic_48_mochi.png` | 同上 + 暖色高光 |
+| 96px | `garlic_96_mochi.png` | 品牌用，完整细节 |
+
+#### 龙虾 AI 头像
+
+| 尺寸 | 文件 | 说明 |
+|------|------|------|
+| 24px | `lobster_24.png` | 聊天气泡内头像 |
+| 32px | `lobster_32.png` | 左侧面板 |
+| 48px | `lobster_48.png` | 关于页 |
+
+> 龙虾头像不按主题换色，保持品牌一致性。
+
+### 5.4 托盘图标
+
+大蒜+LED 合体，按主题 + 状态组合：
+
+| 状态 | Matcha LED | Peachy LED |
+|------|-----------|------------|
+| 空闲 | 白 `#E8ECF4` | 暖灰 `#8B7355` |
+| 运行中 | 薄荷绿 `#3DD68C` | 珊瑚橘 `#FF7F50` |
+| 异常 | 红 `#FF6B6B` | 暖红 `#FF5C5C` |
+| 检测中 | 黄 `#FFBE3D` | 暖橙 `#FFB347` |
+
+尺寸：16/20/32/48/96px（PNG，因托盘 API 需要位图）。
+
+### 5.5 图标层级
 
 | 层级 | 尺寸 | 用途 |
 |------|------|------|
-| ICON_TINY | 16px | 托盘最小、内联小图标 |
-| ICON_SMALL | 20px | 托盘默认、菜单项 |
-| ICON_MEDIUM | 24px | 聊天头像(AI)、按钮内图标 |
-| ICON_LARGE | 32px | 聊天头像(用户)、标题栏 |
-| ICON_XLARGE | 48px | 任务栏图标、关于页 |
-
-### 5.2 图标来源
-
-| 来源 | 用途 |
-|------|------|
-| LVGL Symbols | LV_SYMBOL_PLAY/STOP/REFRESH/SETTINGS/FILE/HOME/EDIT/CLOSE |
-| 品牌图标 | 大蒜角色（garlic_48.png 系列） |
-| AI 头像 | lobster 系列 + ai 系列（24/32/48 三尺寸） |
-| 托盘图标 | 大蒜+LED 合体 PNG，灰/绿/黄/红 × 16/20/32/48/96px |
-| Emoji | 操作类型（📄✏️⚡🔍）、品牌（🧄🦞） |
-
-### 5.3 操作类型图标映射
-
-| 操作 | 图标 | 颜色 |
-|------|------|------|
-| 读文件 | 📄 | text_secondary |
-| 写文件 | ✏️ | accent |
-| 执行命令 | ⚡ | warning |
-| 搜索 | 🔍 | info |
-| 成功 | ✓ | accent |
-| 失败 | ✗ | danger |
-| 进行中 | ● | accent（pulse） |
-| 等待确认 | ? | info |
+| `ICON_TINY` | 16px | 托盘最小、内联小图标 |
+| `ICON_SMALL` | 20px | 菜单项、列表图标 |
+| `ICON_MEDIUM` | 24px | 按钮内图标、AI 头像 |
+| `ICON_LARGE` | 32px | 用户头像、标题栏、空状态 |
+| `ICON_XLARGE` | 48px | 任务栏、关于页 |
+| `ICON_HUGE` | 96px | 品牌展示 |
 
 ---
 
@@ -405,62 +899,114 @@
 
 > 需求 → PRD §3 主界面 / §11 设置
 
-### 6.1 按钮
+### 6.1 按钮层次体系
 
-#### 主按钮 (Primary / btn_action)
+按钮分 5 层，从强到弱：**Primary → Secondary → Ghost → Danger → Tiny**。每层清晰传达操作重要性。
+
+#### 主按钮 (Primary / btn_action) — 最高权重
 
 ```
-  ┌──────────────────────────┐
-  │       Get Started        │  ← 36px, 圆角 8px, padding 12px 24px
-  └──────────────────────────┘
+  ┌──────────────────────────────┐
+  │  [icon]  Get Started         │  ← height=36px, radius=8px, padding=12px 24px
+  └──────────────────────────────┘
 
   Default:  bg=accent, text=text_inverse, font=body_strong
-  Hover:    bg=accent_hover
+  Hover:    bg=accent_hover, shadow=shadow_md
   Active:   bg=accent_active, scale(0.97)
   Disabled: bg=disabled_bg, text=disabled_text
   Focus:    box-shadow=focus_glow
+  图标:     左侧 8px 间距，icon_small(20px)
 ```
 
-#### 次要按钮 (Secondary / btn_secondary)
+**Matcha:** bg=#3DD68C 圆角 8px
+**Peachy:** bg=linear-gradient(135deg, #FF7F50, #FFB347) 圆角 12px，hover 放大 shadow_glow
+
+#### 次要按钮 (Secondary) — 中权重
 
 ```
   Default:  bg=transparent, border=1px accent, text=accent
   Hover:    bg=accent_subtle
+  Active:   bg=accent_subtle, border=accent_hover
   Disabled: border=disabled_text, text=disabled_text
+  图标:     左侧 6px 间距
 ```
 
-#### 幽灵按钮 (Ghost)
+#### 幽灵按钮 (Ghost) — 低权重
 
 ```
-  Default:  bg=transparent, text=text_secondary
+  Default:  bg=transparent, text=text_secondary, padding=6px 12px
   Hover:    bg=hover_overlay, text=text_primary
+  Active:   bg=active_overlay
+  图标:     左侧 4px 间距，图标颜色跟随文字
 ```
 
-#### 危险按钮 (Danger / btn_close)
+#### 危险按钮 (Danger) — 破坏操作专用
 
 ```
-  Default:  bg=danger (#FF6B6B), text=white
-  Hover:    bg=#E55A5A
+  Default:  bg=danger, text=white, radius=8px
+  Hover:    bg=danger_hover（加深 10%）
+  Active:   scale(0.97)
+  图标:     左侧 6px 间距
 ```
 
-#### 发送按钮
+**Matcha:** danger=#FF6B6B
+**Peachy:** danger=#FF5C5C
+
+#### 图标按钮 (Icon Button) — 紧凑操作
 
 ```
-  Default:  40×40px, 圆形, bg=accent gradient, icon=text_inverse
+  ┌────┐
+  │ 🔍 │  ← 32×32px (默认) / 24×24px (紧凑) / 40×40px (大)
+  └────┘
+
+  Default:  bg=transparent, icon=text_secondary
+  Hover:    bg=hover_overlay, icon=text_primary
+  Active:   bg=active_overlay
+  圆形:     radius_full
+  Tooltip:  hover 500ms 显示操作说明
+```
+
+#### 发送按钮 — 特殊主按钮
+
+```
+  Default:  40×40px, 圆形, bg=accent gradient, icon=send (text_inverse)
   Hover:    bg=accent_hover, shadow=shadow_glow
   Active:   bg=accent_active, scale(0.95)
-  Sending:  icon=⏹（停止），可点击中断流式
+  Sending:  icon=square(停止), 可点击中断流式
+  Disabled: bg=disabled_bg, icon=disabled_text
 ```
+
+**Peachy 特化:** bg=linear-gradient(135deg, #FF7F50, #FF6B8A)，hover 时 glow 色改为 `#FF7F5040`
 
 #### 窗口控制按钮
 
 ```
-  [⚙] [—] [□] [✕]  ← 每个 46×48px
-  Hover ✕: bg=danger, icon=white
+  [settings] [minus] [square] [x]  ← 每个 46×48px
+  Hover x: bg=danger, icon=white
   其他 Hover: bg=hover_overlay
 ```
 
-### 6.2 输入框
+### 6.2 按钮组 (Button Group)
+
+多个按钮并排时的排列规则：
+
+```
+  ┌────────────┐ ┌────────────┐ ┌────────────┐
+  │  取消      │ │  保存      │ │  删除      │
+  │  Ghost     │ │  Primary   │ │  Danger    │
+  └────────────┘ └────────────┘ └────────────┘
+     ← 最弱          ← 最强         ← 破坏
+```
+
+| 排列规则 | 说明 |
+|---------|------|
+| 右对齐 | 操作按钮组右对齐 |
+| 间距 | 按钮间 8px |
+| 顺序 | 从弱到强排列（左 Ghost → 右 Primary） |
+| 危险按钮 | 始终在最右，与 Primary 间距 16px |
+| 最多 3 个并排 | 超过 3 个改用下拉菜单 |
+
+### 6.3 输入框
 
 #### 单行输入框
 
@@ -469,11 +1015,12 @@
   Hover:     border=border_strong
   Focus:     border=accent (2px), box-shadow=focus_glow
   Error:     border=danger, 底部显示 error 文字（caption, danger）
+  图标前缀:  左侧图标 + 8px padding-left
 ```
 
 #### 密码输入框（API Key）
 
-同单行输入框 + 右侧 [👁] 切换明文/密码。
+同单行输入框 + 右侧 `eye` / `eye-off` 图标切换明文/密码。
 
 #### 多行输入框（Chat/Work）
 
@@ -481,95 +1028,107 @@
   Default:   bg=panel, border=1px border, min-height=96px, radius=12px
   Focus:     border=accent (1.5px), box-shadow=focus_glow
   自动增长:  监听行数变化, 调整高度
+  工具栏:    左侧 paperclip + mic 图标按钮, 右侧字数 + 发送按钮
 ```
 
-### 6.3 下拉框 (Dropdown)
+### 6.4 下拉框 (Dropdown)
 
 ```
   Default:   bg=surface, border=1px border, height=36px, radius=8px
-  Open:      border=accent, ▾ 旋转 180° (200ms)
+  Open:      border=accent, chevron-down 旋转 180° (200ms)
   下拉面板:  bg=panel, shadow=shadow_lg, radius=12px
-  下拉项:    height=32px, hover=hover_overlay
-  选中项:    accent 文字 + 左侧 accent 圆点 (6px)
+  下拉项:    height=32px, hover=hover_overlay, 左侧图标 + 文字
+  选中项:    accent 文字 + 左侧 check 图标
 ```
 
-### 6.4 开关 (Switch/Toggle)
+### 6.5 开关 (Switch/Toggle)
 
 ```
-  Off:     bg=#373C55, thumb=#8B92A8, 36×20px, radius=10px
-  On:      bg=accent, thumb=white
-  动画:    200ms ease-out 滑动
+  Matcha:
+    Off:  bg=#373C55, thumb=#8B92A8, 36×20px, radius=10px
+    On:   bg=accent(#3DD68C), thumb=white
+  Peachy:
+    Off:  bg=#E0D0C0, thumb=#B8A089, 36×20px, radius=10px
+    On:   bg=accent(#FF7F50), thumb=white
+  动画: 200ms ease-out 滑动 + thumb 弹性回弹
 ```
 
-### 6.5 复选框 (Checkbox)
+### 6.6 复选框 (Checkbox)
 
 ```
   尺寸: 18×18px, radius=4px
   Off:   bg=surface, border=1px border_strong
-  On:    bg=accent, 内部白色 ✓ (12px)
-  动画:  150ms scale(0.8→1.0) + fade-in
+  On:    bg=accent, 内部 check 图标 (12px, white)
+  动画:  150ms scale(0.8→1.0) + check 画线动画
 ```
 
-### 6.6 进度条
+### 6.7 进度条
 
 ```
   背景: surface, 填充: accent gradient, height=6px, radius=3px
   动画: 填充段平滑过渡 300ms
   不确定: accent 色 shimmer, 1.5s 循环
+  百分比: 右侧 small + text_secondary
 ```
 
-### 6.7 加载指示器
+### 6.8 加载指示器
 
 ```
   脉冲圆点: 3 个 6px 圆点, accent 色, 依次脉冲 1.2s 循环
   旋转圆环: 16px, 2px 描边, accent 色, 0.8s 线性循环
+  骨架屏:   raised 色 shimmer, 1.5s 循环
 ```
 
-### 6.8 卡片 (Card)
+### 6.9 卡片 (Card)
 
 ```
   Default:   bg=panel, radius=12px, padding=12px
   Hover:     bg=raised, shadow=shadow_sm
-  Selected:  border=accent (1px)
+  Selected:  border-left=3px accent
+  Peachy:    radius=20px
 ```
 
-### 6.9 列表项 (List Item)
+### 6.10 列表项 (List Item)
 
 ```
   Height: 32px (紧凑) / 44px (标准), padding: 0 12px
   Hover:     bg=hover_overlay
   Selected:  bg=accent_subtle, 左侧 2px accent 竖线
   Font 标题: body (13px), 副标: small (11px) + text_secondary
+  图标:     左侧 icon_small(20px), 右侧 chevron-right (可选)
 ```
 
-### 6.10 Tooltip
+### 6.11 Tooltip
 
 ```
   圆角: 8px, padding: 6px 10px, bg=raised, shadow=shadow_md
   触发: hover 500ms 延迟
   消失: 移开即消失, 200ms fade-out
   最大宽度: 320px (任务详情) / 200px (通用)
+  图标:     可选左侧小图标
 ```
 
-### 6.11 上下文菜单
+### 6.12 上下文菜单
 
 ```
   bg=panel, radius=10px, shadow=shadow_lg
   item height=32px, hover=hover_overlay
-  危险项: text=danger
-  快捷键: 右侧对齐, caption + text_tertiary
+  每项: 左侧图标(16px) + 文字 + 右侧快捷键
+  危险项: text=danger + icon=danger
+  分隔线: divider 色 1px
 ```
 
-### 6.12 Tab 切换
+### 6.13 Tab 切换
 
 ```
   Height=36px
   Active:   text=accent, 底部 2px accent 下划线
-  Inactive: text=text_secondary
+  Inactive: text=text_secondary, hover=text_primary
   动画:     下划线 200ms 滑动
+  图标:     可选左侧小图标
 ```
 
-### 6.13 分隔条 (Splitter)
+### 6.14 分隔条 (Splitter)
 
 ```
   宽: 6px
@@ -578,24 +1137,25 @@
   Dragging:  bg=accent, opacity=0.6
 ```
 
-### 6.14 步骤指示器
+### 6.15 步骤指示器
 
 ```
   ●──●──○──○──○──○  Step 1/6
-  已完成: ● accent 10px
-  当前:   ● accent 12px + glow
+  已完成: ● accent 10px + check 图标(8px)
+  当前:   ● accent 12px + glow + pulse
   未完成: ○ border_strong 10px
   连接线: 2px, 已完成段=accent, 未完成段=border
 ```
 
-### 6.15 状态胶囊 (Status Badge)
+### 6.16 状态胶囊 (Status Badge)
 
 ```
   height=18px, radius=9px, padding: 0 8px, font=caption + bold
-  Ready:   bg=accent_subtle, text=accent
-  Busy:    bg=#FFBE3D1A, text=warning
-  Error:   bg=#FF6B6B1A, text=danger
-  Checking: bg=#6C9FFF1A, text=info + pulse
+  图标(10px) + 文字
+  Ready:    icon=check-circle, bg=accent_subtle, text=accent
+  Busy:     icon=loader-2(spin), bg=#FFBE3D1A, text=warning
+  Error:    icon=x-circle, bg=#FF6B6B1A, text=danger
+  Checking: icon=refresh-cw(spin), bg=#6C9FFF1A, text=info
 ```
 
 ---
@@ -701,17 +1261,19 @@
 
 ### 7.6 空状态
 
-| 位置 | 图标 | 文案 | CTA |
-|------|------|------|-----|
-| Chat 空 | 🧄🦞 | "有什么我能帮你？" | 快捷建议气泡 |
-| Work 空 | ⚡ | "AI 工作台已就绪 — 在 Chat 中发送任务" | 查看示例 |
-| Session 空 | 📭 | "暂无活跃会话" | — |
-| Cron 空 | ⏰ | "暂无定时任务 — 点击 + 创建" | [+按钮] |
-| Skill 空 | 🧩 | "暂无 Skill — 从 ClawHub 浏览安装" | 浏览按钮 |
-| 搜索无结果 | 🔍 | "未找到匹配结果" | 修改搜索词 |
-| Log 空 | 📋 | "暂无日志记录" | — |
+| 位置 | 图标 (SVG) | 文案 | CTA |
+|------|-----------|------|-----|
+| Chat 空 | `garlic_48` + `lobster_32` 并排 | "有什么我能帮你？" | 快捷建议气泡 |
+| Work 空 | `briefcase` (32px, accent) | "AI 工作台已就绪 — 在 Chat 中发送任务" | 查看示例 |
+| Session 空 | `layers` (32px, text_tertiary) | "暂无活跃会话" | — |
+| Cron 空 | `clock` (32px, text_tertiary) | "暂无定时任务 — 点击 + 创建" | [+按钮] |
+| Skill 空 | `puzzle` (32px, text_tertiary) | "暂无 Skill — 从 ClawHub 浏览安装" | 浏览按钮 |
+| 搜索无结果 | `search` (32px, text_tertiary) | "未找到匹配结果" | 修改搜索词 |
+| Log 空 | `file-text` (32px, text_tertiary) | "暂无日志记录" | — |
 
-**通用样式：** 图标 32px + text_tertiary, 居中; 文案 body + text_tertiary, 居中; 最大宽度 280px。
+**通用样式：** SVG 图标 32px + text_tertiary, 居中; 文案 body + text_tertiary, 居中; 最大宽度 280px。
+
+**Peachy 特化：** 空状态背景添加半透明装饰圆点浮动动画（见 §8.5）。
 
 ---
 
@@ -747,6 +1309,7 @@
 | `ease_in` | `cubic-bezier(0.4, 0.0, 1.0, 1)` | 元素退出 |
 | `ease_in_out` | `cubic-bezier(0.4, 0.0, 0.2, 1)` | 位置/大小变化 |
 | `spring` | `cubic-bezier(0.34, 1.56, 0.64, 1)` | 弹性回弹 |
+| `bounce` | `cubic-bezier(0.34, 1.8, 0.64, 1)` | Peachy 专用弹性 |
 
 ### 8.4 动画清单
 
@@ -758,16 +1321,20 @@
 | 流式打字 | 光标 `\|` 脉冲 | 500ms 循环 | linear |
 | 流式追加 | 每 50ms 追加 3 字符 | 50ms | linear |
 | 打字指示器 | 3 圆点依次脉冲 | 1.2s 循环 | linear |
-| 复制反馈 | "✅ 已复制" fade-in → 1.5s fade-out | 200ms | ease_out/in |
+| 复制反馈 | check 图标 scale(0→1) → 1.5s fade-out | 200ms | spring |
 
 #### 按钮 & 控件
 
 | 动画 | 效果 | 时长 | 曲线 |
 |------|------|------|------|
+| 按钮 hover | bg 渐变 + shadow 增强 | 150ms | ease_out |
 | 按钮 active | scale(0.97) | 150ms | ease_in |
 | 按钮 release | scale(1.0) 回弹 | 150ms | spring |
 | Switch 切换 | 滑块滑动 + 颜色渐变 | 200ms | spring |
-| Checkbox 勾选 | scale(0.8→1.0) + ✓ fade-in | 150ms | spring |
+| Checkbox 勾选 | scale(0.8→1.0) + check 画线 | 150ms | spring |
+| Dropdown 打开 | chevron 旋转 180° | 200ms | ease_out |
+| 进度条填充 | 宽度平滑过渡 | 300ms | ease_in_out |
+| 图标切换 | cross-fade（如发送→停止） | 150ms | ease_in_out |
 
 #### 面板 & 布局
 
@@ -776,6 +1343,7 @@
 | 模式切换 | cross-fade + 指示器滑动 | 200ms | ease_in_out |
 | 面板折叠/展开 | 宽度 320↔40px | 300ms | ease_in_out |
 | 最大化/还原 | 窗口尺寸过渡 | 300ms | ease_in_out |
+| Session 列表增减 | 24px 上移/下移 + fade | 200ms | ease_out |
 
 #### 弹窗 & 浮层
 
@@ -783,8 +1351,9 @@
 |------|------|------|------|
 | 弹窗出现 | 95% 缩放 + fade-in | 300ms | ease_out |
 | 弹窗关闭 | 95% 缩放 + fade-out | 200ms | ease_in |
-| 遮罩出现 | opacity 0→60% | 300ms | ease_out |
+| 遮罩出现 | opacity 0→60%（Matcha）/ 0→30%（Peachy） | 300ms | ease_out |
 | Dropdown 展开 | fade-in + 4px 下移 | 200ms | ease_out |
+| 权限弹窗出现 | scale(0.9→1.0) + fade-in | 300ms | spring |
 
 #### Toast & 通知
 
@@ -803,7 +1372,27 @@
 | 主题切换 | 全局色值过渡 | 300ms | ease_in_out |
 | 大蒜头摇摆 | 正弦波 ±12°, 1.5Hz | 连续 | linear |
 
-### 8.5 Reduced Motion
+### 8.5 主题特化动画
+
+#### Matcha v1 特效
+
+| 特效 | 描述 | 场景 |
+|------|------|------|
+| 薄荷呼吸光 | accent 色 box-shadow 脉冲，3s 循环 | Gateway Ready 状态卡片 |
+| 绿色粒子 | 6px 圆点从按钮散开 300ms 消失 | 主按钮成功点击反馈 |
+| 代码高亮 | 等宽字淡入 + 背景色渐变 | 代码块首次渲染 |
+
+#### Peachy v2 特效
+
+| 特效 | 描述 | 场景 |
+|------|------|------|
+| 暖色呼吸光 | accent 色 box-shadow 脉冲，2.5s 循环 | Gateway Ready 状态卡片 |
+| 桃心弹跳 | heart 图标 scale(0→1.2→1) 弹性 | 操作成功反馈 |
+| 背景装饰圆点 | 半透明圆点缓慢浮动，8s 循环 | 向导背景、空状态 |
+| 按钮光泽 | hover 时 45° 光带扫过按钮表面 | 主按钮 hover |
+| 弹性回弹 | 弹窗、下拉出现时放大到 102% 再回弹 | Peachy 场景下的所有弹窗 |
+
+### 8.6 Reduced Motion
 
 系统开启 `prefers-reduced-motion` 时：所有动画时长降为 0ms（即时切换），保留功能性动画（进度条、加载指示器）。
 
@@ -813,24 +1402,74 @@
 
 > 需求 → PRD §3 主界面
 
-### 9.1 音效清单
+### 9.1 音效原则
 
-| 音效 ID | 触发 | 类型 | 时长 | 音量 |
-|---------|------|------|------|------|
-| `msg_incoming` | AI 回复完成 | 短促叮咚 | ~200ms | 40% |
-| `msg_sent` | 用户消息发送 | 轻微"嗖" | ~100ms | 20% |
-| `alert_critical` | 警报弹窗 | 系统警告音 | ~500ms | 60% |
-| `alert_error` | 操作失败 | 系统错误音 | ~300ms | 50% |
-| `success` | Gateway 启动/任务完成 | 短促上扬 | ~200ms | 30% |
-| `permission_request` | 权限确认弹窗 | 短促双音 | ~300ms | 40% |
-| `wizard_complete` | 向导完成 | 欢快短旋律 | ~600ms | 50% |
-| `copy` | 复制到剪贴板 | 轻微点击 | ~50ms | 15% |
+| 原则 | 说明 |
+|------|------|
+| 不打扰 | 默认音量低（20-40%），不刺耳 |
+| 有反馈 | 每个关键操作都有对应的声学反馈 |
+| 跟主题 | Matcha 清脆，Peachy 温暖 |
+| 可关闭 | 全局开关 + 音量滑块（0~100%） |
 
-### 9.2 实现方案
+### 9.2 音效清单（通用）
 
-- Windows: `PlaySound()` API + WAV 资源内嵌
-- 系统音效优先：`MB_ICONWARNING`, `MB_ICONERROR`, `MB_OK`
-- 全局开关 + 音量滑块（0~100%），存储在 config.json `sound_enabled`
+| 音效 ID | 触发 | 时长 | 默认音量 |
+|---------|------|------|---------|
+| `msg_incoming` | AI 回复完成 | ~200ms | 40% |
+| `msg_sent` | 用户消息发送 | ~100ms | 20% |
+| `alert_critical` | 警报弹窗 | ~500ms | 60% |
+| `alert_error` | 操作失败 | ~300ms | 50% |
+| `success` | Gateway 启动/任务完成 | ~200ms | 30% |
+| `permission_request` | 权限确认弹窗 | ~300ms | 40% |
+| `wizard_complete` | 向导完成 | ~600ms | 50% |
+| `copy` | 复制到剪贴板 | ~50ms | 15% |
+| `click` | 按钮点击 | ~30ms | 10% |
+| `switch` | 开关切换 | ~80ms | 15% |
+| `dropdown_open` | 下拉展开 | ~100ms | 15% |
+| `toast` | Toast 通知出现 | ~150ms | 25% |
+
+### 9.3 Matcha v1 音效风格
+
+**清脆、通透、薄荷感。** 高频为主，带轻微混响。
+
+| 音效 ID | 音色描述 |
+|---------|---------|
+| `msg_incoming` | 水滴落玉盘，C5→E5 上行 |
+| `msg_sent` | 轻微气泡声，短促 |
+| `success` | 清脆上扬双音，C5→G5 |
+| `error` | 低沉警示，A4 短促下降 |
+| `permission_request` | 双音敲击，C5-C5 |
+| `wizard_complete` | 三音上行旋律，C5-E5-G5 |
+| `click` | 微型水滴声 |
+| `switch` | 轻快拨动声 |
+
+### 9.4 Peachy v2 音效风格
+
+**温暖、柔和、圆润感。** 中频为主，带轻微颤音。
+
+| 音效 ID | 音色描述 |
+|---------|---------|
+| `msg_incoming` | 木琴轻敲，E4→G4 上行 |
+| `msg_sent` | 轻柔气声，带暖色 |
+| `success` | 温暖上扬双音，E4→B4 |
+| `error` | 柔和低音警示，D4 短促下降 |
+| `permission_request` | 双音木琴，E4-E4 |
+| `wizard_complete` | 三音上行旋律，E4-G4-B4 + 颤音 |
+| `click` | 软木碰撞声 |
+| `switch` | 圆润拨动声 |
+
+### 9.5 实现方案
+
+| 方案 | 说明 |
+|------|------|
+| 音频格式 | WAV（内嵌资源），Ogg Vorbis（外部文件备选） |
+| 播放 API | Windows: `PlaySound()` / SDL2 Audio |
+| 资源位置 | `assets/sounds/matcha/` 和 `assets/sounds/peachy/` |
+| 音效文件 | 按主题分目录，文件名统一（如 `msg_incoming.wav`） |
+| 主题切换 | 指向不同目录，即时生效 |
+| 全局开关 | config.json `sound_enabled: true` |
+| 音量控制 | config.json `sound_volume: 40`（0~100） |
+| 备选 | 系统音效降级：`MB_ICONWARNING`, `MB_ICONERROR`, `MB_OK` |
 
 ---
 
@@ -1029,19 +1668,89 @@ LVGL 模态弹窗，阻断启动。如"未检测到 Node.js，请安装后重新
 
 **布局：** 步骤流（55%）+ 输出面板（45%）上下分栏 + Chat 面板（320px，可折叠至 40px）在右侧
 
-### UI-13: 贴边大蒜头
+### UI-13: 贴边大蒜头（桌面宠物）
 
-80×110px，WS_EX_LAYERED 透明背景，始终置顶。悬停 ±12° 正弦波摇摆 1.5Hz。点击恢复主窗口。纯 Win32 实现。
+窗口拖到屏幕边缘松手 → 隐藏主窗口 → 屏幕边缘显示浮动大蒜头。纯 Win32 实现。
 
-### UI-52 ~ UI-54: 三套主题
+#### 基础参数
 
-| 主题 | bg | panel | text | accent |
-|------|----|-------|------|--------|
-| 暗色 (Mint Dark) | #0F1117 | #1A1D27 | #E8ECF4 | #3DD68C |
-| 亮色 | #F5F7FA | #FFFFFF | #1A1D27 | #2BB673 |
-| 经典暗色 | #2D2D2D | #3C3C3C | #FFFFFF | #82AAF0 |
+| 参数 | 值 |
+|------|-----|
+| 尺寸 | 80×110px（body 64px + sprout 72px） |
+| 窗口属性 | WS_EX_LAYERED + WS_EX_TOPMOST + WS_EX_TOOLWINDOW |
+| 透明方式 | COLORKEY（品红 #FF00FF 为透明色） |
+| 帧率 | 30fps（33ms timer） |
 
-主题切换：300ms 全局色值过渡，不硬切。
+#### 主题变体
+
+| 主题 | body 贴图 | sprout 贴图 | 整体色调 |
+|------|----------|------------|---------|
+| Matcha | `garlic_body_matcha.png` | `garlic_sprout_matcha.png` | 薄荷绿叶茎 + 白蒜瓣 |
+| Peachy | `garlic_body_peachy.png` | `garlic_sprout_peachy.png` | 橘粉叶茎 + 暖杏蒜瓣 |
+| Mochi | `garlic_body_mochi.png` | `garlic_sprout_mochi.png` | 奶茶棕叶茎 + 米白蒜瓣 |
+
+#### 动画状态机
+
+```
+[空闲待机] ──鼠标进入──→ [悬停摇摆] ──鼠标离开──→ [空闲待机]
+     │                        │
+     │────定时触发────→ [随机动作] ──完成──→ [空闲待机]
+     │                        │
+     └────点击────────→ [恢复窗口]
+```
+
+| 状态 | 动画 | 触发 | 时长 |
+|------|------|------|------|
+| 空闲待机 | sprout 微呼吸（±2° 缓慢摆动，0.5Hz） | 默认 | 持续 |
+| 悬停摇摆 | sprout ±12° 正弦波，1.5Hz | 鼠标进入 | 持续到离开 |
+| 随机动作 | 见下方特效表 | 空闲 30-120s 随机 | 1-3s |
+| 恢复窗口 | 缩小 + fade-out → 飞向主窗口位置 | 点击 | 300ms |
+
+#### 随机特效（空闲时触发）
+
+| 特效 | 描述 | Matcha | Peachy | Mochi | 概率 |
+|------|------|--------|--------|-------|------|
+| 喷火 | 口部喷出 3-5 个粒子向上飘散消失 | 绿色粒子 | 橙色粒子 | 茶色粒子 | 20% |
+| 跳跃 | body 整体上跳 20px + 弹性落地 | 同 | 同 | 同 | 20% |
+| 摇头 | body 左右摇头 ±8° | 同 | 同 | 同 | 15% |
+| 闪光 | body 短暂高亮（opacity 脉冲） | 绿色光晕 | 橘色光晕 | 棕色光晕 | 15% |
+| 冒泡 | 头顶冒出 2-3 个透明圆泡上升消失 | 同 | 同 | 同 | 15% |
+| 打盹 | sprout 缓慢下垂 → 回弹 | 同 | 同 | 同 | 15% |
+
+#### 粒子参数（喷火特效）
+
+```
+粒子数量: 3-5 个
+粒子大小: 4-8px 圆形
+起始位置: sprout 顶部
+方向: 向上 + 随机偏移 ±15°
+速度: 40-80px/s
+生命周期: 500-1000ms
+淡出: alpha 1→0
+颜色:
+  Matcha: #3DD68C → #2BB673 (渐变)
+  Peachy: #FF7F50 → #FFB347 (渐变)
+  Mochi:  #A67B5B → #C9A96E (渐变)
+```
+
+### UI-52 ~ UI-56: 五套主题
+
+**主打主题：**
+
+| 主题 | bg | panel | text | accent | 风格 |
+|------|----|-------|------|--------|------|
+| 🍵 Matcha v1 (默认) | #0F1117 | #1A1D27 | #E8ECF4 | #3DD68C | 薄荷绿深色 |
+| 🍑 Peachy v2 | #FFF8F3 | #FFFFFF | #2D1B14 | #FF7F50 | 珊瑚橘暖色 |
+
+**备选主题：**
+
+| 主题 | bg | panel | text | accent | 风格 |
+|------|----|-------|------|--------|------|
+| 经典暗色 | #1E1E1E | #2D2D30 | #CCCCCC | #007ACC | VS Code 风 |
+| 亮色 | #F5F7FA | #FFFFFF | #1A1D27 | #2BB673 | 日间高亮 |
+| 怀旧暗色 | #2D2D2D | #3C3C3C | #FFFFFF | #82AAF0 | 极简深灰 |
+
+主题切换：300ms 全局色值过渡，不硬切。Peachy 圆角放大（radius +8px）。
 
 ### UI-55: 通用控件体系
 

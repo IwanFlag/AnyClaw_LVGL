@@ -15,7 +15,7 @@
 AnyClaw_LVGL/
 ├── src/                          # 应用源码 (C/C++)
 ├── ui/                           # UI 定义
-├── assets/                       # 运行时资源 (PNG 图标等)
+├── assets/                       # 运行时资源 (PNG 图标 + 字体文件等)
 ├── bundled/                      # 离线安装包
 ├── tools/                        # 辅助脚本 (keygen 等)
 ├── thirdparty/                   # 第三方依赖（全部提交到仓库）
@@ -73,11 +73,67 @@ apt-get install mingw-w64 libsdl2-dev zip cmake
 AnyClaw_LVGL_v2.x.x_YYYYMMDD_HHMM.zip
 ├── AnyClaw_LVGL.exe        # 主程序
 ├── SDL2.dll                # 运行时依赖
-└── assets/                 # 图标资源
-    ├── app_icon.png
-    ├── garlic_*.png
-    ├── tray/*.png
-    └── icons/ai/*.png
+└── assets/                 # 图标 + 字体 + 音效资源
+    ├── app_icon.png        # exe / 任务栏图标（16/32/48/64/256px）
+    ├── app_icon.ico        # exe 图标（多尺寸 ICO）
+    │
+    ├── mascot/             # 品牌吉祥物（大蒜 + 龙虾）
+    │   ├── matcha/         # Matcha 主题大蒜
+    │   │   ├── garlic_body_64.png      # 蒜瓣主体
+    │   │   ├── garlic_sprout_72.png    # 叶茎（带动画旋转锚点）
+    │   │   ├── garlic_24.png           # 紧凑头像
+    │   │   ├── garlic_32.png           # 标准头像
+    │   │   ├── garlic_48.png           # 大头像
+    │   │   └── garlic_96.png           # 品牌展示
+    │   ├── peachy/         # Peachy 主题大蒜
+    │   │   └── (同上结构)
+    │   ├── mochi/          # Mochi 主题大蒜
+    │   │   └── (同上结构)
+    │   └── lobster/        # 龙虾 AI 头像（不随主题变）
+    │       ├── lobster_24.png
+    │       ├── lobster_32.png
+    │       └── lobster_48.png
+    │
+    ├── tray/               # 托盘图标（PNG，按主题×状态）
+    │   ├── matcha/
+    │   │   ├── idle_16.png / idle_20.png / idle_32.png     # 白 #E8ECF4
+    │   │   ├── active_16.png / active_20.png / active_32.png # 绿 #3DD68C
+    │   │   ├── error_16.png / error_20.png / error_32.png   # 红 #FF6B6B
+    │   │   └── busy_16.png / busy_20.png / busy_32.png      # 黄 #FFBE3D
+    │   ├── peachy/         # 暖色系状态色
+    │   │   └── (同上结构，idle=#8B7355, active=#FF7F50, error=#FF5C5C, busy=#FFB347)
+    │   └── mochi/          # 棕色系状态色
+    │       └── (同上结构，idle=#B0A394, active=#A67B5B, error=#C47070, busy=#C9A96E)
+    │
+    ├── icons/              # SVG 图标集
+    │   └── lucide/         # Lucide Icons 子集（~120 个 SVG）
+    │
+    ├── fonts/              # 主题字体（.ttf/.otf）
+    │   ├── PlusJakartaSans-Regular.ttf
+    │   ├── PlusJakartaSans-SemiBold.ttf
+    │   ├── PlusJakartaSans-Bold.ttf
+    │   ├── Nunito-Regular.ttf
+    │   ├── Nunito-Bold.ttf
+    │   ├── Lora-Regular.ttf
+    │   ├── Lora-Bold.ttf
+    │   ├── HarmonyOS_Sans_SC_Regular.otf
+    │   ├── HarmonyOS_Sans_SC_Bold.otf
+    │   └── JetBrainsMono-Regular.ttf
+    │
+    └── sounds/             # 主题音效（.wav）
+        ├── matcha/         # 清脆薄荷风
+        │   ├── msg_incoming.wav
+        │   ├── msg_sent.wav
+        │   ├── success.wav
+        │   ├── error.wav
+        │   ├── permission_request.wav
+        │   ├── wizard_complete.wav
+        │   ├── click.wav
+        │   └── switch.wav
+        ├── peachy/         # 温暖桃气风
+        │   └── (同上结构)
+        └── mochi/          # 安静茶道风
+            └── (同上结构)
 ```
 
 ## SDL2 DLL 版本

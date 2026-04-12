@@ -1097,7 +1097,7 @@ struct ResourceLimits {
 {
   "wizard_completed": false,
   "language": "en",
-  "theme": "dark",
+  "theme": "matcha",
   "window_x": 100,
   "window_y": 100,
   "dpi_scale": 1.0,

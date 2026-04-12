@@ -1,7 +1,9 @@
-# AnyClaw LVGL — 抹茶 Matcha 主题 Wireframe 集
+# AnyClaw LVGL — 抹茶 Matcha v1 主题 Wireframe 集
 
-> 主题：抹茶 Matcha (ClawMint) | 版本：v2.2.1 | 更新时间：2026-04-12
+> 🍵 **主打主题 · 默认** | 抹茶 Matcha (ClawMint) | 版本：v2.2.1 | 更新时间：2026-04-12
 > 配合 `AnyClaw_LVGL_PRD_v2.2.1_Design_System.md` 使用
+>
+> 本主题为 AnyClaw 默认主打主题，完整规格见 Design.md §2.2。
 
 ---
 
@@ -32,9 +34,11 @@
 
 | 类型 | 主选 | 回退 |
 |------|------|------|
-| 中文 | HarmonyOS Sans SC | 微软雅黑, sans-serif |
-| 英文 | Inter | Segoe UI, sans-serif |
+| 中文 | HarmonyOS Sans SC | PingFang SC, 微软雅黑, sans-serif |
+| 英文 | Plus Jakarta Sans | Inter, Segoe UI, sans-serif |
 | 等宽 | JetBrains Mono | Consolas, monospace |
+
+> 清新锐利风。Plus Jakarta Sans 比 Montserrat 更圆润现代。
 
 ## UI 场景清单（65 个）
 

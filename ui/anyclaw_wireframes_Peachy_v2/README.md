@@ -1,6 +1,7 @@
-# 🍑 桃气 Peachy — AnyClaw 主题
+# 🍑 桃气 Peachy v2 — AnyClaw 主题
 
-> 暖色系 · 苹果风 · 萌系 · 年轻人友好
+> 🍑 **主打主题 · 暖色系** | 苹果风 · 萌系 · 年轻人友好 | 版本：v2.2.1
+> 完整规格见 Design.md §2.3。
 
 ## 设计理念
 
@@ -10,6 +11,16 @@
 - 🍎 **苹果风**：大圆角 20-24px + 柔和阴影 + 暖白背景
 - 🐱 **萌系元素**：emoji 点缀 + 彩色脉冲动画 + 友好文案
 - 💫 **年轻化**：渐变按钮 + 弹性胶囊 + 装饰圆点
+
+## 字体
+
+| 类型 | 主选 | 回退 |
+|------|------|------|
+| 中文 | HarmonyOS Sans SC | PingFang SC, 微软雅黑, sans-serif |
+| 英文 | Nunito | Quicksand, Segoe UI, sans-serif |
+| 等宽 | JetBrains Mono | Consolas, monospace |
+
+> 温暖亲和风。Nunito 圆端设计天然萌系，与珊瑚橘暖色完美搭配。
 
 ## 色彩系统
 
