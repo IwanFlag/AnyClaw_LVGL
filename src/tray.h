@@ -66,4 +66,7 @@ bool tray_is_topmost();
 /* Set window icon from garlic_icon.png */
 void tray_set_window_icon();
 
+/* Refresh tray colors/icons after theme change */
+void tray_refresh_theme();
+
 #endif /* TRAY_H */

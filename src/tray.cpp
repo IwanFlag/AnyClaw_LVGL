@@ -48,13 +48,27 @@ struct MenuItemData {
 
 static std::list<MenuItemData> g_menuItems;
 
-/* ── Theme colors as GDI COLORREF ────────────────────────────────── */
-static COLORREF theme_bg()       { return RGB(0x1A, 0x1E, 0x2E); }
-static COLORREF theme_panel()    { return RGB(0x23, 0x28, 0x38); }
-static COLORREF theme_text_gdi() { return RGB(0xE0, 0xE0, 0xE0); }
-static COLORREF theme_text_dim() { return RGB(0x90, 0x95, 0xB0); }
-static COLORREF theme_hover()    { return RGB(0x2A, 0x30, 0x4A); }
-static COLORREF theme_sep()      { return RGB(0x37, 0x3C, 0x55); }
+/* ── Theme-aware tray subdirectory ── */
+static const wchar_t* get_tray_theme_dir() {
+    switch (g_theme) {
+        case Theme::Peachy:  return L"tray\\peachy\\";
+        case Theme::Mochi:   return L"tray\\mochi\\";
+        case Theme::Classic: return L"tray\\classic\\";
+        case Theme::Light:   return L"tray\\light\\";
+        default:             return L"tray\\matcha\\";
+    }
+}
+
+/* ── Theme colors as GDI COLORREF from g_colors ── */
+static COLORREF to_colorref(lv_color_t c) {
+    return RGB(c.red << 3 | c.red >> 2, c.green << 2 | c.green >> 4, c.blue << 3 | c.blue >> 2);
+}
+static COLORREF theme_bg()       { return to_colorref(g_colors->bg); }
+static COLORREF theme_panel()    { return to_colorref(g_colors->panel); }
+static COLORREF theme_text_gdi() { return to_colorref(g_colors->text); }
+static COLORREF theme_text_dim() { return to_colorref(g_colors->text_dim); }
+static COLORREF theme_hover()    { return to_colorref(g_colors->hover_overlay); }
+static COLORREF theme_sep()      { return to_colorref(g_colors->divider); }
 
 /* ── Static brushes ──────────────────────────────────────────────── */
 static HBRUSH s_bgBrush = nullptr;
@@ -236,33 +250,54 @@ static HICON create_tray_icon(TrayState state, int size = 96) {
     wchar_t trayFile[32];
     swprintf_s(trayFile, L"tray_%ls_%d.png", colorName, size);
 
-    /* Path 1: exe_dir/assets/tray/tray_*.png */
+    const wchar_t* themeDir = get_tray_theme_dir();
+
+    /* Path 1: exe_dir/assets/tray/{theme}/tray_*.png */
     if (p) {
+        wcscpy_s(p + 1, MAX_PATH - (p - iconPath + 1), L"assets\\");
+        wcscat_s(iconPath, MAX_PATH, themeDir);
+        wcscat_s(iconPath, MAX_PATH, trayFile);
+        LOG_I("ICON", "create_tray_icon: trying theme=%ls", iconPath);
+        hBase = load_png_icon(iconPath, size);
+    }
+    /* Path 2: exe_dir/assets/tray/tray_*.png (theme fallback) */
+    if (!hBase && p) {
         wcscpy_s(p + 1, MAX_PATH - (p - iconPath + 1), L"assets\\tray\\");
         wcscat_s(iconPath, MAX_PATH, trayFile);
         LOG_I("ICON", "create_tray_icon: trying combined=%ls", iconPath);
         hBase = load_png_icon(iconPath, size);
     }
-    /* Path 2: exe_dir/../assets/tray/tray_*.png (build dir layout) */
+    /* Path 3: exe_dir/../assets/tray/{theme}/tray_*.png */
+    if (!hBase && p) {
+        wcscpy_s(p + 1, MAX_PATH - (p - iconPath + 1), L"..\\assets\\");
+        wcscat_s(iconPath, MAX_PATH, themeDir);
+        wcscat_s(iconPath, MAX_PATH, trayFile);
+        hBase = load_png_icon(iconPath, size);
+    }
+    /* Path 4: exe_dir/../assets/tray/tray_*.png */
     if (!hBase && p) {
         wcscpy_s(p + 1, MAX_PATH - (p - iconPath + 1), L"..\\assets\\tray\\");
         wcscat_s(iconPath, MAX_PATH, trayFile);
-        LOG_I("ICON", "create_tray_icon: trying combined=%ls", iconPath);
         hBase = load_png_icon(iconPath, size);
     }
-    /* Path 3: exe_dir/../../assets/tray/tray_*.png (deep build dir) */
+    /* Path 5: exe_dir/../../assets/tray/{theme}/tray_*.png */
+    if (!hBase && p) {
+        wcscpy_s(p + 1, MAX_PATH - (p - iconPath + 1), L"..\\..\\assets\\");
+        wcscat_s(iconPath, MAX_PATH, themeDir);
+        wcscat_s(iconPath, MAX_PATH, trayFile);
+        hBase = load_png_icon(iconPath, size);
+    }
+    /* Path 6: exe_dir/../../assets/tray/tray_*.png */
     if (!hBase && p) {
         wcscpy_s(p + 1, MAX_PATH - (p - iconPath + 1), L"..\\..\\assets\\tray\\");
         wcscat_s(iconPath, MAX_PATH, trayFile);
-        LOG_I("ICON", "create_tray_icon: trying combined=%ls", iconPath);
         hBase = load_png_icon(iconPath, size);
     }
-    /* Path 4: %APPDATA%/AnyClaw/tray/tray_*.png */
+    /* Path 7: %APPDATA%/AnyClaw/tray/{theme}/tray_*.png */
     if (!hBase) {
         wchar_t appData[MAX_PATH];
         if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appData))) {
-            swprintf_s(iconPath, MAX_PATH, L"%ls\\AnyClaw\\tray\\%ls", appData, trayFile);
-            LOG_I("ICON", "create_tray_icon: trying combined=%ls", iconPath);
+            swprintf_s(iconPath, MAX_PATH, L"%ls\\AnyClaw\\%ls%ls", appData, themeDir, trayFile);
             hBase = load_png_icon(iconPath, size);
         }
     }
@@ -276,13 +311,13 @@ static HICON create_tray_icon(TrayState state, int size = 96) {
     /* ═══ Fallback: old behavior — load base icon + GDI LED overlay ═══ */
     LOG_W("ICON", "create_tray_icon: combined PNG not found, falling back to GDI LED overlay");
 
-    /* Status LED colors */
+    /* Status LED colors from theme */
     COLORREF ledColor;
     switch (state) {
-        case TrayState::Green:  ledColor = RGB(0, 200, 60);  break;
-        case TrayState::Yellow: ledColor = RGB(240, 200, 0);  break;
-        case TrayState::Red:    ledColor = RGB(220, 50, 50);  break;
-        default:                ledColor = RGB(200, 200, 210); break; /* White / Idle */
+        case TrayState::Green:  ledColor = to_colorref(g_colors->success);  break;
+        case TrayState::Yellow: ledColor = to_colorref(g_colors->warning);  break;
+        case TrayState::Red:    ledColor = to_colorref(g_colors->danger);   break;
+        default:                ledColor = to_colorref(g_colors->text_dim);  break;
     }
 
     /* Load base icon: try embedded resource first, then file */
@@ -1129,6 +1164,18 @@ void tray_request_quit() {
 
 HWND tray_get_hwnd() {
     return g_hwnd;
+}
+
+void tray_refresh_theme() {
+    /* Destroy cached brushes so they get recreated with new theme colors */
+    if (s_bgBrush) { DeleteObject(s_bgBrush); s_bgBrush = nullptr; }
+    if (s_panelBrush) { DeleteObject(s_panelBrush); s_panelBrush = nullptr; }
+    ensure_brushes();
+    /* Re-apply current state to update icon with theme colors */
+    TrayState cur = g_currentState;
+    g_currentState = TrayState::White; /* force refresh */
+    tray_set_state(cur);
+    LOG_I("TRAY", "Theme refreshed");
 }
 
 void tray_show_menu_at(int x, int y) {

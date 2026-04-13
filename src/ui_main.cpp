@@ -8684,6 +8684,9 @@ void apply_theme_to_all() {
         }
     }
 
+    /* Refresh tray icon/menu colors */
+    tray_refresh_theme();
+
     lv_obj_invalidate(scr);
 }
 
