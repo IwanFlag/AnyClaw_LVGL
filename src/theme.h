@@ -86,13 +86,48 @@ struct ThemeColors {
     uint8_t    radius_2xl;          /* Max: floating elements */
 };
 
+/* ═══════════════════════════════════════════════════════════════
+ *  ThemeFonts — per-theme font pointers (v2.2.1)
+ *  9 级英文/通用字体 + 2 级 CJK 字体
+ * ═══════════════════════════════════════════════════════════════ */
+struct ThemeFonts {
+    /* 英文/通用字体 (9 级) */
+    lv_font_t* display;       /* 品牌标题, 28px @800h, Bold */
+    lv_font_t* h1;            /* 弹窗标题, 22px @800h, Bold */
+    lv_font_t* h2;            /* 区域标题, 18px @800h, SemiBold */
+    lv_font_t* h3;            /* 卡片标题, 15px @800h, SemiBold */
+    lv_font_t* body;          /* 正文, 13px @800h, Regular */
+    lv_font_t* body_strong;   /* 强调正文, 13px @800h, SemiBold */
+    lv_font_t* small;         /* 次要信息, 11px @800h, Regular */
+    lv_font_t* caption;       /* 标签胶囊, 10px @800h, Medium(500) */
+    lv_font_t* code;          /* 代码, 12px @800h, Regular */
+
+    /* 中文 CJK 字体（与英文同级，fallback 链接） */
+    lv_font_t* cjk_body;      /* CJK 正文 */
+    lv_font_t* cjk_title;     /* CJK 标题（仅 Mochi 用思源宋体） */
+};
+
 enum class Theme { Dark, Peachy, Classic, Mochi, Light };
 
 extern const ThemeColors* g_colors;
+extern ThemeFonts g_theme_fonts;
 extern Theme g_theme;
 
 void save_theme_config();
 void load_theme_config();
 void apply_theme_to_all();
+void init_theme_fonts(Theme theme);
+
+/* ═══════════════════════════════════════════════════════════════
+ *  font_size — PCT 动态字号计算
+ *  pct: FONT_*_PCT 常量 (如 FONT_BODY_PCT=163)
+ *  win_h: 当前窗口高
+ *  min_px: 最小像素值 (FONT_MIN_*)
+ *  返回: clamp(win_h * pct / 10000, min_px)
+ * ═══════════════════════════════════════════════════════════════ */
+static inline int font_size(int pct, int win_h, int min_px) {
+    int sz = win_h * pct / 10000;
+    return (sz < min_px) ? min_px : sz;
+}
 
 #endif /* ANYCLAW_THEME_H */

@@ -59,6 +59,7 @@ extern const lv_font_t lv_font_mshy_16;
 lv_font_t* g_cjk_font = nullptr;
 lv_font_t* g_cjk_font_small = nullptr;
 lv_font_t* g_cjk_font_chat = nullptr;   /* Chat text: 4/5 of default (13px at 100%) */
+ThemeFonts g_theme_fonts = {};            /* Per-theme font pointers */
 static DWORD g_ui_thread_id = 0;
 static bool g_restore_last_session = false; /* default: start fresh every launch */
 static LanChatClient g_lan_chat_client;
@@ -146,9 +147,148 @@ static void init_system_font() {
     fflush(stdout);
 }
 
-#define CJK_FONT (g_cjk_font)
-#define CJK_FONT_SMALL (g_cjk_font_small)
-#define CJK_FONT_CHAT (g_cjk_font_chat ? g_cjk_font_chat : g_cjk_font)
+/* ═══════════════════════════════════════════════════════════════
+ *  init_theme_fonts — per-theme font initialization
+ *
+ *  Fills g_theme_fonts with DPI-scaled font pointers.
+ *  When theme-specific .ttf/.otf files are available in assets/fonts/,
+ *  this function loads them per theme. Currently uses embedded CJK
+ *  font data as universal fallback.
+ *
+ *  Font files expected per theme (see Design §3.4):
+ *    Matcha:  PlusJakartaSans-{Regular,SemiBold,Bold}.ttf + HarmonyOS_Sans_SC_*.otf
+ *    Peachy:  Nunito-{Regular,Bold}.ttf + HarmonyOS_Sans_SC_*.otf
+ *    Mochi:   PlusJakartaSans-*.ttf + Lora-*.ttf + 思源宋体_SC_*.otf
+ *    Dark:    Inter-*.ttf + 思源黑体_SC_*.otf
+ *    Light:   Inter-*.ttf + HarmonyOS_Sans_SC_*.otf
+ *    All:     JetBrainsMono-Regular.ttf
+ * ═══════════════════════════════════════════════════════════════ */
+
+/* Helper: create a TinyTTF font from embedded data at given pixel size */
+static lv_font_t* make_embedded_font(int px) {
+    int dpi = app_get_dpi_scale();
+    int sz = px * dpi / 100;
+    if (sz < 8) sz = 8;
+    return lv_tiny_ttf_create_data(cjk_font_data, cjk_font_data_len, sz);
+}
+
+/* Helper: create a TinyTTF font from file at given pixel size, fallback to embedded */
+static lv_font_t* try_load_ttf(const char* path, int px, lv_font_t* fallback_font) {
+    int dpi = app_get_dpi_scale();
+    int sz = px * dpi / 100;
+    if (sz < 8) sz = 8;
+    FILE* f = fopen(path, "rb");
+    if (f) {
+        fclose(f);
+        lv_font_t* font = lv_tiny_ttf_create_file(path, sz);
+        if (font) return font;
+    }
+    /* Fallback: use embedded data */
+    if (fallback_font) return fallback_font;
+    return make_embedded_font(px);
+}
+
+/* Theme font file mapping (relative to executable, Design §3.1) */
+struct ThemeFontPaths {
+    const char* body_regular;    /* English UI body font (Regular) */
+    const char* body_semibold;   /* English UI emphasis (SemiBold/Bold) */
+    const char* body_bold;       /* English headings (Bold) */
+    const char* cjk_regular;     /* CJK body font */
+    const char* cjk_bold;        /* CJK title font */
+    const char* code_font;       /* Monospace font */
+};
+
+static const ThemeFontPaths FONT_PATHS[] = {
+    /* Theme::Dark — Inter + 思源黑体 SC */
+    { "assets/fonts/Inter-Regular.ttf", "assets/fonts/Inter-SemiBold.ttf",
+      "assets/fonts/Inter-Bold.ttf", "assets/fonts/SourceHanSansSC-Regular.otf",
+      "assets/fonts/SourceHanSansSC-Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
+    /* Theme::Peachy — Nunito + HarmonyOS Sans SC */
+    { "assets/fonts/Nunito-Regular.ttf", "assets/fonts/Nunito-Bold.ttf",
+      "assets/fonts/Nunito-Bold.ttf", "assets/fonts/HarmonyOS_Sans_SC_Regular.otf",
+      "assets/fonts/HarmonyOS_Sans_SC_Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
+    /* Theme::Classic — Inter + 思源黑体 SC (same as Dark) */
+    { "assets/fonts/Inter-Regular.ttf", "assets/fonts/Inter-SemiBold.ttf",
+      "assets/fonts/Inter-Bold.ttf", "assets/fonts/SourceHanSansSC-Regular.otf",
+      "assets/fonts/SourceHanSansSC-Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
+    /* Theme::Mochi — PJS + Lora + 思源宋体 SC */
+    { "assets/fonts/PlusJakartaSans-Regular.ttf", "assets/fonts/PlusJakartaSans-SemiBold.ttf",
+      "assets/fonts/Lora-Bold.ttf", "assets/fonts/HarmonyOS_Sans_SC_Regular.otf",
+      "assets/fonts/SourceHanSerifSC-Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
+    /* Theme::Light — Inter + HarmonyOS Sans SC */
+    { "assets/fonts/Inter-Regular.ttf", "assets/fonts/Inter-SemiBold.ttf",
+      "assets/fonts/Inter-Bold.ttf", "assets/fonts/HarmonyOS_Sans_SC_Regular.otf",
+      "assets/fonts/HarmonyOS_Sans_SC_Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
+};
+
+void init_theme_fonts(Theme theme) {
+    /* Base pixel sizes at 800h (Design §3.2) */
+    static const int SZ_DISPLAY = 28;
+    static const int SZ_H1      = 22;
+    static const int SZ_H2      = 18;
+    static const int SZ_H3      = 15;
+    static const int SZ_BODY    = 13;
+    static const int SZ_SMALL   = 11;
+    static const int SZ_CAPTION = 10;
+    static const int SZ_CODE    = 12;
+
+    int ti = (int)theme;
+    if (ti < 0 || ti > 4) ti = 0;
+    const ThemeFontPaths& paths = FONT_PATHS[ti];
+
+    /* Create embedded fallback for when theme files are not available */
+    lv_font_t* emb_body    = make_embedded_font(SZ_BODY);
+    lv_font_t* emb_small   = make_embedded_font(SZ_SMALL);
+    lv_font_t* emb_caption = make_embedded_font(SZ_CAPTION);
+
+    /* Try loading theme-specific fonts; fall back to embedded CJK */
+    lv_font_t* body_font    = try_load_ttf(paths.body_regular, SZ_BODY, emb_body);
+    lv_font_t* bold_font    = try_load_ttf(paths.body_bold, SZ_H1, emb_body);
+    lv_font_t* semibold_font= try_load_ttf(paths.body_semibold, SZ_H3, emb_body);
+    lv_font_t* cjk_regular  = try_load_ttf(paths.cjk_regular, SZ_BODY, emb_body);
+    lv_font_t* cjk_bold     = try_load_ttf(paths.cjk_bold, SZ_H1, emb_body);
+    lv_font_t* code_font    = try_load_ttf(paths.code_font, SZ_CODE, emb_body);
+
+    /* Build 9-level English/通用 font set */
+    g_theme_fonts.display     = try_load_ttf(paths.body_bold, SZ_DISPLAY, emb_body);
+    g_theme_fonts.h1          = bold_font;
+    g_theme_fonts.h2          = try_load_ttf(paths.body_semibold, SZ_H2, emb_body);
+    g_theme_fonts.h3          = semibold_font;
+    g_theme_fonts.body        = body_font;
+    g_theme_fonts.body_strong = semibold_font;
+    g_theme_fonts.small       = try_load_ttf(paths.body_regular, SZ_SMALL, emb_small);
+    g_theme_fonts.caption     = try_load_ttf(paths.body_regular, SZ_CAPTION, emb_caption);
+    g_theme_fonts.code        = code_font;
+
+    /* CJK fonts */
+    g_theme_fonts.cjk_body    = cjk_regular;
+    g_theme_fonts.cjk_title   = cjk_bold;
+
+    /* Set fallback chain: English font → CJK font
+     * When theme-specific font files are available, this links English→CJK.
+     * When using embedded fallback (same pointer), skip to avoid self-loop. */
+    if (g_theme_fonts.body && g_theme_fonts.cjk_body && g_theme_fonts.body != g_theme_fonts.cjk_body)
+        g_theme_fonts.body->fallback = g_theme_fonts.cjk_body;
+    if (g_theme_fonts.body_strong && g_theme_fonts.cjk_body && g_theme_fonts.body_strong != g_theme_fonts.cjk_body)
+        g_theme_fonts.body_strong->fallback = g_theme_fonts.cjk_body;
+    if (g_theme_fonts.h1 && g_theme_fonts.cjk_title && g_theme_fonts.h1 != g_theme_fonts.cjk_title)
+        g_theme_fonts.h1->fallback = g_theme_fonts.cjk_title;
+    if (g_theme_fonts.h2 && g_theme_fonts.cjk_title && g_theme_fonts.h2 != g_theme_fonts.cjk_title)
+        g_theme_fonts.h2->fallback = g_theme_fonts.cjk_title;
+    if (g_theme_fonts.display && g_theme_fonts.cjk_title && g_theme_fonts.display != g_theme_fonts.cjk_title)
+        g_theme_fonts.display->fallback = g_theme_fonts.cjk_title;
+
+    /* Legacy globals: keep old macros working during transition */
+    g_cjk_font      = g_theme_fonts.body;
+    g_cjk_font_small = g_theme_fonts.small;
+    g_cjk_font_chat  = g_theme_fonts.body;
+
+    LOG_I("Font", "Theme fonts initialized for theme %d", ti);
+}
+
+#define CJK_FONT (g_theme_fonts.body ? g_theme_fonts.body : g_cjk_font)
+#define CJK_FONT_SMALL (g_theme_fonts.small ? g_theme_fonts.small : g_cjk_font_small)
+#define CJK_FONT_CHAT (g_theme_fonts.body ? g_theme_fonts.body : (g_cjk_font_chat ? g_cjk_font_chat : g_cjk_font))
 
 /* ═══ Unified font size macros ═══ */
 /* All UI text uses these macros. Change once, apply everywhere. */
@@ -1272,6 +1412,7 @@ static void theme_dropdown_cb(lv_event_t* e) {
         case Theme::Light:   g_colors = &THEME_LIGHT; break;
     }
     save_theme_config();
+    init_theme_fonts(g_theme); /* Reload per-theme fonts */
     apply_theme_to_all();
     static const char* names[] = {"Matcha_v1", "Peachy_v2", "Classic", "Mochi", "Light"};
     const char* theme_name = (sel < 5) ? names[sel] : "?";
@@ -11248,6 +11389,7 @@ void app_ui_init() {
 
     /* Load saved config first (sets g_theme, g_lang, g_colors) */
     load_theme_config();
+    init_theme_fonts(g_theme); /* Initialize per-theme font pointers */
     anim_init();  /* Initialize animation config for loaded theme */
     sound_init(); /* Initialize sound system */
     g_lang = Lang::EN;  /* Force English as default */
