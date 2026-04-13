@@ -74,9 +74,11 @@ struct ThemeColors {
     uint8_t    toast_opacity;       /* Toast background opacity */
     uint8_t    loading_opacity;     /* Loading overlay opacity */
 
-    /* ── 12. Structural (2) ── */
+    /* ── 12. Structural + Gradient (4) ── */
     uint8_t    btn_grad_enable;     /* 1=gradient buttons, 0=solid */
     uint8_t    icon_stroke_width;   /* Icon stroke: 2=normal, 1=thin */
+    lv_color_t btn_grad_start;     /* Button gradient start color */
+    lv_color_t btn_grad_end;       /* Button gradient end color */
 
     /* ── 13. Radius (5, base px, apply SCALE() at use site) ── */
     uint8_t    radius_sm;           /* Small: badges, tags */

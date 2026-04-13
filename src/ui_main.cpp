@@ -286,6 +286,18 @@ void init_theme_fonts(Theme theme) {
     LOG_I("Font", "Theme fonts initialized for theme %d", ti);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+ *  apply_btn_gradient — apply theme gradient to a button (G2/G3)
+ *  If btn_grad_enable=1, sets horizontal gradient from start→end.
+ *  If btn_grad_enable=0, does nothing (solid color via bg_color).
+ * ═══════════════════════════════════════════════════════════════ */
+static void apply_btn_gradient(lv_obj_t* btn) {
+    if (!btn || !g_colors || !g_colors->btn_grad_enable) return;
+    lv_obj_set_style_bg_grad_color(btn, g_colors->btn_grad_end, 0);
+    lv_obj_set_style_bg_grad_dir(btn, LV_GRAD_DIR_HOR, 0);
+    lv_obj_set_style_bg_grad_stop(btn, 255, 0);
+}
+
 #define CJK_FONT (g_theme_fonts.body ? g_theme_fonts.body : g_cjk_font)
 #define CJK_FONT_SMALL (g_theme_fonts.small ? g_theme_fonts.small : g_cjk_font_small)
 #define CJK_FONT_CHAT (g_theme_fonts.body ? g_theme_fonts.body : (g_cjk_font_chat ? g_cjk_font_chat : g_cjk_font))
@@ -453,6 +465,8 @@ static const ThemeColors THEME_DARK = {
     /* ── Structural ── */
     /* btn_grad_enable */     1,
     /* icon_stroke_width */   2,
+    /* btn_grad_start */      {0x3D, 0xD6, 0x8C},  /* #3DD68C accent */
+    /* btn_grad_end */        {0x2B, 0xB6, 0x73},  /* #2BB673 accent_hover */
     /* ── Radius ── */
     /* radius_sm */           4,
     /* radius_md */           8,
@@ -521,6 +535,8 @@ static const ThemeColors THEME_PEACHY = {
     /* ── Structural ── */
     /* btn_grad_enable */     1,
     /* icon_stroke_width */   2,
+    /* btn_grad_start */      {0xFF, 0x7F, 0x50},  /* #FF7F50 accent */
+    /* btn_grad_end */        {0xFF, 0xB3, 0x47},  /* #FFB347 warm orange */
     /* ── Radius ── */
     /* radius_sm */           6,
     /* radius_md */           12,
@@ -589,6 +605,8 @@ static const ThemeColors THEME_CLASSIC = {
     /* ── Structural ── */
     /* btn_grad_enable */     0,
     /* icon_stroke_width */   2,
+    /* btn_grad_start */      {0x00, 0x78, 0xD4},  /* #0078D4 accent (solid mode) */
+    /* btn_grad_end */        {0x1A, 0x8A, 0xD8},  /* #1A8AD8 accent_hover */
     /* ── Radius ── */
     /* radius_sm */           4,
     /* radius_md */           8,
@@ -657,6 +675,8 @@ static const ThemeColors THEME_MOCHI = {
     /* ── Structural ── */
     /* btn_grad_enable */     0,
     /* icon_stroke_width */   1,
+    /* btn_grad_start */      {0xA6, 0x7B, 0x5B},  /* #A67B5B accent (solid mode) */
+    /* btn_grad_end */        {0x8F, 0x6A, 0x4D},  /* #8F6A4D accent_hover */
     /* ── Radius ── */
     /* radius_sm */           4,
     /* radius_md */           8,
@@ -725,6 +745,8 @@ static const ThemeColors THEME_LIGHT = {
     /* ── Structural ── */
     /* btn_grad_enable */     0,
     /* icon_stroke_width */   2,
+    /* btn_grad_start */      {0x2E, 0xCC, 0x71},  /* #2ECC71 accent (solid mode) */
+    /* btn_grad_end */        {0x22, 0x99, 0x60},  /* #229960 accent_hover */
     /* ── Radius ── */
     /* radius_sm */           4,
     /* radius_md */           8,
@@ -4573,6 +4595,7 @@ static void apply_mode_switch_visuals() {
         if (!btn) return;
         const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
         lv_obj_set_style_bg_color(btn, selected ? c->btn_action : c->btn_secondary, 0);
+        if (selected) apply_btn_gradient(btn);
         lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
     };
     paint_btn(mode_btn_chat, g_ui_mode == UI_MODE_CHAT);
@@ -7363,6 +7386,7 @@ static void update_send_button_state() {
         lv_obj_add_state(btn_send_widget, LV_STATE_DISABLED);
     } else {
         lv_obj_set_style_bg_color(btn_send_widget, c->btn_action, 0);
+        apply_btn_gradient(btn_send_widget);
         lv_obj_set_style_opa(btn_send_widget, LV_OPA_COVER, 0);
         lv_obj_clear_state(btn_send_widget, LV_STATE_DISABLED);
     }
@@ -7991,6 +8015,7 @@ static void add_dialog_buttons(lv_obj_t* box, lv_event_cb_t ok_cb, lv_event_cb_t
     lv_obj_t* btn_ok = lv_button_create(btn_row);
     lv_obj_set_size(btn_ok, SCALE(80), SCALE(36));
     lv_obj_set_style_bg_color(btn_ok, c->btn_action, 0);
+    apply_btn_gradient(btn_ok);
     lv_obj_set_style_radius(btn_ok, SCALE(g_colors->radius_sm), 0);
     lv_obj_t* lbl_o = lv_label_create(btn_ok);
     lv_label_set_text(lbl_o, "OK");
@@ -8095,6 +8120,7 @@ int ui_permission_confirm(const char* perm_key, const char* target) {
         lv_obj_set_height(b, SCALE(38));
         lv_obj_set_flex_grow(b, 1);
         lv_obj_set_style_bg_color(b, bg, 0);
+        if (bg.full == c->btn_action.full) apply_btn_gradient(b);
         lv_obj_set_style_radius(b, SCALE(g_colors->radius_md), 0);
         lv_obj_set_style_border_width(b, 0, 0);
         lv_obj_t* t = lv_label_create(b);
@@ -8727,6 +8753,7 @@ void apply_theme_to_all() {
             lv_obj_set_style_bg_color(btn_send_widget, c->btn_secondary, 0);
         } else {
             lv_obj_set_style_bg_color(btn_send_widget, c->btn_action, 0);
+            apply_btn_gradient(btn_send_widget);
         }
     }
 
@@ -12633,6 +12660,7 @@ void app_ui_init() {
         lv_obj_set_pos(btn_send_widget, btn_x, btn_y);
         lv_obj_set_style_radius(btn_send_widget, btn_size / 2, 0);
         lv_obj_set_style_bg_color(btn_send_widget, c->btn_action, 0);
+        apply_btn_gradient(btn_send_widget);
         lv_obj_set_style_bg_opa(btn_send_widget, LV_OPA_COVER, 0);
         lv_obj_set_style_border_width(btn_send_widget, 0, 0);
         lv_obj_clear_flag(btn_send_widget, LV_OBJ_FLAG_SCROLLABLE);
