@@ -82,4 +82,27 @@ void anim_crossfade(lv_obj_t* from, lv_obj_t* to, uint16_t duration);
 /* Theme switch: global color transition (300ms) */
 void anim_theme_transition();
 
+/* ── Theme-specific effects (Design §8.5) ── */
+
+/* Mint breathing glow: accent box-shadow pulsing, 3s cycle (Matcha)
+   Creates a subtle glow animation on a container's shadow.
+   Pass NULL to stop. */
+void anim_mint_glow(lv_obj_t* obj);
+
+/* Particle burst: N small dots scatter from center + fade out (Matcha: green, Peachy: warm)
+   parent: container for particles
+   cx, cy: center point (relative to parent)
+   color: particle color
+   count: number of particles (6-12 recommended) */
+void anim_particles_burst(lv_obj_t* parent, int cx, int cy, lv_color_t color, int count);
+
+/* Code block highlight: monospace bg color fade-in (all themes)
+   code_obj: the code block container
+   accent: highlight bg color */
+void anim_code_highlight(lv_obj_t* code_obj, lv_color_t accent);
+
+/* ── Reduced motion (§8.6) ── */
+void anim_set_reduced_motion(bool enabled);
+bool anim_is_reduced_motion();
+
 #endif /* ANYCLAW_ANIM_H */
