@@ -499,6 +499,68 @@ static const ThemeColors THEME_MOCHI = {
     /* icon_stroke_width */   1,
 };
 
+static const ThemeColors THEME_LIGHT = {
+    /* ══ ☀️ 亮色 Light ══ */
+    /* ── Backgrounds ── */
+    /* bg */                  {0xF5, 0xF7, 0xFA},
+    /* surface */             {0xEB, 0xEE, 0xF2},
+    /* panel */               {0xFF, 0xFF, 0xFF},
+    /* raised */              {0xFF, 0xFF, 0xFF},
+    /* overlay */             {0xE2, 0xE5, 0xEA},
+    /* ── Text ── */
+    /* text */                {0x1A, 0x1D, 0x27},
+    /* text_dim */            {0x6B, 0x72, 0x80},
+    /* text_hint */           {0x9C, 0xA3, 0xAF},
+    /* text_inverse */        {0xFF, 0xFF, 0xFF},
+    /* ── Accent ── */
+    /* accent */              {0x2B, 0xB6, 0x73},
+    /* accent_hover */        {0x22, 0x99, 0x60},
+    /* accent_active */       {0x1A, 0x7D, 0x4D},
+    /* accent_subtle */       {0x2B, 0xB6, 0x73},   /* +12 opacity at use site */
+    /* accent_secondary */    {0x3B, 0x82, 0xF6},
+    /* ── Accent tertiary ── */
+    /* accent_tertiary */     {0xEC, 0x48, 0x99},   /* pink accent */
+    /* ── Semantic ── */
+    /* success */             {0x16, 0xA3, 0x4A},
+    /* warning */             {0xD9, 0x77, 0x06},
+    /* danger */              {0xDC, 0x26, 0x26},
+    /* info */                {0x3B, 0x82, 0xF6},
+    /* ── Functional ── */
+    /* border */              {0xE2, 0xE5, 0xEA},
+    /* border_strong */       {0xD1, 0xD5, 0xDB},
+    /* divider */             {0xF1, 0xF3, 0xF5},
+    /* focus_glow */          {0x2B, 0xB6, 0x73},   /* +30 opacity at use site */
+    /* hover_overlay */       {0x00, 0x00, 0x00},   /* +08 opacity at use site */
+    /* active_overlay */      {0x00, 0x00, 0x00},   /* +12 opacity at use site */
+    /* disabled_bg */         {0xEB, 0xEE, 0xF2},   /* +80 opacity at use site */
+    /* disabled_text */       {0x9C, 0xA3, 0xAF},   /* +80 opacity at use site */
+    /* ── Bubble ── */
+    /* bubble_user_bg */      {0xDC, 0xFC, 0xE7},
+    /* bubble_user_bg_end */  {0xBB, 0xF7, 0xD0},
+    /* bubble_ai_bg */        {0xF1, 0xF5, 0xF9},
+    /* bubble_ai_accent_bar */{0x2B, 0xB6, 0x73},
+    /* ── Buttons ── */
+    /* btn_action */          {0x2B, 0xB6, 0x73},
+    /* btn_secondary */       {0xF1, 0xF3, 0xF5},
+    /* btn_close */           {0xDC, 0x26, 0x26},
+    /* btn_add */             {0x22, 0x99, 0x60},
+    /* ── Log ── */
+    /* log_bg */              {0x1A, 0x1D, 0x27},
+    /* log_text */            {0x4A, 0xDE, 0x80},
+    /* ── Shadow colors ── */
+    /* shadow_sm */           {0x00, 0x00, 0x00},
+    /* shadow_md */           {0x00, 0x00, 0x00},
+    /* shadow_lg */           {0x00, 0x00, 0x00},
+    /* shadow_glow */         {0x2B, 0xB6, 0x73},
+    /* ── Opacity ── */
+    /* mask_opacity */        51,   /* 20% */
+    /* toast_opacity */       240,
+    /* loading_opacity */     217,  /* 85% */
+    /* ── Structural ── */
+    /* btn_grad_enable */     0,
+    /* icon_stroke_width */   2,
+};
+
 const ThemeColors* g_colors = &THEME_DARK;
 
 /* ═══ Exit confirmation state ═══ */
@@ -1037,13 +1099,14 @@ void load_theme_config() {
 
     /* FIX 1: Use robust JSON extraction instead of hand-written lambda */
     int theme = json_extract_int(content.c_str(), "theme", -1);
-    if (theme >= 0 && theme <= 3) {
+    if (theme >= 0 && theme <= 4) {
         g_theme = (Theme)theme;
         switch (g_theme) {
             case Theme::Dark:    g_colors = &THEME_DARK; break;
             case Theme::Peachy:   g_colors = &THEME_PEACHY; break;
             case Theme::Classic: g_colors = &THEME_CLASSIC; break;
             case Theme::Mochi:   g_colors = &THEME_MOCHI; break;
+            case Theme::Light:   g_colors = &THEME_LIGHT; break;
         }
     }
     int lang = json_extract_int(content.c_str(), "language", -1);
@@ -1174,10 +1237,12 @@ static void theme_dropdown_cb(lv_event_t* e) {
         case Theme::Peachy:   g_colors = &THEME_PEACHY; break;
         case Theme::Classic: g_colors = &THEME_CLASSIC; break;
         case Theme::Mochi:   g_colors = &THEME_MOCHI; break;
+        case Theme::Light:   g_colors = &THEME_LIGHT; break;
     }
     save_theme_config();
     apply_theme_to_all();
-    const char* theme_name = sel == 0 ? "Matcha_v1" : (sel == 1 ? "Peachy_v2" : (sel == 2 ? "Classic" : "Mochi"));
+    static const char* names[] = {"Matcha_v1", "Peachy_v2", "Classic", "Mochi", "Light"};
+    const char* theme_name = (sel < 5) ? names[sel] : "?";
     ui_log("[Theme] Switched to %s", theme_name);
     ui_toast_success(g_lang == Lang::CN ? "主题已切换" : "Theme switched");
 }
@@ -1186,7 +1251,7 @@ static void theme_dropdown_cb(lv_event_t* e) {
 lv_obj_t* ui_settings_add_theme_dropdown(lv_obj_t* tab) {
     const ThemeColors* c = g_colors;
     lv_obj_t* dd = lv_dropdown_create(tab);
-    lv_dropdown_set_options(dd, "Matcha_v1\nPeachy_v2\nClassic\nMochi");
+    lv_dropdown_set_options(dd, "Matcha_v1\nPeachy_v2\nClassic\nMochi\nLight");
     lv_dropdown_set_selected(dd, (uint16_t)g_theme);
     lv_obj_set_width(dd, SCALE(160));
     lv_obj_set_style_bg_color(dd, c->surface, 0);
