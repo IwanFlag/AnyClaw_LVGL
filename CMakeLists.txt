@@ -110,6 +110,7 @@ set(APP_SOURCES
     src/json_util.cpp
     src/utf8_util.cpp
     src/garlic_dock.cpp
+    src/anim.cpp
     src/session_manager.cpp
     src/workspace.cpp
     src/permissions.cpp
