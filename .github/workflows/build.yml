@@ -1,0 +1,86 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v2.2.1)'
+        required: false
+        default: ''
+
+env:
+  DEFAULT_VERSION: v2.2.1
+
+jobs:
+  build-windows:
+    name: Cross-compile → Windows (MinGW)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mingw-w64 cmake zip
+
+      - name: Determine version
+        id: version
+        run: |
+          VER="${{ github.event.inputs.version }}"
+          [ -z "$VER" ] && VER="${{ env.DEFAULT_VERSION }}"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "timestamp=$(date +%Y%m%d_%H%M)" >> "$GITHUB_OUTPUT"
+
+      - name: Build + Package
+        run: bash build/linux/build.sh ${{ steps.version.outputs.version }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnyClaw_LVGL_${{ steps.version.outputs.version }}
+          path: build/linux/artifacts/*.zip
+          retention-days: 30
+
+  build-linux:
+    name: Native Linux build (smoke test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake libsdl2-dev
+
+      - name: Build
+        run: bash build/linux/build-linux.sh
+
+  release:
+    name: Create GitHub Release
+    needs: build-windows
+    if: github.event.inputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: AnyClaw_LVGL_${{ github.event.inputs.version }}
+          path: artifacts/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.version }}
+          name: AnyClaw LVGL ${{ github.event.inputs.version }}
+          files: artifacts/*.zip
+          generate_release_notes: true

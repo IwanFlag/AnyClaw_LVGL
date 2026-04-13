@@ -8,6 +8,7 @@
 #include "paths.h"
 #include "model_manager.h"
 #include "tray.h"
+#include "async_task.h"
 #include "health.h"
 #include "garlic_dock.h"
 #include "license.h"
@@ -41,6 +42,7 @@ static lv_obj_t* g_last_clicked_ta = nullptr;
 #include <commctrl.h>
 #include <dwmapi.h>
 #include <dbghelp.h>
+#include "async_task.h"
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "comctl32.lib")
 /* dbghelp linked via CMake (MinGW doesn't support #pragma comment) */
@@ -473,8 +475,6 @@ int main(int argc, char* argv[]) {
     }
     app_set_dpi_scale(detected_dpi);
 
-    /* Force software rendering for screenshot compatibility - must be before SDL_Init */
-    SDL_SetHint(SDL_HINT_RENDER_DRIVER, "software");
     /* Enable IME (Input Method Editor) for Chinese/Japanese input */
     SDL_SetHint(SDL_HINT_IME_SHOW_UI, "1");
     SDL_SetHint(SDL_HINT_IME_SUPPORT_EXTENDED_TEXT, "1");
@@ -591,6 +591,9 @@ int main(int argc, char* argv[]) {
     lv_group_t* grp = lv_group_create();
     lv_group_set_default(grp);
     lv_indev_set_group(keyboard, grp);
+
+    /* Initialize async task queue (2 worker threads for HTTP/Exec) */
+    async_init(2);
 
     /* Enable SDL text input for text areas */
     SDL_StartTextInput();
@@ -1055,6 +1058,7 @@ int main(int argc, char* argv[]) {
     garlic_dock_cleanup();
     failover_stop_health_thread();
     health_stop();
+    async_shutdown();
     tray_cleanup();
     lv_sdl_quit();
 

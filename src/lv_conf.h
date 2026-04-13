@@ -131,9 +131,9 @@ extern const lv_font_t lv_font_source_han_sans_sc_14_cjk;
 #define LV_TINY_TTF_CACHE_GLYPH_CNT 512
 
 /*=================
-   FREETYPE (emoji/color font rendering)
+   FREETYPE (vector font rendering — high-DPI clarity)
  *=================*/
-#define LV_USE_FREETYPE         0
+#define LV_USE_FREETYPE         1
 #if LV_USE_FREETYPE
     /* FreeType requires 32KB+ draw thread stack */
     #define LV_DRAW_THREAD_STACK_SIZE (32 * 1024)
@@ -153,7 +153,7 @@ extern const lv_font_t lv_font_source_han_sans_sc_14_cjk;
 #define LV_SDL_FULLSCREEN        0
 #define LV_SDL_DIRECT_EXIT       1
 #define LV_SDL_ACCELERATED       1
-#define LV_SDL_USE_EGL           0
+#define LV_SDL_USE_EGL           1
 #define LV_SDL_MOUSEWHEEL_MODE_ENCODER  0
 #define LV_SDL_MOUSEWHEEL_MODE_CROWN    1
 #define LV_SDL_MOUSEWHEEL_MODE          LV_SDL_MOUSEWHEEL_MODE_CROWN

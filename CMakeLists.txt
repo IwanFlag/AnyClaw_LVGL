@@ -78,6 +78,31 @@ if(SDL2_LIB_DIR STREQUAL "")
 endif()
 
 # ═══════════════════════════════════════════════════════════════
+# FreeType (vector font rendering)
+# ═══════════════════════════════════════════════════════════════
+set(FREETYPE_CROSS_PREFIX "${CMAKE_SOURCE_DIR}/thirdparty/freetype-mingw" CACHE PATH "FreeType MinGW cross-compile install prefix")
+
+set(FREETYPE_INCLUDE_DIRS "")
+set(FREETYPE_LIB_DIR "")
+
+if(NOT MSVC)
+    if(EXISTS "${FREETYPE_CROSS_PREFIX}/include/freetype2/freetype/freetype.h")
+        list(APPEND FREETYPE_INCLUDE_DIRS "${FREETYPE_CROSS_PREFIX}/include/freetype2")
+    elseif(EXISTS "${FREETYPE_CROSS_PREFIX}/include/freetype/freetype.h")
+        list(APPEND FREETYPE_INCLUDE_DIRS "${FREETYPE_CROSS_PREFIX}/include/freetype")
+    endif()
+
+    if(EXISTS "${FREETYPE_CROSS_PREFIX}/lib/libfreetype.a")
+        set(FREETYPE_LIB_DIR "${FREETYPE_CROSS_PREFIX}/lib")
+    endif()
+endif()
+
+if(FREETYPE_INCLUDE_DIRS STREQUAL "")
+    message(STATUS "FreeType headers not found — LV_USE_FREETYPE will compile but link may fail")
+    message(STATUS "  Run: bash scripts/build-freetype-mingw.sh to cross-compile FreeType")
+endif()
+
+# ═══════════════════════════════════════════════════════════════
 # LVGL sources (GLOB_RECURSE)
 # ═══════════════════════════════════════════════════════════════
 file(GLOB_RECURSE LVGL_SOURCES
@@ -125,6 +150,7 @@ set(APP_SOURCES
     src/remote_tcp_channel.cpp
     src/kb_store.cpp
     src/output_renderer.cpp
+    src/async_task.cpp
 )
 
 set(APP_FONT_SOURCES
@@ -134,6 +160,21 @@ set(APP_FONT_SOURCES
 set(APP_RESOURCES
     src/AnyClaw_LVGL.rc
 )
+
+# ═══════════════════════════════════════════════════════════════
+# FreeType (vector font rendering)
+# ═══════════════════════════════════════════════════════════════
+set(FREETYPE_PREFIX "${CMAKE_SOURCE_DIR}/thirdparty/freetype-mingw")
+
+if(EXISTS "${FREETYPE_PREFIX}/lib/libfreetype.a")
+    set(FREETYPE_INCLUDE_DIRS "${FREETYPE_PREFIX}/include")
+    set(FREETYPE_LIB_DIR "${FREETYPE_PREFIX}/lib")
+    set(USE_FREETYPE 1)
+    message(STATUS "FreeType: found at ${FREETYPE_PREFIX}")
+else()
+    set(USE_FREETYPE 0)
+    message(WARNING "FreeType not found at ${FREETYPE_PREFIX}. Build without FreeType. Run scripts/build-freetype-mingw.sh first.")
+endif()
 
 # ═══════════════════════════════════════════════════════════════
 # Executable
@@ -153,6 +194,7 @@ target_include_directories(AnyClaw_LVGL PRIVATE
     ${CMAKE_SOURCE_DIR}/thirdparty/lvgl
     ${CMAKE_SOURCE_DIR}/thirdparty/lvgl/src
     ${SDL2_INCLUDE_DIRS}
+    ${FREETYPE_INCLUDE_DIRS}
 )
 
 # ═══════════════════════════════════════════════════════════════
@@ -160,6 +202,7 @@ target_include_directories(AnyClaw_LVGL PRIVATE
 # ═══════════════════════════════════════════════════════════════
 target_link_directories(AnyClaw_LVGL PRIVATE
     ${SDL2_LIB_DIR}
+    ${FREETYPE_LIB_DIR}
 )
 
 # ═══════════════════════════════════════════════════════════════
@@ -180,6 +223,7 @@ else()
         advapi32 setupapi shell32 dinput8
         dwmapi comctl32 dbghelp ws2_32 comdlg32
         gdiplus winhttp wininet bcrypt iphlpapi
+        ${USE_FREETYPE:+freetype}
         -static-libgcc -static-libstdc++
     )
 endif()
@@ -192,6 +236,7 @@ target_compile_definitions(AnyClaw_LVGL PRIVATE
     LV_LVGL_H_INCLUDE_SIMPLE
     _WIN32_WINNT=0x0A00
     NOMINMAX
+    $<$<BOOL:${USE_FREETYPE}>:LV_USE_FREETYPE=1>
 )
 
 # ═══════════════════════════════════════════════════════════════
