@@ -313,7 +313,7 @@ static const ThemeColors THEME_DARK = {
     /* icon_stroke_width */   2,
 };
 
-static const ThemeColors THEME_LIGHT = {
+static const ThemeColors THEME_PEACHY = {
     /* ══ 🍑 Peachy v2 ══ */
     /* ── Backgrounds ── */
     /* bg */                  {0xFF, 0xF8, 0xF3},
@@ -979,7 +979,7 @@ void load_theme_config() {
         g_theme = (Theme)theme;
         switch (g_theme) {
             case Theme::Dark:    g_colors = &THEME_DARK; break;
-            case Theme::Light:   g_colors = &THEME_LIGHT; break;
+            case Theme::Peachy:   g_colors = &THEME_PEACHY; break;
             case Theme::Classic: g_colors = &THEME_CLASSIC; break;
         }
     }
@@ -1108,7 +1108,7 @@ static void theme_dropdown_cb(lv_event_t* e) {
     g_theme = (Theme)sel;
     switch (g_theme) {
         case Theme::Dark:    g_colors = &THEME_DARK; break;
-        case Theme::Light:   g_colors = &THEME_LIGHT; break;
+        case Theme::Peachy:   g_colors = &THEME_PEACHY; break;
         case Theme::Classic: g_colors = &THEME_CLASSIC; break;
     }
     save_theme_config();

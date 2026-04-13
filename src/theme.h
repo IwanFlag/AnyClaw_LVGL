@@ -79,7 +79,7 @@ struct ThemeColors {
     uint8_t    icon_stroke_width;   /* Icon stroke: 2=normal, 1=thin */
 };
 
-enum class Theme { Dark, Light, Classic };
+enum class Theme { Dark, Peachy, Classic };
 
 extern const ThemeColors* g_colors;
 extern Theme g_theme;
