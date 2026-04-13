@@ -339,13 +339,9 @@ static Lang detect_system_lang() {
     wchar_t buf[LOCALE_NAME_MAX_LENGTH] = {};
     if (GetSystemDefaultLocaleName(buf, LOCALE_NAME_MAX_LENGTH)) {
         if (wcsncmp(buf, L"zh", 2) == 0) return Lang::CN;
-        if (wcsncmp(buf, L"ko", 2) == 0) return Lang::KR;
-        if (wcsncmp(buf, L"ja", 2) == 0) return Lang::JP;
     }
     LANGID lid = GetSystemDefaultUILanguage();
     if (PRIMARYLANGID(lid) == LANG_CHINESE) return Lang::CN;
-    if (PRIMARYLANGID(lid) == LANG_KOREAN) return Lang::KR;
-    if (PRIMARYLANGID(lid) == LANG_JAPANESE) return Lang::JP;
     return Lang::EN;
 }
 Lang g_lang = detect_system_lang();
@@ -8996,8 +8992,6 @@ static bool* g_wiz_im_active_connected = nullptr;
 /* Widget refs per step */
 static lv_obj_t* g_wiz_btn_cn = nullptr;
 static lv_obj_t* g_wiz_btn_en = nullptr;
-static lv_obj_t* g_wiz_btn_kr = nullptr;
-static lv_obj_t* g_wiz_btn_jp = nullptr;
 static lv_obj_t* g_wiz_detect_lbl = nullptr;
 static lv_obj_t* g_wiz_api_ta = nullptr;
 static lv_obj_t* g_wiz_model_dd = nullptr;
@@ -9223,8 +9217,6 @@ static void wiz_lang_cn_cb(lv_event_t* e) {
     g_lang = Lang::CN;
     if (g_wiz_btn_cn) lv_obj_set_style_bg_color(g_wiz_btn_cn, lv_color_make(59, 130, 246), 0);
     if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, lv_color_make(50, 55, 75), 0);
-    if (g_wiz_btn_kr) lv_obj_set_style_bg_color(g_wiz_btn_kr, lv_color_make(50, 55, 75), 0);
-    if (g_wiz_btn_jp) lv_obj_set_style_bg_color(g_wiz_btn_jp, lv_color_make(50, 55, 75), 0);
 }
 static void wiz_lang_en_cb(lv_event_t* e) {
     (void)e;
@@ -9232,26 +9224,6 @@ static void wiz_lang_en_cb(lv_event_t* e) {
     g_lang = Lang::EN;
     if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, lv_color_make(59, 130, 246), 0);
     if (g_wiz_btn_cn) lv_obj_set_style_bg_color(g_wiz_btn_cn, lv_color_make(50, 55, 75), 0);
-    if (g_wiz_btn_kr) lv_obj_set_style_bg_color(g_wiz_btn_kr, lv_color_make(50, 55, 75), 0);
-    if (g_wiz_btn_jp) lv_obj_set_style_bg_color(g_wiz_btn_jp, lv_color_make(50, 55, 75), 0);
-}
-static void wiz_lang_kr_cb(lv_event_t* e) {
-    (void)e;
-    g_wizard_lang_sel = 2;
-    g_lang = Lang::KR;
-    if (g_wiz_btn_kr) lv_obj_set_style_bg_color(g_wiz_btn_kr, lv_color_make(59, 130, 246), 0);
-    if (g_wiz_btn_cn) lv_obj_set_style_bg_color(g_wiz_btn_cn, lv_color_make(50, 55, 75), 0);
-    if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, lv_color_make(50, 55, 75), 0);
-    if (g_wiz_btn_jp) lv_obj_set_style_bg_color(g_wiz_btn_jp, lv_color_make(50, 55, 75), 0);
-}
-static void wiz_lang_jp_cb(lv_event_t* e) {
-    (void)e;
-    g_wizard_lang_sel = 3;
-    g_lang = Lang::JP;
-    if (g_wiz_btn_jp) lv_obj_set_style_bg_color(g_wiz_btn_jp, lv_color_make(59, 130, 246), 0);
-    if (g_wiz_btn_cn) lv_obj_set_style_bg_color(g_wiz_btn_cn, lv_color_make(50, 55, 75), 0);
-    if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, lv_color_make(50, 55, 75), 0);
-    if (g_wiz_btn_kr) lv_obj_set_style_bg_color(g_wiz_btn_kr, lv_color_make(50, 55, 75), 0);
 }
 
 static void wizard_build_step_lang() {
@@ -9290,26 +9262,6 @@ static void wizard_build_step_lang() {
     lv_label_set_text(lbl_en, "English");
     lv_obj_set_style_text_font(lbl_en, CJK_FONT, 0);
     lv_obj_center(lbl_en);
-
-    g_wiz_btn_kr = lv_button_create(row);
-    lv_obj_set_size(g_wiz_btn_kr, SCALE(140), SCALE(44));
-    lv_obj_set_style_bg_color(g_wiz_btn_kr, (g_wizard_lang_sel == 2) ? lv_color_make(59, 130, 246) : lv_color_make(50, 55, 75), 0);
-    lv_obj_set_style_radius(g_wiz_btn_kr, 8, 0);
-    lv_obj_add_event_cb(g_wiz_btn_kr, wiz_lang_kr_cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* lbl_kr = lv_label_create(g_wiz_btn_kr);
-    lv_label_set_text(lbl_kr, "한국어");
-    lv_obj_set_style_text_font(lbl_kr, CJK_FONT, 0);
-    lv_obj_center(lbl_kr);
-
-    g_wiz_btn_jp = lv_button_create(row);
-    lv_obj_set_size(g_wiz_btn_jp, SCALE(140), SCALE(44));
-    lv_obj_set_style_bg_color(g_wiz_btn_jp, (g_wizard_lang_sel == 3) ? lv_color_make(59, 130, 246) : lv_color_make(50, 55, 75), 0);
-    lv_obj_set_style_radius(g_wiz_btn_jp, 8, 0);
-    lv_obj_add_event_cb(g_wiz_btn_jp, wiz_lang_jp_cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* lbl_jp = lv_label_create(g_wiz_btn_jp);
-    lv_label_set_text(lbl_jp, "日本語");
-    lv_obj_set_style_text_font(lbl_jp, CJK_FONT, 0);
-    lv_obj_center(lbl_jp);
 }
 
 /* ── Step 1: OpenClaw Detection ── */

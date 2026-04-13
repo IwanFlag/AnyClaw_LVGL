@@ -6,7 +6,7 @@
 #define LANG_H
 
 /* Language mode */
-enum class Lang { CN, EN, KR, JP };
+enum class Lang { CN, EN };
 
 /* Global language variable */
 extern Lang g_lang;

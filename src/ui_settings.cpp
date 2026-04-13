@@ -116,8 +116,6 @@ static int lang_to_dropdown_index(Lang lang) {
     switch (lang) {
         case Lang::CN: return 0;
         case Lang::EN: return 1;
-        case Lang::KR: return 2;
-        case Lang::JP: return 3;
     }
     return 1;
 }
@@ -126,8 +124,6 @@ static Lang dropdown_index_to_lang(int idx) {
     switch (idx) {
         case 0: return Lang::CN;
         case 1: return Lang::EN;
-        case 2: return Lang::KR;
-        case 3: return Lang::JP;
         default: return Lang::EN;
     }
 }
@@ -148,8 +144,6 @@ static const char* tr(const char* cn, const char* en) {
     switch (g_lang) {
         case Lang::CN:  return cn;
         case Lang::EN:  return en;
-        case Lang::KR:  return en;
-        case Lang::JP:  return en;
     }
     return en;
 }
@@ -838,7 +832,7 @@ static void build_general_tab(lv_obj_t* tab) {
 
     /* ── Language ── */
     gen_lang_dropdown = lv_dropdown_create(tab);
-    lv_dropdown_set_options(gen_lang_dropdown, "中文\nEnglish\n한국어\n日本語");
+    lv_dropdown_set_options(gen_lang_dropdown, "中文\nEnglish");
     lv_dropdown_set_selected(gen_lang_dropdown, (uint16_t)lang_to_dropdown_index(g_lang));
     lv_obj_set_width(gen_lang_dropdown, SCALE(160));
     apply_input_style(gen_lang_dropdown);
