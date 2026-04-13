@@ -376,58 +376,58 @@ static const ThemeColors THEME_PEACHY = {
 };
 
 static const ThemeColors THEME_CLASSIC = {
-    /* ══ 🌑 Classic Dark ══ */
+    /* ══ 🌑 经典暗色 VS Code 风 ══ */
     /* ── Backgrounds ── */
-    /* bg */                  {0x2D, 0x2D, 0x2D},
-    /* surface */             {0x33, 0x33, 0x33},
-    /* panel */               {0x3C, 0x3C, 0x3C},
-    /* raised */              {0x44, 0x44, 0x44},
-    /* overlay */             {0x50, 0x50, 0x50},
+    /* bg */                  {0x1E, 0x1E, 0x1E},
+    /* surface */             {0x25, 0x25, 0x26},
+    /* panel */               {0x2D, 0x2D, 0x30},
+    /* raised */              {0x38, 0x38, 0x38},
+    /* overlay */             {0x40, 0x40, 0x40},
     /* ── Text ── */
-    /* text */                {0xFF, 0xFF, 0xFF},
-    /* text_dim */            {0xAA, 0xAA, 0xAA},
-    /* text_hint */           {0x77, 0x77, 0x77},
-    /* text_inverse */        {0x2D, 0x2D, 0x2D},
+    /* text */                {0xCC, 0xCC, 0xCC},
+    /* text_dim */            {0x80, 0x80, 0x80},
+    /* text_hint */           {0x55, 0x55, 0x55},
+    /* text_inverse */        {0x1E, 0x1E, 0x1E},
     /* ── Accent ── */
-    /* accent */              {0x64, 0xA0, 0xFF},
-    /* accent_hover */        {0x50, 0x8A, 0xE8},
-    /* accent_active */       {0x40, 0x78, 0xD0},
-    /* accent_subtle */       {0x64, 0xA0, 0xFF},   /* +1A opacity at use site */
-    /* accent_secondary */    {0x82, 0xAA, 0xF0},
+    /* accent */              {0x00, 0x7A, 0xCC},
+    /* accent_hover */        {0x1A, 0x8A, 0xD8},
+    /* accent_active */       {0x00, 0x60, 0xA8},
+    /* accent_subtle */       {0x00, 0x7A, 0xCC},   /* +18 opacity at use site */
+    /* accent_secondary */    {0x4F, 0xC1, 0xFF},
     /* ── Accent tertiary ── */
-    /* accent_tertiary */     {0x00, 0x00, 0x00},   /* Classic: not used */
+    /* accent_tertiary */     {0xC5, 0x86, 0xC0},   /* VS Code purple/pink */
     /* ── Semantic ── */
-    /* success */             {0x4C, 0xAF, 0x50},
-    /* warning */             {0xFF, 0xC1, 0x07},
+    /* success */             {0x4E, 0xC9, 0xB0},
+    /* warning */             {0xCE, 0x91, 0x78},
     /* danger */              {0xF4, 0x43, 0x36},
-    /* info */                {0x21, 0x96, 0xF3},
+    /* info */                {0x56, 0x9C, 0xD6},
     /* ── Functional ── */
-    /* border */              {0x55, 0x55, 0x55},
-    /* border_strong */       {0x77, 0x77, 0x77},
-    /* divider */             {0x44, 0x44, 0x44},
-    /* focus_glow */          {0x64, 0xA0, 0xFF},   /* +30 opacity at use site */
+    /* border */              {0x3E, 0x3E, 0x42},
+    /* border_strong */       {0x55, 0x55, 0x55},
+    /* divider */             {0x33, 0x33, 0x33},
+    /* focus_glow */          {0x00, 0x7A, 0xCC},   /* +30 opacity at use site */
     /* hover_overlay */       {0xFF, 0xFF, 0xFF},   /* +0A opacity at use site */
     /* active_overlay */      {0xFF, 0xFF, 0xFF},   /* +14 opacity at use site */
-    /* disabled_bg */         {0x3C, 0x3C, 0x3C},   /* +80 opacity at use site */
-    /* disabled_text */       {0x77, 0x77, 0x77},   /* +80 opacity at use site */
+    /* disabled_bg */         {0x2D, 0x2D, 0x30},   /* +80 opacity at use site */
+    /* disabled_text */       {0x55, 0x55, 0x55},   /* +80 opacity at use site */
     /* ── Bubble ── */
-    /* bubble_user_bg */      {0x40, 0x70, 0xC0},
-    /* bubble_user_bg_end */  {0x35, 0x60, 0xA5},
-    /* bubble_ai_bg */        {0x3C, 0x3C, 0x3C},
-    /* bubble_ai_accent_bar */{0x64, 0xA0, 0xFF},
+    /* bubble_user_bg */      {0x26, 0x4F, 0x78},
+    /* bubble_user_bg_end */  {0x1E, 0x40, 0x65},
+    /* bubble_ai_bg */        {0x2D, 0x2D, 0x30},
+    /* bubble_ai_accent_bar */{0x00, 0x7A, 0xCC},
     /* ── Buttons ── */
-    /* btn_action */          {0x40, 0x70, 0xC0},
-    /* btn_secondary */       {0x55, 0x55, 0x55},
-    /* btn_close */           {0xA0, 0x28, 0x28},
-    /* btn_add */             {0x28, 0x8C, 0x3C},
+    /* btn_action */          {0x00, 0x7A, 0xCC},
+    /* btn_secondary */       {0x3E, 0x3E, 0x42},
+    /* btn_close */           {0xF4, 0x43, 0x36},
+    /* btn_add */             {0x1A, 0x8A, 0xD8},
     /* ── Log ── */
-    /* log_bg */              {0x22, 0x22, 0x22},
-    /* log_text */            {0x78, 0xFF, 0x78},
+    /* log_bg */              {0x1E, 0x1E, 0x1E},
+    /* log_text */            {0x4E, 0xC9, 0xB0},
     /* ── Shadow colors ── */
     /* shadow_sm */           {0x00, 0x00, 0x00},
     /* shadow_md */           {0x00, 0x00, 0x00},
     /* shadow_lg */           {0x00, 0x00, 0x00},
-    /* shadow_glow */         {0x64, 0xA0, 0xFF},
+    /* shadow_glow */         {0x00, 0x7A, 0xCC},
     /* ── Opacity ── */
     /* mask_opacity */        153,  /* 60% */
     /* toast_opacity */       217,
