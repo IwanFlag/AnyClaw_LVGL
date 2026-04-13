@@ -299,8 +299,8 @@ static void apply_dark_style(lv_obj_t* obj) {
 }
 
 static void apply_input_style(lv_obj_t* obj) {
-    lv_obj_set_style_bg_color(obj, g_colors->input_bg, 0);
-    lv_obj_set_style_border_color(obj, g_colors->panel_border, 0);
+    lv_obj_set_style_bg_color(obj, g_colors->surface, 0);
+    lv_obj_set_style_border_color(obj, g_colors->border, 0);
     lv_obj_set_style_border_width(obj, 1, 0);
     lv_obj_set_style_radius(obj, 6, 0);
     lv_obj_set_style_text_color(obj, g_colors->text, 0);
@@ -314,12 +314,12 @@ static void apply_input_style(lv_obj_t* obj) {
         /* Fix: dropdown list items also need CJK font for Chinese text */
         lv_obj_set_style_text_font(obj, CJK_FONT, LV_PART_ITEMS);
         lv_obj_set_style_text_color(obj, g_colors->text, LV_PART_ITEMS);
-        lv_obj_set_style_bg_color(obj, g_colors->input_bg, LV_PART_ITEMS);
+        lv_obj_set_style_bg_color(obj, g_colors->surface, LV_PART_ITEMS);
     }
 }
 
 static void apply_section_label(lv_obj_t* obj) {
-    lv_obj_set_style_text_color(obj, g_colors->section_label, 0);
+    lv_obj_set_style_text_color(obj, g_colors->accent, 0);
     lv_obj_set_style_text_font(obj, CJK_FONT, 0);
 }
 
@@ -346,7 +346,7 @@ static void refresh_dropdown_cb(lv_event_t* e) {
 static lv_obj_t* add_divider(lv_obj_t* parent) {
     lv_obj_t* d = lv_obj_create(parent);
     lv_obj_set_size(d, LV_PCT(100), 2);
-    lv_obj_set_style_bg_color(d, g_colors ? g_colors->panel_border : lv_color_make(90, 110, 145), 0);
+    lv_obj_set_style_bg_color(d, g_colors ? g_colors->border : lv_color_make(90, 110, 145), 0);
     lv_obj_set_style_bg_opa(d, LV_OPA_70, 0);
     lv_obj_set_style_border_width(d, 0, 0);
     lv_obj_clear_flag(d, LV_OBJ_FLAG_SCROLLABLE);
@@ -530,8 +530,8 @@ static void build_general_tab(lv_obj_t* tab) {
         auto make_auth_card = [&](const char* icon, const char* name, const char* rec, bool* bound_flag) {
             lv_obj_t* card = lv_obj_create(tab);
             lv_obj_set_size(card, LV_PCT(100), LV_SIZE_CONTENT);
-            lv_obj_set_style_bg_color(card, g_colors->input_bg, 0);
-            lv_obj_set_style_border_color(card, g_colors->panel_border, 0);
+            lv_obj_set_style_bg_color(card, g_colors->surface, 0);
+            lv_obj_set_style_border_color(card, g_colors->border, 0);
             lv_obj_set_style_border_width(card, 1, 0);
             lv_obj_set_style_radius(card, 10, 0);
             lv_obj_set_style_pad_all(card, 10, 0);
@@ -3007,19 +3007,19 @@ static void apply_theme_recursive(lv_obj_t* container) {
             }
         }
         else if (cls == &lv_textarea_class) {
-            lv_obj_set_style_bg_color(child, c->input_bg, 0);
+            lv_obj_set_style_bg_color(child, c->surface, 0);
             lv_obj_set_style_text_color(child, c->text, 0);
-            lv_obj_set_style_border_color(child, c->panel_border, 0);
+            lv_obj_set_style_border_color(child, c->border, 0);
         }
         else if (cls == &lv_dropdown_class) {
-            lv_obj_set_style_bg_color(child, c->input_bg, 0);
+            lv_obj_set_style_bg_color(child, c->surface, 0);
             lv_obj_set_style_text_color(child, c->text, 0);
-            lv_obj_set_style_border_color(child, c->panel_border, 0);
+            lv_obj_set_style_border_color(child, c->border, 0);
             lv_obj_set_style_text_color(child, c->text, LV_PART_ITEMS);
-            lv_obj_set_style_bg_color(child, c->input_bg, LV_PART_ITEMS);
+            lv_obj_set_style_bg_color(child, c->surface, LV_PART_ITEMS);
         }
         else if (cls == &lv_switch_class) {
-            lv_obj_set_style_bg_color(child, c->panel_border, LV_PART_MAIN);
+            lv_obj_set_style_bg_color(child, c->border, LV_PART_MAIN);
         }
         else if (cls == &lv_button_class) {
             /* Keep button colors as-is (they have specific roles) */
@@ -3030,7 +3030,7 @@ static void apply_theme_recursive(lv_obj_t* container) {
             int w = lv_obj_get_width(child);
             if ((h <= 2 && w > 20) || (w <= 2 && h > 20)) {
                 /* Divider line */
-                lv_obj_set_style_bg_color(child, c->panel_border, 0);
+                lv_obj_set_style_bg_color(child, c->border, 0);
             } else {
                 /* Recurse into container */
                 lv_obj_set_style_bg_color(child, c->panel, 0);
@@ -3071,7 +3071,7 @@ void ui_settings_apply_theme() {
                 lv_obj_set_style_text_color(tab_btns, c->text_dim, LV_PART_ITEMS);
                 lv_obj_set_style_text_color(tab_btns, c->accent, LV_PART_ITEMS | LV_STATE_CHECKED);
                 lv_obj_set_style_bg_color(tab_btns, c->accent, LV_PART_ITEMS | LV_STATE_CHECKED);
-                lv_obj_set_style_border_color(tab_btns, c->panel_border, LV_PART_ITEMS);
+                lv_obj_set_style_border_color(tab_btns, c->border, LV_PART_ITEMS);
             }
             lv_obj_set_style_bg_color(settings_tabs, c->panel, 0);
             
@@ -3149,7 +3149,7 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_set_style_text_font(tab_btns, CJK_FONT, LV_PART_ITEMS);
     /* Vertical divider between tabs */
     lv_obj_set_style_border_side(tab_btns, LV_BORDER_SIDE_INTERNAL, LV_PART_ITEMS);
-    lv_obj_set_style_border_color(tab_btns, g_colors->panel_border, LV_PART_ITEMS);
+    lv_obj_set_style_border_color(tab_btns, g_colors->border, LV_PART_ITEMS);
     lv_obj_set_style_border_width(tab_btns, 2, LV_PART_ITEMS);
     lv_obj_set_style_pad_ver(tab_btns, 8, LV_PART_ITEMS); /* Short divider, not full height */
 

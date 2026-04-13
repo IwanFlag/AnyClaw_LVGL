@@ -44,8 +44,8 @@ namespace aw {
     inline lv_color_t dark_text()     { return g_colors ? g_colors->text : lv_color_make(224, 224, 224); }
     inline lv_color_t dark_text_dim() { return g_colors ? g_colors->text_dim : lv_color_make(130, 135, 150); }
     inline lv_color_t dark_accent()   { return g_colors ? g_colors->accent : lv_color_make(100, 160, 255); }
-    inline lv_color_t dark_border()   { return g_colors ? g_colors->panel_border : lv_color_make(42, 46, 62); }
-    inline lv_color_t dark_input()    { return g_colors ? g_colors->input_bg : lv_color_make(30, 37, 48); }
+    inline lv_color_t dark_border()   { return g_colors ? g_colors->border : lv_color_make(42, 46, 62); }
+    inline lv_color_t dark_input()    { return g_colors ? g_colors->surface : lv_color_make(30, 37, 48); }
 
     /* Functional colors */
     inline lv_color_t color_primary()  { return g_colors ? g_colors->accent : lv_color_make(59, 130, 246); }
