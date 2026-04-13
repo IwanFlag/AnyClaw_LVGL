@@ -99,6 +99,31 @@ export DISPLAY=:99
 wine AnyClaw_LVGL.exe  # 无显示器环境运行 + 截图
 ```
 
+**离线安装 Wine 11（仓库内已打包，推荐）：**
+
+```bash
+# 一键安装（自动处理 GPG Key + .deb + 依赖修复）
+bash bundled/wine11/install-wine11.sh
+```
+
+如阿里云镜像不通，先切 USTC 源：
+```bash
+cp bundled/wine11/ustc-sources.list /etc/apt/sources.list
+apt-get update
+```
+
+`bundled/wine11/` 内容：
+| 文件 | 说明 |
+|------|------|
+| `winehq-stable_*.deb` | WineHQ 元包 |
+| `wine-stable_*.deb` | Wine Stable 安装器 |
+| `wine-stable-amd64_*.deb` | Wine 64 位运行时 (~118MB) |
+| `wine-stable-i386_*.deb` | Wine 32 位运行时 (~111MB) |
+| `winehq-archive.key` | WineHQ GPG 公钥 |
+| `winehq-noble.sources` | WineHQ apt 源 (Noble) |
+| `ustc-sources.list` | USTC 镜像源 (阿里云备用) |
+| `install-wine11.sh` | 一键安装脚本 |
+
 ### 仓库内依赖（已提交，无需下载）
 
 | 依赖 | 位置 | 说明 |

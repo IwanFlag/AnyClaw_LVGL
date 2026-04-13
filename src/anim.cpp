@@ -4,6 +4,7 @@
  * ═══════════════════════════════════════════════════════════════ */
 #include "anim.h"
 #include "theme.h"
+#include "app.h"
 #include "app_config.h"
 
 /* ── Theme-specific animation configs ── */
@@ -376,8 +377,8 @@ void anim_particles_burst(lv_obj_t* parent, int cx, int cy, lv_color_t color, in
         /* Calculate scatter direction: evenly distribute around circle */
         float angle = (float)i / count * 6.2832f; /* 2*PI */
         int dist = SCALE(PARTICLE_DIST + (i % 3) * 8); /* varied distance */
-        int tx = (int)(lv_cos((int)(angle * 512 / 6.2832f)) * dist / 1024);
-        int ty = (int)(lv_sin((int)(angle * 512 / 6.2832f)) * dist / 1024);
+        int tx = (int)(lv_trigo_cos((int)(angle * 512 / 6.2832f)) * dist / 1024);
+        int ty = (int)(lv_trigo_sin((int)(angle * 512 / 6.2832f)) * dist / 1024);
 
         /* Store dot pointer for callback */
         g_particles[i].dot = dot;

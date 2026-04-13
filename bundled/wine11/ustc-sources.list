@@ -1,0 +1,6 @@
+# USTC 镜像源 (阿里云不可用时使用)
+# 用法: cp bundled/wine11/ustc-sources.list /etc/apt/sources.list && apt-get update
+deb http://mirrors.ustc.edu.cn/ubuntu noble main restricted universe multiverse
+deb http://mirrors.ustc.edu.cn/ubuntu noble-updates main restricted universe multiverse
+deb http://mirrors.ustc.edu.cn/ubuntu noble-backports main restricted universe multiverse
+deb http://mirrors.ustc.edu.cn/ubuntu noble-security main restricted universe multiverse

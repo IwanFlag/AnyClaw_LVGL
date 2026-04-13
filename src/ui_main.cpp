@@ -397,9 +397,9 @@ static uint32_t g_wiz_gemma_progress_start_ms = 0;
 /* Blend a base color with a tint color at ~12% opacity (for toast bg etc.) */
 static lv_color_t blend_with_tint(lv_color_t base, lv_color_t tint) {
     return lv_color_make(
-        (uint8_t)((base.ch.red * 224u + tint.ch.red * 32u) >> 8),
-        (uint8_t)((base.ch.green * 224u + tint.ch.green * 32u) >> 8),
-        (uint8_t)((base.ch.blue * 224u + tint.ch.blue * 32u) >> 8)
+        (uint8_t)((base.red * 224u + tint.red * 32u) >> 8),
+        (uint8_t)((base.green * 224u + tint.green * 32u) >> 8),
+        (uint8_t)((base.blue * 224u + tint.blue * 32u) >> 8)
     );
 }
 
@@ -2200,6 +2200,7 @@ static void toast_flush_pending();
 
 static void ui_log_flush_timer_cb(lv_timer_t* t) {
     (void)t;
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
     if (g_ui_thread_id != 0 && GetCurrentThreadId() == g_ui_thread_id) {
         ui_log_flush_pending();
         toast_flush_pending();
@@ -3697,6 +3698,7 @@ static void work_add_step_card(const char* action, const char* detail, bool done
 
 static void work_append_md_block(const char* title, const char* text) {
     if (!title || !text || !text[0]) return;
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
     WorkRenderType rt = output_renderer_pick(title, text);
     bool is_plan = strstr(text, "\"type\":\"plan\"") || strstr(text, "\"steps\"") || strstr(text, "approve_plan");
     std::string render_text = text;
@@ -4956,6 +4958,7 @@ static void splitter_hover_timer_cb(lv_timer_t* t) {
 
 static void splitter_drag_cb(lv_event_t* e) {
     lv_event_code_t code = lv_event_get_code(e);
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
     static int drag_start_x = 0;
     static bool is_dragging = false;
 
@@ -5145,6 +5148,7 @@ static void label_select_cb(lv_event_t* e) {
 /* Enable text selection on a single label (drag-to-select + click-to-select-all) */
 void make_label_selectable(lv_obj_t* lbl) {
     if (!lbl) return;
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
     /* Skip button labels — they should only respond to clicks, not text selection */
     if (is_label_in_button(lbl)) return;
     lv_obj_add_flag(lbl, LV_OBJ_FLAG_CLICKABLE);
@@ -6331,6 +6335,7 @@ static void stream_timer_cb(lv_timer_t* timer) {
 }
 
 static void chat_start_stream(const char* user_message) {
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
     if (g_streaming) {
         /* FIX: If g_stream_done is set but timer hasn't consumed it yet, force cleanup */
         if (g_stream_done) {
@@ -7463,6 +7468,7 @@ static void session_abort_cb(lv_event_t* e) {
 
 static void task_add(const char* name, const char* status, const char* detail = nullptr) {
     if (!left_panel || g_task_count >= MAX_TASK_WIDGETS) return;
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
     if (task_empty_label) {
         lv_obj_add_flag(task_empty_label, LV_OBJ_FLAG_HIDDEN);
     }
@@ -7527,6 +7533,7 @@ static void task_add(const char* name, const char* status, const char* detail = 
 /* Add a task item with an abort/reset button */
 static void task_add_with_abort(const char* name, const char* status, const char* detail,
                                  const char* session_key) {
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
     task_add(name, status, detail);
     if (g_task_count < 1) return;
 
@@ -8120,7 +8127,7 @@ int ui_permission_confirm(const char* perm_key, const char* target) {
         lv_obj_set_height(b, SCALE(38));
         lv_obj_set_flex_grow(b, 1);
         lv_obj_set_style_bg_color(b, bg, 0);
-        if (bg.full == c->btn_action.full) apply_btn_gradient(b);
+        if (lv_color_eq(bg, c->btn_action)) apply_btn_gradient(b);
         lv_obj_set_style_radius(b, SCALE(g_colors->radius_md), 0);
         lv_obj_set_style_border_width(b, 0, 0);
         lv_obj_t* t = lv_label_create(b);
@@ -8559,6 +8566,7 @@ static lv_obj_t* g_license_status = nullptr;
 
 static void license_activate_cb(lv_event_t* e) {
     (void)e;
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
     if (!g_license_input) return;
     const char* key = lv_textarea_get_text(g_license_input);
     if (!key || !key[0]) {
@@ -8982,6 +8990,7 @@ static void free_retry_ctx_cb(lv_event_t* e) {
 }
 
 static void attachment_retry_click_cb(lv_event_t* e) {
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
     AttachmentRetryCtx* ctx = (AttachmentRetryCtx*)lv_event_get_user_data(e);
     if (!ctx || !ctx->status_lbl || !ctx->path || !ctx->path[0]) return;
     for (const auto& it : g_attachment_queue) {
@@ -9089,6 +9098,7 @@ static lv_obj_t* chat_add_attachment_card(const char* path, bool is_dir) {
 
 static void attachment_queue_timer_cb(lv_timer_t* t) {
     (void)t;
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
     bool has_pending = false;
     const int total = (int)g_attachment_queue.size();
     for (auto& it : g_attachment_queue) {
