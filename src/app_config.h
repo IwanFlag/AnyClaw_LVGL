@@ -114,6 +114,10 @@
 /* ── 窗口控制按钮 (parent: 标题栏) ── */
 #define WC_BTN_H_PCT           58       /* 按钮高 = 标题栏高 × 58% */
 #define WC_BTN_ASPECT          100      /* 按钮宽 = 高 × 100% (正方形) */
+#define MODE_BAR_W_PCT         12       /* 模式切换栏宽 = 窗口宽 × 12% */
+#define MODE_BAR_W_MIN         120      /* 模式切换栏最小宽 */
+#define SIDE_BTN_W_PCT         5        /* 设置按钮宽 = 窗口宽 × 5% */
+#define SIDE_BTN_W_MIN         48       /* 设置按钮最小宽 */
 #define WC_BTN_GAP_PCT         15       /* 按钮间距 = 按钮宽 × 15% */
 #define WC_BTN_MARGIN_PCT      20       /* 右边距 = 按钮宽 × 20% */
 #define WC_BTN_RADIUS          6        /* 圆角 (SCALE'd) */
@@ -167,6 +171,15 @@
 /* ── 输入框 ── */
 #define CHAT_INPUT_PAD_ALL      8       /* 输入框内边距 (SCALE'd) */
 #define CHAT_INPUT_BORDER_W     1
+
+/* ── 加载遮罩 (parent: 窗口) ── */
+#define LOADING_OVERLAY_W_PCT   32      /* 宽 = 窗口宽 × 32% */
+#define LOADING_OVERLAY_H_PCT   37      /* 高 = 窗口高 × 37% */
+#define LOADING_ICON_PCT        21      /* 图标 = 遮罩高 × 21% */
+
+/* ── 右键菜单项 (parent: 右键菜单) ── */
+#define CTX_ITEM_H_PCT          8       /* 项高 = 左面板高 × 8% */
+#define CTX_ITEM_H_MIN          28      /* 项高最小 */
 
 /* ── 弹窗 (parent: 窗口) ── */
 #define DIALOG_W_PCT            40      /* 宽 = 窗口宽 × 40% */

@@ -1234,9 +1234,8 @@ static void loading_show() {
     if (!g_loading_overlay) {
         lv_obj_t* scr = lv_screen_active();
         g_loading_overlay = lv_obj_create(scr);
-        /* Loading overlay — 32% × 37% of window */
-        int overlay_w = WIN_W * 32 / 100;
-        int overlay_h = WIN_H * 37 / 100;
+        int overlay_w = WIN_W * LOADING_OVERLAY_W_PCT / 100;
+        int overlay_h = WIN_H * LOADING_OVERLAY_H_PCT / 100;
         lv_obj_set_size(g_loading_overlay, overlay_w, overlay_h);
         lv_obj_align(g_loading_overlay, LV_ALIGN_TOP_RIGHT, -SCALE(16), TITLE_H + SCALE(8));
         lv_obj_set_style_bg_color(g_loading_overlay, lv_color_make(15, 18, 28), 0);
@@ -1286,10 +1285,9 @@ static void loading_show() {
         lv_obj_set_style_text_font(toggle_lbl, CJK_FONT_SMALL, 0);
         lv_obj_center(toggle_lbl);
 
-        /* Garlic icon centered — 21% of overlay height */
         g_loading_icon = lv_image_create(g_loading_overlay);
         lv_image_set_src(g_loading_icon, "A:assets/garlic_48.png");
-        int loading_icon_px = overlay_h * 21 / 100;  /* overlay_h × 21% */
+        int loading_icon_px = overlay_h * LOADING_ICON_PCT / 100;
         lv_obj_set_size(g_loading_icon, loading_icon_px, loading_icon_px);
         lv_image_set_scale(g_loading_icon, 256); /* 100% */
         lv_obj_align(g_loading_icon, LV_ALIGN_TOP_MID, 0, 0);
@@ -4256,7 +4254,7 @@ void ui_relayout_all() {
 
     /* Update window control button positions */
     if (btn_minimize && btn_maximize && btn_close && title_bar) {
-        int wc_btn_size = std::max(SCALE(28), SCALE(32));
+        int wc_btn_size = std::max(TITLE_H * WC_BTN_H_PCT / 100, SCALE(28));
         int wc_btn_h = wc_btn_size;
         int wc_btn_gap = 6;
         int wc_btn_margin = 10;
@@ -4266,8 +4264,8 @@ void ui_relayout_all() {
         lv_obj_set_pos(btn_maximize, wc_base_x + wc_btn_size + wc_btn_gap, wc_btn_y);
         lv_obj_set_pos(btn_close, wc_base_x + (wc_btn_size + wc_btn_gap) * 2, wc_btn_y);
 
-        int mode_w = SCALE(180);
-        int side_w = SCALE(68);
+        int mode_w = std::max(WIN_W * MODE_BAR_W_PCT / 100, MODE_BAR_W_MIN);
+        int side_w = std::max(WIN_W * SIDE_BTN_W_PCT / 100, SIDE_BTN_W_MIN);
         int top_gap = SCALE(6);
         int top_y = (TITLE_H - wc_btn_h) / 2;
         int right_x = wc_base_x - top_gap;
@@ -4942,7 +4940,7 @@ static void chat_input_right_click_cb(lv_event_t* e) {
     for (int i = 0; i < 4; i++) {
         lv_obj_t* btn = lv_button_create(g_ctx_menu);
         lv_obj_set_width(btn, LV_PCT(100));
-        lv_obj_set_height(btn, 32);
+        lv_obj_set_height(btn, std::max(WIN_H * CTX_ITEM_H_PCT / 100, CTX_ITEM_H_MIN));
         lv_obj_set_style_bg_color(btn, lv_color_make(50, 55, 75), 0);
         lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
         lv_obj_set_style_radius(btn, 4, 0);
