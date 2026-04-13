@@ -77,6 +77,13 @@ struct ThemeColors {
     /* ── 12. Structural (2) ── */
     uint8_t    btn_grad_enable;     /* 1=gradient buttons, 0=solid */
     uint8_t    icon_stroke_width;   /* Icon stroke: 2=normal, 1=thin */
+
+    /* ── 13. Radius (5, base px, apply SCALE() at use site) ── */
+    uint8_t    radius_sm;           /* Small: badges, tags */
+    uint8_t    radius_md;           /* Medium: buttons, inputs */
+    uint8_t    radius_lg;           /* Large: cards, panels */
+    uint8_t    radius_xl;           /* Extra: dialogs, popups */
+    uint8_t    radius_2xl;          /* Max: floating elements */
 };
 
 enum class Theme { Dark, Peachy, Classic, Mochi, Light };

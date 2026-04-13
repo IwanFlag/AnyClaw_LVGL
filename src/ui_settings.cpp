@@ -302,7 +302,7 @@ static void apply_input_style(lv_obj_t* obj) {
     lv_obj_set_style_bg_color(obj, g_colors->surface, 0);
     lv_obj_set_style_border_color(obj, g_colors->border, 0);
     lv_obj_set_style_border_width(obj, 1, 0);
-    lv_obj_set_style_radius(obj, 6, 0);
+    lv_obj_set_style_radius(obj, SCALE(g_colors->radius_sm), 0);
     lv_obj_set_style_text_color(obj, g_colors->text, 0);
     lv_obj_set_style_text_font(obj, CJK_FONT, 0);
     lv_obj_set_style_pad_all(obj, 8, 0);
@@ -533,7 +533,7 @@ static void build_general_tab(lv_obj_t* tab) {
             lv_obj_set_style_bg_color(card, g_colors->surface, 0);
             lv_obj_set_style_border_color(card, g_colors->border, 0);
             lv_obj_set_style_border_width(card, 1, 0);
-            lv_obj_set_style_radius(card, 10, 0);
+            lv_obj_set_style_radius(card, SCALE(g_colors->radius_lg), 0);
             lv_obj_set_style_pad_all(card, 10, 0);
             lv_obj_set_style_pad_gap(card, 8, 0);
             lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
@@ -572,7 +572,7 @@ static void build_general_tab(lv_obj_t* tab) {
             lv_obj_t* btn_allow = lv_button_create(row_btn);
             lv_obj_set_size(btn_allow, SCALE(90), SCALE(30));
             lv_obj_set_style_bg_color(btn_allow, g_colors->accent_secondary, 0);
-            lv_obj_set_style_radius(btn_allow, 8, 0);
+            lv_obj_set_style_radius(btn_allow, SCALE(g_colors->radius_md), 0);
             lv_obj_t* lbl_allow = lv_label_create(btn_allow);
             lv_label_set_text(lbl_allow, "授权");
             lv_obj_set_style_text_font(lbl_allow, CJK_FONT, 0);
@@ -588,7 +588,7 @@ static void build_general_tab(lv_obj_t* tab) {
             lv_obj_t* btn_deny = lv_button_create(row_btn);
             lv_obj_set_size(btn_deny, SCALE(90), SCALE(30));
             lv_obj_set_style_bg_color(btn_deny, g_colors->btn_close, 0);
-            lv_obj_set_style_radius(btn_deny, 8, 0);
+            lv_obj_set_style_radius(btn_deny, SCALE(g_colors->radius_md), 0);
             lv_obj_t* lbl_deny = lv_label_create(btn_deny);
             lv_label_set_text(lbl_deny, "拒绝");
             lv_obj_set_style_text_font(lbl_deny, CJK_FONT, 0);
@@ -939,7 +939,7 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_set_style_bg_color(btn_wizard, g_colors->accent_subtle, 0);
     lv_obj_set_style_bg_grad_color(btn_wizard, g_colors->accent_subtle, 0);
     lv_obj_set_style_bg_grad_dir(btn_wizard, LV_GRAD_DIR_VER, 0);
-    lv_obj_set_style_radius(btn_wizard, 8, 0);
+    lv_obj_set_style_radius(btn_wizard, SCALE(g_colors->radius_md), 0);
     lv_obj_add_event_cb(btn_wizard, [](lv_event_t* e) {
         (void)e;
         ui_settings_close();
@@ -1063,7 +1063,7 @@ static void build_permissions_tab(lv_obj_t* tab) {
     lv_obj_t* btn_save = lv_button_create(row_btn);
     lv_obj_set_size(btn_save, SCALE(180), SCALE(34));
     lv_obj_set_style_bg_color(btn_save, g_colors->accent_secondary, 0);
-    lv_obj_set_style_radius(btn_save, 6, 0);
+    lv_obj_set_style_radius(btn_save, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_save, [](lv_event_t* e) {
         (void)e;
         for (const auto& b : g_perm_bindings) {
@@ -1398,7 +1398,7 @@ static void build_model_tab(lv_obj_t* tab) {
     lv_obj_set_size(btn_add, 40, 36);
     lv_obj_set_style_bg_color(btn_add, g_colors->success, 0);
     lv_obj_set_style_bg_color(btn_add, g_colors->success, LV_STATE_PRESSED);
-    lv_obj_set_style_radius(btn_add, 6, 0);
+    lv_obj_set_style_radius(btn_add, SCALE(g_colors->radius_sm), 0);
     lv_obj_t* lbl_add = lv_label_create(btn_add);
     lv_label_set_text(lbl_add, "+");
     lv_obj_set_style_text_font(lbl_add, FONT(16), 0);
@@ -1422,7 +1422,7 @@ static void build_model_tab(lv_obj_t* tab) {
         lv_obj_set_style_bg_color(dlg, g_colors->panel, 0);
         lv_obj_set_style_border_color(dlg, g_colors->border_strong, 0);
         lv_obj_set_style_border_width(dlg, 1, 0);
-        lv_obj_set_style_radius(dlg, 10, 0);
+        lv_obj_set_style_radius(dlg, SCALE(g_colors->radius_lg), 0);
         lv_obj_set_style_pad_all(dlg, 20, 0);
         lv_obj_set_flex_flow(dlg, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_flex_align(dlg, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
@@ -1452,7 +1452,7 @@ static void build_model_tab(lv_obj_t* tab) {
         lv_obj_set_style_text_font(ta, CJK_FONT, 0);
         lv_obj_set_style_border_color(ta, g_colors->border_strong, 0);
         lv_obj_set_style_border_width(ta, 1, 0);
-        lv_obj_set_style_radius(ta, 6, 0);
+        lv_obj_set_style_radius(ta, SCALE(g_colors->radius_sm), 0);
         lv_obj_set_style_pad_all(ta, 6, 0);
         lv_obj_set_style_pad_ver(ta, 8, 0);
         lv_obj_set_style_border_color(ta, g_colors->border_strong, LV_STATE_FOCUSED);
@@ -1476,7 +1476,7 @@ static void build_model_tab(lv_obj_t* tab) {
         lv_obj_set_size(btn_ok, 80, 36);
         lv_obj_set_style_bg_color(btn_ok, g_colors->accent_secondary, 0);
         lv_obj_set_style_bg_color(btn_ok, g_colors->accent_secondary, LV_STATE_PRESSED);
-        lv_obj_set_style_radius(btn_ok, 6, 0);
+        lv_obj_set_style_radius(btn_ok, SCALE(g_colors->radius_sm), 0);
         lv_obj_t* lbl_ok = lv_label_create(btn_ok);
         lv_label_set_text(lbl_ok, tr("确定", "OK"));
         lv_obj_set_style_text_font(lbl_ok, CJK_FONT, 0);
@@ -1488,7 +1488,7 @@ static void build_model_tab(lv_obj_t* tab) {
         lv_obj_set_size(btn_cancel, 80, 36);
         lv_obj_set_style_bg_color(btn_cancel, g_colors->btn_secondary, 0);
         lv_obj_set_style_bg_color(btn_cancel, g_colors->text_hint, LV_STATE_PRESSED);
-        lv_obj_set_style_radius(btn_cancel, 6, 0);
+        lv_obj_set_style_radius(btn_cancel, SCALE(g_colors->radius_sm), 0);
         lv_obj_t* lbl_cancel = lv_label_create(btn_cancel);
         lv_label_set_text(lbl_cancel, tr("取消", "Cancel"));
         lv_obj_set_style_text_font(lbl_cancel, CJK_FONT, 0);
@@ -1620,7 +1620,7 @@ static void build_model_tab(lv_obj_t* tab) {
     lv_obj_t* btn_show = lv_button_create(row_btns);
     lv_obj_set_size(btn_show, SCALE(100), SCALE(32));
     lv_obj_set_style_bg_color(btn_show, g_colors->border_strong, 0);
-    lv_obj_set_style_radius(btn_show, 6, 0);
+    lv_obj_set_style_radius(btn_show, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_show, apikey_show_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_show = lv_label_create(btn_show);
     lv_label_set_text(lbl_show, "Hide Key");
@@ -1631,7 +1631,7 @@ static void build_model_tab(lv_obj_t* tab) {
     lv_obj_t* btn_verify = lv_button_create(row_btns);
     lv_obj_set_size(btn_verify, SCALE(100), SCALE(32));
     lv_obj_set_style_bg_color(btn_verify, g_colors->success, 0);
-    lv_obj_set_style_radius(btn_verify, 6, 0);
+    lv_obj_set_style_radius(btn_verify, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_verify, apikey_verify_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_verify = lv_label_create(btn_verify);
     lv_label_set_text(lbl_verify, "Verify");
@@ -1642,7 +1642,7 @@ static void build_model_tab(lv_obj_t* tab) {
     lv_obj_t* btn_save = lv_button_create(row_btns);
     lv_obj_set_size(btn_save, SCALE(100), SCALE(32));
     lv_obj_set_style_bg_color(btn_save, g_colors->accent_secondary, 0);
-    lv_obj_set_style_radius(btn_save, 6, 0);
+    lv_obj_set_style_radius(btn_save, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_save, apikey_save_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_save = lv_label_create(btn_save);
     lv_label_set_text(lbl_save, "Save");
@@ -1719,7 +1719,7 @@ static void build_model_tab(lv_obj_t* tab) {
     lv_obj_set_style_bg_color(fo_list, g_colors->surface, 0);
     lv_obj_set_style_border_color(fo_list, g_colors->disabled_bg, 0);
     lv_obj_set_style_border_width(fo_list, 1, 0);
-    lv_obj_set_style_radius(fo_list, 6, 0);
+    lv_obj_set_style_radius(fo_list, SCALE(g_colors->radius_sm), 0);
     lv_obj_set_style_pad_all(fo_list, 8, 0);
     lv_obj_set_flex_flow(fo_list, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_gap(fo_list, 4, 0);
@@ -1987,7 +1987,7 @@ static void build_skills_tab(lv_obj_t* tab) {
     lv_obj_set_style_bg_color(g_skill_list_available, g_colors->surface, 0);
     lv_obj_set_style_border_color(g_skill_list_available, g_colors->disabled_bg, 0);
     lv_obj_set_style_border_width(g_skill_list_available, 1, 0);
-    lv_obj_set_style_radius(g_skill_list_available, 6, 0);
+    lv_obj_set_style_radius(g_skill_list_available, SCALE(g_colors->radius_sm), 0);
     refresh_available_skills_list();
 
     /* Divider */
@@ -2004,7 +2004,7 @@ static void build_skills_tab(lv_obj_t* tab) {
     lv_obj_set_style_bg_color(g_skill_list_installed, g_colors->surface, 0);
     lv_obj_set_style_border_color(g_skill_list_installed, g_colors->disabled_bg, 0);
     lv_obj_set_style_border_width(g_skill_list_installed, 1, 0);
-    lv_obj_set_style_radius(g_skill_list_installed, 6, 0);
+    lv_obj_set_style_radius(g_skill_list_installed, SCALE(g_colors->radius_sm), 0);
     refresh_installed_skills_list();
 }
 
@@ -2200,7 +2200,7 @@ static void build_log_tab(lv_obj_t* tab) {
     lv_obj_t* btn_refresh = lv_button_create(row_filter);
     lv_obj_set_size(btn_refresh, SCALE(80), SCALE(32));
     lv_obj_set_style_bg_color(btn_refresh, g_colors->disabled_bg, 0);
-    lv_obj_set_style_radius(btn_refresh, 6, 0);
+    lv_obj_set_style_radius(btn_refresh, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_refresh, log_refresh_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_ref = lv_label_create(btn_refresh);
     lv_label_set_text(lbl_ref, LV_SYMBOL_REFRESH);
@@ -2222,7 +2222,7 @@ static void build_log_tab(lv_obj_t* tab) {
     lv_obj_t* btn_export = lv_button_create(row_actions);
     lv_obj_set_size(btn_export, SCALE(120), SCALE(32));
     lv_obj_set_style_bg_color(btn_export, g_colors->accent_secondary, 0);
-    lv_obj_set_style_radius(btn_export, 6, 0);
+    lv_obj_set_style_radius(btn_export, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_export, log_export_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_exp = lv_label_create(btn_export);
     lv_label_set_text(lbl_exp, tr("导出日志", "Export Log"));
@@ -2233,7 +2233,7 @@ static void build_log_tab(lv_obj_t* tab) {
     lv_obj_t* btn_clear = lv_button_create(row_actions);
     lv_obj_set_size(btn_clear, SCALE(120), SCALE(32));
     lv_obj_set_style_bg_color(btn_clear, g_colors->danger, 0);
-    lv_obj_set_style_radius(btn_clear, 6, 0);
+    lv_obj_set_style_radius(btn_clear, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_clear, log_clear_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_clr = lv_label_create(btn_clear);
     lv_label_set_text(lbl_clr, tr("清除日志", "Clear Log"));
@@ -2256,7 +2256,7 @@ static void build_log_tab(lv_obj_t* tab) {
         lv_obj_t* dot = lv_obj_create(row_legend);
         lv_obj_set_size(dot, 8, 8);
         lv_obj_set_style_bg_color(dot, log_level_colors[i], 0);
-        lv_obj_set_style_radius(dot, 4, 0);
+        lv_obj_set_style_radius(dot, SCALE(g_colors->radius_sm), 0);
         lv_obj_set_style_border_width(dot, 0, 0);
         lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -2274,7 +2274,7 @@ static void build_log_tab(lv_obj_t* tab) {
     lv_obj_set_style_bg_color(log_list_widget, g_colors->bg, 0);
     lv_obj_set_style_border_color(log_list_widget, g_colors->disabled_bg, 0);
     lv_obj_set_style_border_width(log_list_widget, 1, 0);
-    lv_obj_set_style_radius(log_list_widget, 6, 0);
+    lv_obj_set_style_radius(log_list_widget, SCALE(g_colors->radius_sm), 0);
     lv_obj_set_style_pad_all(log_list_widget, 4, 0);
 
     /* Initial load */
@@ -2411,7 +2411,7 @@ static void build_tracing_tab(lv_obj_t* tab) {
     for (lv_obj_t* b : {btn_ref, btn_exp, btn_clr}) {
         lv_obj_set_size(b, SCALE(100), SCALE(32));
         lv_obj_set_style_bg_color(b, g_colors->btn_secondary, 0);
-        lv_obj_set_style_radius(b, 6, 0);
+        lv_obj_set_style_radius(b, SCALE(g_colors->radius_sm), 0);
     }
     lv_label_set_text(lv_label_create(btn_ref), tr("刷新", "Refresh"));
     lv_label_set_text(lv_label_create(btn_exp), tr("导出", "Export"));
@@ -2596,7 +2596,7 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_t* btn_cfg_export = lv_button_create(row_config);
     lv_obj_set_size(btn_cfg_export, 160, 36);
     lv_obj_set_style_bg_color(btn_cfg_export, g_colors->accent_secondary, 0);
-    lv_obj_set_style_radius(btn_cfg_export, 6, 0);
+    lv_obj_set_style_radius(btn_cfg_export, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_cfg_export, [](lv_event_t* e) {
         (void)e;
         char path[MAX_PATH];
@@ -2622,7 +2622,7 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_t* btn_clear_chat = lv_button_create(row_config);
     lv_obj_set_size(btn_clear_chat, 160, 36);
     lv_obj_set_style_bg_color(btn_clear_chat, g_colors->danger, 0);
-    lv_obj_set_style_radius(btn_clear_chat, 6, 0);
+    lv_obj_set_style_radius(btn_clear_chat, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_clear_chat, [](lv_event_t* e) {
         (void)e;
         extern void clear_chat_history();
@@ -2649,7 +2649,7 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_t* btn_mig_export = lv_button_create(row_mig);
     lv_obj_set_size(btn_mig_export, 160, 36);
     lv_obj_set_style_bg_color(btn_mig_export, g_colors->success, 0);
-    lv_obj_set_style_radius(btn_mig_export, 6, 0);
+    lv_obj_set_style_radius(btn_mig_export, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_mig_export, [](lv_event_t* e) {
         (void)e;
         /* Save dialog using Win32 */
@@ -2684,7 +2684,7 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_t* btn_mig_import = lv_button_create(row_mig);
     lv_obj_set_size(btn_mig_import, 160, 36);
     lv_obj_set_style_bg_color(btn_mig_import, g_colors->warning, 0);
-    lv_obj_set_style_radius(btn_mig_import, 6, 0);
+    lv_obj_set_style_radius(btn_mig_import, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_mig_import, [](lv_event_t* e) {
         (void)e;
         OPENFILENAMEA ofn;
@@ -2718,7 +2718,7 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_t* btn_app_update = lv_button_create(tab);
     lv_obj_set_size(btn_app_update, LV_PCT(100), 36);
     lv_obj_set_style_bg_color(btn_app_update, g_colors->accent_secondary, 0);
-    lv_obj_set_style_radius(btn_app_update, 6, 0);
+    lv_obj_set_style_radius(btn_app_update, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_app_update, [](lv_event_t* e) {
         (void)e;
         static const char* kCurrentVersion = "v2.2.1";
@@ -2753,7 +2753,7 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_t* btn_app_download = lv_button_create(tab);
     lv_obj_set_size(btn_app_download, LV_PCT(100), 36);
     lv_obj_set_style_bg_color(btn_app_download, g_colors->success, 0);
-    lv_obj_set_style_radius(btn_app_download, 6, 0);
+    lv_obj_set_style_radius(btn_app_download, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_app_download, [](lv_event_t* e) {
         (void)e;
         static const char* kApi = "https://api.github.com/repos/IwanFlag/AnyClaw_Tools/releases/latest";
@@ -2786,7 +2786,7 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_t* btn_ver_check = lv_button_create(tab);
     lv_obj_set_size(btn_ver_check, LV_PCT(100), 36);
     lv_obj_set_style_bg_color(btn_ver_check, g_colors->disabled_bg, 0);
-    lv_obj_set_style_radius(btn_ver_check, 6, 0);
+    lv_obj_set_style_radius(btn_ver_check, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_ver_check, [](lv_event_t* e) {
         (void)e;
         char url[512];
@@ -3123,7 +3123,7 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_t* btn_close = lv_button_create(title_bar);
     lv_obj_set_size(btn_close, SCALE(84), SCALE(32));
     lv_obj_set_style_bg_color(btn_close, g_colors->btn_close, 0);
-    lv_obj_set_style_radius(btn_close, SCALE(8), 0);
+    lv_obj_set_style_radius(btn_close, SCALE(g_colors->radius_md), 0);
     lv_obj_align(btn_close, LV_ALIGN_RIGHT_MID, -10, 0);
     lv_obj_add_event_cb(btn_close, settings_close_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_close = lv_label_create(btn_close);
@@ -3139,7 +3139,7 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_set_pos(settings_tabs, 20, title_h + 6);
     lv_obj_set_style_bg_color(settings_tabs, g_colors->panel, 0);
     lv_obj_set_style_border_width(settings_tabs, 0, 0);
-    lv_obj_set_style_radius(settings_tabs, 8, 0);
+    lv_obj_set_style_radius(settings_tabs, SCALE(g_colors->radius_md), 0);
 
     /* Tab button styling */
     lv_obj_t* tab_btns = lv_tabview_get_tab_btns(settings_tabs);
