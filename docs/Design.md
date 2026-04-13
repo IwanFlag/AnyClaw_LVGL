@@ -592,58 +592,61 @@
 
 > 需求 → PRD §3 主界面
 
-### 3.1 字体栈
+### 3.1 字体栈（5 主题）
 
-字体是主题的一部分，Matcha 和 Peachy 字体调性不同。
+#### 🍵 Matcha v1 — 清新锐利
 
-#### Matcha v1 字体（清新锐利）
+| 类型 | 主选 | 备选 | 回退 |
+|------|------|------|------|
+| 中文（UI/正文/标题通用） | **HarmonyOS Sans SC** | 思源黑体 SC | PingFang SC, 微软雅黑, sans-serif |
+| 英文（UI/正文） | **Plus Jakarta Sans** | Inter | Segoe UI, sans-serif |
+| 英文（标题/品牌） | **Plus Jakarta Sans Bold** | Inter Bold | Segoe UI Bold, sans-serif |
+| 等宽 | **JetBrains Mono** | Fira Code | Consolas, monospace |
+
+> Plus Jakarta Sans 比 Inter 更圆润有温度，比 Montserrat 更现代。HarmonyOS Sans SC 比微软雅黑清晰锐利，Variable Weight 支持好。全主题统一无衬线，干净利落。
+
+#### 🍑 Peachy v2 — 温暖亲和
+
+| 类型 | 主选 | 备选 | 回退 |
+|------|------|------|------|
+| 中文（UI/正文/标题通用） | **HarmonyOS Sans SC** | 思源黑体 SC | PingFang SC, 微软雅黑, sans-serif |
+| 英文（UI/正文） | **Nunito** | Quicksand | Segoe UI, sans-serif |
+| 英文（标题/品牌） | **Nunito Bold** | Quicksand Bold | Segoe UI Bold, sans-serif |
+| 等宽 | **JetBrains Mono** | Fira Code | Consolas, monospace |
+
+> Nunito 圆端设计天然萌系，和珊瑚橘暖色搭配完美。字重偏轻（Regular=400 感觉比其他字体细），标题用 Bold(700) 对比更鲜明。
+
+#### 🍡 Mochi v3 — 文艺质感（唯一混用衬线体）
+
+| 类型 | 用途 | 主选 | 备选 | 回退 |
+|------|------|------|------|------|
+| 中文 UI 控件 | 按钮/输入/菜单 | **HarmonyOS Sans SC** | 思源黑体 SC | PingFang SC, sans-serif |
+| 中文 标题/引用 | 弹窗标题/引用块 | **思源宋体 SC** | LXGW WenKai | Noto Serif SC, serif |
+| 英文 UI 控件 | 按钮/输入/标签 | **Plus Jakarta Sans** | Inter | Segoe UI, sans-serif |
+| 英文 标题/引用 | 品牌/About/引用 | **Lora** | Merriweather | Georgia, serif |
+| 等宽 | 代码/日志 | **JetBrains Mono** | Fira Code | Consolas, monospace |
+
+> Mochi 混用衬线体——UI 控件用无衬线保证可读性，标题和引用用衬线传递「安静阅读」质感。思源宋体 SC + Lora 传递茶道美学。
+
+#### 🌑 经典暗色 Dark — VS Code 风
+
+| 类型 | 主选 | 备选 | 回退 |
+|------|------|------|------|
+| 中文 | **思源黑体 SC** | HarmonyOS Sans SC | 微软雅黑, sans-serif |
+| 英文 | **Inter** | SF Pro Display | Segoe UI, sans-serif |
+| 等宽 | **JetBrains Mono** | Fira Code | Consolas, monospace |
+
+> 经典暗色偏好开发者风格，Inter + 思源黑体是经典组合。
+
+#### ☀️ 亮色 Light — 日间高亮
 
 | 类型 | 主选 | 备选 | 回退 |
 |------|------|------|------|
 | 中文 | **HarmonyOS Sans SC** | 思源黑体 SC | PingFang SC, 微软雅黑, sans-serif |
-| 英文 | **Plus Jakarta Sans** | Inter | Segoe UI, sans-serif |
-| 等宽 | JetBrains Mono | Fira Code | Consolas, monospace |
+| 英文 | **Inter** | SF Pro Display | Segoe UI, sans-serif |
+| 等宽 | **JetBrains Mono** | Fira Code | Consolas, monospace |
 
-> Plus Jakarta Sans 比 Inter 更圆润有温度，比 Montserrat 更现代；HarmonyOS Sans SC 比微软雅黑清晰锐利，支持 Variable Weight。
-
-#### Peachy v2 字体（温暖亲和）
-
-| 类型 | 主选 | 备选 | 回退 |
-|------|------|------|------|
-| 中文 | **HarmonyOS Sans SC** | 思源黑体 SC | PingFang SC, 微软雅黑, sans-serif |
-| 英文 | **Nunito** | Quicksand | Segoe UI, sans-serif |
-| 等宽 | JetBrains Mono | Fira Code | Consolas, monospace |
-
-> Nunito 圆端设计，天然萌系，跟 Peachy 珊瑚橘暖色完美搭配。
-
-#### Mochi v3 字体（文艺质感）
-
-| 类型 | 主选 | 备选 | 回退 |
-|------|------|------|------|
-| 中文 UI 控件 | **HarmonyOS Sans SC** | 思源黑体 SC | PingFang SC, sans-serif |
-| 中文 标题/引用 | **思源宋体 SC** | LXGW WenKai | serif |
-| 英文 UI 控件 | **Plus Jakarta Sans** | Inter | Segoe UI, sans-serif |
-| 英文 标题/引用 | **Lora** | Merriweather | Georgia, serif |
-| 等宽 | JetBrains Mono | Fira Code | Consolas, monospace |
-
-> Mochi 是唯一混用衬线体的主题——UI 控件用无衬线保证可读性，标题和引用块用衬线传递阅读质感。
-
-#### 备选主题字体（通用）
-
-| 类型 | 主选 | 备选 | 回退 |
-|------|------|------|------|
-| 中文 | 思源黑体 SC | HarmonyOS Sans SC | 微软雅黑, sans-serif |
-| 英文 | Inter | SF Pro Display | Segoe UI, sans-serif |
-| 等宽 | JetBrains Mono | Fira Code | Consolas, monospace |
-
-#### 字体打包策略
-
-| 方式 | 说明 |
-|------|------|
-| 构建时打包 | 字体文件（.ttf/.otf）放入 `assets/fonts/`，跟随编译打包到 zip |
-| 产物体积 | Plus Jakarta Sans ~90KB + HarmonyOS Sans SC ~4MB + Nunito ~75KB + JetBrains Mono ~300KB ≈ 4.5MB |
-| 主题切换 | 字体即时切换，无需重启，字体文件全部打包（按主题 ID 索引） |
-| 回退 | 字体文件缺失时使用系统回退字体，不阻塞启动 |
+> 亮色主题追求简洁通用，Inter + HarmonyOS Sans SC 干净无干扰。
 
 ### 3.2 字号体系
 
@@ -664,20 +667,159 @@
 
 > 示例：窗口高 1200px 时 body = 1200 × 1.63% ≈ 20px；窗口高 600px 时 body = 10px（触发最小值）。
 
-### 3.3 Markdown 渲染样式
+### 3.3 字体 × 场景矩阵
 
-| 元素 | 样式 |
-|------|------|
-| `# H1` | `h1` + 上边距 `GAP × 4` |
-| `## H2` | `h2` + 上边距 `GAP × 3` |
-| **加粗** | `body_strong` |
-| `行内代码` | `code` + `surface` 背景 + `radius_sm` 圆角 |
-| ``` 代码块 ``` | `code` + `surface` + `radius_md` 圆角 + padding `GAP × 3` |
-| - 列表 | `body` + 左缩进 `GAP × 4` |
-| > 引用 | `body` + `text_secondary` + 左侧 accent 竖线 (`GAP × 0.5` 宽) |
-| [链接](url) | `accent` + 下划线 |
+> 每个 UI 元素 = 字体族 + 字号 Token + 字重。按主题分列。
+> "无衬线" = 该主题的 UI 正文字体；"衬线" = 该主题的标题/引用字体（仅 Mochi 有）。
 
-### 3.4 文字排版规则
+| UI 元素 | 字号 | 字重 | 🍵 Matcha | 🍑 Peachy | 🍡 Mochi | 🌑 Dark | ☀️ Light |
+|---------|------|------|-----------|-----------|----------|---------|----------|
+| **品牌标题** (标题栏/About) | display | 700 | PJS Bold | Nunito Bold | Lora Bold | Inter Bold | Inter Bold |
+| **弹窗标题** | h1 | 700 | PJS Bold | Nunito Bold | 思源宋体 SC Bold | Inter Bold | Inter Bold |
+| **区域标题** (面板/Tab) | h2 | 600 | PJS SemiBold | Nunito SemiBold | 思源宋体 SC Bold | Inter SemiBold | Inter SemiBold |
+| **卡片标题** (StepCard/Session) | h3 | 600 | PJS SemiBold | Nunito SemiBold | PJS SemiBold | Inter SemiBold | Inter SemiBold |
+| **正文** (消息/内容) | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
+| **强调正文** | body | 600 | PJS SemiBold | Nunito SemiBold | PJS SemiBold | Inter SemiBold | Inter SemiBold |
+| **Chat 消息** | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
+| **Chat 消息（Mochi引用块）** | body | 400 | — | — | Lora Regular | — | — |
+| **按钮文字** | body | 600 | PJS SemiBold | Nunito SemiBold | PJS SemiBold | Inter SemiBold | Inter SemiBold |
+| **输入框文字** | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
+| **输入框占位符** | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
+| **下拉选项** | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
+| **次要信息** (时间戳/说明) | small | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
+| **标签/胶囊** | caption | 500 | PJS Medium | Nunito Medium | PJS Medium | Inter Medium | Inter Medium |
+| **代码块** | code | 400 | JetBrains Mono | JetBrains Mono | JetBrains Mono | JetBrains Mono | JetBrains Mono |
+| **行内代码** | code | 400 | JetBrains Mono | JetBrains Mono | JetBrains Mono | JetBrains Mono | JetBrains Mono |
+| **终端日志** | code | 400 | JetBrains Mono | JetBrains Mono | JetBrains Mono | JetBrains Mono | JetBrains Mono |
+| **步骤指示器文字** | small | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
+| **向导步骤名** | caption | 500 | PJS Medium | Nunito Medium | PJS Medium | Inter Medium | Inter Medium |
+| **设置行标签** | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
+| **设置行说明** | small | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
+| **Toast 通知** | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
+| **Tooltip** | small | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
+| **空状态文案** | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
+| **中文** (上述所有 CJK 场景) | 同上 | 同上 | HarmonyOS Sans SC | HarmonyOS Sans SC | 无衬线=HarmOS SC / 衬线=思源宋体 SC | 思源黑体 SC | HarmonyOS Sans SC |
+
+**缩写：** PJS = Plus Jakarta Sans, HarmOS = HarmonyOS, 思源宋体 SC = Source Han Serif SC
+
+**字重速查：**
+
+| 字重值 | 名称 | 使用场景 |
+|--------|------|---------|
+| 400 | Regular | 正文、消息、输入、标签默认 |
+| 500 | Medium | 胶囊状态、向导步骤名 |
+| 600 | SemiBold | 强调正文、区域标题、按钮、卡片标题 |
+| 700 | Bold | 品牌标题、弹窗标题 |
+
+### 3.4 字体加载策略
+
+#### 打包方式
+
+| 文件 | 大小 | 包含变体 |
+|------|------|---------|
+| `PlusJakartaSans-Regular.ttf` | ~25KB | Regular 400 |
+| `PlusJakartaSans-SemiBold.ttf` | ~25KB | SemiBold 600 |
+| `PlusJakartaSans-Bold.ttf` | ~25KB | Bold 700 |
+| `Nunito-Regular.ttf` | ~25KB | Regular 400 |
+| `Nunito-Bold.ttf` | ~25KB | Bold 700 |
+| `HarmonyOS_Sans_SC_Regular.otf` | ~2MB | Regular 400 |
+| `HarmonyOS_Sans_SC_Bold.otf` | ~2MB | Bold 700 |
+| `Lora-Regular.ttf` | ~150KB | Regular 400 |
+| `Lora-Bold.ttf` | ~150KB | Bold 700 |
+| `JetBrainsMono-Regular.ttf` | ~300KB | Regular 400 |
+| **总计** | **~5MB** | |
+
+> Nunito 不需要 SemiBold 变体（其 600 权重视觉上接近其他字体的 500，用 Regular + Bold 即可覆盖）。
+> Mochi 的思源宋体 SC Bold 用于标题（对标其他主题的 SemiBold/Bold）。
+
+#### 加载流程
+
+```
+启动 → 读取 config.json theme 字段
+  → 根据主题 ID 选择字体族（见 3.1 字体栈表）
+  → lv_tiny_ttf_create_file() 加载 .ttf/.otf，按 DPI 缩放
+  → 创建 9 级字号对象（display/h1/h2/h3/body/small/caption/code + body_strong）
+  → 注册为全局 g_theme_fonts 结构体
+  → 主题切换时销毁旧字体 → 重新创建 → 触发 UI 刷新
+```
+
+#### 运行时字体结构体
+
+```c
+struct ThemeFonts {
+    /* 英文/通用字体 */
+    lv_font_t* display;       /* 品牌标题, 28px @800h, Bold */
+    lv_font_t* h1;            /* 弹窗标题, 22px @800h, Bold */
+    lv_font_t* h2;            /* 区域标题, 18px @800h, SemiBold */
+    lv_font_t* h3;            /* 卡片标题, 15px @800h, SemiBold */
+    lv_font_t* body;          /* 正文, 13px @800h, Regular */
+    lv_font_t* body_strong;   /* 强调正文, 13px @800h, SemiBold */
+    lv_font_t* small;         /* 次要信息, 11px @800h, Regular */
+    lv_font_t* caption;       /* 标签胶囊, 10px @800h, Medium(500) */
+    lv_font_t* code;          /* 代码, 12px @800h, Regular */
+
+    /* 中文 CJK 字体（与英文同级，fallback 链接） */
+    lv_font_t* cjk_body;      /* CJK 正文 */
+    lv_font_t* cjk_title;     /* CJK 标题（仅 Mochi 用思源宋体） */
+};
+```
+
+#### 各主题字体对应关系
+
+| Font 指针 | 🍵 Matcha | 🍑 Peachy | 🍡 Mochi | 🌑 Dark | ☀️ Light |
+|-----------|-----------|-----------|----------|---------|----------|
+| `display` | PJS Bold 28px | Nunito Bold 28px | Lora Bold 28px | Inter Bold 28px | Inter Bold 28px |
+| `h1` | PJS Bold 22px | Nunito Bold 22px | 思源宋体 Bold 22px | Inter Bold 22px | Inter Bold 22px |
+| `h2` | PJS SemiBold 18px | Nunito SemiBold 18px | 思源宋体 Bold 18px | Inter SemiBold 18px | Inter SemiBold 18px |
+| `h3` | PJS SemiBold 15px | Nunito SemiBold 15px | PJS SemiBold 15px | Inter SemiBold 15px | Inter SemiBold 15px |
+| `body` | PJS Regular 13px | Nunito Regular 13px | PJS Regular 13px | Inter Regular 13px | Inter Regular 13px |
+| `body_strong` | PJS SemiBold 13px | Nunito SemiBold 13px | PJS SemiBold 13px | Inter SemiBold 13px | Inter SemiBold 13px |
+| `small` | PJS Regular 11px | Nunito Regular 11px | PJS Regular 11px | Inter Regular 11px | Inter Regular 11px |
+| `caption` | PJS Medium 10px | Nunito Medium 10px | PJS Medium 10px | Inter Medium 10px | Inter Medium 10px |
+| `code` | JetBrains Mono 12px | JetBrains Mono 12px | JetBrains Mono 12px | JetBrains Mono 12px | JetBrains Mono 12px |
+| `cjk_body` | HarmOS SC Reg | HarmOS SC Reg | HarmOS SC Reg | 思源黑体 SC Reg | HarmOS SC Reg |
+| `cjk_title` | HarmOS SC Bold | HarmOS SC Bold | 思源宋体 SC Bold | 思源黑体 SC Bold | HarmOS SC Bold |
+
+> Mochi 的 `cjk_title` 使用思源宋体 SC（衬线），与其他主题不同。
+> 所有 CJK 字体通过 `lv_font_t->fallback` 链接到对应英文主字体，实现中英混排自动切换。
+
+#### 回退链
+
+```
+英文渲染请求 → 主字体（如 PJS Regular）
+  → 找不到字形 → fallback → CJK 字体（如 HarmOS SC Regular）
+    → 找不到字形 → fallback → 系统字体（msyh / segoeui）
+      → 找不到字形 → LVGL 内置位图字体
+```
+
+#### 字号动态计算
+
+```c
+/* 所有字号通过此函数计算，不再硬编码 */
+int font_size(int pct, int win_h, int min_px) {
+    int sz = win_h * pct / 10000;  /* pct 如 FONT_BODY_PCT=163 → 1.63% */
+    return (sz < min_px) ? min_px : sz;
+}
+
+/* 使用示例 */
+int body_px = font_size(FONT_BODY_PCT, WIN_H, FONT_MIN_BODY);  /* 800h → 13px */
+int h1_px   = font_size(FONT_H1_PCT,   WIN_H, FONT_MIN_H1);    /* 800h → 22px */
+```
+
+### 3.5 Markdown 渲染样式
+
+| 元素 | 字体 | 样式 |
+|------|------|------|
+| `# H1` | h1 + cjk_title | 上边距 `GAP × 4` |
+| `## H2` | h2 + cjk_title | 上边距 `GAP × 3` |
+| **加粗** | body_strong | |
+| `行内代码` | code | + `surface` 背景 + `radius_sm` 圆角 |
+| ``` 代码块 ``` | code | + `surface` + `radius_md` 圆角 + padding `GAP × 3` |
+| - 列表 | body | + 左缩进 `GAP × 4` |
+| > 引用 | body (Mochi: cjk_title/衬线) | + `text_secondary` + 左侧 accent 竖线 (`GAP × 0.5` 宽) |
+| [链接](url) | body | + `accent` + 下划线 |
+
+### 3.6 文字排版规则
 
 | 规则 | 值 |
 |------|-----|
@@ -687,6 +829,8 @@
 | 文字截断 | 尾部 `...` 省略，最多 3 行 |
 | 代码块背景 | `surface` 色, `radius_md` 圆角 |
 | 选中文字高亮 | `accent` 色, opacity 30% |
+| Mochi 引用块字体 | 切换为衬线体（Lora / 思源宋体 SC） |
+| 字重切换动画 | 主题切换时字重不渐变，直接切换 |
 
 ---
 
