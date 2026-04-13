@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstring>
 #include "app_log.h"
+#include "theme.h"
 
 /* stb_image for PNG loading (works in Wine, unlike WIC/GDI+) */
 #define STB_IMAGE_IMPLEMENTATION
@@ -82,47 +83,68 @@ static HBITMAP load_png_bitmap(const char* path, int* out_w, int* out_h) {
     return hBmp;
 }
 
+/* ── Theme-aware mascot directory ── */
+static const char* get_mascot_dir() {
+    switch (g_theme) {
+        case Theme::Peachy:  return "mascot\\peachy\\";
+        case Theme::Mochi:   return "mascot\\mochi\\";
+        default:             return "mascot\\matcha\\";
+    }
+}
+
 /* ── Load textures ── */
 static void load_bitmaps() {
     char exe_path[MAX_PATH];
     GetModuleFileNameA(nullptr, exe_path, MAX_PATH);
     char* p = strrchr(exe_path, '\\');
 
-    const char* body_names[] = { "assets\\garlic_48.png", "..\\assets\\garlic_48.png", "..\\..\\assets\\garlic_48.png" };
-    const char* sprout_names[] = { "assets\\garlic_sprout.png", "..\\assets\\garlic_sprout.png", "..\\..\\assets\\garlic_sprout.png" };
+    const char* mdir = get_mascot_dir();
+    /* Try theme-specific path first, then fallback to root assets */
+    const char* body_names[] = {
+        "assets\\%sgarlic_48.png",       /* theme-specific */
+        "assets\\garlic_48.png",         /* fallback */
+        "..\\assets\\garlic_48.png",
+        "..\\..\\assets\\garlic_48.png"
+    };
+    const char* sprout_names[] = {
+        "assets\\%sgarlic_sprout.png",
+        "assets\\garlic_sprout.png",
+        "..\\assets\\garlic_sprout.png",
+        "..\\..\\assets\\garlic_sprout.png"
+    };
 
-    for (auto& rel : body_names) {
-        if (p && !g_body_bmp) {
+    for (int i = 0; i < 4 && !g_body_bmp; i++) {
+        if (p) {
             char dir[MAX_PATH];
             size_t dir_len = (size_t)(p - exe_path + 1);
             if (dir_len >= MAX_PATH) dir_len = MAX_PATH - 1;
             memcpy(dir, exe_path, dir_len);
             dir[dir_len] = '\0';
             char path[MAX_PATH];
-            snprintf(path, MAX_PATH, "%s%s", dir, rel);
+            if (i == 0) snprintf(path, MAX_PATH, "%sassets\\%sgarlic_48.png", dir, mdir);
+            else snprintf(path, MAX_PATH, "%s%s", dir, body_names[i]);
             g_body_bmp = load_png_bitmap(path, &g_body_w, &g_body_h);
             if (g_body_bmp) {
                 LOG_I("GARLIC", "Body bitmap loaded: %dx%d from %s", g_body_w, g_body_h, path);
-            } else {
-                LOG_W("GARLIC", "Body bitmap failed: %s", path);
             }
         }
     }
-    for (auto& rel : sprout_names) {
-        if (p && !g_sprout_bmp) {
+    for (int i = 0; i < 4 && !g_sprout_bmp; i++) {
+        if (p) {
             char dir[MAX_PATH];
             size_t dir_len = (size_t)(p - exe_path + 1);
             if (dir_len >= MAX_PATH) dir_len = MAX_PATH - 1;
             memcpy(dir, exe_path, dir_len);
             dir[dir_len] = '\0';
             char path[MAX_PATH];
-            snprintf(path, MAX_PATH, "%s%s", dir, rel);
+            if (i == 0) snprintf(path, MAX_PATH, "%sassets\\%sgarlic_sprout.png", dir, mdir);
+            else snprintf(path, MAX_PATH, "%s%s", dir, sprout_names[i]);
             g_sprout_bmp = load_png_bitmap(path, &g_sprout_w, &g_sprout_h);
             if (g_sprout_bmp) {
                 LOG_I("GARLIC", "Sprout bitmap loaded: %dx%d from %s", g_sprout_w, g_sprout_h, path);
-            } else {
-                LOG_W("GARLIC", "Sprout bitmap failed: %s", path);
             }
+        }
+    }
         }
     }
     if (!g_body_bmp) LOG_E("GARLIC", "Body bitmap NOT FOUND in any path!");
