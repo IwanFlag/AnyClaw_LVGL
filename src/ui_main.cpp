@@ -30,6 +30,7 @@
 /* Extern for tray minimize */
 #include "tray.h"
 #include "anim.h"
+#include "sound.h"
 #include "health.h"
 #include "license.h"
 #include "session_manager.h"
@@ -8691,6 +8692,9 @@ void apply_theme_to_all() {
     /* Update animation config for new theme */
     anim_theme_transition();
 
+    /* Reload sounds for new theme */
+    sound_reload_theme();
+
     lv_obj_invalidate(scr);
 }
 
@@ -11245,6 +11249,7 @@ void app_ui_init() {
     /* Load saved config first (sets g_theme, g_lang, g_colors) */
     load_theme_config();
     anim_init();  /* Initialize animation config for loaded theme */
+    sound_init(); /* Initialize sound system */
     g_lang = Lang::EN;  /* Force English as default */
 
     /* DPI scale info */

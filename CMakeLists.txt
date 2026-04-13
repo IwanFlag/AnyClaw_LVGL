@@ -111,6 +111,7 @@ set(APP_SOURCES
     src/utf8_util.cpp
     src/garlic_dock.cpp
     src/anim.cpp
+    src/sound.cpp
     src/session_manager.cpp
     src/workspace.cpp
     src/permissions.cpp
