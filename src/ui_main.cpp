@@ -239,6 +239,16 @@ static int g_gemma_model_mask = 0;
 static std::atomic<bool> g_gemma_install_started(false);
 static uint32_t g_wiz_gemma_progress_start_ms = 0;
 
+/* ═══ Theme Helpers ═══ */
+/* Blend a base color with a tint color at ~12% opacity (for toast bg etc.) */
+static lv_color_t blend_with_tint(lv_color_t base, lv_color_t tint) {
+    return lv_color_make(
+        (uint8_t)((base.ch.red * 224u + tint.ch.red * 32u) >> 8),
+        (uint8_t)((base.ch.green * 224u + tint.ch.green * 32u) >> 8),
+        (uint8_t)((base.ch.blue * 224u + tint.ch.blue * 32u) >> 8)
+    );
+}
+
 /* ═══ Theme System (P2-4) ═══ */
 Theme g_theme = Theme::Dark;
 static const ThemeColors THEME_DARK = {
@@ -1886,7 +1896,7 @@ static void ui_log_flush_timer_cb(lv_timer_t* t) {
                 if (lp_progress_result) {
                     if (ev.type == 1) {
                         lv_label_set_text(lp_progress_result, ev.result[0] ? ev.result : (ev.ok ? "Done" : "Failed"));
-                        lv_obj_set_style_text_color(lp_progress_result, ev.ok ? lv_color_make(120, 220, 150) : lv_color_make(255, 120, 120), 0);
+                        lv_obj_set_style_text_color(lp_progress_result, ev.ok ? c->success : c->danger, 0);
                     } else {
                         lv_label_set_text(lp_progress_result, "");
                     }
@@ -1922,7 +1932,7 @@ static void ui_log_flush_timer_cb(lv_timer_t* t) {
                 if (mode_boot_progress_result) {
                     if (ev.type == 1) {
                         lv_label_set_text(mode_boot_progress_result, ev.result[0] ? ev.result : (ev.ok ? "Done" : "Failed"));
-                        lv_obj_set_style_text_color(mode_boot_progress_result, ev.ok ? lv_color_make(120, 220, 150) : lv_color_make(255, 120, 120), 0);
+                        lv_obj_set_style_text_color(mode_boot_progress_result, ev.ok ? g_colors->success : g_colors->danger, 0);
                     } else {
                         lv_label_set_text(mode_boot_progress_result, "");
                     }
@@ -2108,19 +2118,19 @@ static void toast_render(const char* text, ToastType type, int duration_ms) {
     lv_color_t bg, border, txt;
     switch (type) {
         case ToastType::Success:
-            bg = lv_color_make(0x1A, 0x2E, 0x1A);
-            border = lv_color_make(0x3D, 0xD6, 0x8C);
-            txt = lv_color_make(0xB6, 0xF2, 0xCC);
+            bg = blend_with_tint(c->bg, c->success);
+            border = c->success;
+            txt = c->success;
             break;
         case ToastType::Warning:
-            bg = lv_color_make(0x2E, 0x2A, 0x1A);
-            border = lv_color_make(0xE6, 0xC8, 0x4B);
-            txt = lv_color_make(0xF2, 0xE6, 0xB6);
+            bg = blend_with_tint(c->bg, c->warning);
+            border = c->warning;
+            txt = c->warning;
             break;
         case ToastType::Error:
-            bg = lv_color_make(0x2E, 0x1A, 0x1A);
-            border = lv_color_make(0xFF, 0x6B, 0x6B);
-            txt = lv_color_make(0xFF, 0xB6, 0xB6);
+            bg = blend_with_tint(c->bg, c->danger);
+            border = c->danger;
+            txt = c->danger;
             break;
         default: /* Info */
             bg = c->panel;
@@ -3269,9 +3279,9 @@ static void work_add_step_card(const char* action, const char* detail, bool done
     lv_color_t card_border = c->border;
     lv_color_t card_bg = c->surface;
     const char* kind = "general";
-    if (write_op) { card_border = lv_color_make(230, 170, 80); card_bg = lv_color_make(58, 46, 28); kind = "write"; }
-    else if (exec_op) { card_border = lv_color_make(120, 170, 240); card_bg = lv_color_make(32, 46, 64); kind = "exec"; }
-    else if (read_op) { card_border = lv_color_make(110, 180, 130); card_bg = lv_color_make(30, 48, 36); kind = "read"; }
+    if (write_op) { card_border = c->warning; card_bg = c->surface; kind = "write"; }
+    else if (exec_op) { card_border = c->info; card_bg = c->surface; kind = "exec"; }
+    else if (read_op) { card_border = c->success; card_bg = c->surface; kind = "read"; }
     lv_obj_t* card = lv_obj_create(mode_work_step_stream);
     lv_obj_set_width(card, LV_PCT(100));
     lv_obj_set_height(card, LV_SIZE_CONTENT);
@@ -3294,7 +3304,7 @@ static void work_add_step_card(const char* action, const char* detail, bool done
 
     lv_obj_t* kind_lbl = lv_label_create(card);
     lv_label_set_text_fmt(kind_lbl, "kind: %s", kind);
-    lv_obj_set_style_text_color(kind_lbl, lv_color_make(170, 190, 220), 0);
+    lv_obj_set_style_text_color(kind_lbl, c->text, 0);
     lv_obj_set_style_text_font(kind_lbl, CJK_FONT_SMALL, 0);
 
     lv_obj_t* info = lv_label_create(card);
@@ -3386,13 +3396,13 @@ static void work_append_md_block(const char* title, const char* text) {
     }
     if (mode_lbl_work_renderer) {
         lv_label_set_text_fmt(mode_lbl_work_renderer, "Renderer: %s", is_plan ? "plan" : output_renderer_name(rt));
-        lv_color_t rc = lv_color_make(140, 170, 220);
-        if (is_plan) rc = lv_color_make(255, 200, 120);
-        else if (rt == WorkRenderType::Diff) rc = lv_color_make(120, 190, 255);
-        else if (rt == WorkRenderType::Table) rc = lv_color_make(120, 210, 150);
-        else if (rt == WorkRenderType::Web) rc = lv_color_make(190, 160, 255);
-        else if (rt == WorkRenderType::File) rc = lv_color_make(255, 190, 140);
-        else if (rt == WorkRenderType::Terminal) rc = lv_color_make(180, 180, 180);
+        lv_color_t rc = c->accent_secondary;
+        if (is_plan) rc = c->warning;
+        else if (rt == WorkRenderType::Diff) rc = c->info;
+        else if (rt == WorkRenderType::Table) rc = c->success;
+        else if (rt == WorkRenderType::Web) rc = c->info;
+        else if (rt == WorkRenderType::File) rc = c->warning;
+        else if (rt == WorkRenderType::Terminal) rc = c->text_dim;
         lv_obj_set_style_text_color(mode_lbl_work_renderer, rc, 0);
     }
     const bool write_op = strstr(title, "write") || strstr(title, "Write") || strstr(text, "write_file");
@@ -4633,7 +4643,7 @@ static void splitter_drag_cb(lv_event_t* e) {
             drag_start_x = p.x;
         }
         /* Highlight + resize cursor on press */
-        lv_obj_set_style_bg_color(splitter, lv_color_make(130, 170, 255), 0);
+        lv_obj_set_style_bg_color(splitter, c->accent_secondary, 0);
         if (g_cursor_resize) SDL_SetCursor(g_cursor_resize);
     } else if (code == LV_EVENT_PRESSING && is_dragging) {
         lv_indev_t* indev = lv_indev_get_act();
@@ -4672,12 +4682,12 @@ static const char* status_text(ClawStatus s) {
 
 static lv_color_t status_color(ClawStatus s) {
     switch (s) {
-        case ClawStatus::Ready:    return lv_color_make(0, 220, 60);     /* Green */
-        case ClawStatus::Busy:     return lv_color_make(220, 200, 40);   /* Yellow */
-        case ClawStatus::Checking: return lv_color_make(220, 200, 40);   /* Yellow */
-        case ClawStatus::Error:    return lv_color_make(220, 40, 40);    /* Red */
-        case ClawStatus::Detected: return lv_color_make(220, 200, 40);   /* Yellow */
-        default:                   return lv_color_make(200, 200, 210);   /* White / dim */
+        case ClawStatus::Ready:    return g_colors->success;     /* Green */
+        case ClawStatus::Busy:     return g_colors->warning;   /* Yellow */
+        case ClawStatus::Checking: return g_colors->warning;   /* Yellow */
+        case ClawStatus::Error:    return g_colors->danger;    /* Red */
+        case ClawStatus::Detected: return g_colors->warning;   /* Yellow */
+        default:                   return g_colors->text_dim;   /* White / dim */
     }
 }
 
@@ -4818,9 +4828,9 @@ void make_label_selectable(lv_obj_t* lbl) {
     lv_obj_add_event_cb(lbl, label_select_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_add_event_cb(lbl, label_select_cb, LV_EVENT_DEFOCUSED, nullptr);
     /* Selection highlight color — same light blue as chat input */
-    lv_obj_set_style_bg_color(lbl, lv_color_make(180, 215, 255), LV_PART_SELECTED);
+    lv_obj_set_style_bg_color(lbl, c->accent_secondary, LV_PART_SELECTED);
     lv_obj_set_style_bg_opa(lbl, LV_OPA_COVER, LV_PART_SELECTED);
-    lv_obj_set_style_text_color(lbl, lv_color_make(30, 30, 40), LV_PART_SELECTED);
+    lv_obj_set_style_text_color(lbl, c->text_inverse, LV_PART_SELECTED);
 }
 
 /* Recursively make all labels in a widget tree selectable */
@@ -5329,7 +5339,7 @@ static void chat_add_user_bubble(const char* text) {
     }
 
     lv_obj_set_style_text_align(lbl, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_style_text_color(lbl, lv_color_make(255, 255, 255), 0);
+    lv_obj_set_style_text_color(lbl, c->text_inverse, 0);
     lv_obj_set_style_text_font(lbl, CJK_FONT_CHAT, 0);
     lv_obj_set_style_pad_hor(lbl, 10, 0);
     lv_obj_set_style_pad_ver(lbl, 4, 0);
@@ -6098,13 +6108,13 @@ static void chat_start_stream(const char* user_message) {
 
     lv_obj_t* ts_lbl = lv_label_create(meta);
     lv_label_set_text(ts_lbl, meta_ts);
-    lv_obj_set_style_text_color(ts_lbl, lv_color_make(130, 135, 150), 0);
+    lv_obj_set_style_text_color(ts_lbl, c->text_dim, 0);
     lv_obj_set_style_text_font(ts_lbl, FONT(10), 0);
 
     /* Streaming text label */
     stream_buf_clear();
     g_stream_label = lv_label_create(inner);
-    lv_obj_set_style_text_color(g_stream_label, lv_color_make(230, 230, 230), 0);
+    lv_obj_set_style_text_color(g_stream_label, c->text, 0);
     lv_obj_set_style_text_font(g_stream_label, CJK_FONT_CHAT, 0);
     lv_label_set_long_mode(g_stream_label, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(g_stream_label, LV_PCT(100));
@@ -6453,7 +6463,7 @@ static void work_vertical_splitter_cb(lv_event_t* e) {
         start_y = p.y;
         start_step_h = g_work_step_stream_h;
         /* Highlight splitter on press */
-        if (mode_work_splitter) lv_obj_set_style_bg_color(mode_work_splitter, lv_color_make(130, 170, 255), 0);
+        if (mode_work_splitter) lv_obj_set_style_bg_color(mode_work_splitter, g_colors->accent_secondary, 0);
         return;
     }
     if (code == LV_EVENT_RELEASED || code == LV_EVENT_LEAVE) {
@@ -7143,7 +7153,7 @@ static void task_add(const char* name, const char* status, const char* detail = 
     t.widget = lv_obj_create(left_panel);
     lv_obj_set_size(t.widget, LEFT_PANEL_W - GAP * 2, SCALE(32));
     lv_obj_set_pos(t.widget, GAP, g_task_next_y);
-    lv_obj_set_style_bg_color(t.widget, lv_color_make(25, 28, 42), 0);
+    lv_obj_set_style_bg_color(t.widget, c->panel, 0);
     lv_obj_set_style_bg_opa(t.widget, LV_OPA_60, 0);
     lv_obj_set_style_border_width(t.widget, 0, 0);
     lv_obj_set_style_radius(t.widget, 6, 0);
@@ -7162,19 +7172,19 @@ static void task_add(const char* name, const char* status, const char* detail = 
     lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
     /* Status indicator dot — 四色统一：白(Idle)/绿(Running)/红(Error)/黄(Checking) */
     if (strcmp(status, "Running") == 0 || strcmp(status, "运行中") == 0) {
-        lv_obj_set_style_bg_color(dot, lv_color_make(0, 220, 60), 0);
+        lv_obj_set_style_bg_color(dot, c->success, 0);
     } else if (strcmp(status, "Error") == 0 || strcmp(status, "异常") == 0) {
-        lv_obj_set_style_bg_color(dot, lv_color_make(220, 40, 40), 0);
+        lv_obj_set_style_bg_color(dot, c->danger, 0);
     } else if (strcmp(status, "Checking") == 0 || strcmp(status, "检测中") == 0) {
-        lv_obj_set_style_bg_color(dot, lv_color_make(220, 200, 40), 0);
+        lv_obj_set_style_bg_color(dot, c->warning, 0);
     } else {
-        lv_obj_set_style_bg_color(dot, lv_color_make(200, 200, 210), 0); /* White / Idle */
+        lv_obj_set_style_bg_color(dot, c->text_dim, 0); /* White / Idle */
     }
 
     /* Task name — fill remaining space via flex_grow */
     t.label = lv_label_create(t.widget);
     lv_label_set_text(t.label, name);
-    lv_obj_set_style_text_color(t.label, lv_color_make(200, 205, 220), 0);
+    lv_obj_set_style_text_color(t.label, c->text_dim, 0);
     lv_obj_set_style_text_font(t.label, CJK_FONT_SMALL, 0);
     lv_label_set_long_mode(t.label, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_flex_grow(t.label, 1);
@@ -7201,9 +7211,9 @@ static void task_add_with_abort(const char* name, const char* status, const char
         /* Create abort button (small, right-aligned) */
         t.abort_btn = lv_btn_create(t.widget);
         lv_obj_set_size(t.abort_btn, SCALE(28), SCALE(22));
-        lv_obj_set_style_bg_color(t.abort_btn, lv_color_make(180, 50, 50), 0);
-        lv_obj_set_style_bg_color(t.abort_btn, lv_color_make(220, 80, 80), LV_STATE_PRESSED);
-        lv_obj_set_style_bg_color(t.abort_btn, lv_color_make(100, 40, 40), LV_STATE_DISABLED);
+        lv_obj_set_style_bg_color(t.abort_btn, c->btn_close, 0);
+        lv_obj_set_style_bg_color(t.abort_btn, c->danger, LV_STATE_PRESSED);
+        lv_obj_set_style_bg_color(t.abort_btn, c->disabled_bg, LV_STATE_DISABLED);
         lv_obj_set_style_radius(t.abort_btn, 4, 0);
         lv_obj_set_style_border_width(t.abort_btn, 0, 0);
         lv_obj_set_style_pad_all(t.abort_btn, 0, 0);
@@ -7211,7 +7221,7 @@ static void task_add_with_abort(const char* name, const char* status, const char
 
         lv_obj_t* abort_lbl = lv_label_create(t.abort_btn);
         lv_label_set_text(abort_lbl, LV_SYMBOL_CLOSE);
-        lv_obj_set_style_text_color(abort_lbl, lv_color_make(255, 255, 255), 0);
+        lv_obj_set_style_text_color(abort_lbl, c->text_inverse, 0);
         lv_obj_set_style_text_font(abort_lbl, &lv_font_montserrat_14, 0);
         lv_obj_center(abort_lbl);
 
@@ -7663,7 +7673,7 @@ static void add_dialog_buttons(lv_obj_t* box, lv_event_cb_t ok_cb, lv_event_cb_t
     lv_obj_t* lbl_c = lv_label_create(btn_cancel);
     lv_label_set_text(lbl_c, "Cancel");
     lv_obj_set_style_text_font(lbl_c, CJK_FONT, 0);
-    lv_obj_set_style_text_color(lbl_c, lv_color_make(255, 255, 255), 0);
+    lv_obj_set_style_text_color(lbl_c, c->text_inverse, 0);
     lv_obj_center(lbl_c);
     if (cancel_cb) {
         lv_obj_add_event_cb(btn_cancel, cancel_cb, LV_EVENT_CLICKED, user_data);
@@ -7683,7 +7693,7 @@ static void add_dialog_buttons(lv_obj_t* box, lv_event_cb_t ok_cb, lv_event_cb_t
     lv_obj_t* lbl_o = lv_label_create(btn_ok);
     lv_label_set_text(lbl_o, "OK");
     lv_obj_set_style_text_font(lbl_o, CJK_FONT, 0);
-    lv_obj_set_style_text_color(lbl_o, lv_color_make(255, 255, 255), 0);
+    lv_obj_set_style_text_color(lbl_o, c->text_inverse, 0);
     lv_obj_center(lbl_o);
     if (ok_cb) {
         lv_obj_add_event_cb(btn_ok, ok_cb, LV_EVENT_CLICKED, user_data);
@@ -8159,7 +8169,7 @@ void ui_show_about_dialog() {
     /* Brand title */
     lv_obj_t* lbl_title = lv_label_create(box);
     lv_label_set_text(lbl_title, "AnyClaw LVGL");
-    lv_obj_set_style_text_color(lbl_title, lv_color_make(100, 160, 255), 0);
+    lv_obj_set_style_text_color(lbl_title, c->accent_secondary, 0);
     lv_obj_set_style_text_font(lbl_title, CJK_FONT, 0);
 
     /* Version */
@@ -8196,14 +8206,14 @@ void ui_show_about_dialog() {
     /* Links */
     lv_obj_t* lbl_links = lv_label_create(box);
     lv_label_set_text(lbl_links, "github.com/IwanFlag/AnyClaw_LVGL");
-    lv_obj_set_style_text_color(lbl_links, lv_color_make(130, 170, 240), 0);
+    lv_obj_set_style_text_color(lbl_links, c->accent_secondary, 0);
     lv_obj_set_style_text_font(lbl_links, FONT(12), 0);
 
     /* Close button */
     lv_obj_t* btn_close = lv_button_create(box);
     lv_obj_set_size(btn_close, LV_PCT(100), SCALE(36));
-    lv_obj_set_style_bg_color(btn_close, lv_color_make(59, 130, 246), 0);
-    lv_obj_set_style_bg_color(btn_close, lv_color_make(90, 160, 255), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(btn_close, c->accent_secondary, 0);
+    lv_obj_set_style_bg_color(btn_close, c->info, LV_STATE_PRESSED);
     lv_obj_set_style_radius(btn_close, SCALE(8), 0);
     lv_obj_add_event_cb(btn_close, about_dialog_close_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_close = lv_label_create(btn_close);
@@ -8225,7 +8235,7 @@ static void license_activate_cb(lv_event_t* e) {
     const char* key = lv_textarea_get_text(g_license_input);
     if (!key || !key[0]) {
         lv_label_set_text(g_license_status, "Please enter a license key");
-        lv_obj_set_style_text_color(g_license_status, lv_color_make(220, 80, 80), 0);
+        lv_obj_set_style_text_color(g_license_status, c->danger, 0);
         return;
     }
 
@@ -8235,7 +8245,7 @@ static void license_activate_cb(lv_event_t* e) {
         char msg[128];
         snprintf(msg, sizeof(msg), "Activated! %dh (%.1f days) remaining", hours, hours / 24.0);
         lv_label_set_text(g_license_status, msg);
-        lv_obj_set_style_text_color(g_license_status, lv_color_make(0, 220, 60), 0);
+        lv_obj_set_style_text_color(g_license_status, c->success, 0);
 
         /* Close dialog after 1.5s */
         lv_timer_create([](lv_timer_t* t) {
@@ -8244,7 +8254,7 @@ static void license_activate_cb(lv_event_t* e) {
         }, 1500, nullptr);
     } else {
         lv_label_set_text(g_license_status, error ? error : "Activation failed");
-        lv_obj_set_style_text_color(g_license_status, lv_color_make(220, 80, 80), 0);
+        lv_obj_set_style_text_color(g_license_status, c->danger, 0);
     }
 }
 
@@ -8263,7 +8273,7 @@ void ui_show_license_dialog() {
     /* Title */
     lv_obj_t* lbl_title = lv_label_create(box);
     lv_label_set_text(lbl_title, "Trial Period Ended");
-    lv_obj_set_style_text_color(lbl_title, lv_color_make(220, 80, 80), 0);
+    lv_obj_set_style_text_color(lbl_title, c->danger, 0);
     lv_obj_set_style_text_font(lbl_title, CJK_FONT, 0);
 
     /* Description */
@@ -8315,8 +8325,8 @@ void ui_show_license_dialog() {
     /* Activate button */
     lv_obj_t* btn_activate = lv_button_create(btn_row);
     lv_obj_set_size(btn_activate, LV_PCT(50), SCALE(36));
-    lv_obj_set_style_bg_color(btn_activate, lv_color_make(0, 180, 60), 0);
-    lv_obj_set_style_bg_color(btn_activate, lv_color_make(0, 210, 80), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(btn_activate, c->success, 0);
+    lv_obj_set_style_bg_color(btn_activate, c->success, LV_STATE_PRESSED);
     lv_obj_set_style_radius(btn_activate, SCALE(8), 0);
     lv_obj_add_event_cb(btn_activate, license_activate_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_act = lv_label_create(btn_activate);
@@ -8640,7 +8650,7 @@ static void attachment_retry_click_cb(lv_event_t* e) {
         if (!it.done && it.status_lbl == ctx->status_lbl) return;
     }
     lv_label_set_text(ctx->status_lbl, "Queue: pending (retry)");
-    lv_obj_set_style_text_color(ctx->status_lbl, lv_color_make(255, 210, 120), 0);
+    lv_obj_set_style_text_color(ctx->status_lbl, c->warning, 0);
     AttachmentQueueItem item;
     item.path = ctx->path;
     item.is_dir = ctx->is_dir;
@@ -8705,13 +8715,13 @@ static lv_obj_t* chat_add_attachment_card(const char* path, bool is_dir) {
             lv_obj_set_style_radius(preview, 6, 0);
             lv_obj_t* preview_hint = lv_label_create(card);
             lv_label_set_text(preview_hint, "Image preview (click to open original)");
-            lv_obj_set_style_text_color(preview_hint, lv_color_make(200, 220, 255), 0);
+            lv_obj_set_style_text_color(preview_hint, c->accent_secondary, 0);
             lv_obj_set_style_text_font(preview_hint, CJK_FONT_SMALL, 0);
         } else {
             lv_obj_delete(preview);
             lv_obj_t* preview_hint = lv_label_create(card);
             lv_label_set_text(preview_hint, "Image preview unavailable");
-            lv_obj_set_style_text_color(preview_hint, lv_color_make(255, 195, 120), 0);
+            lv_obj_set_style_text_color(preview_hint, c->warning, 0);
             lv_obj_set_style_text_font(preview_hint, CJK_FONT_SMALL, 0);
         }
     }
@@ -8723,7 +8733,7 @@ static lv_obj_t* chat_add_attachment_card(const char* path, bool is_dir) {
 
     lv_obj_t* status_tip = lv_label_create(card);
     lv_label_set_text(status_tip, "Queue: pending");
-    lv_obj_set_style_text_color(status_tip, lv_color_make(255, 210, 120), 0);
+    lv_obj_set_style_text_color(status_tip, c->warning, 0);
     lv_obj_set_style_text_font(status_tip, CJK_FONT_SMALL, 0);
     lv_obj_add_flag(status_tip, LV_OBJ_FLAG_CLICKABLE);
 
@@ -8761,11 +8771,11 @@ static void attachment_queue_timer_cb(lv_timer_t* t) {
         if (it.status_lbl) {
             if (ok) {
                 lv_label_set_text(it.status_lbl, "Queue: sent");
-                lv_obj_set_style_text_color(it.status_lbl, lv_color_make(140, 235, 170), 0);
+                lv_obj_set_style_text_color(it.status_lbl, c->success, 0);
                 g_sent_attachments.push_back({it.path, it.is_dir});
             } else {
                 lv_label_set_text(it.status_lbl, "Queue: failed (click to retry)");
-                lv_obj_set_style_text_color(it.status_lbl, lv_color_make(255, 150, 150), 0);
+                lv_obj_set_style_text_color(it.status_lbl, c->danger, 0);
                 g_attachment_failed_cache.push_back(it);
             }
         }
@@ -8940,7 +8950,7 @@ static void create_title_bar(lv_obj_t* scr) {
         int led_sz = TITLE_H * TITLE_LED_PCT / 100;
         led_ok = lv_led_create(title_bar);
         lv_obj_set_size(led_ok, led_sz, led_sz);
-        lv_led_set_color(led_ok, lv_color_make(200, 200, 60));
+        lv_led_set_color(led_ok, g_colors->warning);
         lv_led_off(led_ok);
         right_x -= led_sz + SCALE(6);
         lv_obj_set_pos(led_ok, right_x, top_y + (wc_btn_h - led_sz) / 2);
@@ -9185,7 +9195,7 @@ static void wizard_progress_mirror_from_event(const PendingProgressEvent& ev, in
     if (g_wiz_install_progress_result) {
         if (ev.type == 1) {
             lv_label_set_text(g_wiz_install_progress_result, ev.result[0] ? ev.result : (ev.ok ? "Done" : "Failed"));
-            lv_obj_set_style_text_color(g_wiz_install_progress_result, ev.ok ? lv_color_make(120, 220, 150) : lv_color_make(255, 120, 120), 0);
+            lv_obj_set_style_text_color(g_wiz_install_progress_result, ev.ok ? g_colors->success : g_colors->danger, 0);
         } else {
             lv_label_set_text(g_wiz_install_progress_result, "");
         }
@@ -9329,13 +9339,13 @@ static void wizard_set_next_enabled(bool enabled) {
         lv_obj_clear_state(g_wizard_btn_next, LV_STATE_DISABLED);
         lv_obj_set_style_bg_opa(g_wizard_btn_next, LV_OPA_COVER, 0);
         if (g_wizard_step == WIZARD_STEPS - 1) {
-            lv_obj_set_style_bg_color(g_wizard_btn_next, lv_color_make(34, 197, 94), 0);
+            lv_obj_set_style_bg_color(g_wizard_btn_next, g_colors->success, 0);
         } else {
-            lv_obj_set_style_bg_color(g_wizard_btn_next, lv_color_make(59, 130, 246), 0);
+            lv_obj_set_style_bg_color(g_wizard_btn_next, g_colors->accent_secondary, 0);
         }
     } else {
         lv_obj_add_state(g_wizard_btn_next, LV_STATE_DISABLED);
-        lv_obj_set_style_bg_color(g_wizard_btn_next, lv_color_make(60, 65, 80), 0);
+        lv_obj_set_style_bg_color(g_wizard_btn_next, g_colors->disabled_bg, 0);
         lv_obj_set_style_bg_opa(g_wizard_btn_next, LV_OPA_50, 0);
     }
 }
@@ -9345,15 +9355,15 @@ static void wiz_lang_cn_cb(lv_event_t* e) {
     (void)e;
     g_wizard_lang_sel = 0;
     g_lang = Lang::CN;
-    if (g_wiz_btn_cn) lv_obj_set_style_bg_color(g_wiz_btn_cn, lv_color_make(59, 130, 246), 0);
-    if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, lv_color_make(50, 55, 75), 0);
+    if (g_wiz_btn_cn) lv_obj_set_style_bg_color(g_wiz_btn_cn, g_colors->accent_secondary, 0);
+    if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, g_colors->disabled_bg, 0);
 }
 static void wiz_lang_en_cb(lv_event_t* e) {
     (void)e;
     g_wizard_lang_sel = 1;
     g_lang = Lang::EN;
-    if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, lv_color_make(59, 130, 246), 0);
-    if (g_wiz_btn_cn) lv_obj_set_style_bg_color(g_wiz_btn_cn, lv_color_make(50, 55, 75), 0);
+    if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, g_colors->accent_secondary, 0);
+    if (g_wiz_btn_cn) lv_obj_set_style_bg_color(g_wiz_btn_cn, g_colors->disabled_bg, 0);
 }
 
 static void wizard_build_step_lang() {
@@ -9375,7 +9385,7 @@ static void wizard_build_step_lang() {
 
     g_wiz_btn_cn = lv_button_create(row);
     lv_obj_set_size(g_wiz_btn_cn, SCALE(140), SCALE(44));
-    lv_obj_set_style_bg_color(g_wiz_btn_cn, (g_wizard_lang_sel == 0) ? lv_color_make(59, 130, 246) : lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_bg_color(g_wiz_btn_cn, (g_wizard_lang_sel == 0) ? g_colors->accent_secondary : g_colors->disabled_bg, 0);
     lv_obj_set_style_radius(g_wiz_btn_cn, 8, 0);
     lv_obj_add_event_cb(g_wiz_btn_cn, wiz_lang_cn_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_cn = lv_label_create(g_wiz_btn_cn);
@@ -9385,7 +9395,7 @@ static void wizard_build_step_lang() {
 
     g_wiz_btn_en = lv_button_create(row);
     lv_obj_set_size(g_wiz_btn_en, SCALE(140), SCALE(44));
-    lv_obj_set_style_bg_color(g_wiz_btn_en, (g_wizard_lang_sel == 1) ? lv_color_make(59, 130, 246) : lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_bg_color(g_wiz_btn_en, (g_wizard_lang_sel == 1) ? g_colors->accent_secondary : g_colors->disabled_bg, 0);
     lv_obj_set_style_radius(g_wiz_btn_en, 8, 0);
     lv_obj_add_event_cb(g_wiz_btn_en, wiz_lang_en_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_en = lv_label_create(g_wiz_btn_en);
@@ -9448,10 +9458,10 @@ static void wiz_install_poll_cb(lv_timer_t* t) {
     if (g_wiz_install_active_label) {
         if (g_wiz_install_result_ok) {
             lv_label_set_text(g_wiz_install_active_label, tr(W_INSTALLED));
-            lv_obj_set_style_text_color(g_wiz_install_active_label, lv_color_make(0, 220, 60), 0);
+            lv_obj_set_style_text_color(g_wiz_install_active_label, g_colors->success, 0);
         } else {
             lv_label_set_text(g_wiz_install_active_label, g_wiz_install_result_msg[0] ? g_wiz_install_result_msg : tr(W_INSTALL_FAIL));
-            lv_obj_set_style_text_color(g_wiz_install_active_label, lv_color_make(220, 80, 80), 0);
+            lv_obj_set_style_text_color(g_wiz_install_active_label, g_colors->danger, 0);
         }
     }
     if (g_wiz_install_result_ok) {
@@ -9489,11 +9499,11 @@ static void wiz_gw_init_cb(lv_event_t* e) {
 
         if (ok) {
             if (lbl) lv_label_set_text(lbl, tr(W_GW_INIT_OK));
-            lv_obj_set_style_bg_color(btn, lv_color_make(34, 197, 94), 0);
+            lv_obj_set_style_bg_color(btn, g_colors->success, 0);
             wizard_set_next_enabled(true);
         } else {
             if (lbl) lv_label_set_text(lbl, output[0] ? output : tr(W_GW_INIT_FAIL));
-            lv_obj_set_style_text_color(lbl, lv_color_make(220, 80, 80), 0);
+            lv_obj_set_style_text_color(lbl, g_colors->danger, 0);
         }
 
         g_wiz_install_running.store(false);
@@ -9749,22 +9759,22 @@ static void wizard_build_step_detect() {
     if (env.node_ok && env.node_version_ok) {
         char buf[128];
         snprintf(buf, sizeof(buf), tr(W_NODE_OK), env.node_ver);
-        wizard_add_status_row(g_wizard_content, buf, lv_color_make(0, 220, 60));
+        wizard_add_status_row(g_wizard_content, buf, g_colors->success);
     } else if (env.node_ok && !env.node_version_ok) {
         char buf[128];
         snprintf(buf, sizeof(buf), tr(W_NODE_OLD), env.node_ver);
-        wizard_add_status_row(g_wizard_content, buf, lv_color_make(220, 180, 40));
+        wizard_add_status_row(g_wizard_content, buf, g_colors->warning);
     } else {
-        wizard_add_status_row(g_wizard_content, tr(W_NODE_FAIL), lv_color_make(220, 40, 40));
+        wizard_add_status_row(g_wizard_content, tr(W_NODE_FAIL), g_colors->danger);
     }
 
     /* npm */
     if (env.npm_ok) {
         char buf[128];
         snprintf(buf, sizeof(buf), tr(W_NPM_OK), env.npm_ver);
-        wizard_add_status_row(g_wizard_content, buf, lv_color_make(0, 220, 60));
+        wizard_add_status_row(g_wizard_content, buf, g_colors->success);
     } else if (env.node_ok) {
-        wizard_add_status_row(g_wizard_content, tr(W_NPM_FAIL), lv_color_make(220, 40, 40));
+        wizard_add_status_row(g_wizard_content, tr(W_NPM_FAIL), g_colors->danger);
     }
 
     /* ═══ 2. Network check ═══ */
@@ -9774,13 +9784,13 @@ static void wizard_build_step_detect() {
 
     wizard_add_status_row(g_wizard_content,
         net_ok ? tr(W_NET_OK) : tr(W_NET_FAIL),
-        net_ok ? lv_color_make(0, 220, 60) : lv_color_make(220, 40, 40));
+        net_ok ? g_colors->success : g_colors->danger);
 
     /* ═══ 3. OpenClaw ═══ */
     if (env.openclaw_ok) {
         char buf[128];
         snprintf(buf, sizeof(buf), tr(W_OC_OK), env.openclaw_ver);
-        wizard_add_status_row(g_wizard_content, buf, lv_color_make(0, 220, 60));
+        wizard_add_status_row(g_wizard_content, buf, g_colors->success);
 
         /* ═══ 3b. Gateway health (only if OC is installed) ═══ */
         char gw_resp[128] = {0};
@@ -9790,12 +9800,12 @@ static void wizard_build_step_detect() {
 
         wizard_add_status_row(g_wizard_content,
             gw_ok ? tr(W_GW_OK) : tr(W_GW_DOWN),
-            gw_ok ? lv_color_make(0, 220, 60) : lv_color_make(220, 180, 40));
+            gw_ok ? g_colors->success : g_colors->warning);
 
         if (!gw_ok && net_ok) {
             lv_obj_t* gw_btn = lv_button_create(g_wizard_content);
             lv_obj_set_size(gw_btn, SCALE(220), SCALE(38));
-            lv_obj_set_style_bg_color(gw_btn, lv_color_make(59, 130, 246), 0);
+            lv_obj_set_style_bg_color(gw_btn, g_colors->accent_secondary, 0);
             lv_obj_set_style_radius(gw_btn, 8, 0);
             lv_obj_t* gw_lbl = lv_label_create(gw_btn);
             lv_label_set_text(gw_lbl, tr(W_GW_INIT_BTN));
@@ -9804,7 +9814,7 @@ static void wizard_build_step_detect() {
             lv_obj_add_event_cb(gw_btn, wiz_gw_init_cb, LV_EVENT_CLICKED, nullptr);
         }
     } else {
-        wizard_add_status_row(g_wizard_content, tr(W_OC_NOT_INST), lv_color_make(220, 40, 40));
+        wizard_add_status_row(g_wizard_content, tr(W_OC_NOT_INST), g_colors->danger);
     }
 
     /* ═══ Node.js missing: offline download + links ═══ */
@@ -9827,7 +9837,7 @@ static void wizard_build_step_detect() {
 
         g_wiz_dl_node_btn = lv_button_create(dl_row);
         lv_obj_set_size(g_wiz_dl_node_btn, SCALE(240), SCALE(38));
-        lv_obj_set_style_bg_color(g_wiz_dl_node_btn, lv_color_make(168, 85, 247), 0); /* Purple */
+        lv_obj_set_style_bg_color(g_wiz_dl_node_btn, g_colors->info, 0); /* Purple */
         lv_obj_set_style_radius(g_wiz_dl_node_btn, 8, 0);
         lv_obj_t* dl_node_lbl = lv_label_create(g_wiz_dl_node_btn);
         lv_label_set_text(dl_node_lbl, "Download Node.js LTS (.msi)");
@@ -9837,7 +9847,7 @@ static void wizard_build_step_detect() {
 
         lv_obj_t* open_dl_btn = lv_button_create(dl_row);
         lv_obj_set_size(open_dl_btn, SCALE(120), SCALE(38));
-        lv_obj_set_style_bg_color(open_dl_btn, lv_color_make(80, 85, 100), 0);
+        lv_obj_set_style_bg_color(open_dl_btn, g_colors->btn_secondary, 0);
         lv_obj_set_style_radius(open_dl_btn, 8, 0);
         lv_obj_t* open_lbl = lv_label_create(open_dl_btn);
         lv_label_set_text(open_lbl, "Open Folder");
@@ -9854,7 +9864,7 @@ static void wizard_build_step_detect() {
         for (int i = 0; urls[i]; i++) {
             lv_obj_t* link = lv_label_create(g_wizard_content);
             lv_label_set_text(link, urls[i]);
-            lv_obj_set_style_text_color(link, lv_color_make(100, 180, 255), 0);
+            lv_obj_set_style_text_color(link, g_colors->accent_secondary, 0);
             lv_obj_set_style_text_font(link, CJK_FONT_SMALL, 0);
         }
     }
@@ -9884,7 +9894,7 @@ static void wizard_build_step_detect() {
         /* Auto install button: includes Node/npm bootstrap + OpenClaw install chain. */
         lv_obj_t* btn_auto = lv_button_create(btn_row);
         lv_obj_set_size(btn_auto, LV_PCT(48), SCALE(44));
-        lv_obj_set_style_bg_color(btn_auto, lv_color_make(34, 197, 94), 0);
+        lv_obj_set_style_bg_color(btn_auto, g_colors->success, 0);
         lv_obj_set_style_radius(btn_auto, 8, 0);
         lv_obj_t* lbl_auto = lv_label_create(btn_auto);
         lv_label_set_text(lbl_auto, "Auto Install");
@@ -9901,7 +9911,7 @@ static void wizard_build_step_detect() {
         /* Local/bundled install button (blue) */
         lv_obj_t* btn_local = lv_button_create(btn_row);
         lv_obj_set_size(btn_local, LV_PCT(48), SCALE(44));
-        lv_obj_set_style_bg_color(btn_local, lv_color_make(59, 130, 246), 0);
+        lv_obj_set_style_bg_color(btn_local, g_colors->accent_secondary, 0);
         lv_obj_set_style_radius(btn_local, 8, 0);
         lv_obj_t* lbl = lv_label_create(btn_local);
         lv_label_set_text(lbl, tr(W_INSTALL_LOCAL));
@@ -9924,7 +9934,7 @@ static void wizard_build_step_detect() {
 
         g_wiz_dl_oc_btn = lv_button_create(oc_dl_row);
         lv_obj_set_size(g_wiz_dl_oc_btn, SCALE(240), SCALE(38));
-        lv_obj_set_style_bg_color(g_wiz_dl_oc_btn, lv_color_make(168, 85, 247), 0); /* Purple */
+        lv_obj_set_style_bg_color(g_wiz_dl_oc_btn, g_colors->info, 0); /* Purple */
         lv_obj_set_style_radius(g_wiz_dl_oc_btn, 8, 0);
         lv_obj_t* dl_oc_lbl = lv_label_create(g_wiz_dl_oc_btn);
         lv_label_set_text(dl_oc_lbl, "Download OpenClaw (.tgz)");
@@ -9938,7 +9948,7 @@ static void wizard_build_step_detect() {
 
         lv_obj_t* open_oc_dl = lv_button_create(oc_dl_row);
         lv_obj_set_size(open_oc_dl, SCALE(120), SCALE(38));
-        lv_obj_set_style_bg_color(open_oc_dl, lv_color_make(80, 85, 100), 0);
+        lv_obj_set_style_bg_color(open_oc_dl, g_colors->btn_secondary, 0);
         lv_obj_set_style_radius(open_oc_dl, 8, 0);
         lv_obj_t* open_oc_lbl = lv_label_create(open_oc_dl);
         lv_label_set_text(open_oc_lbl, "Open Folder");
@@ -9948,7 +9958,7 @@ static void wizard_build_step_detect() {
 
         lv_obj_t* btn_cancel = lv_button_create(g_wizard_content);
         lv_obj_set_size(btn_cancel, LV_PCT(100), SCALE(40));
-        lv_obj_set_style_bg_color(btn_cancel, lv_color_make(220, 80, 80), 0);
+        lv_obj_set_style_bg_color(btn_cancel, g_colors->btn_close, 0);
         lv_obj_set_style_radius(btn_cancel, 8, 0);
         lv_obj_t* lbl_cancel = lv_label_create(btn_cancel);
         lv_label_set_text(lbl_cancel, "退出安装");
@@ -10003,7 +10013,7 @@ static void wizard_build_step_detect() {
         lv_label_set_text(warn, g_lang == Lang::CN
             ? "⚠ 网络不可达，安装/下载功能将不可用"
             : "⚠ Network unreachable — install/download features unavailable");
-        lv_obj_set_style_text_color(warn, lv_color_make(220, 180, 40), 0);
+        lv_obj_set_style_text_color(warn, g_colors->warning, 0);
         lv_obj_set_style_text_font(warn, CJK_FONT_SMALL, 0);
     }
 }
@@ -10078,7 +10088,7 @@ static void wizard_build_step_model_api() {
     /* ── Divider ── */
     lv_obj_t* div = lv_obj_create(g_wizard_content);
     lv_obj_set_size(div, LV_PCT(100), 1);
-    lv_obj_set_style_bg_color(div, lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_bg_color(div, g_colors->divider, 0);
     lv_obj_set_style_border_width(div, 0, 0);
     lv_obj_clear_flag(div, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -10153,7 +10163,7 @@ static void wizard_build_step_gemma() {
 
     lv_obj_t* btn_start_gemma = lv_button_create(g_wizard_content);
     lv_obj_set_size(btn_start_gemma, LV_PCT(100), SCALE(36));
-    lv_obj_set_style_bg_color(btn_start_gemma, lv_color_make(70, 120, 85), 0);
+    lv_obj_set_style_bg_color(btn_start_gemma, g_colors->success, 0);
     lv_obj_set_style_radius(btn_start_gemma, 8, 0);
     lv_obj_t* lbl_start = lv_label_create(btn_start_gemma);
     lv_label_set_text(lbl_start, g_lang == Lang::CN ? "立即开始下载 Gemma" : "Start Gemma Download Now");
@@ -10235,7 +10245,7 @@ static void wizard_build_step_gemma() {
     /* Skip button — Gemma is optional, always allow Next */
     lv_obj_t* btn_skip_gemma = lv_button_create(g_wizard_content);
     lv_obj_set_size(btn_skip_gemma, LV_PCT(100), SCALE(36));
-    lv_obj_set_style_bg_color(btn_skip_gemma, lv_color_make(70, 90, 120), 0);
+    lv_obj_set_style_bg_color(btn_skip_gemma, g_colors->accent_secondary, 0);
     lv_obj_set_style_radius(btn_skip_gemma, 8, 0);
     lv_obj_t* lbl_skip = lv_label_create(btn_skip_gemma);
     lv_label_set_text(lbl_skip, g_lang == Lang::CN ? "跳过（继续）" : "Skip (continue)");
@@ -10257,7 +10267,7 @@ static void wizard_im_refresh_status_labels() {
     auto set_status = [](lv_obj_t* lbl, bool ok) {
         if (!lbl) return;
         lv_label_set_text(lbl, ok ? "已连接" : "未配置");
-        lv_obj_set_style_text_color(lbl, ok ? lv_color_make(90, 210, 130) : lv_color_make(230, 180, 80), 0);
+        lv_obj_set_style_text_color(lbl, ok ? g_colors->success : g_colors->warning, 0);
     };
     set_status(g_wiz_im_tg_status, g_wiz_im_tg_connected);
     set_status(g_wiz_im_discord_status, g_wiz_im_discord_connected);
@@ -10493,14 +10503,14 @@ static void wizard_build_step_profile() {
     /* ── Divider ── */
     lv_obj_t* div = lv_obj_create(g_wizard_content);
     lv_obj_set_size(div, LV_PCT(100), 1);
-    lv_obj_set_style_bg_color(div, lv_color_make(50, 55, 75), 0);
+    lv_obj_set_style_bg_color(div, g_colors->divider, 0);
     lv_obj_set_style_border_width(div, 0, 0);
     lv_obj_clear_flag(div, LV_OBJ_FLAG_SCROLLABLE);
 
     /* ── Summary ── */
     lv_obj_t* summary_hint = lv_label_create(g_wizard_content);
     lv_label_set_text(summary_hint, tr(W_SUMMARY));
-    lv_obj_set_style_text_color(summary_hint, lv_color_make(100, 160, 255), 0);
+    lv_obj_set_style_text_color(summary_hint, g_colors->accent_secondary, 0);
     lv_obj_set_style_text_font(summary_hint, CJK_FONT, 0);
 
     lv_obj_t* box = lv_obj_create(g_wizard_content);
@@ -10644,11 +10654,11 @@ static void wizard_update_step() {
         /* Last step: "Get Started" button */
         lv_obj_t* lbl = lv_obj_get_child(g_wizard_btn_next, 0);
         if (lbl) lv_label_set_text(lbl, tr(W_GET_STARTED));
-        lv_obj_set_style_bg_color(g_wizard_btn_next, lv_color_make(34, 197, 94), 0); /* Green */
+        lv_obj_set_style_bg_color(g_wizard_btn_next, g_colors->success, 0); /* Green */
     } else {
         lv_obj_t* lbl = lv_obj_get_child(g_wizard_btn_next, 0);
         if (lbl) lv_label_set_text(lbl, tr(W_NEXT));
-        lv_obj_set_style_bg_color(g_wizard_btn_next, lv_color_make(59, 130, 246), 0); /* Blue */
+        lv_obj_set_style_bg_color(g_wizard_btn_next, g_colors->accent_secondary, 0); /* Blue */
     }
 }
 
@@ -11017,8 +11027,8 @@ void ui_show_setup_wizard() {
     /* Prev button */
     g_wizard_btn_prev = lv_button_create(btn_bar);
     lv_obj_set_size(g_wizard_btn_prev, SCALE(100), SCALE(40));
-    lv_obj_set_style_bg_color(g_wizard_btn_prev, lv_color_make(50, 55, 75), 0);
-    lv_obj_set_style_bg_color(g_wizard_btn_prev, lv_color_make(70, 75, 100), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(g_wizard_btn_prev, g_colors->disabled_bg, 0);
+    lv_obj_set_style_bg_color(g_wizard_btn_prev, g_colors->btn_secondary, LV_STATE_PRESSED);
     lv_obj_set_style_radius(g_wizard_btn_prev, 8, 0);
     lv_obj_add_event_cb(g_wizard_btn_prev, wizard_prev_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_prev = lv_label_create(g_wizard_btn_prev);
@@ -11029,8 +11039,8 @@ void ui_show_setup_wizard() {
     /* Next button */
     g_wizard_btn_next = lv_button_create(btn_bar);
     lv_obj_set_size(g_wizard_btn_next, SCALE(120), SCALE(40));
-    lv_obj_set_style_bg_color(g_wizard_btn_next, lv_color_make(59, 130, 246), 0);
-    lv_obj_set_style_bg_color(g_wizard_btn_next, lv_color_make(90, 160, 255), LV_STATE_PRESSED);
+    lv_obj_set_style_bg_color(g_wizard_btn_next, g_colors->accent_secondary, 0);
+    lv_obj_set_style_bg_color(g_wizard_btn_next, g_colors->accent_secondary, LV_STATE_PRESSED);
     lv_obj_set_style_radius(g_wizard_btn_next, 8, 0);
     lv_obj_add_event_cb(g_wizard_btn_next, wizard_next_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_next = lv_label_create(g_wizard_btn_next);
@@ -11122,7 +11132,7 @@ void app_ui_init() {
     lv_obj_t* div1 = lv_obj_create(scr);
     lv_obj_set_size(div1, WIN_W, 1);
     lv_obj_set_pos(div1, 0, TITLE_H);
-    lv_obj_set_style_bg_color(div1, lv_color_make(60, 70, 100), 0);
+    lv_obj_set_style_bg_color(div1, g_colors->divider, 0);
     lv_obj_set_style_bg_opa(div1, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(div1, 0, 0);
     lv_obj_set_style_pad_all(div1, 0, 0);
@@ -11161,7 +11171,7 @@ void app_ui_init() {
     auto create_nav_btn = [&](const char* icon, const char* tip, bool active) -> lv_obj_t* {
         lv_obj_t* b = lv_button_create(nav_top);
         lv_obj_set_size(b, nav_btn_sz, nav_btn_sz);
-        lv_obj_set_style_bg_color(b, active ? c->accent : lv_color_make(0, 0, 0), 0);
+        lv_obj_set_style_bg_color(b, active ? c->accent : c->text_hint, 0);
         lv_obj_set_style_bg_opa(b, active ? LV_OPA_20 : LV_OPA_TRANSP, 0);
         lv_obj_set_style_radius(b, NAV_ICON_BTN_RADIUS, 0);
         lv_obj_set_style_border_width(b, 0, 0);
@@ -11245,13 +11255,13 @@ void app_ui_init() {
     /* Gateway Status — left */
     lp_panel_title = lv_label_create(lp_status_row);
     lv_label_set_text(lp_panel_title, tr(S_GW_STATUS));
-    lv_obj_set_style_text_color(lp_panel_title, lv_color_make(130, 170, 240), 0);
+    lv_obj_set_style_text_color(lp_panel_title, c->accent_secondary, 0);
     lv_obj_set_style_text_font(lp_panel_title, CJK_FONT, 0);
 
     /* LED indicator — middle */
     led_ok = lv_led_create(lp_status_row);
     lv_obj_set_size(led_ok, 14, 14);
-    lv_led_set_color(led_ok, lv_color_make(200, 200, 60));
+    lv_led_set_color(led_ok, g_colors->warning);
     lv_led_off(led_ok);
 
     /* Status text — right */
@@ -11268,7 +11278,7 @@ void app_ui_init() {
         static char model_display[300];
         snprintf(model_display, sizeof(model_display), "Model: %s", gw_model_buf);
         lv_label_set_text(model_label, model_display);
-        lv_obj_set_style_text_color(model_label, lv_color_make(100, 140, 180), 0);
+        lv_obj_set_style_text_color(model_label, c->text_dim, 0);
         lv_obj_set_style_text_font(model_label, FONT(10), 0);
         lv_obj_set_pos(model_label, GAP + 8, GAP + 30);
     }
@@ -12319,7 +12329,7 @@ void app_ui_init() {
 
         lv_obj_t* send_lbl = lv_label_create(btn_send_widget);
         lv_label_set_text(send_lbl, LV_SYMBOL_RIGHT);
-        lv_obj_set_style_text_color(send_lbl, lv_color_make(255, 255, 255), 0);
+        lv_obj_set_style_text_color(send_lbl, c->text_inverse, 0);
         lv_obj_center(send_lbl);
 
         /* Restore upload button: left of send button */
@@ -12337,7 +12347,7 @@ void app_ui_init() {
         lv_obj_add_event_cb(btn_upload_widget, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
         lv_obj_t* upload_lbl = lv_label_create(btn_upload_widget);
         lv_label_set_text(upload_lbl, LV_SYMBOL_UPLOAD);
-        lv_obj_set_style_text_color(upload_lbl, lv_color_make(255, 255, 255), 0);
+        lv_obj_set_style_text_color(upload_lbl, c->text_inverse, 0);
         lv_obj_center(upload_lbl);
 
         btn_voice_widget = lv_button_create(mode_panel_chat);
@@ -12354,7 +12364,7 @@ void app_ui_init() {
         lv_obj_add_event_cb(btn_voice_widget, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
         lv_obj_t* voice_lbl = lv_label_create(btn_voice_widget);
         lv_label_set_text(voice_lbl, "V");
-        lv_obj_set_style_text_color(voice_lbl, lv_color_make(255, 255, 255), 0);
+        lv_obj_set_style_text_color(voice_lbl, c->text_inverse, 0);
         lv_obj_center(voice_lbl);
 
         /* Track input text changes to update button state */
