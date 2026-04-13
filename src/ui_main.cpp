@@ -1738,6 +1738,8 @@ static void ui_log_flush_pending() {
     log_refresh_display();
 }
 
+static void toast_flush_pending();
+
 static void ui_log_flush_timer_cb(lv_timer_t* t) {
     (void)t;
     if (g_ui_thread_id != 0 && GetCurrentThreadId() == g_ui_thread_id) {
@@ -1929,7 +1931,7 @@ void update_ui_language();
  *  轻量级应用内通知：底部弹出，自动消失。
  *  线程安全：任意线程调用 ui_toast()，UI 线程渲染。
  * ════════════════════════════════════════════════════════════ */
-enum class ToastType { Info, Success, Warning, Error };
+/* ToastType defined in app.h */
 
 struct PendingToast {
     char text[512];
@@ -9251,7 +9253,6 @@ static void wiz_lang_jp_cb(lv_event_t* e) {
     if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, lv_color_make(50, 55, 75), 0);
     if (g_wiz_btn_kr) lv_obj_set_style_bg_color(g_wiz_btn_kr, lv_color_make(50, 55, 75), 0);
 }
-}
 
 static void wizard_build_step_lang() {
     static const I18n S_HINT = {"Please select your language:", "请选择你的语言："};
@@ -11078,7 +11079,7 @@ void app_ui_init() {
     auto create_nav_btn = [&](const char* icon, const char* tip, bool active) -> lv_obj_t* {
         lv_obj_t* b = lv_button_create(nav_top);
         lv_obj_set_size(b, nav_btn_sz, nav_btn_sz);
-        lv_obj_set_style_bg_color(b, active ? c->accent : LV_COLOR_MAKE(0, 0, 0), 0);
+        lv_obj_set_style_bg_color(b, active ? c->accent : lv_color_make(0, 0, 0), 0);
         lv_obj_set_style_bg_opa(b, active ? LV_OPA_20 : LV_OPA_TRANSP, 0);
         lv_obj_set_style_radius(b, NAV_ICON_BTN_RADIUS, 0);
         lv_obj_set_style_border_width(b, 0, 0);

@@ -234,4 +234,22 @@
 #define SCROLL_SPEED_FACTOR     20
 #define SCROLL_BOTTOM_TOLERANCE_PCT  5  /* "接近底部"容差 = 容器高 × 5% */
 
+
+/* ╔═══════════════════════════════════════════════════════════╗
+ * ║  Backward compatibility aliases (_BASE → _MIN)            ║
+ * ╚═══════════════════════════════════════════════════════════╝ */
+#define TITLE_BAR_H_BASE    TITLE_H_MIN
+#define PANEL_GAP_BASE      GAP_MIN
+#define SPLITTER_W_BASE     SPLITTER_W_MIN
+#define GAP_BASE            GAP_MIN
+#define CHAT_GAP_BASE       CHAT_GAP_MIN
+#define CHAT_MSG_MARGIN_BASE 8      /* chat message side margin (SCALE'd) */
+#define LED_DOT_SIZE        6       /* task status dot px (SCALE'd) */
+#define LP_ROW_H            LP_ROW_H_MIN
+#define LP_ROW_BG_OPA       LV_OPA_TRANSP
+#define LP_ROW_BORDER_W     0
+#define LP_ROW_PAD_ALL      0
+#define LP_ROW_GAP          4
+#define NAV_QUICK_AREA_H_PCT NAV_QUICK_H_PCT
+
 #endif /* APP_CONFIG_H */

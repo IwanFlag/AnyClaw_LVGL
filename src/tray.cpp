@@ -712,7 +712,7 @@ static HMENU create_tray_menu(TrayState state) {
 
     /* Model name (sub-status) */
     {
-        extern void app_get_current_model(char* buf, int buf_size);
+        extern bool app_get_current_model(char* buf, int buf_size);
         char model_buf[128] = {0};
         app_get_current_model(model_buf, sizeof(model_buf));
         if (model_buf[0]) {
