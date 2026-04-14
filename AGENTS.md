@@ -288,71 +288,69 @@ docs: 重构 PRD 为 13 章结构，移除 UI 内容
 | `scripts/` 工具脚本 | |
 | `tasks/` 任务跟踪 | |
 
-### 典型工作流
+### 开发工作流（总流程）
 
 ```
-改代码 → 编译验证 → 改文档（PRD + Design 同步）→ 验证文档一致性 → 提交 → 推送
+第一轮：需求完整性          第二轮：测试修复
+┌──────────────────┐      ┌──────────────────────┐
+│ 对照 PRD+Design  │      │ 跑应用（Wine+xdotool） │
+│ 逐章检查代码     │  →   │ 按 PRD 章节逐功能测试  │
+│ 缺功能 → 开发    │      │ 有 Bug → 修 → 复测    │
+│ 全部完成 → 进入  │      │ 无 Bug → 标记 ✅       │
+└──────────────────┘      └──────────────────────┘
+                                   ↓
+                          全部章节无 Bug
+                                   ↓
+                          编译打包 → commit → push
 ```
 
-具体步骤：
-1. 修改 `src/` 代码
-2. `bash build/linux/build.sh v2.2.1` — 编译通过
-3. 修改 `docs/PRD.md` 对应功能状态
-4. 修改 `docs/Design.md` 对应 UI 状态
-5. `bash scripts/verify-docs.sh` — 一致性检查
-6. `git add -A && git commit -m "<格式>"` — 提交
-7. `git push` — 推送
+### 第一轮：需求完整性检查
 
-### 测试-修复循环
+**目标**：对照 `docs/PRD.md` + `docs/Design.md`，确认每个功能在代码中已实现。
 
-**核心循环：测试 → 发现Bug → 修复 → 编译 → 再测试验证 → 复盘记录**
+**执行顺序**：按 PRD 章节 §2→§3→...→§13 依次检查。
 
+**每章检查方法**：
+1. 读 PRD 该章的验收标准（Acceptance Criteria）
+2. 读 Design 对应的 UI 编号描述
+3. 在 `src/` 中搜索相关代码实现
+4. 判断：功能代码存在 → 标记 ✅；缺失或不完整 → 创建开发任务
+
+**检查结果记录**：在 `tasks/v2.2.1-dev.md` 中标记状态。
+
+**进入第二轮条件**：所有 PRD 功能代码已实现（或标记为已知不做的范围外）。
+
+### 第二轮：测试-修复循环
+
+**核心规则：每个 Bug 必须 修复→复测→确认修复 才算关闭，不允许跳过。**
+
+**每轮循环**：
 ```
-┌─────────────────────────────────────────────────┐
-│  启动: Xvfb + Wine                               │
-│  操作: xdotool 模拟点击/键盘                      │
-│  截图: import (ImageMagick)                       │
-│  分析: mimo_api.sh 多模态分析截图                  │
-│  日志: app.log 定位 crash/卡死                    │
-│  修复: 改代码 → 编译 → 重新测试                    │
-│  记录: Bug → v2.2.1-scan.md → 复盘 → MEMORY.md    │
-└─────────────────────────────────────────────────┘
+测试一个功能 → 发现 Bug?
+  ├─ 是 → 记录到 v2.2.1-scan.md → 修复代码 → 编译 → 重跑同一功能验证
+  │       ├─ 修复成功 → 标记 🐛→✅ → 测试下一个功能
+  │       └─ 修复失败 → 继续修（分析日志定位根因）
+  └─ 否 → 标记 ✅ → 测试下一个功能
 ```
 
-**每轮测试流程：**
+**Bug 处理规则**：
+- 每个 Bug 编号记录：模块、现象、复现步骤、根因、修复方案
+- 修复后必须复测同一场景确认
+- 发现新 Bug 不影响当前 Bug 的修复——并行处理但不混淆
 
-1. **环境准备**
-   - `Xvfb :99 -screen 0 1920x1200x24 &` — 虚拟显示
-   - `export DISPLAY=:99`
-   - 解压 zip 到临时目录
+**测试工具链**：
 
-2. **启动应用**
-   - `wine AnyClaw_LVGL.exe &` — 后台启动
-   - 等待 `app.log` 出现 `Entering main loop`
-   - 超时 30s 无响应 → 截黑屏 + 查日志定位
+| 步骤 | 工具 | 命令 |
+|------|------|------|
+| 启动虚拟显示 | Xvfb | `Xvfb :99 -screen 0 1920x1200x24 &` |
+| 启动应用 | Wine | `DISPLAY=:99 wine AnyClaw_LVGL.exe &` |
+| 模拟操作 | xdotool | `xdotool mousemove/click/type/key` |
+| 截图 | ImageMagick | `DISPLAY=:99 import -window root shot.png` |
+| 分析截图 | MiMo 多模态 | `bash mimo_api.sh image shot.png "<问题>"` |
+| 定位 crash | 日志 | `app.log` 最后一条 = 卡死点 |
+| 检测卡死 | 进程监控 | `ps` + CPU 占用判断死锁/死循环 |
 
-3. **模拟操作**
-   - `xdotool mousemove <x> <y> click 1` — 点击
-   - `xdotool type "text"` — 输入文字
-   - `xdotool key Return` — 回车
-   - `xdotool key Tab` — 切换焦点
-   - 坐标基于窗口百分比布局计算（参考 app_config.h PCT 常量）
-
-4. **截图分析**
-   - `DISPLAY=:99 import -window root /tmp/screenshot.png`
-   - `bash mimo_api.sh image /tmp/screenshot.png "对照 Design.md UI-XX，检查布局/颜色/文字是否正确"`
-   - 黑屏 → 检查 app.log 最后一条 + 进程状态
-
-5. **Bug 处理**
-   - 发现 Bug → 记录到 `tasks/v2.2.1-scan.md`
-   - 修复代码 → 编译 → 重跑同一步骤验证
-   - 验证通过 → 更新 scan.md 状态 🐛→✅
-
-6. **复盘记录**
-   - 每次会话结束写 `tasks/session-YYYY-MM-DD.md`
-   - 关键决策和教训写入 `tasks/MEMORY.md`
-
-**测试覆盖顺序（按 PRD 章节）：**
+**测试覆盖顺序**（按 PRD 章节）：
 
 ```
 §2 安装与首次启动 → §3 主界面 → §4 Chat → §5 Work
@@ -360,7 +358,24 @@ docs: 重构 PRD 为 13 章结构，移除 UI 内容
 → §10 工作区 → §11 设置 → §13 系统管理
 ```
 
-每章测试完毕后：无 Bug → 标记 ✅，有 Bug → 修复后重新测试该章。
+每章测试通过（零 Bug）后 → 标记 ✅ → 进入下一章。
+
+**全部章节通过后**：
+1. 编译打包 `bash build/linux/build.sh v2.2.1`
+2. 更新 `tasks/MEMORY.md` 进度
+3. 写会话记录 `tasks/session-YYYY-MM-DD.md`
+4. `git add -A && git commit && git push`
+
+### 编码工作流（单次修改）
+
+当开发或修 Bug 时，每次代码变更遵循：
+1. 修改 `src/` 代码
+2. `bash build/linux/build.sh v2.2.1` — 编译通过
+3. 修改 `docs/PRD.md` 对应功能状态（如涉及）
+4. 修改 `docs/Design.md` 对应 UI 状态（如涉及）
+5. `bash scripts/verify-docs.sh` — 一致性检查
+6. `git add -A && git commit -m "<格式>"` — 提交
+7. `git push` — 推送
 
 ---
 
