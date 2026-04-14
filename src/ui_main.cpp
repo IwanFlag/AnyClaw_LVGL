@@ -10981,17 +10981,34 @@ static void wizard_update_step_bar(int current_step) {
         bool done = (i < current_step);
         bool active = (i == current_step);
         if (done) {
-            /* Completed: accent filled */
+            /* Completed: accent filled + check icon */
             lv_obj_set_style_bg_color(g_wizard_step_dots[i], g_colors->accent, 0);
             lv_obj_set_style_bg_opa(g_wizard_step_dots[i], LV_OPA_COVER, 0);
             lv_obj_set_style_border_width(g_wizard_step_dots[i], 0, 0);
+            lv_obj_set_size(g_wizard_step_dots[i], SCALE(12), SCALE(12));
+            lv_obj_set_style_shadow_width(g_wizard_step_dots[i], 0, 0);
+            /* Show check label */
+            lv_obj_t* check = lv_obj_get_child(g_wizard_step_dots[i], 0);
+            if (check && lv_obj_check_type(check, &lv_label_class)) {
+                lv_obj_clear_flag(check, LV_OBJ_FLAG_HIDDEN);
+            }
         } else if (active) {
-            /* Current: accent filled + glow effect via larger radius */
+            /* Current: accent filled + glow pulse */
             lv_obj_set_style_bg_color(g_wizard_step_dots[i], g_colors->accent, 0);
             lv_obj_set_style_bg_opa(g_wizard_step_dots[i], LV_OPA_COVER, 0);
             lv_obj_set_style_border_width(g_wizard_step_dots[i], 0, 0);
-            lv_obj_set_style_radius(g_wizard_step_dots[i], LV_RADIUS_CIRCLE, 0);
             lv_obj_set_size(g_wizard_step_dots[i], SCALE(14), SCALE(14));
+            /* Glow shadow */
+            lv_obj_set_style_shadow_width(g_wizard_step_dots[i], SCALE(8), 0);
+            lv_obj_set_style_shadow_color(g_wizard_step_dots[i], g_colors->accent, 0);
+            lv_obj_set_style_shadow_opa(g_wizard_step_dots[i], LV_OPA_40, 0);
+            /* Hide check label */
+            lv_obj_t* check = lv_obj_get_child(g_wizard_step_dots[i], 0);
+            if (check && lv_obj_check_type(check, &lv_label_class)) {
+                lv_obj_add_flag(check, LV_OBJ_FLAG_HIDDEN);
+            }
+            /* Start glow pulse animation */
+            anim_pulse_opa(g_wizard_step_dots[i], 2000);
         } else {
             /* Future: outline only */
             lv_obj_set_style_bg_opa(g_wizard_step_dots[i], LV_OPA_TRANSP, 0);
@@ -10999,6 +11016,12 @@ static void wizard_update_step_bar(int current_step) {
             lv_obj_set_style_border_color(g_wizard_step_dots[i], g_colors->border, 0);
             lv_obj_set_style_radius(g_wizard_step_dots[i], LV_RADIUS_CIRCLE, 0);
             lv_obj_set_size(g_wizard_step_dots[i], SCALE(12), SCALE(12));
+            lv_obj_set_style_shadow_width(g_wizard_step_dots[i], 0, 0);
+            /* Hide check label */
+            lv_obj_t* check = lv_obj_get_child(g_wizard_step_dots[i], 0);
+            if (check && lv_obj_check_type(check, &lv_label_class)) {
+                lv_obj_add_flag(check, LV_OBJ_FLAG_HIDDEN);
+            }
         }
         /* Update label color */
         if (g_wizard_step_labels[i]) {
@@ -11422,6 +11445,19 @@ void ui_show_setup_wizard() {
             lv_obj_set_style_border_width(g_wizard_step_dots[i], 2, 0);
             lv_obj_set_style_border_color(g_wizard_step_dots[i], g_colors->border, 0);
         }
+        /* Glow shadow for current step */
+        if (i == g_wizard_step) {
+            lv_obj_set_style_shadow_width(g_wizard_step_dots[i], SCALE(8), 0);
+            lv_obj_set_style_shadow_color(g_wizard_step_dots[i], g_colors->accent, 0);
+            lv_obj_set_style_shadow_opa(g_wizard_step_dots[i], LV_OPA_40, 0);
+        }
+        /* Check label inside completed dots */
+        lv_obj_t* dot_check = lv_label_create(g_wizard_step_dots[i]);
+        lv_label_set_text(dot_check, LV_SYMBOL_OK);
+        lv_obj_set_style_text_font(dot_check, FONT(7), 0);
+        lv_obj_set_style_text_color(dot_check, g_colors->text_inverse, 0);
+        lv_obj_center(dot_check);
+        if (i >= g_wizard_step) lv_obj_add_flag(dot_check, LV_OBJ_FLAG_HIDDEN);
 
         /* Label under dot */
         g_wizard_step_labels[i] = lv_label_create(g_wizard_step_bar);
@@ -11433,6 +11469,10 @@ void ui_show_setup_wizard() {
         lv_obj_update_layout(g_wizard_step_labels[i]);
         int lbl_w = lv_obj_get_width(g_wizard_step_labels[i]);
         lv_obj_set_pos(g_wizard_step_labels[i], cx - lbl_w / 2, SCALE(20));
+    }
+    /* Start glow pulse on current step dot */
+    if (g_wizard_step_dots[g_wizard_step]) {
+        anim_pulse_opa(g_wizard_step_dots[g_wizard_step], 2000);
     }
 
     /* ── Content area (shifted down for step bar) ── */

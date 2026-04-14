@@ -44,3 +44,10 @@
 - 用户希望: 高效自主推进，不要反复确认
 - 中文沟通
 - 服务器网络: GitHub SSH 可用，apt 已切清华源
+
+### 2026-04-15 更新
+- 新增: mingw gcc13 posix 离线包 (68MB tar.gz) 替换旧 11.0.1 包
+- 新增: install-mingw.sh 三策略安装（apt → tar.gz → 散装 deb）
+- 新增: apt 清华源配置（/etc/apt/sources.list.d/ubuntu-official.list）
+- 编译验证通过: MinGW 交叉编译 + Wine 启动
+- 发现: 向导步骤条渲染可能与代码不一致，需截图验证
