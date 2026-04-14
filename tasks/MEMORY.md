@@ -9,18 +9,22 @@
 - 任务追踪: `AnyClaw_LVGL/tasks/v2.2.1-dev.md`
 - Git 配置: user.email=openclaw@anyclaw.dev, user.name=OpenClaw AI
 
-### 当前进度（截至 2026-04-14）
+### 当前进度（截至 2026-04-14 下午）
 - 阶段一~三: ✅ 全部完成
 - 阶段四 4T-00~05: ✅ 5 套主题就绪（Matcha/Peachy/Classic/Mochi/Light）
 - 4T-06: 68% 完成，剩余 FA(字体) + G(渐变) 阻塞于外部资源
 - 4T-07: 目录结构就位，资源文件 ⏸️ 需设计工具
-- 4T-08: 4/6 完成
+- 4T-08: 5/6 完成
+- 阶段五 5T-01~04: 部分完成（见 session-2026-04-14）
+- 新增: widgets 目录 12 处硬编码颜色已 Token 化（aw_button/aw_input/aw_label/aw_common）
+- 新增: CMakeLists.txt FreeType 条件链接语法错误已修复
 
 ### 下一步
 - 从 `tasks/v2.2.1-dev.md` 找到下一个 ⏳ 继续
 - 阶段四（主题系统）: 代码任务全部 ✅，剩 Wine 截图验证 + ⏸️ 资源文件
 - 阶段五（工程改进）: 5T-01 全部 ✅, 5T-02/03/04 部分完成，从 5T-02.3 开始继续
 - 阻塞项: 字体文件(.ttf/.otf)下载、LVGL gradient API、MinGW 编译验证
+- 环境限制: 服务器无 mingw-w64 / Wine / apt 源不可用 / 无 GitHub 凭证→无法 push
 
 ## 工作习惯
 - 用户希望: 高效自主推进，不要反复确认
