@@ -103,16 +103,16 @@ wine AnyClaw_LVGL.exe  # 无显示器环境运行 + 截图
 
 ```bash
 # 一键安装（自动处理 GPG Key + .deb + 依赖修复）
-bash bundled/wine11/install-wine11.sh
+bash build/linux/wine11/install-wine11.sh
 ```
 
 如阿里云镜像不通，先切 USTC 源：
 ```bash
-cp bundled/wine11/ustc-sources.list /etc/apt/sources.list
+cp build/linux/wine11/ustc-sources.list /etc/apt/sources.list
 apt-get update
 ```
 
-`bundled/wine11/` 内容：
+`build/linux/wine11/` 内容：
 | 文件 | 说明 |
 |------|------|
 | `winehq-stable_*.deb` | WineHQ 元包 |

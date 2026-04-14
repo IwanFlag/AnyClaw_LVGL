@@ -2,11 +2,11 @@
 # ═══════════════════════════════════════════════════════════════
 #  install-wine11.sh — 从本地 .deb 安装 Wine 11 (Ubuntu 24.04 Noble)
 #
-#  用法: bash bundled/wine11/install-wine11.sh
+#  用法: bash build/linux/wine11/install-wine11.sh
 #
 #  前置条件: mingw-w64 等 i386 基础依赖已通过 apt 安装
 #  如果阿里云镜像不通，先切源:
-#    cp bundled/wine11/ustc-sources.list /etc/apt/sources.list.d/
+#    cp build/linux/wine11/ustc-sources.list /etc/apt/sources.list.d/
 #    apt-get update
 # ═══════════════════════════════════════════════════════════════
 set -e
