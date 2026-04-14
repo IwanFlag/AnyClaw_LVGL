@@ -64,3 +64,8 @@ thirdparty/lvgl/tests/
 
 # Misc
 .clawhub/
+
+# Build artifacts (too large for GitHub)
+build/linux/artifacts/*.zip
+build/linux/artifacts/*.exe
+build/linux/artifacts/*.dll

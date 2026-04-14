@@ -188,6 +188,30 @@ static lv_font_t* try_load_ttf(const char* path, int px, lv_font_t* fallback_fon
     return make_embedded_font(px);
 }
 
+/* Helper: create a FreeType vector font (high-DPI crisp rendering).
+ * Returns NULL if file not found or FreeType init fails.
+ * Caller should use this as primary when available, with TinyTTF as fallback. */
+static lv_font_t* try_load_freetype(const char* path, int px, lv_freetype_font_style_t style) {
+#if LV_USE_FREETYPE
+    int dpi = app_get_dpi_scale();
+    int sz = px * dpi / 100;
+    if (sz < 8) sz = 8;
+    FILE* f = fopen(path, "rb");
+    if (!f) return nullptr;
+    fclose(f);
+    lv_font_t* ft = lv_freetype_font_create(path, LV_FREETYPE_FONT_RENDER_MODE_OUTLINE,
+                                             (uint32_t)sz, style);
+    if (ft) {
+        LOG_I("Font", "FreeType loaded: %s @ %dpx (dpi %d)", path, sz, dpi);
+        return ft;
+    }
+    LOG_W("Font", "FreeType create failed for %s, falling back to TinyTTF", path);
+#else
+    (void)path; (void)px; (void)style;
+#endif
+    return nullptr;
+}
+
 /* Theme font file mapping (relative to executable, Design §3.1) */
 struct ThemeFontPaths {
     const char* body_regular;    /* English UI body font (Regular) */
@@ -278,12 +302,77 @@ void init_theme_fonts(Theme theme) {
     if (g_theme_fonts.display && g_theme_fonts.cjk_title && g_theme_fonts.display != g_theme_fonts.cjk_title)
         g_theme_fonts.display->fallback = g_theme_fonts.cjk_title;
 
+    /* ══ FreeType vector fonts (5T-02.5) ══
+     * Try loading high-DPI vector fonts via FreeType.
+     * When available, FreeType replaces TinyTTF as primary;
+     * TinyTTF font becomes the fallback for CJK glyph coverage. */
+    lv_font_t* ft_body = try_load_freetype(paths.body_regular, SZ_BODY, LV_FREETYPE_FONT_STYLE_NORMAL);
+    lv_font_t* ft_bold = try_load_freetype(paths.body_bold, SZ_H1, LV_FREETYPE_FONT_STYLE_BOLD);
+
+    if (ft_body) {
+        /* FreeType body → fallback to TinyTTF body (which has CJK) */
+        ft_body->fallback = g_theme_fonts.body;
+        g_theme_fonts.freetype_body = ft_body;
+        g_theme_fonts.body = ft_body;
+        /* Also upgrade body_strong/small/caption to FreeType if same file */
+        lv_font_t* ft_strong = try_load_freetype(paths.body_semibold, SZ_H3, LV_FREETYPE_FONT_STYLE_BOLD);
+        if (ft_strong) {
+            ft_strong->fallback = g_theme_fonts.body_strong;
+            g_theme_fonts.body_strong = ft_strong;
+        }
+        lv_font_t* ft_small = try_load_freetype(paths.body_regular, SZ_SMALL, LV_FREETYPE_FONT_STYLE_NORMAL);
+        if (ft_small) {
+            ft_small->fallback = g_theme_fonts.small;
+            g_theme_fonts.small = ft_small;
+        }
+        lv_font_t* ft_caption = try_load_freetype(paths.body_regular, SZ_CAPTION, LV_FREETYPE_FONT_STYLE_NORMAL);
+        if (ft_caption) {
+            ft_caption->fallback = g_theme_fonts.caption;
+            g_theme_fonts.caption = ft_caption;
+        }
+    }
+    if (ft_bold) {
+        ft_bold->fallback = g_theme_fonts.h1;
+        g_theme_fonts.freetype_title = ft_bold;
+        g_theme_fonts.h1 = ft_bold;
+        /* Also upgrade display/h2 with FreeType bold/semibold */
+        lv_font_t* ft_display = try_load_freetype(paths.body_bold, SZ_DISPLAY, LV_FREETYPE_FONT_STYLE_BOLD);
+        if (ft_display) {
+            ft_display->fallback = g_theme_fonts.display;
+            g_theme_fonts.display = ft_display;
+        }
+        lv_font_t* ft_h2 = try_load_freetype(paths.body_semibold, SZ_H2, LV_FREETYPE_FONT_STYLE_BOLD);
+        if (ft_h2) {
+            ft_h2->fallback = g_theme_fonts.h2;
+            g_theme_fonts.h2 = ft_h2;
+        }
+    }
+    /* FreeType code font */
+    lv_font_t* ft_code = try_load_freetype(paths.code_font, SZ_CODE, LV_FREETYPE_FONT_STYLE_NORMAL);
+    if (ft_code) {
+        ft_code->fallback = g_theme_fonts.code;
+        g_theme_fonts.code = ft_code;
+    }
+
+    /* Re-apply fallback chain with FreeType as primary → TinyTTF → CJK embedded */
+    if (g_theme_fonts.body && g_theme_fonts.cjk_body && g_theme_fonts.body != g_theme_fonts.cjk_body)
+        g_theme_fonts.body->fallback = g_theme_fonts.cjk_body;
+    if (g_theme_fonts.body_strong && g_theme_fonts.cjk_body && g_theme_fonts.body_strong != g_theme_fonts.cjk_body)
+        g_theme_fonts.body_strong->fallback = g_theme_fonts.cjk_body;
+    if (g_theme_fonts.h1 && g_theme_fonts.cjk_title && g_theme_fonts.h1 != g_theme_fonts.cjk_title)
+        g_theme_fonts.h1->fallback = g_theme_fonts.cjk_title;
+    if (g_theme_fonts.h2 && g_theme_fonts.cjk_title && g_theme_fonts.h2 != g_theme_fonts.cjk_title)
+        g_theme_fonts.h2->fallback = g_theme_fonts.cjk_title;
+    if (g_theme_fonts.display && g_theme_fonts.cjk_title && g_theme_fonts.display != g_theme_fonts.cjk_title)
+        g_theme_fonts.display->fallback = g_theme_fonts.cjk_title;
+
     /* Legacy globals: keep old macros working during transition */
     g_cjk_font      = g_theme_fonts.body;
     g_cjk_font_small = g_theme_fonts.small;
     g_cjk_font_chat  = g_theme_fonts.body;
 
-    LOG_I("Font", "Theme fonts initialized for theme %d", ti);
+    LOG_I("Font", "Theme fonts initialized for theme %d (FreeType %s)",
+          ti, (ft_body || ft_bold) ? "active" : "unavailable");
 }
 
 /* ═══════════════════════════════════════════════════════════════
