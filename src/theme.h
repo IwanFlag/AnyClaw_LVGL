@@ -107,6 +107,10 @@ struct ThemeFonts {
     /* 中文 CJK 字体（与英文同级，fallback 链接） */
     lv_font_t* cjk_body;      /* CJK 正文 */
     lv_font_t* cjk_title;     /* CJK 标题（仅 Mochi 用思源宋体） */
+
+    /* FreeType 矢量字体（高清屏优先，可选） */
+    lv_font_t* freetype_body;  /* FreeType body font (may be NULL) */
+    lv_font_t* freetype_title; /* FreeType title font (may be NULL) */
 };
 
 enum class Theme { Dark, Peachy, Classic, Mochi, Light };
