@@ -303,6 +303,65 @@ docs: 重构 PRD 为 13 章结构，移除 UI 内容
 6. `git add -A && git commit -m "<格式>"` — 提交
 7. `git push` — 推送
 
+### 测试-修复循环
+
+**核心循环：测试 → 发现Bug → 修复 → 编译 → 再测试验证 → 复盘记录**
+
+```
+┌─────────────────────────────────────────────────┐
+│  启动: Xvfb + Wine                               │
+│  操作: xdotool 模拟点击/键盘                      │
+│  截图: import (ImageMagick)                       │
+│  分析: mimo_api.sh 多模态分析截图                  │
+│  日志: app.log 定位 crash/卡死                    │
+│  修复: 改代码 → 编译 → 重新测试                    │
+│  记录: Bug → v2.2.1-scan.md → 复盘 → MEMORY.md    │
+└─────────────────────────────────────────────────┘
+```
+
+**每轮测试流程：**
+
+1. **环境准备**
+   - `Xvfb :99 -screen 0 1920x1200x24 &` — 虚拟显示
+   - `export DISPLAY=:99`
+   - 解压 zip 到临时目录
+
+2. **启动应用**
+   - `wine AnyClaw_LVGL.exe &` — 后台启动
+   - 等待 `app.log` 出现 `Entering main loop`
+   - 超时 30s 无响应 → 截黑屏 + 查日志定位
+
+3. **模拟操作**
+   - `xdotool mousemove <x> <y> click 1` — 点击
+   - `xdotool type "text"` — 输入文字
+   - `xdotool key Return` — 回车
+   - `xdotool key Tab` — 切换焦点
+   - 坐标基于窗口百分比布局计算（参考 app_config.h PCT 常量）
+
+4. **截图分析**
+   - `DISPLAY=:99 import -window root /tmp/screenshot.png`
+   - `bash mimo_api.sh image /tmp/screenshot.png "对照 Design.md UI-XX，检查布局/颜色/文字是否正确"`
+   - 黑屏 → 检查 app.log 最后一条 + 进程状态
+
+5. **Bug 处理**
+   - 发现 Bug → 记录到 `tasks/v2.2.1-scan.md`
+   - 修复代码 → 编译 → 重跑同一步骤验证
+   - 验证通过 → 更新 scan.md 状态 🐛→✅
+
+6. **复盘记录**
+   - 每次会话结束写 `tasks/session-YYYY-MM-DD.md`
+   - 关键决策和教训写入 `tasks/MEMORY.md`
+
+**测试覆盖顺序（按 PRD 章节）：**
+
+```
+§2 安装与首次启动 → §3 主界面 → §4 Chat → §5 Work
+→ §6 模式切换 → §7 模型管理 → §8 Agent → §9 权限
+→ §10 工作区 → §11 设置 → §13 系统管理
+```
+
+每章测试完毕后：无 Bug → 标记 ✅，有 Bug → 修复后重新测试该章。
+
 ---
 
 ## 四、命令速查
