@@ -69,7 +69,7 @@ inline lv_obj_t* aw_switch_create(lv_obj_t* parent, bool initial = false) {
     if (initial) lv_obj_add_state(sw, LV_STATE_CHECKED);
 
     /* Style */
-    lv_obj_set_style_bg_color(sw, lv_color_make(80, 85, 100), 0);
+    lv_obj_set_style_bg_color(sw, g_colors ? g_colors->btn_secondary : lv_color_make(80, 85, 100), 0);
     lv_obj_set_style_bg_color(sw, aw::color_primary(), LV_PART_INDICATOR | LV_STATE_CHECKED);
     lv_obj_set_style_radius(sw, AW_RADIUS_LARGE, 0);
 

@@ -39,7 +39,7 @@ inline lv_obj_t* aw_label_create(lv_obj_t* parent, const char* text,
             lv_obj_set_style_text_font(lbl, aw_font(12), 0);
             break;
         case LABEL_MONO:
-            lv_obj_set_style_text_color(lbl, lv_color_make(180, 220, 180), 0);
+            lv_obj_set_style_text_color(lbl, g_colors ? g_colors->text : lv_color_make(180, 220, 180), 0);
             lv_obj_set_style_text_font(lbl, aw_font(12), 0);
             break;
     }

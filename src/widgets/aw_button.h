@@ -30,20 +30,20 @@ inline lv_obj_t* aw_btn_create(lv_obj_t* parent, const char* text,
 
     switch (style) {
         case BTN_PRIMARY:
-            lv_obj_set_style_bg_color(btn, aw::color_primary(), 0);
-            lv_obj_set_style_bg_color(btn, lv_color_make(90, 160, 255), LV_STATE_PRESSED);
+            lv_obj_set_style_bg_color(btn, g_colors ? g_colors->btn_action : aw::color_primary(), 0);
+            lv_obj_set_style_bg_color(btn, g_colors ? g_colors->accent_active : lv_color_make(90, 160, 255), LV_STATE_PRESSED);
             break;
         case BTN_SECONDARY:
-            lv_obj_set_style_bg_color(btn, lv_color_make(80, 85, 100), 0);
-            lv_obj_set_style_bg_color(btn, lv_color_make(100, 105, 120), LV_STATE_PRESSED);
+            lv_obj_set_style_bg_color(btn, g_colors ? g_colors->btn_secondary : lv_color_make(80, 85, 100), 0);
+            lv_obj_set_style_bg_color(btn, g_colors ? g_colors->active_overlay : lv_color_make(100, 105, 120), LV_STATE_PRESSED);
             break;
         case BTN_DANGER:
-            lv_obj_set_style_bg_color(btn, aw::color_danger(), 0);
-            lv_obj_set_style_bg_color(btn, lv_color_make(240, 100, 100), LV_STATE_PRESSED);
+            lv_obj_set_style_bg_color(btn, g_colors ? g_colors->btn_close : aw::color_danger(), 0);
+            lv_obj_set_style_bg_color(btn, g_colors ? g_colors->danger : lv_color_make(240, 100, 100), LV_STATE_PRESSED);
             break;
         case BTN_SUCCESS:
-            lv_obj_set_style_bg_color(btn, lv_color_make(40, 100, 60), 0);
-            lv_obj_set_style_bg_color(btn, lv_color_make(50, 130, 80), LV_STATE_PRESSED);
+            lv_obj_set_style_bg_color(btn, g_colors ? g_colors->success : lv_color_make(40, 100, 60), 0);
+            lv_obj_set_style_bg_color(btn, g_colors ? g_colors->success : lv_color_make(50, 130, 80), LV_STATE_PRESSED);
             break;
         case BTN_GHOST:
             lv_obj_set_style_bg_opa(btn, LV_OPA_TRANSP, 0);

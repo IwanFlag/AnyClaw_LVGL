@@ -55,8 +55,8 @@ namespace aw {
     inline lv_color_t color_white()    { return lv_color_make(255, 255, 255); }
 
     /* Selection */
-    inline lv_color_t color_sel_bg()   { return lv_color_make(180, 215, 255); }
-    inline lv_color_t color_sel_text() { return lv_color_make(30, 30, 40); }
+    inline lv_color_t color_sel_bg()   { return g_colors ? g_colors->overlay : lv_color_make(180, 215, 255); }
+    inline lv_color_t color_sel_text() { return g_colors ? g_colors->text : lv_color_make(30, 30, 40); }
 }
 
 /* ── Spacing Constants ──────────────────────────────────────── */
