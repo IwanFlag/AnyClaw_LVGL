@@ -718,10 +718,58 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_set_style_bg_color(gen_auto_start_sw, g_colors->disabled_bg, LV_PART_MAIN);
     lv_obj_set_style_bg_color(gen_auto_start_sw, g_colors->accent, LV_PART_INDICATOR | LV_STATE_CHECKED);
     lv_obj_set_style_bg_color(gen_auto_start_sw, g_colors->text_inverse, LV_PART_KNOB);
+    /* Read from config: default ON */
+    {
+        bool auto_restart = true;
+        const char* userprofile = std::getenv("USERPROFILE");
+        if (userprofile) {
+            char path[512];
+            snprintf(path, sizeof(path), "%s\\AppData\\Roaming\\AnyClaw_LVGL\\config.json", userprofile);
+            FILE* f = fopen(path, "r");
+            if (f) {
+                fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
+                if (sz > 0 && sz < 16384) {
+                    char* buf = new char[sz + 1]; fread(buf, 1, sz, f); buf[sz] = '\0';
+                    if (strstr(buf, "\"auto_restart_on_crash\": false")) auto_restart = false;
+                    delete[] buf;
+                }
+                fclose(f);
+            }
+        }
+        if (auto_restart) lv_obj_add_state(gen_auto_start_sw, LV_STATE_CHECKED);
+    }
     lv_obj_add_event_cb(gen_auto_start_sw, [](lv_event_t* e) {
         lv_obj_t* sw = (lv_obj_t*)lv_event_get_target(e);
         bool enabled = lv_obj_has_state(sw, LV_STATE_CHECKED);
-        /* TODO: persist auto_start_on_crash config */
+        /* Save to config */
+        const char* userprofile = std::getenv("USERPROFILE");
+        if (userprofile) {
+            char path[512];
+            snprintf(path, sizeof(path), "%s\\AppData\\Roaming\\AnyClaw_LVGL\\config.json", userprofile);
+            FILE* f = fopen(path, "r");
+            std::string content;
+            if (f) { fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
+                if (sz > 0 && sz < 16384) { char* b = new char[sz+1]; fread(b,1,sz,f); b[sz]='\0'; content=b; delete[] b; }
+                fclose(f);
+            }
+            size_t pos = content.find("\"auto_restart_on_crash\"");
+            if (pos != std::string::npos) {
+                size_t colon = content.find(':', pos);
+                size_t end = content.find_first_of(",\n}", colon);
+                if (colon != std::string::npos && end != std::string::npos)
+                    content.replace(colon + 1, end - colon - 1, enabled ? " true" : " false");
+            } else {
+                size_t last_brace = content.rfind('}');
+                if (last_brace != std::string::npos) {
+                    char line[128];
+                    snprintf(line, sizeof(line), "  \"auto_restart_on_crash\": %s,\n", enabled ? "true" : "false");
+                    content.insert(last_brace, line);
+                }
+            }
+            f = fopen(path, "w");
+            if (f) { fwrite(content.c_str(), 1, content.size(), f); fclose(f); }
+        }
+        LOG_I("Config", "auto_restart_on_crash = %s", enabled ? "true" : "false");
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 
     lv_obj_t* lbl_auto_hint = lv_label_create(auto_right);
