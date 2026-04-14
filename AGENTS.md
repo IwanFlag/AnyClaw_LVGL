@@ -372,11 +372,11 @@ docs: 重构 PRD 为 13 章结构，移除 UI 内容
 3. 写会话记录 `tasks/session-YYYY-MM-DD.md`
 4. `git add -A && git commit && git push`
 
-**会话结束交接规则**：
-- 无论会话因何原因结束，必须确保所有改动已 `git push`
-- 写 `tasks/session-YYYY-MM-DD.md`：做了什么、卡在哪、下一步是什么
-- 更新 `tasks/MEMORY.md`：进度、阻塞项、关键决策
-- 如果有未完成的 🔧 任务，回退状态为 ⏳ 并说明原因
+**每次完成一个功能或 Bug 后**：
+- 更新 `tasks/v2.2.1-dev.md` / `tasks/v2.2.1-scan.md` 状态
+- 更新 `tasks/MEMORY.md` 进度
+- `git add -A && git commit && git push`
+- 然后才开始下一个
 
 ### 编码工作流（单次修改）
 
