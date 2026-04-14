@@ -167,7 +167,11 @@ set(APP_RESOURCES
 set(FREETYPE_PREFIX "${CMAKE_SOURCE_DIR}/thirdparty/freetype-mingw")
 
 if(EXISTS "${FREETYPE_PREFIX}/lib/libfreetype.a")
-    set(FREETYPE_INCLUDE_DIRS "${FREETYPE_PREFIX}/include")
+    if(EXISTS "${FREETYPE_PREFIX}/include/freetype2/freetype/freetype.h")
+        set(FREETYPE_INCLUDE_DIRS "${FREETYPE_PREFIX}/include/freetype2")
+    else()
+        set(FREETYPE_INCLUDE_DIRS "${FREETYPE_PREFIX}/include")
+    endif()
     set(FREETYPE_LIB_DIR "${FREETYPE_PREFIX}/lib")
     set(USE_FREETYPE 1)
     message(STATUS "FreeType: found at ${FREETYPE_PREFIX}")
