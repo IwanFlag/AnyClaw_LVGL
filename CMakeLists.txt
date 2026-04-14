@@ -223,7 +223,7 @@ else()
         advapi32 setupapi shell32 dinput8
         dwmapi comctl32 dbghelp ws2_32 comdlg32
         gdiplus winhttp wininet bcrypt iphlpapi
-        ${USE_FREETYPE:+freetype}
+        $<$<BOOL:${USE_FREETYPE}>:freetype>
         -static-libgcc -static-libstdc++
     )
 endif()
