@@ -225,10 +225,10 @@ assets/tray/{theme}/tray_{state}_{size}.png
 - 状态类：check, x, alert-circle, info, etc.
 - 文件类：file, file-text, folder, download, upload, etc.
 
-### 下载源
+### 下载完成
 
-- **主选**：`https://unpkg.com/lucide-static@latest/` （单文件下载）
-- **备选**：GitHub release `https://github.com/lucide-icons/lucide/releases`
+125 个 SVG 图标已提取到 `assets/icons/lucide/`（Lucide 0.460.0）。
+覆盖 Design.md 定义的全部图标类别 + 常用 UI 图标。
 
 ---
 
@@ -236,13 +236,14 @@ assets/tray/{theme}/tray_{state}_{size}.png
 
 ### 字体清单
 
-| # | 字体族 | 文件 | 来源 | License |
-|---|--------|------|------|---------|
-| FB1 | Plus Jakarta Sans | Regular/SemiBold/Bold .ttf | Google Fonts | OFL |
-| FB2 | Nunito | Regular/Bold .ttf | Google Fonts | OFL |
-| FB3 | HarmonyOS Sans SC | Regular/Bold .otf | 华为开源 | Apache 2.0 |
-| FB4 | Lora | Regular/Bold .ttf | Google Fonts | OFL |
-| FB5 | JetBrains Mono | Regular .ttf | Google Fonts | OFL |
+| # | 字体族 | 文件 | 来源 | License | 状态 |
+|---|--------|------|------|---------|------|
+| FB1 | Plus Jakarta Sans | Regular/Medium(as SemiBold)/Bold .ttf | GitHub | OFL | ✅ |
+| FB2 | Nunito | Regular/Bold .ttf | GitHub (googlefonts) | OFL | ✅ |
+| FB3 | HarmonyOS Sans SC | — | 华为源不可达 | — | ⏸️ 用 Noto Sans SC 替代 |
+| FB3b | Noto Sans SC | Regular/Bold .otf | GitHub (googlefonts) | OFL | ✅ CJK 替代 |
+| FB4 | Lora | Regular/Bold .ttf | GitHub (googlefonts) | OFL | ✅ |
+| FB5 | JetBrains Mono | Regular .ttf | GitHub (JetBrains) | OFL | ✅ |
 
 ### 下载源
 
