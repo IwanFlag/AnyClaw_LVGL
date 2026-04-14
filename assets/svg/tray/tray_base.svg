@@ -1,0 +1,22 @@
+<!-- Tray Icon: Garlic Silhouette + LED Status Dot
+     Replace __BODY_COLOR__ and __LED_COLOR__ -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- Garlic silhouette -->
+  <g>
+    <!-- Stem -->
+    <rect x="42" y="10" width="12" height="18" rx="6" fill="__BODY_COLOR__"/>
+    <!-- Left leaf -->
+    <path d="M48 16 C38 6, 30 10, 34 20 C36 24, 42 22, 48 18Z" fill="__BODY_COLOR__"/>
+    <!-- Right leaf -->
+    <path d="M48 16 C58 6, 66 10, 62 20 C60 24, 54 22, 48 18Z" fill="__BODY_COLOR__"/>
+    <!-- Body -->
+    <ellipse cx="48" cy="55" rx="26" ry="30" fill="__BODY_COLOR__"/>
+    <!-- Bottom tip -->
+    <path d="M40 82 C43 90, 48 92, 48 92 C48 92, 53 90, 56 82" fill="__BODY_COLOR__"/>
+  </g>
+
+  <!-- LED status dot (bottom-right) -->
+  <circle cx="76" cy="76" r="12" fill="__LED_COLOR__" stroke="#FFFFFF" stroke-width="2"/>
+  <!-- LED shine -->
+  <circle cx="73" cy="73" r="4" fill="#FFFFFF" opacity="0.4"/>
+</svg>

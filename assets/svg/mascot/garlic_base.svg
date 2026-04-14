@@ -1,0 +1,68 @@
+<!-- Kawaii Garlic Mascot - Base Template
+     Replace __STEM__, __STEM_HI__, __BODY_START__, __BODY_END__, __STROKE__, __BLUSH__ colors
+     SVG viewport: 96x96 (render at any size) -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <defs>
+    <linearGradient id="bodyGrad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="__BODY_START__"/>
+      <stop offset="100%" stop-color="__BODY_END__"/>
+    </linearGradient>
+    <linearGradient id="stemGrad" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="__STEM_HI__"/>
+      <stop offset="100%" stop-color="__STEM__"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000020"/>
+    </filter>
+    <radialGradient id="highlight" cx="0.35" cy="0.3" r="0.4">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Shadow -->
+  <ellipse cx="48" cy="88" rx="22" ry="4" fill="#00000015"/>
+
+  <!-- Stem / Leaves -->
+  <g filter="url(#shadow)">
+    <!-- Main stem -->
+    <rect x="45" y="8" width="6" height="20" rx="3" fill="url(#stemGrad)"/>
+    <!-- Left leaf -->
+    <path d="M48 14 C38 6, 28 10, 32 20 C34 24, 42 22, 48 18Z" fill="url(#stemGrad)" stroke="__STEM__" stroke-width="0.5"/>
+    <!-- Right leaf -->
+    <path d="M48 14 C58 6, 68 10, 64 20 C62 24, 54 22, 48 18Z" fill="url(#stemGrad)" stroke="__STEM__" stroke-width="0.5"/>
+    <!-- Leaf highlight -->
+    <path d="M48 12 C42 6, 34 8, 36 16 C37 19, 43 18, 48 15Z" fill="__STEM_HI__" opacity="0.4"/>
+  </g>
+
+  <!-- Body -->
+  <g filter="url(#shadow)">
+    <!-- Main body (garlic bulb shape) -->
+    <ellipse cx="48" cy="54" rx="28" ry="32" fill="url(#bodyGrad)" stroke="__STROKE__" stroke-width="1.5"/>
+    <!-- Clove divisions -->
+    <path d="M48 24 C48 24, 44 40, 42 56" stroke="__STROKE__" stroke-width="0.8" fill="none" opacity="0.3"/>
+    <path d="M48 24 C48 24, 52 40, 54 56" stroke="__STROKE__" stroke-width="0.8" fill="none" opacity="0.3"/>
+    <path d="M36 30 C38 44, 40 56, 42 68" stroke="__STROKE__" stroke-width="0.6" fill="none" opacity="0.2"/>
+    <path d="M60 30 C58 44, 56 56, 54 68" stroke="__STROKE__" stroke-width="0.6" fill="none" opacity="0.2"/>
+    <!-- Bottom tip -->
+    <path d="M42 82 C44 88, 48 90, 48 90 C48 90, 52 88, 54 82" fill="url(#bodyGrad)" stroke="__STROKE__" stroke-width="1"/>
+    <!-- Highlight -->
+    <ellipse cx="40" cy="42" rx="14" ry="18" fill="url(#highlight)"/>
+  </g>
+
+  <!-- Face -->
+  <g>
+    <!-- Left eye -->
+    <ellipse cx="38" cy="50" rx="3.5" ry="4" fill="#2D3748"/>
+    <ellipse cx="36.5" cy="48.5" rx="1.5" ry="1.8" fill="#FFFFFF"/>
+    <!-- Right eye -->
+    <ellipse cx="58" cy="50" rx="3.5" ry="4" fill="#2D3748"/>
+    <ellipse cx="56.5" cy="48.5" rx="1.5" ry="1.8" fill="#FFFFFF"/>
+    <!-- Smile -->
+    <path d="M42 58 Q48 64, 54 58" stroke="#2D3748" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <!-- Blush left -->
+    <ellipse cx="32" cy="57" rx="5" ry="3" fill="__BLUSH__" opacity="0.4"/>
+    <!-- Blush right -->
+    <ellipse cx="64" cy="57" rx="5" ry="3" fill="__BLUSH__" opacity="0.4"/>
+  </g>
+</svg>
