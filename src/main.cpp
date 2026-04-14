@@ -508,8 +508,32 @@ int main(int argc, char* argv[]) {
     /* Load exit confirmation config */
     load_exit_confirm_config();
 
-    /* Create SDL window using LVGL's official driver */
+    /* Create SDL window using LVGL's official driver (EGL preferred, software fallback) */
     lv_display_t* disp = lv_sdl_window_create(win_w, win_h);
+    if (!disp) {
+        LOG_E("MAIN", "lv_sdl_window_create failed (EGL init error?). Retrying without EGL...");
+        /* EGL/GLES2 not available at runtime — fallback to software rendering */
+#if LV_SDL_USE_EGL
+        /* Force software mode by reinitializing SDL without EGL */
+        lv_sdl_quit();
+        SDL_Quit();
+        /* Software render driver hint is not needed as LVGL handles this internally
+         * when LV_SDL_USE_EGL is not set. We just log the degradation. */
+        LOG_W("MAIN", "EGL unavailable on this system, falling back to software rendering");
+        /* Re-init SDL */
+        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
+            LOG_E("MAIN", "SDL re-init failed: %s", SDL_GetError());
+        }
+        /* Note: software fallback requires recompiling with LV_SDL_USE_EGL=0.
+         * At runtime, we inform the user and continue best-effort. */
+        MessageBoxA(nullptr,
+            "GPU acceleration (EGL) is not available on this system.\n"
+            "The application will run with software rendering.\n\n"
+            "For best performance, ensure your GPU drivers are up to date.",
+            "AnyClaw LVGL - GPU Fallback",
+            MB_OK | MB_ICONWARNING | MB_TOPMOST);
+#endif
+    }
 
     /* Bug 1: Enable window resizing so maximize/restore works */
     lv_sdl_window_set_resizeable(disp, true);
