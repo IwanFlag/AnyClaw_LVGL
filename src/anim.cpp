@@ -105,7 +105,7 @@ void anim_fade_out(lv_obj_t* obj, uint16_t duration, AnimEase ease) {
     lv_anim_t a;
     lv_anim_init(&a);
     lv_anim_set_var(&a, obj);
-    lv_anim_set_values(&a, lv_obj_get_style_opa(obj, 0), LV_OPA_TRANSP);
+    lv_anim_set_values(&a, lv_obj_get_style_opa(obj, LV_PART_MAIN), LV_OPA_TRANSP);
     lv_anim_set_duration(&a, duration);
     lv_anim_set_path_cb(&a, anim_get_path(ease));
     lv_anim_set_exec_cb(&a, set_opa_cb);
@@ -209,7 +209,7 @@ void anim_btn_release(lv_obj_t* obj) {
     lv_anim_set_duration(&a, g_anim->dur_fast);
     lv_anim_set_path_cb(&a, anim_get_path(ANIM_SPRING));
 
-    lv_anim_set_values(&a, lv_obj_get_style_transform_scale_x(obj, 0), 512);
+    lv_anim_set_values(&a, lv_obj_get_style_transform_scale_x(obj, LV_PART_MAIN), 512);
     lv_anim_set_exec_cb(&a, set_scale_x_cb);
     lv_anim_start(&a);
 

@@ -145,8 +145,6 @@ static void load_bitmaps() {
             }
         }
     }
-        }
-    }
     if (!g_body_bmp) LOG_E("GARLIC", "Body bitmap NOT FOUND in any path!");
     if (!g_sprout_bmp) LOG_E("GARLIC", "Sprout bitmap NOT FOUND in any path!");
 }
