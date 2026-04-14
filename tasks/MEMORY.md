@@ -32,6 +32,7 @@
 ### 下一步
 - 查看 CI 结果（5T-04.4 确认通过后标记 ✅）
 - 环境已解锁后：apt install mingw-w64 wine → 编译验证 + Wine 截图
+- 新增: Nunito/Inter/JetBrainsMono 字体已下载（fontsource woff2→TTF 转换），FA5/FA7/FA8 阻塞解除
 - 阻塞项: apt 镜像不可达（当前服务器阿里云源 timeout）、Wine 未装（截图验证）
 - 代码已全部干净：0 硬编码、0 TODO、文档验证通过
 
