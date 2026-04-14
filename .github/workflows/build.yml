@@ -47,7 +47,7 @@ jobs:
           retention-days: 30
 
   build-linux:
-    name: Native Linux build (smoke test)
+    name: Cross-compile smoke test (no artifact)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -56,10 +56,16 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq cmake libsdl2-dev
+          sudo apt-get install -y -qq mingw-w64 cmake
 
-      - name: Build
-        run: bash build/linux/build-linux.sh
+      - name: CMake configure (syntax check)
+        run: |
+          cmake -S . -B build/smoke \
+            -DCMAKE_TOOLCHAIN_FILE=build/toolchain-mingw64.cmake \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Compile (smoke test)
+        run: cmake --build build/smoke -j"$(nproc)"
 
   release:
     name: Create GitHub Release

@@ -62,14 +62,41 @@ else()
 endif()
 
 if(SDL2_INCLUDE_DIRS STREQUAL "")
-    message(FATAL_ERROR
-        "SDL2 headers not found. Checked:\n"
-        "  ${SDL2_CROSS_PREFIX}/include[/SDL2]\n"
-        "  ${SDL2_BUNDLED_PREFIX}/include\n"
-    )
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # Native Linux build: try system SDL2 via pkg-config or find_package
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(SDL2_PC QUIET sdl2)
+        endif()
+        if(SDL2_PC_FOUND)
+            set(SDL2_INCLUDE_DIRS "${SDL2_PC_INCLUDE_DIRS}")
+            set(SDL2_LIB_DIR "")
+            set(USE_SYSTEM_SDL2 TRUE)
+            message(STATUS "  Using system SDL2 via pkg-config")
+        else()
+            find_package(SDL2 QUIET)
+            if(SDL2_FOUND)
+                set(SDL2_INCLUDE_DIRS "${SDL2_INCLUDE_DIRS}")
+                set(SDL2_LIB_DIR "")
+                set(USE_SYSTEM_SDL2 TRUE)
+                message(STATUS "  Using system SDL2 via find_package")
+            else()
+                message(FATAL_ERROR
+                    "SDL2 not found. Install libsdl2-dev or place MinGW SDL2 in:\n"
+                    "  ${SDL2_CROSS_PREFIX}/include/SDL2/\n"
+                )
+            endif()
+        endif()
+    else()
+        message(FATAL_ERROR
+            "SDL2 headers not found. Checked:\n"
+            "  ${SDL2_CROSS_PREFIX}/include[/SDL2]\n"
+            "  ${SDL2_BUNDLED_PREFIX}/include\n"
+        )
+    endif()
 endif()
 
-if(SDL2_LIB_DIR STREQUAL "")
+if(SDL2_LIB_DIR STREQUAL "" AND NOT USE_SYSTEM_SDL2)
     message(FATAL_ERROR
         "SDL2 library directory not found for current toolchain.\n"
         "MSVC expects SDL2.lib under thirdparty/SDL2/lib/x64.\n"
@@ -221,15 +248,29 @@ if(MSVC)
         gdiplus winhttp wininet bcrypt iphlpapi
     )
 else()
-    target_link_libraries(AnyClaw_LVGL PRIVATE
-        mingw32 SDL2main SDL2
-        kernel32 user32 gdi32 winmm imm32 ole32 oleaut32 version uuid
-        advapi32 setupapi shell32 dinput8
-        dwmapi comctl32 dbghelp ws2_32 comdlg32
-        gdiplus winhttp wininet bcrypt iphlpapi
-        $<$<BOOL:${USE_FREETYPE}>:freetype>
-        -static-libgcc -static-libstdc++
-    )
+    if(USE_SYSTEM_SDL2)
+        # Native Linux build: use system SDL2
+        if(SDL2_PC_FOUND)
+            target_link_libraries(AnyClaw_LVGL PRIVATE ${SDL2_PC_LIBRARIES})
+        else()
+            target_link_libraries(AnyClaw_LVGL PRIVATE SDL2)
+        endif()
+        target_link_libraries(AnyClaw_LVGL PRIVATE
+            $<$<BOOL:${USE_FREETYPE}>:freetype>
+            dl pthread
+        )
+    else()
+        # MinGW cross-compile
+        target_link_libraries(AnyClaw_LVGL PRIVATE
+            mingw32 SDL2main SDL2
+            kernel32 user32 gdi32 winmm imm32 ole32 oleaut32 version uuid
+            advapi32 setupapi shell32 dinput8
+            dwmapi comctl32 dbghelp ws2_32 comdlg32
+            gdiplus winhttp wininet bcrypt iphlpapi
+            $<$<BOOL:${USE_FREETYPE}>:freetype>
+            -static-libgcc -static-libstdc++
+        )
+    endif()
 endif()
 
 # ═══════════════════════════════════════════════════════════════
