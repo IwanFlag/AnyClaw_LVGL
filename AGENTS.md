@@ -379,49 +379,37 @@ docs: 重构 PRD 为 13 章结构，移除 UI 内容
 | 阶段一 | 文档对齐审查 | ✅ 全部完成 |
 | 阶段二 2A~2G | 功能界面与逻辑开发 | ✅ 全部完成 |
 | 阶段三 | Bug 检查与修复 | ✅ 6 个 bug 已修（详见 `tasks/v2.2.1-scan.md`） |
-| 阶段四 | 主题系统完善 | ⏳ **当前阶段，准备开始** |
+| 阶段四 | 主题系统完善 | 🔧 **进行中**（音效 ✅ / 字体部分阻塞 / 验证待 Wine） |
 
 ### 阶段四任务结构（92+ 项）
 
 ```
-4T-00  扩展 ThemeColors 15→~50 字段              9 项  ⏳  ← 地基，最先做
-4T-01  抹茶 Matcha v1 全 Token 化 + 消硬编码    13 项  ⏳
-4T-02  桃气 Peachy v2 完善 + 重命名              7 项  ⏳
-4T-03  糯 Mochi v3 新增                          6 项  ⏳
-4T-04  经典暗色 Dark 完善                        4 项  ⏳
-4T-05  亮色 Light 新增                           3 项  ⏳
-4T-06  结构性主题差异                           76 项  ⏳
-  ├─ R1~R4      圆角系统（3主题×5级半径）
-  ├─ FA1~FA12   字体系统（ThemeFonts + 5主题×11指针）
-  ├─ SH1~SH3    阴影色（冷黑/暖棕/淡暖棕）
-  ├─ G1~G3      渐变按钮（Matcha渐变/Peachy渐变/Mochi纯色）
-  ├─ I1~I4      图标系统（笔触粗细 + StepCard颜色 + Lucide SVG）
-  ├─ A1~A6      动效系统（30+通用 + 3主题特化 + 切换过渡）
-  ├─ C1~C14     控件颜色（12控件×4态 + 遮罩/Toast/Loading/StepCard）
-  ├─ D1~D2      大蒜头贴图
-  └─ AU1~AU5    音效系统
-4T-07  资源文件补齐                            21 项  ⏳
-  ├─ A1~A5   大蒜/龙虾吉祥物
-  ├─ T1~T4   托盘图标重组
-  ├─ I1~I2   Lucide SVG
-  ├─ FB1~FB5 字体文件 5 套
-  └─ S1~S4   音效文件 3 主题
-4T-08  主题切换与持久化                          6 项  ⏳
+4T-00  扩展 ThemeColors 15→~50 字段              9 项  ✅
+4T-01  抹茶 Matcha v1 全 Token 化 + 消硬编码    13 项  ✅（Wine 截图待做）
+4T-02  桃气 Peachy v2 完善 + 重命名              7 项  ✅（Wine 截图待做）
+4T-03  糯 Mochi v3 新增                          6 项  ✅（Wine 截图待做）
+4T-04  经典暗色 Dark 完善                        4 项  ✅（Wine 截图待做）
+4T-05  亮色 Light 新增                           3 项  ✅（Wine 截图待做）
+4T-06  结构性主题差异                           76 项  ✅（FA5/FA7/FA8 字体阻塞）
+4T-07  资源文件补齐                            21 项  🔧（S2~S4 音效 ✅ / FB2,FB5,FB6 字体 ⏸️）
+4T-08  主题切换与持久化                          6 项  ✅（全量回归待做）
 ```
+
+**阻塞项：** 需本地开发环境下载 Nunito/Inter/JetBrainsMono 字体 + MinGW 编译验证 + Wine 截图
 
 ### 执行规则
 
 1. **按顺序执行**：4T-00 → 4T-01 → ... → 4T-08，不跳步
 2. **每个任务完成标准**：代码改完 → 文档同步（Design.md / tasks/）→ 编译验证 → commit + push
 3. **4T-00 是地基**：ThemeColors 扩展到 ~50 字段后，后续所有任务才有 Token 可用
-4. **跳过资源生成**：4T-07 中需要设计工具生成的 PNG/SVG/WAV 文件（大蒜吉祥物、音效等）标记为 ⏸️，优先做代码任务
-5. **Wine 测试**：主题视觉验证需要 Wine + Xvfb 环境
+4. **跳过资源生成**：4T-07 中剩余 ⏸️ 项（Nunito/Inter/JetBrainsMono 字体 + 音效 WAV 文件）需本地环境，优先做代码任务
+5. **Wine 测试**：主题视觉验证需要 Wine + Xvfb 环境（本地开发机）
 
 ### 关键文件速查
 
 | 文件 | 用途 |
 |------|------|
-| `src/theme.h` | ThemeColors 结构体 + Theme enum（当前 15 字段） |
+| `src/theme.h` | ThemeColors 结构体 + Theme enum（46 颜色字段 + 5 结构 = 51） |
 | `src/app_config.h` | 布局 PCT 常量（~90 个） |
 | `src/ui_main.cpp` | 主 UI 代码（158 处硬编码颜色需改） |
 | `src/ui_settings.cpp` | 设置页代码 |

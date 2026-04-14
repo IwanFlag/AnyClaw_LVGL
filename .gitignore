@@ -43,13 +43,16 @@ build/windows/out/
 *.orig
 *.tmp
 
-# 字体源文件
+# 字体源文件（保留 assets 下的）
 *.ttf
 *.ttc
+!assets/fonts/*.ttf
+!assets/fonts/*.ttc
 
-# Python
+# Python（保留 scripts/ 和 tools/ 下的）
 *.py
 !tools/keygen.py
+!scripts/*.py
 
 # 保留规则
 !docs/*.md
