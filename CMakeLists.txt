@@ -359,3 +359,13 @@ add_custom_command(TARGET AnyClaw_LVGL POST_BUILD
         $<TARGET_FILE_DIR:AnyClaw_LVGL>/assets/fonts
     COMMENT "Copying assets/fonts to output directory"
 )
+
+# ═══════════════════════════════════════════════════════════════
+# Post-build: copy assets/tray (tray icons for all themes)
+# ═══════════════════════════════════════════════════════════════
+add_custom_command(TARGET AnyClaw_LVGL POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/assets/tray"
+        $<TARGET_FILE_DIR:AnyClaw_LVGL>/assets/tray
+    COMMENT "Copying assets/tray to output directory"
+)

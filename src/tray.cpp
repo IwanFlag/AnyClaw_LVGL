@@ -1145,8 +1145,13 @@ void tray_process_messages() {
     /* Apply any pending tray state change on the main thread (thread-safe) */
     tray_apply_pending_state();
 
+    /* Drain Windows messages but cap to prevent re-entrant or spinning message loops
+       from blocking the main loop. Use a hard limit (256) + time budget (10ms). */
     MSG msg;
-    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+    DWORD deadline = GetTickCount() + 10;
+    int count = 0;
+    while (count < 256 && GetTickCount() < deadline && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        ++count;
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
