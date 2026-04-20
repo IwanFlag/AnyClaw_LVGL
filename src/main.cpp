@@ -1118,38 +1118,42 @@ int main(int argc, char* argv[]) {
 
     /* Main loop — LVGL timer handles SDL events via sdl_event_handler */
     LOG_I("MAIN", "Entering main loop");
-    DWORD loop_t0 = GetTickCount();
     int loop_count = 0;
+    auto last_log_time = std::chrono::steady_clock::now();
     while (!tray_should_quit()) {
-        /* Drain Windows message queue before blocking call.
-         * Without this, long lv_timer_handler() calls (>5s) trigger Windows AppHang detection.
-         * PeekMessage + PM_REMOVE keeps the queue empty so Windows stays happy. */
-        MSG win_msg;
-        while (PeekMessageA(&win_msg, nullptr, 0, 0, PM_REMOVE)) {
-            if (win_msg.message == WM_QUIT) {
-                tray_show_window(false);
-                break;
-            }
-            TranslateMessage(&win_msg);
-            DispatchMessageA(&win_msg);
-        }
-
-        DWORD t0 = GetTickCount();
+        auto loop_start = std::chrono::steady_clock::now();
         lv_timer_handler();
-        DWORD t_handler = GetTickCount() - t0;
-
-        ui_process_wheel_scroll();
-        tray_process_messages();
-
+        auto after_lvt = std::chrono::steady_clock::now();
         loop_count++;
-        if (t_handler > 50) {
-            /* Only log if lv_timer_handler itself is slow (>50ms) */
-            LOG_W("MAIN", "Slow lv_timer_handler: %lums (n=%d)", (unsigned long)t_handler, loop_count);
+
+        /* Log every 100 iterations or if a single call takes >500ms */
+        auto dt_lvt = std::chrono::duration_cast<std::chrono::milliseconds>(after_lvt - loop_start).count();
+        if (loop_count == 1 || loop_count % 100 == 0 || dt_lvt > 500) {
+            LOG_I("MAIN", "LOOP[%d] lv_timer_handler took %lldms, ui_wheel=%lldms, tray=%lldms",
+                  loop_count, (long long)dt_lvt,
+                  (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - after_lvt).count());
         }
+        if (loop_count == 10) LOG_I("MAIN", "LOOP_REACHED_10");
+        if (tray_should_quit()) break;
+
+        auto before_wheel = std::chrono::steady_clock::now();
+        ui_process_wheel_scroll();
+        auto after_wheel = std::chrono::steady_clock::now();
+
+        tray_process_messages();
+        auto after_tray = std::chrono::steady_clock::now();
 
         SDL_Delay(5);
+
+        /* Every 2s log a heartbeat so we know the loop is alive */
+        auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration_cast<std::chrono::seconds>(now - last_log_time).count() >= 2) {
+            LOG_I("MAIN", "HEARTBEAT loop_count=%d", loop_count);
+            last_log_time = now;
+        }
     }
-    LOG_I("MAIN", "Main loop exited");
+    LOG_I("MAIN", "Main loop exited after %d iterations", loop_count);
 
     LOG_I("MAIN", "Shutting down...");
 
