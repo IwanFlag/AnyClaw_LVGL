@@ -1126,30 +1126,39 @@ int main(int argc, char* argv[]) {
         auto after_lvt = std::chrono::steady_clock::now();
         loop_count++;
 
-        /* Log every 100 iterations or if a single call takes >500ms */
-        auto dt_lvt = std::chrono::duration_cast<std::chrono::milliseconds>(after_lvt - loop_start).count();
-        if (loop_count == 1 || loop_count % 100 == 0 || dt_lvt > 500) {
-            LOG_I("MAIN", "LOOP[%d] lv_timer_handler took %lldms, ui_wheel=%lldms, tray=%lldms",
-                  loop_count, (long long)dt_lvt,
-                  (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
-                      std::chrono::steady_clock::now() - after_lvt).count());
-        }
-        if (loop_count == 10) LOG_I("MAIN", "LOOP_REACHED_10");
         if (tray_should_quit()) break;
 
         auto before_wheel = std::chrono::steady_clock::now();
         ui_process_wheel_scroll();
         auto after_wheel = std::chrono::steady_clock::now();
 
+        auto before_tray = std::chrono::steady_clock::now();
         tray_process_messages();
         auto after_tray = std::chrono::steady_clock::now();
 
+        /* Log first iteration and every 100th to stderr (bypasses log buffer) */
+        auto dt_lvt = std::chrono::duration_cast<std::chrono::milliseconds>(after_lvt - loop_start).count();
+        if (loop_count == 1 || loop_count % 100 == 0) {
+            fprintf(stderr, "[LOOP] #%d lvt=%lldms wheel=%lldms tray=%lldms\n",
+                    loop_count, (long long)dt_lvt,
+                    (long long)std::chrono::duration_cast<std::chrono::milliseconds>(after_wheel - before_wheel).count(),
+                    (long long)std::chrono::duration_cast<std::chrono::milliseconds>(after_tray - before_tray).count());
+            fflush(stderr);
+        }
+        if (loop_count == 10) {
+            fprintf(stderr, "[LOOP] #10 REACHED\n");
+            fflush(stderr);
+        }
+
         SDL_Delay(5);
 
-        /* Every 2s log a heartbeat so we know the loop is alive */
+        /* Every 2s write a raw heartbeat to stderr (bypasses log buffer).
+           Also log first iteration and every 10th so we can see timing. */
         auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::seconds>(now - last_log_time).count() >= 2) {
-            LOG_I("MAIN", "HEARTBEAT loop_count=%d", loop_count);
+        long long elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_log_time).count();
+        if (elapsed_ms >= 2000) {
+            fprintf(stderr, "[HEARTBEAT] loop_count=%d elapsed=%lldms\n", loop_count, elapsed_ms);
+            fflush(stderr);
             last_log_time = now;
         }
     }

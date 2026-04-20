@@ -1142,8 +1142,12 @@ void tray_set_window_icon() {
 }
 
 void tray_process_messages() {
+    auto t0 = GetTickCount();
+
     /* Apply any pending tray state change on the main thread (thread-safe) */
     tray_apply_pending_state();
+
+    auto t1 = GetTickCount();
 
     /* TEMP: comment out message pump to test if it's the source of the 1600ms delay */
     // MSG msg;
@@ -1155,6 +1159,11 @@ void tray_process_messages() {
     //     TranslateMessage(&msg);
     //     DispatchMessageW(&msg);
     // }
+
+    auto t2 = GetTickCount();
+    if (t2 - t0 > 50) {
+        fprintf(stderr, "[TRAY] took %ldms (apply=%ldms)\n", t2 - t0, t1 - t0);
+    }
 }
 
 bool tray_should_quit() {

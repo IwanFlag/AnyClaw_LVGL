@@ -146,8 +146,8 @@
 
 ```
 文档更新    ████████████ 100%
-C1 控制栏   █░░░░░░░░░░  10%  ← 当前
-C2 左NAV    ░░░░░░░░░░░   0%
+C1 控制栏   ████████████ 100%  ✅
+C2 左NAV    ████████████ 100%  ✅
 C3 分隔条   ░░░░░░░░░░░   0%
 C4 自动刷新 ░░░░░░░░░░░   0%
 C5 模型联动 ░░░░░░░░░░░   0%
@@ -162,5 +162,6 @@ C8 BootCheck░░░░░░░░░░░   0%
 ## 日志
 
 ```
+[3d78fa5] feat: control bar reorder [Agent▼][Report][AI行为▼], nav bottom toggle, Last Report
 [da8ca7d] docs: update Design.md v2.2.2
 ```
