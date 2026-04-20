@@ -1,4 +1,4 @@
-#ifndef APP_H
+﻿#ifndef APP_H
 #define APP_H
 
 #include "lvgl.h"
@@ -8,6 +8,17 @@
 /* Startup error - set before UI init, shown as LVGL modal if non-empty */
 extern std::string g_startup_error;
 extern std::string g_startup_error_title;
+
+/* Active runtime — which agent backend handles the current chat session */
+enum class Runtime {
+    OpenClaw = 0,
+    Hermes   = 1,
+    Claude   = 2
+};
+
+/* Get/set active runtime (persisted to config.json) */
+Runtime app_get_active_runtime();
+void   app_set_active_runtime(Runtime r);
 
 /* OpenClaw status — reflects full chain reachability, not just gateway process */
 enum class ClawStatus {
@@ -58,6 +69,7 @@ bool app_get_provider_api_key(const char* provider, char* key_out, int out_size)
 bool app_check_nodejs(char* version_out, int out_size);
 bool app_check_nodejs_version_ok(const char* version);
 const char* app_get_nodejs_download_url();
+void app_set_node_path(const char* path);  /* Manual path fallback for wizard */
 bool app_install_openclaw(char* output, int out_size); /* auto: network → local fallback */
 bool app_install_openclaw_ex(char* output, int out_size, const char* mode); /* "network"/"local"/"auto" */
 bool app_init_openclaw(char* output, int out_size); /* gateway start → stop (generate default config) */
@@ -83,9 +95,15 @@ struct EnvCheckResult {
     bool npm_ok;
     bool openclaw_ok;
     bool gateway_ok;
+    bool hermes_ok;
+    bool hermes_healthy;
+    bool claude_ok;
+    bool claude_healthy;
     char node_ver[64];
     char npm_ver[32];
     char openclaw_ver[64];
+    char hermes_ver[64];
+    char claude_ver[64];
     char error_msg[256];
 };
 EnvCheckResult app_check_environment();
@@ -126,8 +144,10 @@ void load_dpi_config();
 /* DPI scale */
 void app_set_dpi_scale(int scale_percent);
 int app_get_dpi_scale();
-/* Convert base(96dpi) pixels to current DPI */
-inline int SCALE(int px) { return px; }  /* DPI-aware: no double-scaling */
+extern int g_dpi_scale;
+/* Convert base(96dpi) pixels to current DPI — cap at 100% to avoid
+   4× pixel rendering area at high DPI (>100%) blocking LVGL software renderer */
+inline int SCALE(int px) { return px * (g_dpi_scale > 100 ? 100 : g_dpi_scale) / 100; }
 
 /* Model & API Key globals */
 extern char g_selected_model[256];
@@ -156,6 +176,8 @@ bool ui_settings_is_open();
 
 /* Setup wizard (first-launch / reconfigure) */
 void ui_show_setup_wizard();
+/* Force-show wizard regardless of wizard_completed (--show-wizard CLI flag) */
+void ui_show_setup_wizard_forced(void);
 
 /* JSON utility: extract integer/string from simple JSON (handles whitespace, nesting level 1) */
 int json_extract_int(const char* json, const char* key, int default_val = 0);

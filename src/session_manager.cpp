@@ -182,7 +182,25 @@ bool SessionManager::refresh() {
     sessions_.clear();
     last_error_.clear();
 
-    static const DWORD kSessionListTimeoutMs = 3000;
+    /* ── 优先：HTTP 直调 Gateway API（毫秒级，无子进程开销）── */
+    char response[16384] = {0};
+    char url[256];
+    snprintf(url, sizeof(url), "http://127.0.0.1:18789/api/sessions");
+    int code = http_get(url, response, sizeof(response), 1);
+
+    if (code >= 200 && code < 500 && response[0] != '\0') {
+        bool parsed = parse_json(response);
+        if (parsed) {
+            return true;  /* span 在作用域结束时自动记录 */
+        }
+        last_error_ = "Invalid sessions JSON";
+        span.set_fail();
+        return false;
+    }
+
+    /* ── 降级：CLI 调用（超时 500ms，快失败）── */
+    LOG_D("SESSION", "HTTP sessions API unavailable (%d), falling back to CLI", code);
+    static const DWORD kSessionListTimeoutMs = 500;  /* 原 3000ms，缩短加快失败 */
     char output[16384] = {0};
     bool ok = exec_cmd_local(
         "openclaw gateway call sessions.list --json",
@@ -191,7 +209,7 @@ bool SessionManager::refresh() {
 
     if (!ok || output[0] == '\0') {
         last_error_ = "Failed to query sessions";
-        LOG_W("SESSION", "sessions.list returned empty or failed");
+        LOG_W("SESSION", "sessions.list CLI fallback failed");
         span.set_fail();
         return false;
     }

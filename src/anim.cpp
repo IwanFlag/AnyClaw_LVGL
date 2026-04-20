@@ -23,24 +23,12 @@ static const AnimConfig ANIM_MOCHI = {
     0  /* no bounce */
 };
 
-static const AnimConfig ANIM_CLASSIC = {
-    DUR_INSTANT, DUR_FAST, DUR_NORMAL, DUR_SLOW, DUR_VERY_SLOW,
-    0
-};
-
-static const AnimConfig ANIM_LIGHT = {
-    DUR_INSTANT, DUR_FAST, DUR_NORMAL, DUR_SLOW, DUR_VERY_SLOW,
-    0
-};
-
 const AnimConfig* g_anim = &ANIM_MATCHA;
 
 void anim_init() {
     switch (g_theme) {
         case Theme::Peachy:  g_anim = &ANIM_PEACHY;  break;
         case Theme::Mochi:   g_anim = &ANIM_MOCHI;   break;
-        case Theme::Classic: g_anim = &ANIM_CLASSIC;  break;
-        case Theme::Light:   g_anim = &ANIM_LIGHT;    break;
         default:             g_anim = &ANIM_MATCHA;   break;
     }
 }

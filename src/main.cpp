@@ -1,4 +1,4 @@
-#include "lv_conf.h"
+﻿#include "lv_conf.h"
 /* Increase keyboard buffer for IME (Chinese input sends multi-byte sequences) */
 #define KEYBOARD_BUFFER_SIZE 256
 #include "lvgl.h"
@@ -19,6 +19,7 @@
 #include "SDL.h"
 #include "SDL_syswm.h"
 #include <cstring>
+#include <windows.h>
 #include "drivers/sdl/lv_sdl_window.h"
 #include "drivers/sdl/lv_sdl_mouse.h"
 #include "drivers/sdl/lv_sdl_keyboard.h"
@@ -382,9 +383,83 @@ static void setup_title_drag(HWND hwnd) {
     }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+ *  Command-line interface
+ *  --show-wizard   Force the setup wizard to appear (bypasses wizard_completed)
+ *  --reset-wizard  Reset wizard_completed=false so wizard auto-shows on next start
+ *  --help          Show available options
+ * ═══════════════════════════════════════════════════════════════ */
+static void handle_cli_args(int argc, char* argv[]) {
+    for (int i = 1; i < argc; i++) {
+        const char* arg = argv[i];
+        if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
+            printf("AnyClaw LVGL v2.0 — Command-line options:\n");
+            printf("  --show-wizard   Force the setup wizard to appear\n");
+            printf("  --reset-wizard  Reset wizard_completed so wizard shows on next start\n");
+            printf("  --help, -h      Show this help message\n");
+            exit(0);
+        } else if (strcmp(arg, "--reset-wizard") == 0) {
+            /* Reset wizard_completed in config so it auto-shows next launch */
+            const char* appdata = std::getenv("APPDATA");
+            if (!appdata) {
+                printf("ERROR: APPDATA not set, cannot reset wizard.\n");
+                exit(1);
+            }
+            std::string cfg_path = std::string(appdata) + "\\AnyClaw_LVGL\\config.json";
+            std::ifstream in(cfg_path);
+            if (!in.is_open()) {
+                printf("AnyClaw config not found at %s (no reset needed)\n", cfg_path.c_str());
+                exit(0);
+            }
+            std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            in.close();
+            /* Replace "wizard_completed": true with false */
+            std::string modified;
+            modified.reserve(content.size());
+            bool found = false;
+            for (size_t p = 0; p < content.size();) {
+                size_t pos = content.find("\"wizard_completed\": true", p);
+                if (pos != std::string::npos) {
+                    modified += content.substr(p, pos - p);
+                    modified += "\"wizard_completed\": false";
+                    p = pos + strlen("\"wizard_completed\": true");
+                    found = true;
+                } else {
+                    modified += content.substr(p);
+                    break;
+                }
+            }
+            if (found) {
+                std::ofstream out(cfg_path);
+                if (out.is_open()) {
+                    out << modified;
+                    out.close();
+                    printf("Wizard reset: wizard_completed=false. Restart AnyClaw to see the wizard.\n");
+                } else {
+                    printf("ERROR: Could not write config at %s\n", cfg_path.c_str());
+                    exit(1);
+                }
+            } else {
+                printf("Wizard was already not completed.\n");
+            }
+            exit(0);
+        }
+    }
+}
+
+/* Exposed by ui_main.cpp: force wizard to show regardless of wizard_completed */
+extern void ui_show_setup_wizard_forced(void);
+
+/* Flag: user passed --show-wizard */
+static bool g_force_show_wizard = false;
+
 int main(int argc, char* argv[]) {
-    (void)argc;
-    (void)argv;
+    handle_cli_args(argc, argv);
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--show-wizard") == 0)
+            g_force_show_wizard = true;
+    }
 
     /* E-01-2: Install crash handler as early as possible */
     install_crash_handler();
@@ -406,7 +481,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    /* Console hidden in release build (WIN32 subsystem) — use app.log for debug */
+    /* Console hidden in release build (WIN32 subsystem) — use anyclaw_app.log for debug */
 
     HINSTANCE hInstance = GetModuleHandle(nullptr);
 
@@ -482,9 +557,34 @@ int main(int argc, char* argv[]) {
     /* Init LVGL first (lv_sdl_window_create calls SDL_Init internally) */
     lv_init();
 
-    /* Detect actual screen resolution using Win32 (SDL may return wrong value) */
-    int screen_w = GetSystemMetrics(SM_CXSCREEN);
-    int screen_h = GetSystemMetrics(SM_CYSCREEN);
+    /* Detect actual screen resolution using Win32 (SDL may return wrong value)
+     * Use SM_CXVIRTUALSCREEN for the virtual desktop, falling back to
+     * SM_CXFULLSCREEN (work area), then SM_CXSCREEN (full screen).
+     *
+     * CRITICAL: On Windows with Per-Monitor DPI Awareness V2 + DPI virtualization
+     * (e.g. 2560x1600 physical @200% scaling shown as 1280x800 virtual),
+     * GetSystemMetrics may return PHYSICAL pixels even for SM_CXVIRTUALSCREEN.
+     * We detect this by comparing screen size against the DPI scale:
+     *   - At 200% DPI (detected_dpi=208): virtual = physical / 2.08
+     *   - If physical / dpi_ratio is meaningfully smaller → use virtual
+     *
+     * SDL2 with Per-Monitor DPI awareness creates windows in physical pixels,
+     * while our LVGL layout uses virtual pixels. We must keep both in sync.
+     */
+    int raw_screen_w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int raw_screen_h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (raw_screen_w <= 0) {
+        raw_screen_w = GetSystemMetrics(SM_CXFULLSCREEN);
+        raw_screen_h = GetSystemMetrics(SM_CYFULLSCREEN);
+    }
+    if (raw_screen_w <= 0) {
+        raw_screen_w = GetSystemMetrics(SM_CXSCREEN);
+        raw_screen_h = GetSystemMetrics(SM_CYSCREEN);
+    }
+
+    /* Use raw screen pixels directly - SDL2 handles DPI awareness */
+    int screen_w = raw_screen_w;
+    int screen_h = raw_screen_h;
     if (screen_w <= 0) screen_w = 1280;
     if (screen_h <= 0) screen_h = 800;
 
@@ -635,6 +735,15 @@ int main(int argc, char* argv[]) {
     app_ui_init();
     LOG_I("MAIN", "UI initialized in %lums", GetTickCount() - tick_ui);
 
+    /* --show-wizard: force the setup wizard to appear immediately */
+    if (g_force_show_wizard) {
+        lv_timer_create([](lv_timer_t* t) {
+            LOG_I("MAIN", "--show-wizard: forcing setup wizard display");
+            ui_show_setup_wizard_forced();
+            lv_timer_del(t);
+        }, 300, nullptr);
+    }
+
     /* Set window icon from garlic_icon.png */
     tray_set_window_icon();
 
@@ -654,31 +763,12 @@ int main(int argc, char* argv[]) {
     /* Defer heavy startup work to worker thread so UI stays responsive. */
     lv_timer_create([](lv_timer_t* t) {
         std::thread([]() {
-            ui_progress_begin("Startup", "Gateway preflight", 5);
-            /* OpenClaw single-instance + auto-start */
-            {
-                int node_count = app_count_node_processes();
-                char health_buf[128] = {0};
-                bool gateway_alive = (http_get(GATEWAY_HEALTH_URL, health_buf, sizeof(health_buf), 1) == 200);
-                if (gateway_alive) {
-                    LOG_I("MAIN", "Gateway already healthy, skipping startup (node_count=%d)", node_count);
-                    ui_progress_update("Startup", "Gateway already healthy", 22);
-                } else {
-                    LOG_I("MAIN", "Gateway offline, trying auto-start (node_count=%d)", node_count);
-                    ui_progress_update("Startup", "Gateway offline, starting...", 18);
-                    if (app_start_gateway()) {
-                        LOG_I("MAIN", "Gateway started successfully");
-                        ui_progress_update("Startup", "Gateway startup complete", 30);
-                    } else {
-                        LOG_W("MAIN", "Failed to auto-start Gateway (skip aggressive node cleanup)");
-                        ui_progress_update("Startup", "Gateway start failed (continuing)", 30);
-                    }
-                }
-            }
+            ui_progress_begin("Startup", "Initializing UI...", 5);
+            /* Gateway auto-start DISABLED for testing */
+            ui_progress_update("Startup", "GUI ready (gateway autostart disabled)", 30);
 
             health_start();
-            ui_progress_update("Startup", "Health monitor online", 38);
-            tray_set_state(TrayState::Yellow);
+            ui_progress_update("Startup", "Health monitor online", 50);tray_set_state(TrayState::Yellow);
             tray_balloon("AnyClaw", "已启动，正在检测 OpenClaw 状态...", 3000);
 
             ui_progress_update("Startup", "Loading license", 46);
@@ -1028,19 +1118,38 @@ int main(int argc, char* argv[]) {
 
     /* Main loop — LVGL timer handles SDL events via sdl_event_handler */
     LOG_I("MAIN", "Entering main loop");
+    DWORD loop_t0 = GetTickCount();
     int loop_count = 0;
     while (!tray_should_quit()) {
+        /* Drain Windows message queue before blocking call.
+         * Without this, long lv_timer_handler() calls (>5s) trigger Windows AppHang detection.
+         * PeekMessage + PM_REMOVE keeps the queue empty so Windows stays happy. */
+        MSG win_msg;
+        while (PeekMessageA(&win_msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (win_msg.message == WM_QUIT) {
+                tray_show_window(false);
+                break;
+            }
+            TranslateMessage(&win_msg);
+            DispatchMessageA(&win_msg);
+        }
+
+        DWORD t0 = GetTickCount();
         lv_timer_handler();
-        loop_count++;
-        /* Check immediately — exit dialog callback sets g_shouldQuit during lv_timer_handler */
-        if (tray_should_quit()) break;
+        DWORD t_handler = GetTickCount() - t0;
 
         ui_process_wheel_scroll();
         tray_process_messages();
 
+        loop_count++;
+        if (t_handler > 50) {
+            /* Only log if lv_timer_handler itself is slow (>50ms) */
+            LOG_W("MAIN", "Slow lv_timer_handler: %lums (n=%d)", (unsigned long)t_handler, loop_count);
+        }
+
         SDL_Delay(5);
     }
-    LOG_I("MAIN", "Main loop exited after %d iterations", loop_count);
+    LOG_I("MAIN", "Main loop exited");
 
     LOG_I("MAIN", "Shutting down...");
 
@@ -1083,6 +1192,7 @@ int main(int argc, char* argv[]) {
     failover_stop_health_thread();
     health_stop();
     async_shutdown();
+    app_log_shutdown();  /* 强制刷日志缓冲到磁盘，然后退出刷盘线程 */
     tray_cleanup();
     lv_sdl_quit();
 

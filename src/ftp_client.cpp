@@ -1,5 +1,7 @@
 #include "ftp_client.h"
 
+#ifdef ENABLE_FTP
+
 #include <windows.h>
 #include <wininet.h>
 #include <cstdio>
@@ -223,3 +225,5 @@ bool ftp_transfer_file(const FtpTransferConfig& cfg,
     if (ok && on_progress) on_progress(100, "Done");
     return ok;
 }
+
+#endif /* ENABLE_FTP */

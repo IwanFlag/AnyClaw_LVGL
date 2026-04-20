@@ -219,42 +219,48 @@ static void remove_json_field(std::string& s, const char* field) {
 }
 
 static void license_save_to_config() {
-    std::string path = lic_get_config_path();
-    std::string content;
-    {
-        std::ifstream rf(path);
-        if (rf.is_open()) {
-            content.assign((std::istreambuf_iterator<char>(rf)), std::istreambuf_iterator<char>());
-            rf.close();
+    try {
+        std::string path = lic_get_config_path();
+        std::string content;
+        {
+            std::ifstream rf(path);
+            if (rf.is_open()) {
+                content.assign((std::istreambuf_iterator<char>(rf)), std::istreambuf_iterator<char>());
+                rf.close();
+            }
         }
-    }
-    if (content.empty()) {
-        content = "{\n}\n";
-    }
-    remove_json_field(content, "\"license_seq\"");
-    remove_json_field(content, "\"license_expiry\"");
-    remove_json_field(content, "\"hw_key\"");
-    remove_json_field(content, "\"tm_key\"");
-    remove_json_field(content, "\"tm_expiry\"");
-    size_t last_brace = content.rfind('}');
-    if (last_brace == std::string::npos) {
-        content = "{\n}\n";
-        last_brace = content.rfind('}');
-    }
-    char buf[512];
-    snprintf(buf, sizeof(buf),
-             "  \"license_seq\": %d,\n"
-             "  \"license_expiry\": %lld,\n"
-             "  \"hw_key\": \"%s\",\n"
-             "  \"tm_key\": \"%s\",\n"
-             "  \"tm_expiry\": %lld,\n",
-             g_license_seq, (long long)g_license_expiry,
-             g_hw_key, g_tm_key, (long long)g_tm_expiry);
-    content.insert(last_brace, buf);
-    std::ofstream wf(path);
-    if (wf.is_open()) {
-        wf << content;
-        wf.close();
+        if (content.empty()) {
+            content = "{\n}\n";
+        }
+        remove_json_field(content, "\"license_seq\"");
+        remove_json_field(content, "\"license_expiry\"");
+        remove_json_field(content, "\"hw_key\"");
+        remove_json_field(content, "\"tm_key\"");
+        remove_json_field(content, "\"tm_expiry\"");
+        size_t last_brace = content.rfind('}');
+        if (last_brace == std::string::npos) {
+            content = "{\n}\n";
+            last_brace = content.rfind('}');
+        }
+        char buf[512];
+        snprintf(buf, sizeof(buf),
+                 "  \"license_seq\": %d,\n"
+                 "  \"license_expiry\": %lld,\n"
+                 "  \"hw_key\": \"%s\",\n"
+                 "  \"tm_key\": \"%s\",\n"
+                 "  \"tm_expiry\": %lld,\n",
+                 g_license_seq, (long long)g_license_expiry,
+                 g_hw_key, g_tm_key, (long long)g_tm_expiry);
+        content.insert(last_brace, buf);
+        std::ofstream wf(path);
+        if (wf.is_open()) {
+            wf << content;
+            wf.close();
+        }
+    } catch (const std::exception& e) {
+        LOG_E("License", "Exception saving license config: %s", e.what());
+    } catch (...) {
+        LOG_E("License", "Unknown exception saving license config");
     }
 }
 
@@ -300,27 +306,35 @@ static int base32_decode(const char* input, unsigned char* output, int output_ma
 void license_init() {
     if (g_license_loaded) return;
 
-    /* Read from config.json */
-    std::ifstream f(lic_get_config_path());
-    if (!f.is_open()) {
-        LOG_D("License", "No config file, using defaults");
+    try {
+        /* Read from config.json */
+        std::ifstream f(lic_get_config_path());
+        if (!f.is_open()) {
+            LOG_D("License", "No config file, using defaults");
+            g_license_loaded = true;
+            return;
+        }
+        std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        f.close();
+
+        g_license_seq = json_extract_int(content.c_str(), "license_seq", 0);
+        /* FIX Bug 7: Use json_extract_int64 instead of manual parsing */
+        g_license_expiry = json_extract_int64(content.c_str(), "license_expiry", 0);
+        json_extract_string(content.c_str(), "hw_key", g_hw_key, sizeof(g_hw_key));
+        json_extract_string(content.c_str(), "tm_key", g_tm_key, sizeof(g_tm_key));
+        g_tm_expiry = json_extract_int64(content.c_str(), "tm_expiry", 0);
+
         g_license_loaded = true;
-        return;
+        LOG_I("License", "Loaded: seq=%d expiry=%lld hw=%d tm=%d",
+              g_license_seq, (long long)g_license_expiry,
+              g_hw_key[0] ? 1 : 0, g_tm_key[0] ? 1 : 0);
+    } catch (const std::exception& e) {
+        LOG_E("License", "Exception during license_init: %s", e.what());
+        g_license_loaded = true; /* prevent repeated attempts; fall back to trial */
+    } catch (...) {
+        LOG_E("License", "Unknown exception during license_init");
+        g_license_loaded = true;
     }
-    std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-    f.close();
-
-    g_license_seq = json_extract_int(content.c_str(), "license_seq", 0);
-    /* FIX Bug 7: Use json_extract_int64 instead of manual parsing */
-    g_license_expiry = json_extract_int64(content.c_str(), "license_expiry", 0);
-    json_extract_string(content.c_str(), "hw_key", g_hw_key, sizeof(g_hw_key));
-    json_extract_string(content.c_str(), "tm_key", g_tm_key, sizeof(g_tm_key));
-    g_tm_expiry = json_extract_int64(content.c_str(), "tm_expiry", 0);
-
-    g_license_loaded = true;
-    LOG_I("License", "Loaded: seq=%d expiry=%lld hw=%d tm=%d",
-          g_license_seq, (long long)g_license_expiry,
-          g_hw_key[0] ? 1 : 0, g_tm_key[0] ? 1 : 0);
 }
 
 bool license_is_valid() {

@@ -1,4 +1,4 @@
-#ifndef APP_CONFIG_H
+﻿#ifndef APP_CONFIG_H
 #define APP_CONFIG_H
 
 /*
@@ -50,9 +50,9 @@
 #define TITLE_H_MIN             36      /* 最小高 */
 
 /* ── 左导航栏 (parent: 窗口) ── */
-#define NAV_W_PCT               4       /* 宽 = 窗口宽 × 4% */
-#define NAV_W_MIN               40      /* 最小宽 */
-#define NAV_ICON_BTN_PCT        70      /* 图标按钮 = 导航宽 × 70% */
+#define NAV_W_PCT               6       /* 宽 = 窗口宽 × 6% */
+#define NAV_W_MIN               36      /* 最小宽 */
+#define NAV_ICON_BTN_PCT        100     /* 图标按钮 = 导航宽 × 100% */
 #define NAV_ICON_GAP_PCT        8       /* 按钮间距 = 导航宽 × 8% */
 #define NAV_ICON_BTN_RADIUS     10      /* 圆角 (SCALE'd) */
 #define NAV_QUICK_H_PCT         25      /* 底部快捷区高 = 内容区高 × 25% */
@@ -191,10 +191,10 @@
 #define DIALOG_BORDER_W         1
 
 /* ── 向导弹窗 (parent: 窗口) ── */
-#define WIZARD_W_PCT            38      /* 宽 = 窗口宽 × 38% */
-#define WIZARD_H_PCT            60      /* 高 = 窗口高 × 60% */
-#define WIZARD_W_MIN            480
-#define WIZARD_H_MIN            400
+#define WIZARD_W_PCT            100     /* 宽 = 窗口宽 × 100% (撑满全窗口) */
+#define WIZARD_H_PCT            100     /* 高 = 窗口高 × 100% */
+#define WIZARD_W_MIN            800
+#define WIZARD_H_MIN            600
 
 /* ── Dropdown ── */
 #define DROPDOWN_RADIUS         6
@@ -220,8 +220,10 @@
 #define SESSION_ACTIVE_AGE_MS   300000
 
 /* ── Gateway ── */
-#define GATEWAY_PORT            18789
-#define GATEWAY_HEALTH_URL      "http://127.0.0.1:18789/health"
+#define GATEWAY_PORT            10086
+#define GATEWAY_HEALTH_URL      "http://127.0.0.1:10086/health"
+#define HERMES_PORT             18790
+#define HERMES_HEALTH_URL       "http://127.0.0.1:18790/health"
 
 /* ── 日志 ── */
 #define LOG_MAX_LINES           200
@@ -262,6 +264,7 @@
 #define LP_ROW_BG_OPA       LV_OPA_TRANSP
 #define LP_ROW_BORDER_W     0
 #define LP_ROW_PAD_ALL      0
+#define INPUT_H_BASE        40      /* Standard single-line input height (px, SCALE'd) */
 #define LP_ROW_GAP          4
 #define NAV_QUICK_AREA_H_PCT NAV_QUICK_H_PCT
 

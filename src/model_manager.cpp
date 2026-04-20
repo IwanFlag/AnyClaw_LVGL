@@ -1,4 +1,4 @@
-#include "model_manager.h"
+﻿#include "model_manager.h"
 #include "app.h"
 #include "app_log.h"
 #include <cstdio>
@@ -12,6 +12,9 @@
 
 /* ── Default models — sorted by capability (powerful first) ── */
 static const char* default_models[] = {
+    /* User's primary model (2026-04-19, from openclaw.json) */
+    "minimax-cn/MiniMax-M2.7-highspeed",            /* MiniMax M2.7 高速版（用户主模型） */
+    "minimax/MiniMax-M2.7",                          /* MiniMax M2.7 多模态版 */
     /* Free models (verified accessible, 2026-04-06 tested) */
     "nousresearch/hermes-3-llama-3.1-405b:free",   /* 405B 最强开源 */
     "openai/gpt-oss-120b:free",                     /* 120B OpenAI开源 */
@@ -20,7 +23,7 @@ static const char* default_models[] = {
     "qwen/qwen3-coder:free",                        /* 代码专用 */
     "qwen/qwen3-next-80b-a3b-instruct:free",        /* 通义千问 Next */
     "z-ai/glm-4.5-air:free",                        /* 智谱 GLM */
-    "minimax/minimax-m2.5:free",                    /* MiniMax */
+    "minimax/minimax-m2.5:free",                    /* MiniMax M2.5 */
     "nvidia/nemotron-3-super-120b-a12b:free",       /* NVIDIA 120B */
     "stepfun/step-3.5-flash:free",                  /* 阶跃星辰 */
     "nvidia/nemotron-3-nano-30b-a3b:free",          /* NVIDIA 30B MoE */
@@ -39,7 +42,7 @@ static const char* default_models[] = {
     "meta-llama/llama-3.2-3b-instruct:free",        /* Meta 最小 */
     nullptr
 };
-static const int default_count = 24;
+static const int default_count = 26;
 
 /* ── Cached model list ──────────────────────────────────────── */
 static char model_cache[MODEL_MAX_COUNT][MODEL_MAX_NAME_LEN];
@@ -133,30 +136,24 @@ void model_manager_init() {
 }
 
 /* ── Insert current Gateway model into list (called from UI) ── */
-/* Strips provider prefix, inserts at top if not in default list.
+/* Exact match against list (provider prefix preserved), inserts at top if not found.
  * Returns the index of the model (or -1 if no gateway model). */
 int model_insert_current(const char* gw_model) {
     if (!gw_model || !gw_model[0]) return -1;
 
     has_gateway_config = true;
 
-    /* Strip provider prefix for dropdown format */
-    const char* short_model = gw_model;
-    if (strncmp(gw_model, "openrouter/", 11) == 0) {
-        short_model = gw_model + 11;
-    }
-    /* xiaomi/ prefix kept as-is */
-
+    /* Exact match (provider prefix kept as-is in both list and comparison) */
     /* Check if already in list */
     for (int i = 0; i < model_count; i++) {
-        if (strcmp(model_cache[i], short_model) == 0) {
-            LOG_D("MODEL", "Gateway model already in list at index %d: %s", i, short_model);
+        if (strcmp(model_cache[i], gw_model) == 0) {
+            LOG_D("MODEL", "Gateway model already in list at index %d: %s", i, gw_model);
             return i;
         }
     }
 
-    /* Not in list → insert at top */
-    model_insert_top(short_model);
+    /* Not in list → insert at top (full prefixed name) */
+    model_insert_top(gw_model);
     return 0;
 }
 

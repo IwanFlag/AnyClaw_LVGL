@@ -37,6 +37,10 @@ bool workspace_lock_acquire();
 void workspace_lock_release();
 bool workspace_lock_is_held();
 
+/* Remove a lock file left behind by a crashed/force-killed session.
+ * Called at startup before workspace_init. */
+void workspace_remove_stale_lock();
+
 /* Sync managed policy section to AGENTS.md / TOOLS.md */
 bool workspace_sync_managed_sections();
 

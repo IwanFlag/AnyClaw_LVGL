@@ -17,6 +17,7 @@
 #include "SDL.h"
 #include "lang.h"
 #include "lvgl.h"
+#include "widgets/aw_button.h"
 #include <windows.h>
 #include <commdlg.h>
 
@@ -502,14 +503,8 @@ static void build_general_tab(lv_obj_t* tab) {
         lv_obj_set_style_text_font(btn_apply_lbl, CJK_FONT, 0);
         lv_obj_center(btn_apply_lbl);
 
-        lv_obj_t* btn_add_ws = lv_button_create(ws_btn_row);
-        lv_obj_set_size(btn_add_ws, SCALE(140), SCALE(34));
-        lv_obj_set_style_bg_color(btn_add_ws, g_colors->btn_secondary, 0);
+        lv_obj_t* btn_add_ws = aw_btn_create(ws_btn_row, "Save Candidate", BTN_OUTLINED, SCALE(140), SCALE(34));
         lv_obj_add_event_cb(btn_add_ws, workspace_add_only_cb, LV_EVENT_CLICKED, nullptr);
-        lv_obj_t* btn_add_lbl = lv_label_create(btn_add_ws);
-        lv_label_set_text(btn_add_lbl, "Save Candidate");
-        lv_obj_set_style_text_font(btn_add_lbl, CJK_FONT, 0);
-        lv_obj_center(btn_add_lbl);
 
         gen_workspace_status = lv_label_create(tab);
         lv_label_set_text(gen_workspace_status, "Workspace manager ready");
@@ -983,7 +978,7 @@ static void build_general_tab(lv_obj_t* tab) {
     /* Reconfigure wizard button */
     lv_obj_t* btn_wizard = lv_button_create(tab);
     lv_obj_set_width(btn_wizard, LV_PCT(100));
-    lv_obj_set_height(btn_wizard, 40);
+    lv_obj_set_height(btn_wizard, SCALE(40));
     lv_obj_set_style_bg_color(btn_wizard, g_colors->accent_subtle, 0);
     lv_obj_set_style_bg_grad_color(btn_wizard, g_colors->accent_subtle, 0);
     lv_obj_set_style_bg_grad_dir(btn_wizard, LV_GRAD_DIR_VER, 0);
@@ -1465,7 +1460,7 @@ static void build_model_tab(lv_obj_t* tab) {
 
         /* Dialog box */
         lv_obj_t* dlg = lv_obj_create(overlay);
-        lv_obj_set_size(dlg, 840, LV_SIZE_CONTENT);
+        lv_obj_set_size(dlg, SCALE(840), LV_SIZE_CONTENT);
         lv_obj_center(dlg);
         lv_obj_set_style_bg_color(dlg, g_colors->panel, 0);
         lv_obj_set_style_border_color(dlg, g_colors->border_strong, 0);
@@ -1531,17 +1526,8 @@ static void build_model_tab(lv_obj_t* tab) {
         lv_obj_set_style_text_color(lbl_ok, g_colors->text_inverse, 0);
         lv_obj_center(lbl_ok);
 
-        /* Cancel button (right) */
-        lv_obj_t* btn_cancel = lv_button_create(btn_row);
-        lv_obj_set_size(btn_cancel, 80, 36);
-        lv_obj_set_style_bg_color(btn_cancel, g_colors->btn_secondary, 0);
-        lv_obj_set_style_bg_color(btn_cancel, g_colors->text_hint, LV_STATE_PRESSED);
-        lv_obj_set_style_radius(btn_cancel, SCALE(g_colors->radius_sm), 0);
-        lv_obj_t* lbl_cancel = lv_label_create(btn_cancel);
-        lv_label_set_text(lbl_cancel, tr("取消", "Cancel"));
-        lv_obj_set_style_text_font(lbl_cancel, CJK_FONT, 0);
-        lv_obj_set_style_text_color(lbl_cancel, g_colors->text_inverse, 0);
-        lv_obj_center(lbl_cancel);
+        /* Cancel button (right) — outlined style, accent text */
+        lv_obj_t* btn_cancel = aw_btn_create(btn_row, tr("取消", "Cancel"), BTN_OUTLINED, 80, 36);
 
         /* Cancel handler */
         lv_obj_add_event_cb(btn_cancel, [](lv_event_t* e2) {
@@ -1763,7 +1749,7 @@ static void build_model_tab(lv_obj_t* tab) {
     lv_obj_t* fo_list = lv_obj_create(tab);
     failover_list_container = fo_list; /* store for rebuild */
     lv_obj_set_width(fo_list, LV_PCT(100));
-    lv_obj_set_height(fo_list, 240);
+    lv_obj_set_height(fo_list, SCALE(240));
     lv_obj_set_style_bg_color(fo_list, g_colors->surface, 0);
     lv_obj_set_style_border_color(fo_list, g_colors->disabled_bg, 0);
     lv_obj_set_style_border_width(fo_list, 1, 0);
@@ -2018,7 +2004,7 @@ static void build_skills_tab(lv_obj_t* tab) {
     lv_textarea_set_one_line(g_skill_search_input, true);
     lv_textarea_set_placeholder_text(g_skill_search_input, "Type to filter...");
     lv_obj_set_width(g_skill_search_input, LV_PCT(100));
-    lv_obj_set_height(g_skill_search_input, 56);
+    lv_obj_set_height(g_skill_search_input, SCALE(56));
     apply_input_style(g_skill_search_input);
     lv_textarea_set_text_selection(g_skill_search_input, true);
     lv_group_add_obj(lv_group_get_default(), g_skill_search_input);
@@ -2031,7 +2017,7 @@ static void build_skills_tab(lv_obj_t* tab) {
 
     g_skill_list_available = lv_list_create(tab);
     lv_obj_set_width(g_skill_list_available, LV_PCT(100));
-    lv_obj_set_height(g_skill_list_available, 390);
+    lv_obj_set_height(g_skill_list_available, SCALE(390));
     lv_obj_set_style_bg_color(g_skill_list_available, g_colors->surface, 0);
     lv_obj_set_style_border_color(g_skill_list_available, g_colors->disabled_bg, 0);
     lv_obj_set_style_border_width(g_skill_list_available, 1, 0);
@@ -2048,7 +2034,7 @@ static void build_skills_tab(lv_obj_t* tab) {
 
     g_skill_list_installed = lv_list_create(tab);
     lv_obj_set_width(g_skill_list_installed, LV_PCT(100));
-    lv_obj_set_height(g_skill_list_installed, 240);
+    lv_obj_set_height(g_skill_list_installed, SCALE(240));
     lv_obj_set_style_bg_color(g_skill_list_installed, g_colors->surface, 0);
     lv_obj_set_style_border_color(g_skill_list_installed, g_colors->disabled_bg, 0);
     lv_obj_set_style_border_width(g_skill_list_installed, 1, 0);
@@ -2185,7 +2171,7 @@ static void build_log_tab(lv_obj_t* tab) {
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 
     lv_obj_t* lbl_log_hint = lv_label_create(row_log);
-    lv_label_set_text(lbl_log_hint, tr("写入 logs\\app.log", "Write to logs\\app.log"));
+    lv_label_set_text(lbl_log_hint, tr("写入 logs\\anyclaw_app.log", "Write to logs\\anyclaw_app.log"));
     apply_hint_label(lbl_log_hint);
 
     /* Row: [Log Level label] [dropdown] */
@@ -2453,20 +2439,9 @@ static void build_tracing_tab(lv_obj_t* tab) {
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
     lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t* btn_ref = lv_button_create(row);
-    lv_obj_t* btn_exp = lv_button_create(row);
-    lv_obj_t* btn_clr = lv_button_create(row);
-    for (lv_obj_t* b : {btn_ref, btn_exp, btn_clr}) {
-        lv_obj_set_size(b, SCALE(100), SCALE(32));
-        lv_obj_set_style_bg_color(b, g_colors->btn_secondary, 0);
-        lv_obj_set_style_radius(b, SCALE(g_colors->radius_sm), 0);
-    }
-    lv_label_set_text(lv_label_create(btn_ref), tr("刷新", "Refresh"));
-    lv_label_set_text(lv_label_create(btn_exp), tr("导出", "Export"));
-    lv_label_set_text(lv_label_create(btn_clr), tr("清空", "Clear"));
-    lv_obj_center(lv_obj_get_child(btn_ref, 0));
-    lv_obj_center(lv_obj_get_child(btn_exp, 0));
-    lv_obj_center(lv_obj_get_child(btn_clr, 0));
+    lv_obj_t* btn_ref = aw_btn_create(row, tr("刷新", "Refresh"), BTN_OUTLINED, SCALE(100), SCALE(32));
+    lv_obj_t* btn_exp = aw_btn_create(row, tr("导出", "Export"), BTN_OUTLINED, SCALE(100), SCALE(32));
+    lv_obj_t* btn_clr = aw_btn_create(row, tr("清空", "Clear"), BTN_OUTLINED, SCALE(100), SCALE(32));
 
     lv_obj_add_event_cb(btn_ref, [](lv_event_t*) { refresh_tracing_view(); }, LV_EVENT_CLICKED, nullptr);
     lv_obj_add_event_cb(btn_exp, [](lv_event_t*) {
@@ -2520,11 +2495,7 @@ static void build_kb_tab(lv_obj_t* tab) {
     lv_obj_set_flex_flow(row_btn, LV_FLEX_FLOW_ROW);
     lv_obj_clear_flag(row_btn, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t* btn_add = lv_button_create(row_btn);
-    lv_obj_set_size(btn_add, SCALE(140), SCALE(34));
-    lv_obj_set_style_bg_color(btn_add, g_colors->btn_secondary, 0);
-    lv_label_set_text(lv_label_create(btn_add), tr("添加文件", "Add File"));
-    lv_obj_center(lv_obj_get_child(btn_add, 0));
+    lv_obj_t* btn_add = aw_btn_create(row_btn, tr("添加文件", "Add File"), BTN_OUTLINED, SCALE(140), SCALE(34));
     lv_obj_add_event_cb(btn_add, [](lv_event_t*) {
         OPENFILENAMEA ofn{};
         char path[MAX_PATH] = {0};
@@ -2584,7 +2555,7 @@ static void build_about_tab(lv_obj_t* tab) {
     /* Garlic brand icon - sprouting garlic from project icons */
     lv_obj_t* img_garlic = lv_image_create(tab);
     lv_image_set_src(img_garlic, "A:assets/garlic_sprout.png");
-    lv_obj_set_size(img_garlic, 120, 120);
+    lv_obj_set_size(img_garlic, SCALE(120), SCALE(120));
     lv_image_set_scale(img_garlic, 256); /* 100% scale (256 = 1x) */
 
     /* App logo/title */
@@ -2642,7 +2613,7 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_set_flex_align(row_config, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     lv_obj_t* btn_cfg_export = lv_button_create(row_config);
-    lv_obj_set_size(btn_cfg_export, 160, 36);
+    lv_obj_set_size(btn_cfg_export, SCALE(160), SCALE(36));
     lv_obj_set_style_bg_color(btn_cfg_export, g_colors->accent_secondary, 0);
     lv_obj_set_style_radius(btn_cfg_export, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_cfg_export, [](lv_event_t* e) {
@@ -2668,7 +2639,7 @@ static void build_about_tab(lv_obj_t* tab) {
 
     /* Clear Chat History button */
     lv_obj_t* btn_clear_chat = lv_button_create(row_config);
-    lv_obj_set_size(btn_clear_chat, 160, 36);
+    lv_obj_set_size(btn_clear_chat, SCALE(160), SCALE(36));
     lv_obj_set_style_bg_color(btn_clear_chat, g_colors->danger, 0);
     lv_obj_set_style_radius(btn_clear_chat, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_clear_chat, [](lv_event_t* e) {
@@ -2695,7 +2666,7 @@ static void build_about_tab(lv_obj_t* tab) {
 
     /* Export Migration */
     lv_obj_t* btn_mig_export = lv_button_create(row_mig);
-    lv_obj_set_size(btn_mig_export, 160, 36);
+    lv_obj_set_size(btn_mig_export, SCALE(160), SCALE(36));
     lv_obj_set_style_bg_color(btn_mig_export, g_colors->success, 0);
     lv_obj_set_style_radius(btn_mig_export, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_mig_export, [](lv_event_t* e) {
@@ -2730,7 +2701,7 @@ static void build_about_tab(lv_obj_t* tab) {
 
     /* Import Migration */
     lv_obj_t* btn_mig_import = lv_button_create(row_mig);
-    lv_obj_set_size(btn_mig_import, 160, 36);
+    lv_obj_set_size(btn_mig_import, SCALE(160), SCALE(36));
     lv_obj_set_style_bg_color(btn_mig_import, g_colors->warning, 0);
     lv_obj_set_style_radius(btn_mig_import, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_mig_import, [](lv_event_t* e) {

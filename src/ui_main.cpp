@@ -858,7 +858,7 @@ void set_exit_confirmation(bool enabled) {
 }
 
 /* ═══ DPI scale state (100, 125, 150) ═══ */
-static int g_dpi_scale = 100;
+int g_dpi_scale = 100;
 
 int app_get_dpi_scale() {
     return g_dpi_scale;
@@ -1392,10 +1392,9 @@ void load_theme_config() {
             case Theme::Light:   g_colors = &THEME_LIGHT; break;
         }
     }
-    int lang = json_extract_int(content.c_str(), "language", -1);
-    if (lang >= 0 && lang <= 3) {
-        g_lang = (Lang)lang;
-    }
+    /* Language forced to English — do not restore from config file */
+    /* int lang = json_extract_int(content.c_str(), "language", -1); */
+    /* if (lang >= 0 && lang <= 3) { g_lang = (Lang)lang; } */
 
     /* P2-03: Restore window position */
     int wx = json_extract_int(content.c_str(), "window_x", -1);
@@ -10537,14 +10536,15 @@ static void wizard_build_step_model_api() {
 
     g_wiz_api_ta = lv_textarea_create(g_wizard_content);
     lv_textarea_set_one_line(g_wiz_api_ta, true);
-    lv_textarea_set_password_mode(g_wiz_api_ta, true);
+    /* Show API key in plain text */
+
     lv_textarea_set_placeholder_text(g_wiz_api_ta, "sk-or-...");
     /* FIX Bug 4: Restore API key from saved state on step re-entry */
     if (g_wizard_api_key[0]) {
         lv_textarea_set_text(g_wiz_api_ta, g_wizard_api_key);
     }
     lv_obj_set_width(g_wiz_api_ta, LV_PCT(100));
-    lv_obj_set_height(g_wiz_api_ta, SCALE(34));
+    lv_obj_set_height(g_wiz_api_ta, SCALE(INPUT_H_BASE));
     lv_obj_set_style_bg_color(g_wiz_api_ta, g_colors->surface, 0);
     lv_obj_set_style_border_color(g_wiz_api_ta, g_colors->border, 0);
     lv_obj_set_style_border_width(g_wiz_api_ta, 1, 0);
@@ -11294,6 +11294,7 @@ static void wizard_close_cb(lv_event_t* e) {
 }
 
 /* ── Main wizard UI ── */
+void ui_show_setup_wizard_forced(void) { ui_show_setup_wizard(); }
 void ui_show_setup_wizard() {
     if (g_wizard_modal) return;  /* Already showing */
 
@@ -11478,8 +11479,8 @@ void ui_show_setup_wizard() {
     /* ── Content area (shifted down for step bar) ── */
     int content_y = step_bar_y + step_bar_h + 4;
     g_wizard_content = lv_obj_create(g_wizard_box);
-    lv_obj_set_size(g_wizard_content, box_w - 40, box_h - content_y - SCALE(64));
-    lv_obj_set_pos(g_wizard_content, 20, content_y);
+    lv_obj_set_size(g_wizard_content, box_w - SCALE(24), box_h - content_y - SCALE(64));
+    lv_obj_set_pos(g_wizard_content, SCALE(12), content_y);
     lv_obj_set_style_bg_opa(g_wizard_content, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(g_wizard_content, 0, 0);
     lv_obj_set_style_radius(g_wizard_content, 0, 0);
@@ -11488,6 +11489,7 @@ void ui_show_setup_wizard() {
     lv_obj_set_flex_flow(g_wizard_content, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(g_wizard_content, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_gap(g_wizard_content, 12, 0);
+    lv_obj_set_style_pad_column(g_wizard_content, SCALE(8), 0);
 
     /* ── Bottom button bar ── */
     lv_obj_t* btn_bar = lv_obj_create(g_wizard_box);

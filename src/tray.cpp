@@ -53,8 +53,6 @@ static const wchar_t* get_tray_theme_dir() {
     switch (g_theme) {
         case Theme::Peachy:  return L"tray\\peachy\\";
         case Theme::Mochi:   return L"tray\\mochi\\";
-        case Theme::Classic: return L"tray\\classic\\";
-        case Theme::Light:   return L"tray\\light\\";
         default:             return L"tray\\matcha\\";
     }
 }

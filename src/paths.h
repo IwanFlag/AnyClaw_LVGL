@@ -1,4 +1,4 @@
-#ifndef PATHS_H
+﻿#ifndef PATHS_H
 #define PATHS_H
 
 /*
@@ -24,7 +24,7 @@
 /* Log directories */
 #define DIR_LOGS                "logs"
 #define DIR_CRASH_LOGS          "crash_logs"
-#define FILE_APP_LOG            "app.log"
+#define FILE_APP_LOG            "anyclaw_app.log"
 
 /* ── OpenClaw Detection ─────────────────────────────────────── */
 #define OPENCLAW_CONFIG_DIR     "openclaw"

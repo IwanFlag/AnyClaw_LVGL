@@ -4,6 +4,15 @@ project(AnyClaw_LVGL LANGUAGES C CXX)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
+# MSVC: force UTF-8 source encoding + disable min/max macro pollution + C11 standard
+if(MSVC)
+    string(APPEND CMAKE_CXX_FLAGS " /utf-8 /DNOMINMAX")
+    string(APPEND CMAKE_C_FLAGS " /utf-8 /DNOMINMAX /std:c11")
+else()
+    string(APPEND CMAKE_CXX_FLAGS " /utf-8 /DNOMINMAX")
+    string(APPEND CMAKE_C_FLAGS " /utf-8 /DNOMINMAX")
+endif()
+
 # ═══════════════════════════════════════════════════════════════
 # Options
 # ═══════════════════════════════════════════════════════════════
@@ -142,6 +151,23 @@ set(EXCLUDE_FONTS
 )
 list(REMOVE_ITEM LVGL_SOURCES ${EXCLUDE_FONTS})
 
+# Exclude platform-specific drivers not used on Windows (GLOB_RECURSE catches all subdirs).
+file(GLOB_RECURSE LVGL_DRIVERS_SOURCES
+    ${CMAKE_SOURCE_DIR}/thirdparty/lvgl/src/drivers/*.c
+)
+set(EXCLUDE_DRIVERS
+    ${CMAKE_SOURCE_DIR}/thirdparty/lvgl/src/drivers/nuttx/lv_nuttx_cache.c
+    ${CMAKE_SOURCE_DIR}/thirdparty/lvgl/src/drivers/nuttx/lv_nuttx_entry.c
+    ${CMAKE_SOURCE_DIR}/thirdparty/lvgl/src/drivers/nuttx/lv_nuttx_fbdev.c
+    ${CMAKE_SOURCE_DIR}/thirdparty/lvgl/src/drivers/nuttx/lv_nuttx_image_cache.c
+    ${CMAKE_SOURCE_DIR}/thirdparty/lvgl/src/drivers/nuttx/lv_nuttx_lcd.c
+    ${CMAKE_SOURCE_DIR}/thirdparty/lvgl/src/drivers/nuttx/lv_nuttx_libuv.c
+    ${CMAKE_SOURCE_DIR}/thirdparty/lvgl/src/drivers/nuttx/lv_nuttx_mouse.c
+    ${CMAKE_SOURCE_DIR}/thirdparty/lvgl/src/drivers/nuttx/lv_nuttx_profiler.c
+    ${CMAKE_SOURCE_DIR}/thirdparty/lvgl/src/drivers/nuttx/lv_nuttx_touchscreen.c
+)
+list(REMOVE_ITEM LVGL_SOURCES ${EXCLUDE_DRIVERS})
+
 # ═══════════════════════════════════════════════════════════════
 # App sources
 # ═══════════════════════════════════════════════════════════════
@@ -167,15 +193,17 @@ set(APP_SOURCES
     src/session_manager.cpp
     src/workspace.cpp
     src/permissions.cpp
-    src/boot_check.cpp
     src/feature_flags.cpp
     src/tracing.cpp
     src/lan_chat_protocol.cpp
     src/lan_chat_client.cpp
     src/ftp_client.cpp
+    src/stub_ftp.cpp
     src/remote_protocol.cpp
     src/remote_tcp_channel.cpp
     src/kb_store.cpp
+    src/app_log.cpp
+    src/runtime_mgr.cpp
     src/output_renderer.cpp
     src/async_task.cpp
 )
@@ -190,21 +218,37 @@ set(APP_RESOURCES
 
 # ═══════════════════════════════════════════════════════════════
 # FreeType (vector font rendering)
+# NOTE: MinGW libfreetype.a is NOT compatible with MSVC — only use for MinGW builds.
+# For MSVC, FreeType must come from vcpkg or a native Windows build.
 # ═══════════════════════════════════════════════════════════════
-set(FREETYPE_PREFIX "${CMAKE_SOURCE_DIR}/thirdparty/freetype-mingw")
+if(NOT MSVC)
+    set(FREETYPE_PREFIX "${CMAKE_SOURCE_DIR}/thirdparty/freetype-mingw")
 
-if(EXISTS "${FREETYPE_PREFIX}/lib/libfreetype.a")
-    if(EXISTS "${FREETYPE_PREFIX}/include/freetype2/freetype/freetype.h")
-        set(FREETYPE_INCLUDE_DIRS "${FREETYPE_PREFIX}/include/freetype2")
+    if(EXISTS "${FREETYPE_PREFIX}/lib/libfreetype.a")
+        if(EXISTS "${FREETYPE_PREFIX}/include/freetype2/freetype/freetype.h")
+            set(FREETYPE_INCLUDE_DIRS "${FREETYPE_PREFIX}/include/freetype2")
+        else()
+            set(FREETYPE_INCLUDE_DIRS "${FREETYPE_PREFIX}/include")
+        endif()
+        set(FREETYPE_LIB_DIR "${FREETYPE_PREFIX}/lib")
+        set(USE_FREETYPE 1)
+        message(STATUS "FreeType: found at ${FREETYPE_PREFIX}")
     else()
-        set(FREETYPE_INCLUDE_DIRS "${FREETYPE_PREFIX}/include")
+        set(USE_FREETYPE 0)
+        message(WARNING "FreeType not found at ${FREETYPE_PREFIX}. Build without FreeType. Run scripts/build-freetype-mingw.sh first.")
     endif()
-    set(FREETYPE_LIB_DIR "${FREETYPE_PREFIX}/lib")
-    set(USE_FREETYPE 1)
-    message(STATUS "FreeType: found at ${FREETYPE_PREFIX}")
 else()
-    set(USE_FREETYPE 0)
-    message(WARNING "FreeType not found at ${FREETYPE_PREFIX}. Build without FreeType. Run scripts/build-freetype-mingw.sh first.")
+    # MSVC build: use freetype-msvc we built from source
+    set(FREETYPE_PREFIX "${CMAKE_SOURCE_DIR}/thirdparty/freetype-msvc")
+    if(EXISTS "${FREETYPE_PREFIX}/lib/freetype.lib")
+        set(FREETYPE_INCLUDE_DIRS "${FREETYPE_PREFIX}/include")
+        set(FREETYPE_LIB_DIR "${FREETYPE_PREFIX}/lib")
+        set(USE_FREETYPE 1)
+        message(STATUS "FreeType: found MSVC build at ${FREETYPE_PREFIX}")
+    else()
+        set(USE_FREETYPE 0)
+        message(WARNING "FreeType: MSVC lib not found at ${FREETYPE_PREFIX}. Build without FreeType.")
+    endif()
 endif()
 
 # ═══════════════════════════════════════════════════════════════
@@ -242,6 +286,7 @@ target_link_directories(AnyClaw_LVGL PRIVATE
 if(MSVC)
     target_link_libraries(AnyClaw_LVGL PRIVATE
         SDL2main SDL2
+        $<$<BOOL:${USE_FREETYPE}>:freetype>
         kernel32 user32 gdi32 winmm imm32 ole32 oleaut32 version uuid
         advapi32 setupapi shell32 dinput8
         dwmapi comctl32 dbghelp ws2_32 comdlg32
@@ -304,3 +349,13 @@ if(SDL2_DLL_PATH)
 else()
     message(WARNING "SDL2.dll not found. Build will succeed but runtime needs SDL2.dll in PATH/output.")
 endif()
+
+# ═══════════════════════════════════════════════════════════════
+# Post-build: copy assets/fonts (CJK + UI fonts)
+# ═══════════════════════════════════════════════════════════════
+add_custom_command(TARGET AnyClaw_LVGL POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/assets/fonts"
+        $<TARGET_FILE_DIR:AnyClaw_LVGL>/assets/fonts
+    COMMENT "Copying assets/fonts to output directory"
+)

@@ -1,7 +1,8 @@
-#include "app.h"
+﻿#include "app.h"
 #include "app_log.h"
 #include "permissions.h"
 #include "workspace.h"
+#include "runtime_mgr.h"
 #include <windows.h>
 #include <shellapi.h>
 #include <tlhelp32.h>
@@ -80,7 +81,15 @@ static bool exec_cmd(const char* cmd, char* output, int out_size, DWORD timeout_
 
     PROCESS_INFORMATION pi{};
 
-    std::string full = std::string("cmd /C \"") + cmd + "\"";
+    // Detection: if cmd starts with "openclaw " or "node ", skip the cmd /C wrapper.
+    // CREATE_NO_WINDOW flag is set so no console window appears.
+    bool needs_shell_wrapper = true;
+    if (strncmp(cmd, "openclaw ", 9) == 0 ||
+        strncmp(cmd, "node ", 5) == 0 ||
+        strncmp(cmd, "npm ", 4) == 0) {
+        needs_shell_wrapper = false;
+    }
+    std::string full = needs_shell_wrapper ? (std::string("cmd /C \"") + cmd + "\"") : std::string(cmd);
     std::vector<char> buf(full.begin(), full.end());
     buf.push_back('\0');
 
@@ -633,6 +642,14 @@ bool app_update_model_config(const char* api_key, const char* model_name) {
         if (strncmp(mn, "xiaomi/", 7) == 0) {
             provider = "xiaomi";
             base_url = "https://api.xiaomimimo.com/v1";
+        } else if (strncmp(mn, "minimax-cn/", 11) == 0) {
+            provider = "minimax-cn";
+            base_url = "https://api.minimaxi.com/anthropic";
+            mn += 11;  /* strip prefix */
+        } else if (strncmp(mn, "minimax/", 8) == 0) {
+            provider = "minimax";
+            base_url = "https://api.minimaxi.com/anthropic";
+            mn += 8;  /* strip prefix */
         } else if (strncmp(mn, "openrouter/", 11) == 0) {
             provider = "openrouter";
             mn += 11;  /* strip prefix */
@@ -664,6 +681,8 @@ bool app_update_model_config(const char* api_key, const char* model_name) {
     if (api_key && api_key[0] && model_name && model_name[0]) {
         const char* provider = "openrouter";
         if (strncmp(model_name, "xiaomi/", 7) == 0) provider = "xiaomi";
+        else if (strncmp(model_name, "minimax-cn/", 11) == 0) provider = "minimax-cn";
+        else if (strncmp(model_name, "minimax/", 8) == 0) provider = "minimax";
 
         snprintf(cmd, sizeof(cmd),
             "openclaw config set models.providers.%s.apiKey \"%s\"", provider, api_key);
@@ -830,9 +849,37 @@ bool app_get_provider_api_key(const char* provider, char* key_out, int out_size)
 }
 
 /* ── Check if Node.js is installed ─────────────────────────── */
+static char g_manual_node_path[MAX_PATH] = {0};
+
+void app_set_node_path(const char* path) {
+    if (path && path[0]) {
+        strncpy(g_manual_node_path, path, sizeof(g_manual_node_path) - 1);
+        g_manual_node_path[sizeof(g_manual_node_path) - 1] = '\0';
+        LOG_I("OpenClaw", "Manual node path set: %s", path);
+    }
+}
+
 bool app_check_nodejs(char* version_out, int out_size) {
     if (version_out && out_size > 0) version_out[0] = '\0';
     char output[256] = {0};
+
+    /* Try manual path first if set */
+    if (g_manual_node_path[0]) {
+        char cmd[512] = {0};
+        snprintf(cmd, sizeof(cmd), "\"%s\\node.exe\" --version", g_manual_node_path);
+        if (exec_cmd(cmd, output, sizeof(output)) && output[0]) {
+            char* p = output + strlen(output) - 1;
+            while (p > output && (*p == '\r' || *p == '\n' || *p == ' ')) { *p = '\0'; p--; }
+            if (version_out && out_size > 0) {
+                strncpy(version_out, output, out_size - 1);
+                version_out[out_size - 1] = '\0';
+            }
+            LOG_I("OpenClaw", "Node.js found via manual path: %s", output);
+            return true;
+        }
+    }
+
+    /* Fallback: check in PATH */
     if (exec_cmd("node --version", output, sizeof(output)) && output[0]) {
         /* Trim whitespace */
         char* p = output + strlen(output) - 1;
@@ -1179,7 +1226,7 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
             return false;
         }
         ui_progress_update("OpenClaw Setup", "Installing from bundled package", 50);
-        snprintf(cmd, sizeof(cmd), "npm install -g \"%s\"", tarball);
+        snprintf(cmd, sizeof(cmd), "npm install -g --yes \"%s\"", tarball);
         LOG_I("Setup", "Installing from bundled: %s", tarball);
         ok = exec_cmd(cmd, output, out_size, 120000);
         if (ok) ui_progress_update("OpenClaw Setup", "Package installed", 80);
@@ -1194,7 +1241,7 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
             /* FIX: Use download_file() which handles curl fallback to PowerShell */
             if (download_file(github_openclaw_url, tgz_path.c_str(), output, out_size, 10 * 60 * 1000)
                 && file_size_ok(tgz_path, 1ull * 1024ull * 1024ull)) {
-                snprintf(cmd, sizeof(cmd), "npm install -g \"%s\"", tgz_path.c_str());
+                snprintf(cmd, sizeof(cmd), "npm install -g --yes \"%s\"", tgz_path.c_str());
                 ok = exec_cmd(cmd, output, out_size, 120000);
                 if (ok) ui_log("[Setup] OpenClaw installed from GitHub release");
             }
@@ -1211,7 +1258,7 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
             for (int i = 0; registries[i]; i++) {
                 ui_progress_update("OpenClaw Setup", registries[i], 40 + i * 15);
                 ui_log("[Setup] OpenClaw npm source %d/3: %s", i + 1, registries[i]);
-                snprintf(cmd, sizeof(cmd), "set \"npm_config_registry=%s\" && npm install -g openclaw", registries[i]);
+                snprintf(cmd, sizeof(cmd), "set \"npm_config_registry=%s\" && npm install -g --yes openclaw", registries[i]);
                 ok = exec_cmd(cmd, output, out_size, 8 * 60 * 1000);
                 if (ok) break;
                 ui_log("[Setup] Source %d failed/timeout, auto switch next source", i + 1);
@@ -1228,7 +1275,7 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
             /* FIX: Use download_file() which handles curl fallback to PowerShell */
             if (download_file(github_openclaw_url, tgz_path.c_str(), output, out_size, 10 * 60 * 1000)
                 && file_size_ok(tgz_path, 1ull * 1024ull * 1024ull)) {
-                snprintf(cmd, sizeof(cmd), "npm install -g \"%s\"", tgz_path.c_str());
+                snprintf(cmd, sizeof(cmd), "npm install -g --yes \"%s\"", tgz_path.c_str());
                 ok = exec_cmd(cmd, output, out_size, 120000);
                 if (ok) ui_log("[Setup] OpenClaw installed from GitHub release");
             }
@@ -1246,7 +1293,7 @@ bool app_install_openclaw_ex(char* output, int out_size, const char* mode) {
             for (int i = 0; registries[i]; i++) {
                 ui_progress_update("OpenClaw Setup", registries[i], 40 + i * 10);
                 ui_log("[Setup] OpenClaw npm source %d/3: %s", i + 1, registries[i]);
-                snprintf(cmd, sizeof(cmd), "set \"npm_config_registry=%s\" && npm install -g openclaw", registries[i]);
+                snprintf(cmd, sizeof(cmd), "set \"npm_config_registry=%s\" && npm install -g --yes openclaw", registries[i]);
                 ok = exec_cmd(cmd, output, out_size, 8 * 60 * 1000);
                 if (ok) break;
                 ui_log("[Setup] Source %d failed/timeout, auto switch next source", i + 1);
@@ -1527,9 +1574,12 @@ bool app_uninstall_openclaw_full(char* output, int out_size, bool full_cleanup) 
     if (!output || out_size <= 0) return false;
     output[0] = '\0';
 
+    ui_progress_begin("OpenClaw Uninstall", "Stopping gateway...", 5);
+
     /* 1. Stop gateway first */
     char tmp[256] = {0};
     exec_cmd("openclaw gateway stop", tmp, sizeof(tmp), 10000);
+    ui_progress_update("OpenClaw Uninstall", "Uninstalling npm package...", 30);
 
     /* 2. npm uninstall */
     LOG_I("Setup", "Uninstalling openclaw via npm...");
@@ -1537,6 +1587,7 @@ bool app_uninstall_openclaw_full(char* output, int out_size, bool full_cleanup) 
 
     /* 3. Remove config/workspace if requested */
     if (ok && full_cleanup) {
+        ui_progress_update("OpenClaw Uninstall", "Cleaning up config...", 70);
         char rm_cmd[512];
 
         /* OpenClaw config: USERPROFILE\.openclaw\ */
@@ -1556,7 +1607,13 @@ bool app_uninstall_openclaw_full(char* output, int out_size, bool full_cleanup) 
         }
     }
 
-    if (ok) LOG_I("Setup", "Uninstall complete (full_cleanup=%d)", full_cleanup);
+    if (ok) {
+        LOG_I("Setup", "Uninstall complete (full_cleanup=%d)", full_cleanup);
+        ui_progress_finish("OpenClaw Uninstall", true, "OpenClaw removed");
+    } else {
+        LOG_E("Setup", "Uninstall failed: %s", output[0] ? output : "unknown error");
+        ui_progress_finish("OpenClaw Uninstall", false, output[0] ? output : "npm uninstall failed");
+    }
     return ok;
 }
 
@@ -1612,6 +1669,64 @@ bool app_verify_openclaw(char* detail_out, int out_size) {
     return true;
 }
 
+/* ── Helper: find npm.cmd in known paths (no subprocess needed) ── */
+static bool find_npm_cmd(char* path_out, int path_size) {
+    if (!path_out || path_size <= 0) return false;
+    path_out[0] = '\0';
+
+    /* Try node.exe sibling + npm.cmd (most reliable) */
+    const char* node_candidates[] = {
+        "C:\\Program Files\\nodejs\\node.exe",
+        "C:\\Program Files (x86)\\nodejs\\node.exe",
+    };
+    for (int i = 0; i < (int)(sizeof(node_candidates) / sizeof(node_candidates[0])); i++) {
+        if (GetFileAttributesA(node_candidates[i]) != INVALID_FILE_ATTRIBUTES) {
+            /* Found node.exe — check for npm.cmd in same dir */
+            std::string npm_cmd = std::string(node_candidates[i]);
+            size_t pos = npm_cmd.rfind('\\');
+            if (pos != std::string::npos) npm_cmd = npm_cmd.substr(0, pos) + "\\npm.cmd";
+            if (GetFileAttributesA(npm_cmd.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                snprintf(path_out, path_size, "\"%s\"", npm_cmd.c_str());
+                return true;
+            }
+        }
+    }
+
+    /* Try npm.cmd directly in common locations */
+    const char* npm_cmd_candidates[] = {
+        "C:\\Program Files\\nodejs\\npm.cmd",
+        "C:\\Program Files (x86)\\nodejs\\npm.cmd",
+        "C:\\Users\\thundersoft\\AppData\\Roaming\\npm\\npm.cmd",
+    };
+    for (int i = 0; i < (int)(sizeof(npm_cmd_candidates) / sizeof(npm_cmd_candidates[0])); i++) {
+        if (GetFileAttributesA(npm_cmd_candidates[i]) != INVALID_FILE_ATTRIBUTES) {
+            snprintf(path_out, path_size, "\"%s\"", npm_cmd_candidates[i]);
+            return true;
+        }
+    }
+    return false;
+}
+
+/* ── Helper: find openclaw.cmd in known paths (no subprocess needed) ── */
+static bool find_openclaw_cmd(char* path_out, int path_size) {
+    if (!path_out || path_size <= 0) return false;
+    path_out[0] = '\0';
+
+    const char* candidates[] = {
+        "C:\\Users\\thundersoft\\AppData\\Roaming\\npm\\openclaw.cmd",
+        "C:\\Users\\thundersoft\\AppData\\Roaming\\npm\\openclaw",
+        "C:\\Program Files\\nodejs\\openclaw.cmd",
+    };
+    for (int i = 0; i < (int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
+        DWORD attr = GetFileAttributesA(candidates[i]);
+        if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+            snprintf(path_out, path_size, "\"%s\"", candidates[i]);
+            return true;
+        }
+    }
+    return false;
+}
+
 /* ── Full environment check ────────────────────────────────── */
 EnvCheckResult app_check_environment() {
     EnvCheckResult result = {};
@@ -1627,22 +1742,68 @@ EnvCheckResult app_check_environment() {
         }
     }
 
-    /* npm */
-    char npm_out[64] = {0};
-    result.npm_ok = exec_cmd("npm --version", npm_out, sizeof(npm_out)) && npm_out[0];
-    if (result.npm_ok) {
-        char* p = npm_out + strlen(npm_out) - 1;
-        while (p > npm_out && (*p == '\r' || *p == '\n' || *p == ' ')) { *p = '\0'; p--; }
-        strncpy(result.npm_ver, npm_out, sizeof(result.npm_ver) - 1);
+    /* npm — try direct file path first (works when npm is a bash script in MSYS2 env) */
+    {
+        char npm_path[512] = {0};
+        if (find_npm_cmd(npm_path, sizeof(npm_path))) {
+            std::string ver_cmd = std::string(npm_path) + " --version";
+            char npm_out[64] = {0};
+            if (exec_cmd(ver_cmd.c_str(), npm_out, sizeof(npm_out)) && npm_out[0]) {
+                result.npm_ok = true;
+                char* p = npm_out + strlen(npm_out) - 1;
+                while (p > npm_out && (*p == '\r' || *p == '\n' || *p == ' ')) { *p = '\0'; p--; }
+                strncpy(result.npm_ver, npm_out, sizeof(result.npm_ver) - 1);
+            }
+        }
+        /* Fallback: try PATH search */
+        if (!result.npm_ok) {
+            char npm_out[64] = {0};
+            result.npm_ok = exec_cmd("npm --version", npm_out, sizeof(npm_out)) && npm_out[0];
+            if (result.npm_ok) {
+                char* p = npm_out + strlen(npm_out) - 1;
+                while (p > npm_out && (*p == '\r' || *p == '\n' || *p == ' ')) { *p = '\0'; p--; }
+                strncpy(result.npm_ver, npm_out, sizeof(result.npm_ver) - 1);
+            }
+        }
     }
 
-    /* OpenClaw */
-    result.openclaw_ok = app_verify_openclaw(result.openclaw_ver, sizeof(result.openclaw_ver));
+    /* OpenClaw — try direct file path first (works when openclaw is a bash script in MSYS2 env) */
+    {
+        char oc_path[512] = {0};
+        if (find_openclaw_cmd(oc_path, sizeof(oc_path))) {
+            std::string ver_cmd = std::string(oc_path) + " --version";
+            char ver_out[256] = {0};
+            if (exec_cmd(ver_cmd.c_str(), ver_out, sizeof(ver_out)) && ver_out[0]) {
+                result.openclaw_ok = true;
+                char* p = ver_out + strlen(ver_out) - 1;
+                while (p > ver_out && (*p == '\r' || *p == '\n' || *p == ' ')) { *p = '\0'; p--; }
+                strncpy(result.openclaw_ver, ver_out, sizeof(result.openclaw_ver) - 1);
+            }
+        }
+        /* Fallback: standard PATH search */
+        if (!result.openclaw_ok) {
+            result.openclaw_ok = app_verify_openclaw(result.openclaw_ver, sizeof(result.openclaw_ver));
+        }
+    }
 
-    LOG_I("Env", "Node=%s(%s) npm=%s(%s) OpenClaw=%s(%s)",
+    /* Hermes Agent */
+    result.hermes_ok = app_detect_hermes(result.hermes_ver, sizeof(result.hermes_ver));
+    if (result.hermes_ok) {
+        result.hermes_healthy = app_check_hermes_health();
+    }
+
+    /* Claude CLI */
+    result.claude_ok = app_detect_claude_cli(result.claude_ver, sizeof(result.claude_ver));
+    if (result.claude_ok) {
+        result.claude_healthy = app_check_claude_cli_health();
+    }
+
+    LOG_I("Env", "Node=%s(%s) npm=%s OpenClaw=%s Hermes=%s Claude=%s",
            result.node_ok ? "OK" : "MISSING", result.node_ver,
-           result.npm_ok ? "OK" : "MISSING", result.npm_ver,
-           result.openclaw_ok ? "OK" : "MISSING", result.openclaw_ver);
+           result.npm_ok ? result.npm_ver : "MISSING",
+           result.openclaw_ok ? result.openclaw_ver : "MISSING",
+           result.hermes_ok ? result.hermes_ver : "MISSING",
+           result.claude_ok ? result.claude_ver : "MISSING");
 
     return result;
 }
