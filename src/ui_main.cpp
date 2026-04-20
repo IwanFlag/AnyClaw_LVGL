@@ -4893,10 +4893,10 @@ static void relayout_panels() {
     SPLITTER_W  = std::max((int)(WIN_W * SPLITTER_W_PCT / 100), SCALE(SPLITTER_W_MIN));
 
     LEFT_PANEL_W  = std::max(avail_w * LEFT_PANEL_PCT / 100, SCALE(LEFT_PANEL_MIN_W));
-    RIGHT_PANEL_W = avail_w - LEFT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W;
+    RIGHT_PANEL_W = avail_w - LEFT_PANEL_W - PANEL_GAP;  /* no splitter — removed v2.2.11 */
     if (RIGHT_PANEL_W < SCALE(RIGHT_PANEL_MIN_W)) {
         RIGHT_PANEL_W = SCALE(RIGHT_PANEL_MIN_W);
-        LEFT_PANEL_W = avail_w - RIGHT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W;
+        LEFT_PANEL_W = avail_w - RIGHT_PANEL_W - PANEL_GAP;
     }
 
     /* Move & resize left nav */
@@ -4910,13 +4910,8 @@ static void relayout_panels() {
     lv_obj_set_size(left_panel, LEFT_PANEL_W, PANEL_H);
     lv_obj_set_pos(left_panel, panel_x, PANEL_TOP);
 
-    /* Move & resize splitter — centered in the gap between panels */
-    int split_x = panel_x + LEFT_PANEL_W + (PANEL_GAP - SPLITTER_W) / 2;
-    lv_obj_set_size(splitter, SPLITTER_W, PANEL_H);
-    lv_obj_set_pos(splitter, split_x, PANEL_TOP);
-
-    /* Move & resize right panel */
-    int right_x = split_x + SPLITTER_W + (PANEL_GAP - SPLITTER_W + 1) / 2;
+    /* Move & resize right panel (no splitter — removed in v2.2.11) */
+    int right_x = panel_x + LEFT_PANEL_W + PANEL_GAP;
     lv_obj_set_size(right_panel, RIGHT_PANEL_W, PANEL_H);
     lv_obj_set_pos(right_panel, right_x, PANEL_TOP);
 
@@ -11614,10 +11609,10 @@ void app_ui_init() {
     SPLITTER_W  = std::max((int)(WIN_W * SPLITTER_W_PCT / 100), SCALE(SPLITTER_W_MIN));
 
     LEFT_PANEL_W  = std::max(avail_w * LEFT_PANEL_PCT / 100, SCALE(LEFT_PANEL_MIN_W));
-    RIGHT_PANEL_W = avail_w - LEFT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W;
+    RIGHT_PANEL_W = avail_w - LEFT_PANEL_W - PANEL_GAP;  /* no splitter — removed v2.2.11 */
     if (RIGHT_PANEL_W < SCALE(RIGHT_PANEL_MIN_W)) {
         RIGHT_PANEL_W = SCALE(RIGHT_PANEL_MIN_W);
-        LEFT_PANEL_W = avail_w - RIGHT_PANEL_W - PANEL_GAP * 2 - SPLITTER_W;
+        LEFT_PANEL_W = avail_w - RIGHT_PANEL_W - PANEL_GAP;
     }
     PANEL_H = WIN_H - TITLE_H - FOOTER_H - SCALE(24);
     if (PANEL_H < SCALE(300)) PANEL_H = SCALE(300);
@@ -11878,33 +11873,18 @@ void app_ui_init() {
     lv_obj_set_style_text_font(lp_hint, FONT(12), 0);
     lv_obj_align(lp_hint, LV_ALIGN_BOTTOM_MID, 0, -8);
 
-    /* ═══ SPLITTER (draggable divider between panels) ═══ */
+    /* Splitter removed in v2.2.11 — hidden, no drag */
     splitter = lv_obj_create(scr);
-    int split_x = 10 + LEFT_PANEL_W + (PANEL_GAP - SPLITTER_W) / 2;
-    lv_obj_set_size(splitter, SPLITTER_W, PANEL_H);
-    lv_obj_set_pos(splitter, split_x, PANEL_TOP);
-    lv_obj_set_style_bg_color(splitter, c->border, 0);
-    lv_obj_set_style_bg_opa(splitter, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(splitter, 0, 0);
-    lv_obj_set_style_radius(splitter, 3, 0);
-    lv_obj_set_style_pad_all(splitter, 0, 0);
-    lv_obj_clear_flag(splitter, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(splitter, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_flag(splitter, LV_OBJ_FLAG_CHECKABLE);  /* For press visual */
-    lv_obj_add_event_cb(splitter, splitter_drag_cb, LV_EVENT_PRESSED, nullptr);
-    lv_obj_add_event_cb(splitter, splitter_drag_cb, LV_EVENT_PRESSING, nullptr);
-    lv_obj_add_event_cb(splitter, splitter_drag_cb, LV_EVENT_RELEASED, nullptr);
-    lv_obj_add_event_cb(splitter, splitter_drag_cb, LV_EVENT_LEAVE, nullptr);
-
-    /* Splitter hover cursor ↔ */
-    splitter_cursor_init();
-    lv_timer_create(splitter_hover_timer_cb, 200, nullptr);
+    lv_obj_set_size(splitter, 0, 0);  /* zero size — invisible */
+    lv_obj_set_pos(splitter, 0, 0);
+    lv_obj_add_flag(splitter, LV_OBJ_FLAG_HIDDEN);
 
     /* ═══ RIGHT PANEL: Controls ═══ */
+    int right_x = nav_scaled + SCALE(8) + LEFT_PANEL_W + PANEL_GAP;
     lv_obj_t* pr = lv_obj_create(scr);
-    right_panel = pr;  /* Store reference for splitter */
+    right_panel = pr;
     lv_obj_set_size(pr, RIGHT_PANEL_W, PANEL_H);
-    lv_obj_set_pos(pr, split_x + SPLITTER_W + (PANEL_GAP - SPLITTER_W + 1) / 2, PANEL_TOP);
+    lv_obj_set_pos(pr, right_x, PANEL_TOP);
     lv_obj_set_style_bg_color(pr, c->panel, 0);
     lv_obj_set_style_bg_opa(pr, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(pr, 1, 0);
