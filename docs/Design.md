@@ -2526,6 +2526,8 @@ Chat 和 Work 模式的输入区完全相同，区别仅在于输出区。控制
 
 > 需求 → PRD §7 模型管理
 
+**通用设置（General）Tab：** Open Report 按钮（查看诊断报告）及其他通用选项。
+
 ### UI-47: Model Tab
 
 ```
