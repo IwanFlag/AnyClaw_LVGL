@@ -902,7 +902,6 @@ int h1_px   = font_size(FONT_H1_PCT,   WIN_H, FONT_MIN_H1);    /* 800h → 22px 
 |-------|------|-----------|--------|
 | `TITLE_H` | 窗口高 × 6% | 48px | 36px |
 | `TITLE_ICON` | 标题栏高 × 80% | 38px | — |
-| `TITLE_LED` | 标题栏高 × 18% | 9px | — |
 | `TITLE_MODEL_W` | 窗口宽 × 10% | 145px | — |
 
 #### 左导航栏（parent: 窗口）
