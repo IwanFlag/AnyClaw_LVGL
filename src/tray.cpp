@@ -1152,6 +1152,15 @@ void tray_process_messages() {
     int count = 0;
     while (count < 256 && GetTickCount() < deadline && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
         ++count;
+
+        /* Silently remove WM_PAINT: dispatching it causes SDL to trigger a full
+           GLES/EGL redraw every iteration → each main loop takes ~1600ms.
+           ValidateRect stops Windows from re-posting it immediately. */
+        if (msg.message == WM_PAINT) {
+            ValidateRect(msg.hwnd, nullptr);
+            continue;
+        }
+
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
     }
