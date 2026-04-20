@@ -1899,6 +1899,7 @@ static void loading_show() {
 /* Splitter / Resizable panels */
 static lv_obj_t* splitter = nullptr;
 static lv_obj_t* left_nav = nullptr;     /* icon-only module nav */
+static lv_obj_t* nav_session = nullptr;   /* bottom nav: Chat/Work toggle */
 static lv_obj_t* left_panel = nullptr;
 static lv_obj_t* right_panel = nullptr;
 static lv_obj_t* mode_bar = nullptr;
@@ -1973,6 +1974,10 @@ static lv_obj_t* mode_dd_control = nullptr;
 static lv_obj_t* mode_dd_llm = nullptr;
 static lv_obj_t* mode_dd_ai_mode = nullptr;
 static lv_obj_t* mode_lbl_work_hint = nullptr;
+static lv_obj_t* ctrl_bar = nullptr;
+static lv_obj_t* ctrl_dd_agent = nullptr;
+static lv_obj_t* ctrl_dd_ai_host = nullptr;
+static lv_obj_t* ctrl_btn_text_voice = nullptr;
 static lv_obj_t* mode_dd_chat_ai_mode = nullptr;
 static lv_obj_t* mode_lbl_chat_status = nullptr;
 static lv_obj_t* mode_ta_user_name = nullptr;
@@ -2037,6 +2042,7 @@ static int g_remote_retry_attempt = 0;
 static int g_remote_link_down_ticks = 0;
 static char g_remote_last_reason[160] = "";
 static const int REMOTE_RETRY_MAX = 2;
+static const int CTRL_BAR_H = 40;
 static int MODE_BAR_H = 36;
 enum UiMainMode { UI_MODE_CHAT = 0, UI_MODE_WORK = 1 };
 static UiMainMode g_ui_mode = UI_MODE_CHAT;
@@ -4676,9 +4682,11 @@ static void apply_mode_switch_visuals() {
     if (g_ui_mode == UI_MODE_CHAT) {
         lv_obj_clear_flag(mode_panel_chat, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(mode_panel_work, LV_OBJ_FLAG_HIDDEN);
+        if (ctrl_bar) lv_obj_clear_flag(ctrl_bar, LV_OBJ_FLAG_HIDDEN);
     } else {
         lv_obj_add_flag(mode_panel_chat, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(mode_panel_work, LV_OBJ_FLAG_HIDDEN);
+        if (ctrl_bar) lv_obj_add_flag(ctrl_bar, LV_OBJ_FLAG_HIDDEN);
     }
 
     auto paint_btn = [](lv_obj_t* btn, bool selected) {
@@ -4692,6 +4700,16 @@ static void apply_mode_switch_visuals() {
     paint_btn(mode_btn_work, g_ui_mode == UI_MODE_WORK);
     paint_btn(top_mode_chat, g_ui_mode == UI_MODE_CHAT);
     paint_btn(top_mode_work, g_ui_mode == UI_MODE_WORK);
+
+    /* Update nav_session toggle icon */
+    if (nav_session) {
+        const ThemeColors* nc = g_colors ? g_colors : &THEME_DARK;
+        lv_obj_t* lbl = lv_obj_get_child(nav_session, 0);
+        if (lbl && lv_obj_check_type(lbl, &lv_label_class)) {
+            lv_label_set_text(lbl, (g_ui_mode == UI_MODE_CHAT) ? "\xE2\x9E\xA1" : "\xE2\x96\xB6");
+            lv_obj_set_style_text_color(lbl, (g_ui_mode == UI_MODE_WORK) ? nc->accent : nc->text_dim, 0);
+        }
+    }
 }
 
 static void mode_chat_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_CHAT; apply_mode_switch_visuals(); relayout_panels(); }
@@ -4902,16 +4920,21 @@ static void relayout_panels() {
     lv_obj_set_size(right_panel, RIGHT_PANEL_W, PANEL_H);
     lv_obj_set_pos(right_panel, right_x, PANEL_TOP);
 
+    /* Resize ctrl_bar to follow right_panel width */
+    if (ctrl_bar) {
+        lv_obj_set_size(ctrl_bar, RIGHT_PANEL_W - CHAT_GAP * 2, SCALE(CTRL_BAR_H));
+    }
+
     int content_w = mode_content_w();
     int content_h = mode_content_h();
 
     if (mode_panel_chat) {
         lv_obj_set_size(mode_panel_chat, content_w, content_h);
-        lv_obj_set_pos(mode_panel_chat, CHAT_GAP, CHAT_GAP);
+        lv_obj_set_pos(mode_panel_chat, CHAT_GAP, CHAT_GAP + SCALE(CTRL_BAR_H));
     }
     if (mode_panel_work) {
         lv_obj_set_size(mode_panel_work, content_w, content_h);
-        lv_obj_set_pos(mode_panel_work, CHAT_GAP, CHAT_GAP);
+        lv_obj_set_pos(mode_panel_work, CHAT_GAP, CHAT_GAP + SCALE(CTRL_BAR_H));
     }
     if (mode_dd_control) lv_obj_set_width(mode_dd_control, std::min(content_w - 16, SCALE(360)));
     if (mode_dd_llm) lv_obj_set_width(mode_dd_llm, std::min(content_w - 16, SCALE(360)));
@@ -4987,9 +5010,7 @@ static void relayout_panels() {
         if (btn_voice_widget) base_x -= (btn_size + btn_gap);
         lv_obj_set_pos(g_search_btn, base_x - btn_size - btn_gap, input_y + input_h - btn_size - btn_margin);
     }
-    if (mode_dd_chat_ai_mode) {
-        lv_obj_set_pos(mode_dd_chat_ai_mode, CHAT_GAP, input_y - SCALE(28));
-    }
+    /* mode_dd_chat_ai_mode is now in ctrl_bar, no need to reposition here */
     if (mode_lbl_chat_status) {
         lv_obj_set_pos(mode_lbl_chat_status, CHAT_GAP + SCALE(96), input_y - SCALE(16));
     }
@@ -11681,15 +11702,24 @@ void app_ui_init() {
     lv_obj_set_flex_align(nav_bot, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_gap(nav_bot, nav_gap, 0);
 
-    /* Session toggle */
-    lv_obj_t* nav_session = lv_button_create(nav_bot);
+    /* ═══ BOTTOM NAV: Chat/Work toggle (replaces session icon) ═══ */
+    nav_session = lv_btn_create(nav_bot);
     lv_obj_set_size(nav_session, nav_btn_sz, nav_btn_sz);
     lv_obj_set_style_bg_opa(nav_session, LV_OPA_TRANSP, 0);
     lv_obj_set_style_radius(nav_session, NAV_ICON_BTN_RADIUS, 0);
     lv_obj_set_style_border_width(nav_session, 0, 0);
+    lv_obj_add_event_cb(nav_session, [](lv_event_t* e) {
+        (void)e;
+        /* Toggle Chat ↔ Work mode */
+        if (g_ui_mode == UI_MODE_CHAT) g_ui_mode = UI_MODE_WORK;
+        else g_ui_mode = UI_MODE_CHAT;
+        apply_mode_switch_visuals();
+        relayout_panels();
+        ui_log("[CTRL] Nav toggle -> %s", g_ui_mode == UI_MODE_CHAT ? "chat" : "work");
+    }, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* sl = lv_label_create(nav_session);
-    lv_label_set_text(sl, "\xF0\x9F\x93\x82"); /* 📂 */
-    lv_obj_set_style_text_color(sl, c->text_dim, 0);
+    lv_label_set_text(sl, (g_ui_mode == UI_MODE_CHAT) ? "\xE2\x9E\xA1" : "\xE2\x96\xB6"); /* ⇢ or ◂ */
+    lv_obj_set_style_text_color(sl, c->accent, 0);
     lv_obj_center(sl);
 
     /* Settings */
@@ -11883,6 +11913,68 @@ void app_ui_init() {
     lv_obj_set_style_pad_all(pr, 0, 0);
     lv_obj_clear_flag(pr, LV_OBJ_FLAG_SCROLLABLE);
 
+    /* ═══ CONTROL BAR: Chat mode toolbar (Agent / Report / AI行为) ═══ */
+    ctrl_bar = lv_obj_create(pr);
+    lv_obj_set_size(ctrl_bar, RIGHT_PANEL_W - CHAT_GAP * 2, SCALE(CTRL_BAR_H));
+    lv_obj_set_pos(ctrl_bar, CHAT_GAP, 0);
+    lv_obj_set_style_bg_opa(ctrl_bar, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(ctrl_bar, 0, 0);
+    lv_obj_set_style_border_color(ctrl_bar, c->border, 0);
+    lv_obj_set_style_border_width(ctrl_bar, 1, 0);        /* bottom divider */
+    lv_obj_set_style_pad_bottom(ctrl_bar, 1, 0);
+    lv_obj_clear_flag(ctrl_bar, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Agent dropdown: OpenClaw / Hermes / Claude */
+    const int DD_W = SCALE(90);
+    const int DD_H = SCALE(24);
+    const int DD_GAP = SCALE(8);
+    const int BTN_W = SCALE(70);
+    int dd_x = CHAT_GAP;
+
+    ctrl_dd_agent = lv_dropdown_create(ctrl_bar);
+    lv_dropdown_set_options(ctrl_dd_agent, "OpenClaw\nHermes\nClaude");
+    lv_dropdown_set_selected(ctrl_dd_agent, 0);
+    lv_obj_set_size(ctrl_dd_agent, DD_W, DD_H);
+    lv_obj_set_pos(ctrl_dd_agent, dd_x, (SCALE(CTRL_BAR_H) - DD_H) / 2);
+    lv_obj_set_style_bg_color(ctrl_dd_agent, c->surface, 0);
+    lv_obj_set_style_text_color(ctrl_dd_agent, c->text_dim, 0);
+    lv_obj_set_style_border_color(ctrl_dd_agent, c->border, 0);
+    lv_obj_set_style_text_font(ctrl_dd_agent, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_font(ctrl_dd_agent, FONT(12), LV_PART_INDICATOR);
+    lv_obj_add_event_cb(ctrl_dd_agent, [](lv_event_t* e) {
+        /* TODO: switch agent runtime and联动 model */
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    /* Report button: opens last BootCheck report */
+    dd_x += DD_W + DD_GAP;
+    lv_obj_t* ctrl_btn_report = lv_btn_create(ctrl_bar);
+    lv_obj_set_size(ctrl_btn_report, BTN_W, DD_H);
+    lv_obj_set_pos(ctrl_btn_report, dd_x, (SCALE(CTRL_BAR_H) - DD_H) / 2);
+    lv_obj_set_style_bg_color(ctrl_btn_report, c->btn_secondary, 0);
+    lv_obj_set_style_bg_opa(ctrl_btn_report, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(ctrl_btn_report, SCALE(g_colors->radius_sm), 0);
+    lv_obj_set_style_border_width(ctrl_btn_report, 0, 0);
+    lv_obj_clear_flag(ctrl_btn_report, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* lbl_report = lv_label_create(ctrl_btn_report);
+    lv_label_set_text(lbl_report, "Report");
+    lv_obj_set_style_text_color(lbl_report, c->text, 0);
+    lv_obj_center(lbl_report);
+    lv_obj_add_event_cb(ctrl_btn_report, work_boot_open_report_cb, LV_EVENT_CLICKED, nullptr);
+
+    /* AI behavior dropdown (Autonomous/Ask/Plan) */
+    dd_x += BTN_W + DD_GAP;
+    mode_dd_chat_ai_mode = lv_dropdown_create(ctrl_bar);
+    lv_dropdown_set_options(mode_dd_chat_ai_mode, "Auto\nAsk\nPlan");
+    lv_dropdown_set_selected(mode_dd_chat_ai_mode, (uint16_t)g_ai_interaction_mode);
+    lv_obj_set_size(mode_dd_chat_ai_mode, DD_W, DD_H);
+    lv_obj_set_pos(mode_dd_chat_ai_mode, dd_x, (SCALE(CTRL_BAR_H) - DD_H) / 2);
+    lv_obj_set_style_bg_color(mode_dd_chat_ai_mode, c->surface, 0);
+    lv_obj_set_style_text_color(mode_dd_chat_ai_mode, c->text_dim, 0);
+    lv_obj_set_style_border_color(mode_dd_chat_ai_mode, c->border, 0);
+    lv_obj_set_style_text_font(mode_dd_chat_ai_mode, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_font(mode_dd_chat_ai_mode, FONT(12), LV_PART_INDICATOR);
+    lv_obj_add_event_cb(mode_dd_chat_ai_mode, ai_mode_dropdown_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
     int content_w = mode_content_w();
     int content_h = mode_content_h();
 
@@ -11893,7 +11985,7 @@ void app_ui_init() {
 
     mode_panel_chat = lv_obj_create(pr);
     lv_obj_set_size(mode_panel_chat, content_w, content_h);
-    lv_obj_set_pos(mode_panel_chat, CHAT_GAP, CHAT_GAP);
+    lv_obj_set_pos(mode_panel_chat, CHAT_GAP, CHAT_GAP + SCALE(CTRL_BAR_H));
     lv_obj_set_style_bg_opa(mode_panel_chat, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(mode_panel_chat, 0, 0);
     lv_obj_set_style_pad_all(mode_panel_chat, 0, 0);
@@ -11901,7 +11993,7 @@ void app_ui_init() {
 
     mode_panel_work = lv_obj_create(pr);
     lv_obj_set_size(mode_panel_work, content_w, content_h);
-    lv_obj_set_pos(mode_panel_work, CHAT_GAP, CHAT_GAP);
+    lv_obj_set_pos(mode_panel_work, CHAT_GAP, CHAT_GAP + SCALE(CTRL_BAR_H));
     lv_obj_set_style_bg_opa(mode_panel_work, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(mode_panel_work, 0, 0);
     lv_obj_set_style_pad_all(mode_panel_work, 8, 0);
@@ -11950,7 +12042,7 @@ void app_ui_init() {
         update_work_mode_hint();
         lv_obj_t* btn_boot_check = aw_btn_create(sec_runtime, "Run Health Check + Auto Repair", BTN_SECONDARY, SCALE(260), SCALE(34));
         lv_obj_add_event_cb(btn_boot_check, work_boot_check_cb, LV_EVENT_CLICKED, nullptr);
-        lv_obj_t* btn_open_boot_report = aw_btn_create(sec_runtime, "Open Last Boot Report", BTN_SECONDARY, SCALE(220), SCALE(34));
+        lv_obj_t* btn_open_boot_report = aw_btn_create(sec_runtime, "Last Report", BTN_SECONDARY, SCALE(220), SCALE(34));
         lv_obj_add_event_cb(btn_open_boot_report, work_boot_open_report_cb, LV_EVENT_CLICKED, nullptr);
         mode_lbl_boot_report_hint = aw_label_wrap_create(sec_runtime, "Report: (not generated yet)", LABEL_HINT, 100);
         lv_obj_set_style_text_color(mode_lbl_boot_report_hint, c->text_dim, 0);
@@ -12721,19 +12813,6 @@ void app_ui_init() {
         lv_obj_center(search_lbl);
         lv_obj_add_event_cb(g_search_btn, search_toggle_cb, LV_EVENT_CLICKED, nullptr);
     }
-
-    /* Chat quick switch: AI interaction mode (Autonomous/Ask/Plan) */
-    mode_dd_chat_ai_mode = lv_dropdown_create(mode_panel_chat);
-    lv_dropdown_set_options(mode_dd_chat_ai_mode, "Auto\nAsk\nPlan");
-    lv_dropdown_set_selected(mode_dd_chat_ai_mode, (uint16_t)g_ai_interaction_mode);
-    lv_obj_set_size(mode_dd_chat_ai_mode, SCALE(88), SCALE(24));
-    lv_obj_set_pos(mode_dd_chat_ai_mode, CHAT_GAP, content_h - SCALE(140));
-    lv_obj_set_style_bg_color(mode_dd_chat_ai_mode, c->surface, 0);
-    lv_obj_set_style_text_color(mode_dd_chat_ai_mode, c->text_dim, 0);
-    lv_obj_set_style_border_color(mode_dd_chat_ai_mode, c->border, 0);
-    lv_obj_set_style_text_font(mode_dd_chat_ai_mode, CJK_FONT_SMALL, 0);
-    lv_obj_set_style_text_font(mode_dd_chat_ai_mode, FONT(12), LV_PART_INDICATOR);
-    lv_obj_add_event_cb(mode_dd_chat_ai_mode, ai_mode_dropdown_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     /* Chat input area — pinned to bottom with GAP spacing */
     input_h = 108;  /* Default 3-line height (28px/line + padding) */
