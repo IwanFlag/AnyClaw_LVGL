@@ -767,8 +767,11 @@ AnyClaw 有三套模式维度，各自独立，组合使用。
 AnyClaw (GUI)
     │
     ▼
-OpenClaw Agent → Agent → LLM API（云端）
-                         → llama-server（本地）
+OpenClaw Agent（路由层）
+    │
+    ├── MiniMax M2.7-highspeed（默认）
+    ├── OpenRouter（可选，25+ 模型）
+    └── llama-server（本地模型）
 ```
 
 | 层 | 职责 | 配置位置 |
@@ -782,7 +785,7 @@ OpenClaw Agent → Agent → LLM API（云端）
 - **功能编号：** MODEL-01 **优先级：** P0 **状态：** ✅ 已实现
 
 **模型选择：**
-- 下拉列表，按能力排序，默认 21 个模型
+- 下拉列表，按能力排序，默认 21 个模型，**默认模型为 MiniMax M2.7-highspeed**
 - 支持添加自定义模型（"+" 按钮 → 输入模型名称）
 - OpenRouter 上 25 个 `:free` 模型，国内直连可达
 
