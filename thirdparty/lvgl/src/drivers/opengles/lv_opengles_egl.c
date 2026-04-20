@@ -153,12 +153,30 @@ static void * load_lib(const char ** libs, size_t count)
 }
 static void * load_egl_lib(void)
 {
-    const char * egl_libs[] = {"libEGL.so", "libEGL.so.1"};
+    /* Try Windows ANGLE DLLs first, then Linux .so fallbacks */
+    const char * egl_libs[] = {
+#if defined(_WIN32)
+        "libEGL.dll", "EGL.dll",
+#elif defined(__APPLE__)
+        "libEGL.dylib", "libEGL.1.dylib",
+#else
+        "libEGL.so.1", "libEGL.so",
+#endif
+    };
     return load_lib(egl_libs, sizeof(egl_libs) / sizeof(egl_libs[0]));
 }
 static void * load_gl_lib(void)
 {
-    const char * gl_libs[] = {"libGLESv2.so", "libGLESv2.so.2"};
+    /* Try Windows ANGLE DLLs first, then Linux .so fallbacks */
+    const char * gl_libs[] = {
+#if defined(_WIN32)
+        "libGLESv2.dll", "GLESv2.dll",
+#elif defined(__APPLE__)
+        "libGLESv2.dylib",
+#else
+        "libGLESv2.so.2", "libGLESv2.so",
+#endif
+    };
     return load_lib(gl_libs, sizeof(gl_libs) / sizeof(gl_libs[0]));
 }
 

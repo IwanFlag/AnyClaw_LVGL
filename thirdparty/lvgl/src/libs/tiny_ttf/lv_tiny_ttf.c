@@ -21,9 +21,9 @@
 #define STBRP_STATIC
 #define STBTT_STATIC
 #define STB_TRUETYPE_IMPLEMENTATION
-#define STBTT_HEAP_FACTOR_SIZE_32 50
-#define STBTT_HEAP_FACTOR_SIZE_128 20
-#define STBTT_HEAP_FACTOR_SIZE_DEFAULT 10
+#define STBTT_HEAP_FACTOR_SIZE_32 200
+#define STBTT_HEAP_FACTOR_SIZE_128 80
+#define STBTT_HEAP_FACTOR_SIZE_DEFAULT 40
 #define STBTT_malloc(x, u) ((void)(u), lv_malloc(x))
 #define STBTT_free(x, u) ((void)(u), lv_free(x))
 

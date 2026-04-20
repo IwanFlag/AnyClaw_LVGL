@@ -18,8 +18,10 @@ extern "C" {
 
 #if LV_USE_SDL
 
+#if LV_USE_EGL
 #include "../opengles/lv_opengles_egl_private.h"
 #include "../opengles/lv_opengles_texture_private.h"
+#endif
 
 #include LV_SDL_INCLUDE_PATH
 

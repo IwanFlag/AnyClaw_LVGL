@@ -1,44 +1,65 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="650" height="420" viewBox="0 0 650 420">
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="580" viewBox="0 0 800 580">
   <defs>
     <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
       <feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#000000" flood-opacity="0.5"/>
     </filter>
   </defs>
   <!-- Background overlay -->
-  <rect width="650" height="420" fill="#0F1117"/>
-  <rect width="650" height="420" fill="#000000" opacity="0.6"/>
+  <rect width="800" height="580" fill="#0F1117"/>
+  <rect width="800" height="580" fill="#000000" opacity="0.6"/>
   <!-- Dialog -->
-  <rect x="50" y="30" width="550" height="360" rx="12" fill="#1E2530" stroke="#3DD68C20" stroke-width="1" filter="url(#shadow)"/>
-  <!-- Step indicator -->
-  <circle cx="245" cy="68" r="6" fill="#3DD68C"/>
-  <circle cx="275" cy="68" r="6" fill="#3DD68C"/>
-  <circle cx="305" cy="68" r="6" fill="#3DD68C"/>
-  <circle cx="335" cy="68" r="6" fill="#3DD68C"/>
-  <circle cx="365" cy="68" r="6" fill="#3DD68C"/>
-  <circle cx="395" cy="68" r="6" fill="#252A38" stroke="#6B7280" stroke-width="1"/>
-  <text x="460" y="73" font-family="Inter, sans-serif" font-size="13" fill="#8B92A8">Step 5/6</text>
-  <!-- Title -->
-  <text x="325" y="110" text-anchor="middle" font-family="Inter, sans-serif" font-size="18" font-weight="700" fill="#E8ECF4">消息渠道配置</text>
+  <rect x="0" y="0" width="800" height="580" rx="0" fill="#1E2530"/>
+  <!-- Header area (56px) -->
+  <rect x="0" y="0" width="800" height="56" fill="#1E2530"/>
+  <circle cx="28" cy="28" r="16" fill="#3DD68C"/>
+  <text x="28" y="34" text-anchor="middle" font-size="16">🧄</text>
+  <text x="60" y="34" font-family="Inter, sans-serif" font-size="16" font-weight="600" fill="#E8ECF4">消息渠道配置 / IM Channels</text>
+  <text x="680" y="34" font-family="Inter, sans-serif" font-size="12" fill="#8B92A8">Step 5/6</text>
+  <rect x="700" y="14" width="80" height="28" rx="6" fill="none" stroke="#3DD68C0A" stroke-width="1"/>
+  <text x="740" y="33" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="#8B92A8">Exit</text>
+  <!-- Step indicator bar -->
+  <line x1="100" y1="80" x2="700" y2="80" stroke="#3DD68C" stroke-width="2"/>
+  <circle cx="150" cy="80" r="6" fill="#3DD68C"/>
+  <circle cx="250" cy="80" r="6" fill="#3DD68C"/>
+  <circle cx="350" cy="80" r="6" fill="#3DD68C"/>
+  <circle cx="450" cy="80" r="6" fill="#3DD68C"/>
+  <circle cx="550" cy="80" r="6" fill="#3DD68C"/>
+  <circle cx="650" cy="80" r="6" fill="#252A38" stroke="#6B7280" stroke-width="1"/>
+  <!-- Content area -->
+  <text x="100" y="130" font-family="Inter, sans-serif" font-size="14" fill="#8B92A8">Optional: Connect IM channels for remote control from your phone.</text>
   <!-- Cards row -->
-  <!-- Telegram card -->
-  <rect x="80" y="135" width="150" height="160" rx="10" fill="#1A1D27" stroke="#3DD68C40" stroke-width="1"/>
-  <text x="155" y="175" text-anchor="middle" font-size="36">✈</text>
-  <text x="155" y="210" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#E8ECF4">Telegram</text>
-  <circle cx="135" cy="240" r="5" fill="#3DD68C"/>
-  <text x="155" y="244" font-family="Inter, sans-serif" font-size="12" fill="#3DD68C">已连接</text>
-  <!-- Discord card -->
-  <rect x="250" y="135" width="150" height="160" rx="10" fill="#1A1D27" stroke="#3DD68C0A" stroke-width="1"/>
-  <text x="325" y="175" text-anchor="middle" font-size="36">🎮</text>
-  <text x="325" y="210" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#E8ECF4">Discord</text>
-  <circle cx="305" cy="240" r="5" fill="none" stroke="#6B7280" stroke-width="1.5"/>
-  <text x="325" y="244" font-family="Inter, sans-serif" font-size="12" fill="#6B7280">未配置</text>
-  <!-- WhatsApp card -->
-  <rect x="420" y="135" width="150" height="160" rx="10" fill="#1A1D27" stroke="#3DD68C0A" stroke-width="1"/>
-  <text x="495" y="175" text-anchor="middle" font-size="36">💬</text>
-  <text x="495" y="210" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#E8ECF4">WhatsApp</text>
-  <circle cx="475" cy="240" r="5" fill="none" stroke="#6B7280" stroke-width="1.5"/>
-  <text x="495" y="244" font-family="Inter, sans-serif" font-size="12" fill="#6B7280">未配置</text>
+  <!-- Telegram card (connected) -->
+  <rect x="80" y="160" width="200" height="180" rx="10" fill="#1A1D27" stroke="#3DD68C40" stroke-width="2"/>
+  <text x="180" y="210" text-anchor="middle" font-size="40">✈</text>
+  <text x="180" y="260" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#E8ECF4">Telegram</text>
+  <circle cx="155" cy="290" r="6" fill="#3DD68C"/>
+  <text x="180" y="294" font-family="Inter, sans-serif" font-size="12" fill="#3DD68C">Connected</text>
+  <rect x="115" y="310" width="130" height="32" rx="6" fill="#3DD68C1A" stroke="#3DD68C40" stroke-width="1"/>
+  <text x="180" y="331" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="#E8ECF4">Configure</text>
+  <!-- Discord card (not configured) -->
+  <rect x="300" y="160" width="200" height="180" rx="10" fill="#1A1D27" stroke="#3DD68C0A" stroke-width="1"/>
+  <text x="400" y="210" text-anchor="middle" font-size="40">🎮</text>
+  <text x="400" y="260" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#E8ECF4">Discord</text>
+  <circle cx="375" cy="290" r="6" fill="none" stroke="#6B7280" stroke-width="1.5"/>
+  <text x="400" y="294" font-family="Inter, sans-serif" font-size="12" fill="#6B7280">Not configured</text>
+  <rect x="335" y="310" width="130" height="32" rx="6" fill="none" stroke="#6B7280" stroke-width="1"/>
+  <text x="400" y="331" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="#8B92A8">Configure</text>
+  <!-- WhatsApp card (not configured) -->
+  <rect x="520" y="160" width="200" height="180" rx="10" fill="#1A1D27" stroke="#3DD68C0A" stroke-width="1"/>
+  <text x="620" y="210" text-anchor="middle" font-size="40">💬</text>
+  <text x="620" y="260" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#E8ECF4">WhatsApp</text>
+  <circle cx="595" cy="290" r="6" fill="none" stroke="#6B7280" stroke-width="1.5"/>
+  <text x="620" y="294" font-family="Inter, sans-serif" font-size="12" fill="#6B7280">Not configured</text>
+  <rect x="555" y="310" width="130" height="32" rx="6" fill="none" stroke="#6B7280" stroke-width="1"/>
+  <text x="620" y="331" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="#8B92A8">Scan Bind</text>
+  <!-- Skip hint -->
+  <text x="100" y="380" font-family="Inter, sans-serif" font-size="12" fill="#6B7280">You can skip now and configure later in settings.</text>
   <!-- Skip button -->
-  <rect x="500" y="340" width="80" height="36" rx="6" fill="none" stroke="#6B7280" stroke-width="1"/>
-  <text x="540" y="363" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" fill="#8B92A8">Skip</text>
+  <rect x="660" y="480" width="80" height="36" rx="6" fill="none" stroke="#6B7280" stroke-width="1"/>
+  <text x="700" y="503" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" fill="#8B92A8">Skip</text>
+  <!-- Bottom buttons -->
+  <rect x="200" y="480" width="100" height="36" rx="6" fill="#1A1D27" stroke="#3DD68C20" stroke-width="1"/>
+  <text x="250" y="503" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" fill="#E8ECF4">&lt; Back</text>
+  <rect x="500" y="480" width="100" height="36" rx="6" fill="#3DD68C"/>
+  <text x="550" y="503" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#0F1117">Next &gt;</text>
 </svg>
