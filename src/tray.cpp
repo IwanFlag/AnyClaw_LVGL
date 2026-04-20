@@ -1145,25 +1145,16 @@ void tray_process_messages() {
     /* Apply any pending tray state change on the main thread (thread-safe) */
     tray_apply_pending_state();
 
-    /* Drain Windows messages but cap to prevent re-entrant or spinning message loops
-       from blocking the main loop. Use a hard limit (256) + time budget (10ms). */
-    MSG msg;
-    DWORD deadline = GetTickCount() + 10;
-    int count = 0;
-    while (count < 256 && GetTickCount() < deadline && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-        ++count;
-
-        /* Silently remove WM_PAINT: dispatching it causes SDL to trigger a full
-           GLES/EGL redraw every iteration → each main loop takes ~1600ms.
-           ValidateRect stops Windows from re-posting it immediately. */
-        if (msg.message == WM_PAINT) {
-            ValidateRect(msg.hwnd, nullptr);
-            continue;
-        }
-
-        TranslateMessage(&msg);
-        DispatchMessageW(&msg);
-    }
+    /* TEMP: comment out message pump to test if it's the source of the 1600ms delay */
+    // MSG msg;
+    // while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+    //     if (msg.message == WM_PAINT) {
+    //         if (msg.hwnd) ValidateRect(msg.hwnd, nullptr);
+    //         continue;
+    //     }
+    //     TranslateMessage(&msg);
+    //     DispatchMessageW(&msg);
+    // }
 }
 
 bool tray_should_quit() {

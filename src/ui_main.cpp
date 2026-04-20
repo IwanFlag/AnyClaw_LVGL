@@ -1688,7 +1688,7 @@ static void loading_timer_cb(lv_timer_t* t) {
     DWORD now = GetTickCount();
 
     /* Rotate garlic icon */
-    g_loading_angle += 6.0f;  /* 6° per tick = full rotation in ~1s at 16ms interval */
+    g_loading_angle += 6.0f;  /* 6° per tick = full rotation in ~3s at 50ms interval */
     if (g_loading_angle >= 360.0f) g_loading_angle -= 360.0f;
     if (g_loading_icon) {
         lv_image_set_rotation(g_loading_icon, (int32_t)(g_loading_angle * 10));
@@ -1893,7 +1893,7 @@ static void loading_show() {
 
     /* Start rotation + status check timer (60fps) */
     if (g_loading_timer) lv_timer_del(g_loading_timer);
-    g_loading_timer = lv_timer_create(loading_timer_cb, 16, nullptr);
+    g_loading_timer = lv_timer_create(loading_timer_cb, 50, nullptr);
 }
 
 /* Splitter / Resizable panels */
@@ -11868,7 +11868,7 @@ void app_ui_init() {
 
     /* Splitter hover cursor ↔ */
     splitter_cursor_init();
-    lv_timer_create(splitter_hover_timer_cb, 50, nullptr);
+    lv_timer_create(splitter_hover_timer_cb, 200, nullptr);
 
     /* ═══ RIGHT PANEL: Controls ═══ */
     lv_obj_t* pr = lv_obj_create(scr);

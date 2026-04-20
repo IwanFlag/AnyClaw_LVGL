@@ -14,7 +14,7 @@ static std::mutex         g_log_mtx;
 static std::condition_variable g_log_cv;
 static std::vector<char>   g_log_buf;          /* 累积的日志行 */
 static bool                 g_log_shutdown = false;
-static const size_t         g_log_buf_flush_threshold = 8192; /* 8KB 触发刷盘 */
+static const size_t         g_log_buf_flush_threshold = 512; /* 512B 触发刷盘 */
 
 /* ── 刷盘线程 ── */
 static void log_flush_thread() {
