@@ -1149,16 +1149,21 @@ void tray_process_messages() {
 
     auto t1 = GetTickCount();
 
-    /* TEMP: comment out message pump to test if it's the source of the 1600ms delay */
-    // MSG msg;
-    // while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-    //     if (msg.message == WM_PAINT) {
-    //         if (msg.hwnd) ValidateRect(msg.hwnd, nullptr);
-    //         continue;
-    //     }
-    //     TranslateMessage(&msg);
-    //     DispatchMessageW(&msg);
-    // }
+    /* Process tray window messages — limit per frame to avoid blocking UI.
+     * PeekMessage (not GetMessage) returns immediately if queue is empty. */
+    MSG msg;
+    int processed = 0;
+    const int MAX_MSG_PER_FRAME = 8;
+    while (processed < MAX_MSG_PER_FRAME && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        if (msg.message == WM_PAINT) {
+            if (msg.hwnd) ValidateRect(msg.hwnd, nullptr);
+            processed++;
+            continue;
+        }
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+        processed++;
+    }
 
     auto t2 = GetTickCount();
     if (t2 - t0 > 50) {

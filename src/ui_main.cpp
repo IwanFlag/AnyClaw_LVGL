@@ -2128,14 +2128,39 @@ static lv_obj_t* task_empty_label = nullptr;  /* "No tasks yet" placeholder */
 
 /* ── TASK-054: Task hover detail popup ── */
 static bool g_tooltip_busy = false;  /* re-entrancy guard */
+static lv_timer_t* g_hover_timer = nullptr;  /* debounce timer */
+static TaskItem* g_pending_hover_item = nullptr;  /* item pending tooltip */
 
 static void task_tooltip_destroy(TaskItem* t) {
+    if (g_tooltip_busy) return;
     if (t->tooltip) {
         lv_obj_t* tip = t->tooltip;
         t->tooltip = nullptr;  /* clear BEFORE delete to prevent re-entry */
         lv_obj_del(tip);
         LOG_D("TOOLTIP", "Destroyed tooltip for: %s", t->name);
     }
+}
+
+/* Cancel any pending hover timer */
+static void cancel_hover_timer(void) {
+    if (g_hover_timer) {
+        lv_timer_del(g_hover_timer);
+        g_hover_timer = nullptr;
+    }
+    g_pending_hover_item = nullptr;
+}
+
+/* Forward declaration */
+static void task_tooltip_create(TaskItem* t);
+
+/* Timer callback: show tooltip after debounce delay */
+static void on_hover_timer(lv_timer_t* t) {
+    (void)t;
+    if (g_pending_hover_item && !g_tooltip_busy) {
+        task_tooltip_create(g_pending_hover_item);
+    }
+    g_pending_hover_item = nullptr;
+    g_hover_timer = nullptr;
 }
 
 static void task_tooltip_create(TaskItem* t) {
@@ -2181,18 +2206,24 @@ static void task_tooltip_create(TaskItem* t) {
     lv_obj_set_width(detail_lbl, lv_pct(100));
     lv_obj_set_style_pad_top(detail_lbl, 6, 0);
 
-    /* Position: right of task item, vertically aligned */
-    lv_obj_update_layout(t->widget);
-    int32_t tx = lv_obj_get_x(t->widget) + lv_obj_get_width(t->widget) + 8;
-    int32_t ty = lv_obj_get_y(t->widget);
-    /* Clamp to screen */
-    lv_obj_update_layout(tip);
-    int32_t tip_w = lv_obj_get_width(tip);
+    /* Position: right of task item, vertically aligned.
+     * Use lv_obj_get_coords (cheap) instead of lv_obj_update_layout (expensive). */
+    lv_area_t widget_area;
+    lv_obj_get_coords(t->widget, &widget_area);
+    int32_t tx = widget_area.x2 + 8;
+    int32_t ty = widget_area.y1;
+
+    /* Estimate tooltip width from content (avoids full layout pass) */
+    lv_point_t txt_sz;
+    lv_text_get_size(&txt_sz, t->detail, CJK_FONT_SMALL, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    lv_point_t name_sz;
+    lv_text_get_size(&name_sz, t->name, CJK_FONT_SMALL, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    int32_t est_tip_w = (txt_sz.x > name_sz.x ? txt_sz.x : name_sz.x) + 24;  /* + padding/border */
     int32_t scr_w = lv_obj_get_width(lv_scr_act());
-    if (tx + tip_w > scr_w - 8) {
+    if (tx + est_tip_w > scr_w - 8) {
         /* Fall back: show below the task item */
-        tx = lv_obj_get_x(t->widget);
-        ty = lv_obj_get_y(t->widget) + lv_obj_get_height(t->widget) + 4;
+        tx = widget_area.x1;
+        ty = widget_area.y2 + 4;
     }
     lv_obj_set_pos(tip, tx, ty);
 
@@ -2213,14 +2244,21 @@ static void task_hover_cb(lv_event_t* e) {
     if (!found) return;
 
     if (code == LV_EVENT_HOVER_OVER) {
-        task_tooltip_create(found);
+        /* Debounce: cancel any pending timer, start a new 100ms delay.
+         * Only the final resting position creates the tooltip. */
+        cancel_hover_timer();
+        g_pending_hover_item = found;
+        g_hover_timer = lv_timer_create(on_hover_timer, 100, nullptr);
     } else if (code == LV_EVENT_HOVER_LEAVE) {
+        /* Immediate destroy on leave — no need to debounce. */
+        cancel_hover_timer();
         task_tooltip_destroy(found);
     }
 }
 
 /* Destroy all tooltips (call before task_clear) */
 static void task_destroy_all_tooltips() {
+    cancel_hover_timer();
     g_tooltip_busy = true;
     for (int i = 0; i < g_task_count; i++) {
         task_tooltip_destroy(&g_tasks[i]);
