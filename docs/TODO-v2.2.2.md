@@ -67,12 +67,12 @@
 
 ### 3.1 高优先级
 
-- [ ] B3-1 字体乱码：检查 CJK fallback 链与字体加载覆盖
-- [ ] B3-2 App 卡死：排查主线程阻塞（openclaw_mgr / async_task）
+- [x] B3-1 字体乱码：检查 CJK fallback 链与字体加载覆盖（已修复：优先绑定 CJK 字体到全局 CJK 指针）
+- [x] B3-2 App 卡死：排查主线程阻塞（openclaw_mgr / async_task）（已修复：Step2 复用 Step1 检测结果，移除重复同步环境检测）
 
 ### 3.2 中优先级
 
-- [ ] B3-3 GUI 异常：布局、hover、流式渲染稳定性修复
+- [x] B3-3 GUI 异常：布局、hover、流式渲染稳定性修复（已修复：Agent Tab 回填配置，消除界面状态与实际配置不一致）
 
 ---
 

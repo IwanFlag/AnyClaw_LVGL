@@ -1241,6 +1241,33 @@ static void build_agent_tab(lv_obj_t* tab) {
                                "Manage Leader mode, runtime and optional agent installs."));
     apply_hint_label(hint);
 
+    Runtime rt_cfg = app_get_active_runtime();
+    bool leader_mode_cfg = CFG_DEFAULT_LEADER_MODE != 0;
+    bool hermes_enabled_cfg = CFG_DEFAULT_HERMES_ENABLED != 0;
+    char claude_path_cfg[260] = {0};
+    {
+        std::ifstream f(settings_config_path());
+        if (f.is_open()) {
+            std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+            f.close();
+            char mode_buf[32] = {0};
+            if (json_extract_string(content.c_str(), CFG_KEY_AGENT_MODE, mode_buf, sizeof(mode_buf))) {
+                leader_mode_cfg = (strcmp(mode_buf, CFG_AGENT_MODE_LEADER) == 0);
+            }
+            int lm = json_extract_int(content.c_str(), CFG_KEY_LEADER_MODE, -1);
+            if (lm >= 0) leader_mode_cfg = (lm == 1);
+            int he = json_extract_int(content.c_str(), CFG_KEY_HERMES_ENABLED, -1);
+            if (he >= 0) hermes_enabled_cfg = (he == 1);
+            char rt_buf[32] = {0};
+            if (json_extract_string(content.c_str(), "active_runtime", rt_buf, sizeof(rt_buf))) {
+                if (strcmp(rt_buf, "hermes") == 0) rt_cfg = Runtime::Hermes;
+                else if (strcmp(rt_buf, "claude") == 0) rt_cfg = Runtime::Claude;
+                else rt_cfg = Runtime::OpenClaw;
+            }
+            json_extract_string(content.c_str(), CFG_KEY_CLAUDE_PATH, claude_path_cfg, sizeof(claude_path_cfg));
+        }
+    }
+
     lv_obj_t* row_runtime = lv_obj_create(tab);
     lv_obj_set_size(row_runtime, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(row_runtime, LV_OPA_TRANSP, 0);
@@ -1257,7 +1284,7 @@ static void build_agent_tab(lv_obj_t* tab) {
 
     agent_runtime_dd = lv_dropdown_create(row_runtime);
     lv_dropdown_set_options(agent_runtime_dd, "OpenClaw\nHermes\nClaude");
-    lv_dropdown_set_selected(agent_runtime_dd, (uint16_t)((int)app_get_active_runtime()));
+    lv_dropdown_set_selected(agent_runtime_dd, (uint16_t)((int)rt_cfg));
     lv_obj_set_width(agent_runtime_dd, SCALE(180));
     apply_input_style(agent_runtime_dd);
 
@@ -1276,7 +1303,7 @@ static void build_agent_tab(lv_obj_t* tab) {
     lv_obj_set_style_text_font(lbl_leader, CJK_FONT, 0);
 
     agent_leader_sw = lv_switch_create(row_leader);
-    if (CFG_DEFAULT_LEADER_MODE) lv_obj_add_state(agent_leader_sw, LV_STATE_CHECKED);
+    if (leader_mode_cfg) lv_obj_add_state(agent_leader_sw, LV_STATE_CHECKED);
 
     lv_obj_t* row_hermes = lv_obj_create(tab);
     lv_obj_set_size(row_hermes, LV_PCT(100), LV_SIZE_CONTENT);
@@ -1293,7 +1320,7 @@ static void build_agent_tab(lv_obj_t* tab) {
     lv_obj_set_style_text_font(lbl_hermes, CJK_FONT, 0);
 
     agent_hermes_sw = lv_switch_create(row_hermes);
-    if (CFG_DEFAULT_HERMES_ENABLED) lv_obj_add_state(agent_hermes_sw, LV_STATE_CHECKED);
+    if (hermes_enabled_cfg) lv_obj_add_state(agent_hermes_sw, LV_STATE_CHECKED);
 
     lv_obj_t* lbl_path = lv_label_create(tab);
     lv_label_set_text(lbl_path, tr("Claude Code Path", "Claude Code Path"));
@@ -1302,6 +1329,7 @@ static void build_agent_tab(lv_obj_t* tab) {
     agent_claude_path_ta = lv_textarea_create(tab);
     lv_textarea_set_one_line(agent_claude_path_ta, true);
     lv_textarea_set_placeholder_text(agent_claude_path_ta, "C:/Users/.../claude.exe");
+    if (claude_path_cfg[0]) lv_textarea_set_text(agent_claude_path_ta, claude_path_cfg);
     lv_obj_set_width(agent_claude_path_ta, LV_PCT(100));
     apply_input_style(agent_claude_path_ta);
 
