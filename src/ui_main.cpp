@@ -357,10 +357,10 @@ void init_theme_fonts(Theme theme) {
     if (g_theme_fonts.display && g_theme_fonts.cjk_title && g_theme_fonts.display != g_theme_fonts.cjk_title)
         g_theme_fonts.display->fallback = g_theme_fonts.cjk_title;
 
-    /* Legacy globals: keep old macros working during transition */
-    g_cjk_font      = g_theme_fonts.body;
-    g_cjk_font_small = g_theme_fonts.small;
-    g_cjk_font_chat  = g_theme_fonts.body;
+    /* Legacy globals: prioritize CJK fonts to avoid garbled Chinese text on some stacks */
+    g_cjk_font = g_theme_fonts.cjk_body ? g_theme_fonts.cjk_body : g_theme_fonts.body;
+    g_cjk_font_small = g_theme_fonts.small ? g_theme_fonts.small : g_cjk_font;
+    g_cjk_font_chat = g_theme_fonts.cjk_body ? g_theme_fonts.cjk_body : g_cjk_font;
 
     LOG_I("Font", "Theme fonts initialized for theme %d (FreeType %s)",
           ti, (ft_body || ft_bold) ? "active" : "unavailable");
@@ -9664,6 +9664,12 @@ static int g_wizard_step = 0;
 /* Wizard selections */
 static int g_wizard_lang_sel = (g_lang == Lang::CN) ? 0 : 1;  /* 0=CN, 1=EN, matches system lang */
 static int g_wizard_openclaw_ok = 0;     /* detection result */
+static bool g_wizard_hermes_ok = false;
+static bool g_wizard_hermes_healthy = false;
+static bool g_wizard_claude_ok = false;
+static bool g_wizard_claude_healthy = false;
+static char g_wizard_hermes_ver[64] = {0};
+static char g_wizard_claude_ver[64] = {0};
 static bool g_wizard_oc_installed_now = false; /* OC was installed during this wizard session */
 static bool g_wizard_session_finished = false;
 static char g_wizard_api_key[256] = {0};
@@ -10325,6 +10331,12 @@ static void wizard_build_step_detect() {
     /* ═══ 1. Full environment check ═══ */
     EnvCheckResult env = app_check_environment();
     g_wizard_openclaw_ok = env.openclaw_ok ? 1 : 0;
+    g_wizard_hermes_ok = env.hermes_ok;
+    g_wizard_hermes_healthy = env.hermes_healthy;
+    g_wizard_claude_ok = env.claude_ok;
+    g_wizard_claude_healthy = env.claude_healthy;
+    snprintf(g_wizard_hermes_ver, sizeof(g_wizard_hermes_ver), "%s", env.hermes_ver);
+    snprintf(g_wizard_claude_ver, sizeof(g_wizard_claude_ver), "%s", env.claude_ver);
 
     /* Node.js */
     if (env.node_ok && env.node_version_ok) {
@@ -10733,8 +10745,6 @@ static void wizard_build_step_model_api() {
     lv_label_set_long_mode(hint_agent, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(hint_agent, LV_PCT(100));
 
-    EnvCheckResult env = app_check_environment();
-
     auto add_runtime_card = [&](const char* title, bool installed, bool healthy, const char* version, lv_event_cb_t install_cb) {
         lv_obj_t* card = lv_obj_create(g_wizard_content);
         lv_obj_set_size(card, LV_PCT(100), LV_SIZE_CONTENT);
@@ -10778,8 +10788,8 @@ static void wizard_build_step_model_api() {
         lv_obj_add_event_cb(btn, install_cb, LV_EVENT_CLICKED, nullptr);
     };
 
-    add_runtime_card("Hermes Agent", env.hermes_ok, env.hermes_healthy, env.hermes_ver, wizard_install_hermes_cb);
-    add_runtime_card("Claude CLI", env.claude_ok, env.claude_healthy, env.claude_ver, wizard_install_claude_cb);
+    add_runtime_card("Hermes Agent", g_wizard_hermes_ok, g_wizard_hermes_healthy, g_wizard_hermes_ver, wizard_install_hermes_cb);
+    add_runtime_card("Claude CLI", g_wizard_claude_ok, g_wizard_claude_healthy, g_wizard_claude_ver, wizard_install_claude_cb);
 }
 
 /* ── Step 3: Local Gemma Models (Optional) ── */
