@@ -48,6 +48,7 @@ static const lv_font_t* FONT(int base_px) {
 #include <fstream>
 #include <string>
 #include <thread>
+#include <atomic>
 #include <algorithm>
 #include <vector>
 #include <sstream>
@@ -97,6 +98,9 @@ static lv_obj_t* model_dropdown = nullptr;
 static lv_obj_t* model_search_input = nullptr;
 static lv_obj_t* model_current_label = nullptr;
 static lv_obj_t* model_provider_hint = nullptr; /* "Provider: openrouter/xiaomi" */
+static lv_obj_t* model_btn_verify = nullptr;
+static lv_obj_t* model_btn_save = nullptr;
+static lv_obj_t* model_btn_save_test = nullptr;
 static lv_obj_t* failover_list_container = nullptr; /* checkbox list for failover models */
 static char gw_model_buf[256] = {0}; /* Gateway model for callbacks */
 static lv_obj_t* ff_status_label = nullptr;
@@ -117,7 +121,229 @@ static lv_obj_t* agent_runtime_dd = nullptr;
 static lv_obj_t* agent_leader_sw = nullptr;
 static lv_obj_t* agent_hermes_sw = nullptr;
 static lv_obj_t* agent_claude_path_ta = nullptr;
+static lv_obj_t* agent_status_label = nullptr;
+static lv_obj_t* agent_effect_label = nullptr;
+static lv_obj_t* agent_btn_save = nullptr;
+static lv_obj_t* agent_btn_rollback = nullptr;
+static lv_obj_t* agent_btn_install_h = nullptr;
+static lv_obj_t* agent_btn_install_c = nullptr;
+static lv_obj_t* agent_btn_recheck = nullptr;
+static lv_timer_t* g_agent_install_poll_timer = nullptr;
+static std::atomic<bool> g_agent_install_running(false);
+static std::atomic<bool> g_agent_recheck_running(false);
+static Runtime g_agent_last_committed_runtime = Runtime::OpenClaw;
+static Runtime g_agent_prev_runtime = Runtime::OpenClaw;
+static bool g_agent_runtime_dirty = false;
+static bool g_agent_state_cached_valid = false;
+static bool g_agent_state_cached_installed = false;
+static bool g_agent_state_cached_healthy = false;
+static lv_obj_t* g_settings_confirm_overlay = nullptr;
+static std::string g_pending_migration_import_path;
 static std::vector<std::string> g_workspace_choices;
+
+enum class AgentHealthState {
+    Healthy,
+    InstalledUnhealthy,
+    Missing,
+    Conflict
+};
+
+static const char* runtime_name(Runtime rt) {
+    switch (rt) {
+        case Runtime::Hermes: return "Hermes";
+        case Runtime::Claude: return "Claude";
+        case Runtime::OpenClaw:
+        default: return "OpenClaw";
+    }
+}
+
+static bool agent_has_runtime_conflict(Runtime rt, const char* claude_path) {
+    if (rt != Runtime::Claude) return false;
+    bool exists_hint = app_check_claude_cli_exists();
+    bool bad_path = claude_path && claude_path[0] && !std::filesystem::exists(claude_path);
+    bool missing_path_and_not_found = (!claude_path || !claude_path[0]) && !exists_hint;
+    return bad_path || missing_path_and_not_found;
+}
+
+static AgentHealthState eval_runtime_health(Runtime rt, const char* claude_path, bool* installed_out, bool* healthy_out) {
+    bool installed = false;
+    bool healthy = false;
+
+    if (rt == Runtime::OpenClaw) {
+        EnvCheckResult env = app_check_environment();
+        installed = env.openclaw_ok;
+        healthy = env.openclaw_ok && env.gateway_ok;
+    } else if (rt == Runtime::Hermes) {
+        char ver[64] = {0};
+        installed = app_detect_hermes(ver, sizeof(ver));
+        healthy = installed && app_check_hermes_health();
+    } else {
+        char ver[64] = {0};
+        bool exists_hint = app_check_claude_cli_exists();
+        installed = app_detect_claude_cli(ver, sizeof(ver)) || exists_hint;
+        healthy = installed && app_check_claude_cli_health();
+        bool bad_path = claude_path && claude_path[0] && !std::filesystem::exists(claude_path);
+        bool missing_path_and_not_found = (!claude_path || !claude_path[0]) && !exists_hint;
+        if (bad_path || missing_path_and_not_found) {
+            if (installed_out) *installed_out = installed;
+            if (healthy_out) *healthy_out = healthy;
+            return AgentHealthState::Conflict;
+        }
+    }
+
+    if (installed_out) *installed_out = installed;
+    if (healthy_out) *healthy_out = healthy;
+    if (!installed) return AgentHealthState::Missing;
+    if (!healthy) return AgentHealthState::InstalledUnhealthy;
+    return AgentHealthState::Healthy;
+}
+
+static void agent_update_button_states() {
+    bool busy = g_agent_install_running.load();
+    if (agent_btn_save) {
+        if (busy) lv_obj_add_state(agent_btn_save, LV_STATE_DISABLED);
+        else lv_obj_clear_state(agent_btn_save, LV_STATE_DISABLED);
+    }
+    if (agent_btn_install_h) {
+        if (busy) lv_obj_add_state(agent_btn_install_h, LV_STATE_DISABLED);
+        else lv_obj_clear_state(agent_btn_install_h, LV_STATE_DISABLED);
+    }
+    if (agent_btn_install_c) {
+        if (busy) lv_obj_add_state(agent_btn_install_c, LV_STATE_DISABLED);
+        else lv_obj_clear_state(agent_btn_install_c, LV_STATE_DISABLED);
+    }
+    if (agent_btn_recheck) {
+        if (busy || g_agent_recheck_running.load()) lv_obj_add_state(agent_btn_recheck, LV_STATE_DISABLED);
+        else lv_obj_clear_state(agent_btn_recheck, LV_STATE_DISABLED);
+    }
+}
+
+static void agent_install_poll_cb(lv_timer_t* t) {
+    (void)t;
+    agent_update_button_states();
+}
+
+static void refresh_agent_runtime_state_ui(bool deep_check = true) {
+    if (!agent_runtime_dd || !agent_status_label || !agent_btn_save) return;
+
+    Runtime rt = (Runtime)lv_dropdown_get_selected(agent_runtime_dd);
+    const char* path = agent_claude_path_ta ? lv_textarea_get_text(agent_claude_path_ta) : "";
+    bool installed = false;
+    bool healthy = false;
+    AgentHealthState st = AgentHealthState::InstalledUnhealthy;
+
+    bool conflict = agent_has_runtime_conflict(rt, path);
+    if (conflict) {
+        st = AgentHealthState::Conflict;
+    } else if (deep_check) {
+        st = eval_runtime_health(rt, path, &installed, &healthy);
+        g_agent_state_cached_valid = true;
+        g_agent_state_cached_installed = installed;
+        g_agent_state_cached_healthy = healthy;
+    } else if (g_agent_state_cached_valid) {
+        installed = g_agent_state_cached_installed;
+        healthy = g_agent_state_cached_healthy;
+        if (!installed) st = AgentHealthState::Missing;
+        else if (!healthy) st = AgentHealthState::InstalledUnhealthy;
+        else st = AgentHealthState::Healthy;
+    }
+
+    const char* st_cn = "";
+    const char* st_en = "";
+    lv_color_t st_color = g_colors->text_dim;
+    switch (st) {
+        case AgentHealthState::Healthy:
+            st_cn = "已健康";
+            st_en = "Healthy";
+            st_color = g_colors->success;
+            break;
+        case AgentHealthState::InstalledUnhealthy:
+            st_cn = "已安装，待启动/待修复";
+            st_en = "Installed, unhealthy";
+            st_color = g_colors->warning;
+            break;
+        case AgentHealthState::Missing:
+            st_cn = "未安装";
+            st_en = "Missing";
+            st_color = g_colors->danger;
+            break;
+        case AgentHealthState::Conflict:
+            st_cn = "配置冲突";
+            st_en = "Conflict";
+            st_color = g_colors->danger;
+            break;
+    }
+
+    if (!deep_check && !conflict && !g_agent_state_cached_valid) {
+        st_cn = "待重检";
+        st_en = "Need recheck";
+        st_color = g_colors->warning;
+    }
+
+    lv_label_set_text_fmt(agent_status_label, "%s: %s",
+                          g_lang == Lang::CN ? "运行时状态" : "Runtime Status",
+                          g_lang == Lang::CN ? st_cn : st_en);
+    lv_obj_set_style_text_color(agent_status_label, st_color, 0);
+
+    bool can_save = (st != AgentHealthState::Conflict) && !g_agent_install_running.load();
+    if (!can_save) lv_obj_add_state(agent_btn_save, LV_STATE_DISABLED);
+    else lv_obj_clear_state(agent_btn_save, LV_STATE_DISABLED);
+
+    if (agent_effect_label) {
+        Runtime selected = rt;
+        if (selected != g_agent_last_committed_runtime) {
+            g_agent_runtime_dirty = true;
+            lv_label_set_text(agent_effect_label,
+                tr("切换仅对新会话生效，当前会话保持不变。",
+                   "Switch applies to new sessions only; current session is unchanged."));
+            lv_obj_set_style_text_color(agent_effect_label, g_colors->warning, 0);
+        } else {
+            g_agent_runtime_dirty = false;
+            lv_label_set_text(agent_effect_label,
+                tr("当前运行时已生效。", "Current runtime is active."));
+            lv_obj_set_style_text_color(agent_effect_label, g_colors->text_dim, 0);
+        }
+    }
+}
+
+struct AgentRecheckResult {
+    Runtime rt;
+    bool installed;
+    bool healthy;
+};
+
+static void agent_recheck_apply_cb(void* p) {
+    AgentRecheckResult* r = (AgentRecheckResult*)p;
+    if (!r) return;
+    g_agent_state_cached_valid = true;
+    g_agent_state_cached_installed = r->installed;
+    g_agent_state_cached_healthy = r->healthy;
+    g_agent_recheck_running.store(false);
+    refresh_agent_runtime_state_ui(false);
+    if (agent_effect_label) {
+        lv_label_set_text(agent_effect_label,
+            tr("运行时状态已重检。", "Runtime state rechecked."));
+        lv_obj_set_style_text_color(agent_effect_label, g_colors->info, 0);
+    }
+    delete r;
+}
+
+static void agent_recheck_async(Runtime rt, const std::string& claude_path) {
+    if (g_agent_recheck_running.exchange(true)) return;
+    agent_update_button_states();
+    if (agent_effect_label) {
+        lv_label_set_text(agent_effect_label,
+            tr("正在后台重检运行时状态...", "Rechecking runtime state in background..."));
+        lv_obj_set_style_text_color(agent_effect_label, g_colors->warning, 0);
+    }
+    std::thread([rt, claude_path]() {
+        bool installed = false;
+        bool healthy = false;
+        (void)eval_runtime_health(rt, claude_path.c_str(), &installed, &healthy);
+        AgentRecheckResult* res = new AgentRecheckResult{rt, installed, healthy};
+        lv_async_call(agent_recheck_apply_cb, res);
+    }).detach();
+}
 
 static int lang_to_dropdown_index(Lang lang) {
     switch (lang) {
@@ -143,6 +369,23 @@ static void build_agent_tab(lv_obj_t* tab);
 static void build_feature_tab(lv_obj_t* tab);
 static void build_tracing_tab(lv_obj_t* tab);
 static void build_kb_tab(lv_obj_t* tab);
+
+static void update_model_action_buttons_state() {
+    const char* key = acc_apikey_ta ? lv_textarea_get_text(acc_apikey_ta) : "";
+    bool has_key = key && key[0];
+    if (model_btn_verify) {
+        if (has_key) lv_obj_clear_state(model_btn_verify, LV_STATE_DISABLED);
+        else lv_obj_add_state(model_btn_verify, LV_STATE_DISABLED);
+    }
+    if (model_btn_save) {
+        if (has_key) lv_obj_clear_state(model_btn_save, LV_STATE_DISABLED);
+        else lv_obj_add_state(model_btn_save, LV_STATE_DISABLED);
+    }
+    if (model_btn_save_test) {
+        if (has_key) lv_obj_clear_state(model_btn_save_test, LV_STATE_DISABLED);
+        else lv_obj_add_state(model_btn_save_test, LV_STATE_DISABLED);
+    }
+}
 
 static std::string settings_config_path() {
     const char* appdata = std::getenv("APPDATA");
@@ -1242,6 +1485,8 @@ static void build_agent_tab(lv_obj_t* tab) {
     apply_hint_label(hint);
 
     Runtime rt_cfg = app_get_active_runtime();
+    g_agent_last_committed_runtime = rt_cfg;
+    g_agent_prev_runtime = rt_cfg;
     bool leader_mode_cfg = CFG_DEFAULT_LEADER_MODE != 0;
     bool hermes_enabled_cfg = CFG_DEFAULT_HERMES_ENABLED != 0;
     char claude_path_cfg[260] = {0};
@@ -1287,6 +1532,18 @@ static void build_agent_tab(lv_obj_t* tab) {
     lv_dropdown_set_selected(agent_runtime_dd, (uint16_t)((int)rt_cfg));
     lv_obj_set_width(agent_runtime_dd, SCALE(180));
     apply_input_style(agent_runtime_dd);
+    lv_obj_add_event_cb(agent_runtime_dd, [](lv_event_t* e) {
+        (void)e;
+        refresh_agent_runtime_state_ui(false);
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    agent_status_label = lv_label_create(tab);
+    lv_label_set_text(agent_status_label, tr("运行时状态: 检查中...", "Runtime Status: Checking..."));
+    apply_hint_label(agent_status_label);
+
+    agent_effect_label = lv_label_create(tab);
+    lv_label_set_text(agent_effect_label, "");
+    apply_hint_label(agent_effect_label);
 
     lv_obj_t* row_leader = lv_obj_create(tab);
     lv_obj_set_size(row_leader, LV_PCT(100), LV_SIZE_CONTENT);
@@ -1332,6 +1589,10 @@ static void build_agent_tab(lv_obj_t* tab) {
     if (claude_path_cfg[0]) lv_textarea_set_text(agent_claude_path_ta, claude_path_cfg);
     lv_obj_set_width(agent_claude_path_ta, LV_PCT(100));
     apply_input_style(agent_claude_path_ta);
+    lv_obj_add_event_cb(agent_claude_path_ta, [](lv_event_t* e) {
+        (void)e;
+        refresh_agent_runtime_state_ui(false);
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
 
     lv_obj_t* row_btn = lv_obj_create(tab);
     lv_obj_set_size(row_btn, LV_PCT(100), LV_SIZE_CONTENT);
@@ -1343,34 +1604,59 @@ static void build_agent_tab(lv_obj_t* tab) {
     lv_obj_set_flex_align(row_btn, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(row_btn, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t* btn_install_h = aw_btn_create(row_btn, tr("安装 Hermes", "Install Hermes"), BTN_SECONDARY, SCALE(150), SCALE(34));
-    lv_obj_add_event_cb(btn_install_h, [](lv_event_t* e) {
+    agent_btn_install_h = aw_btn_create(row_btn, tr("安装 Hermes", "Install Hermes"), BTN_SECONDARY, SCALE(150), SCALE(34));
+    lv_obj_add_event_cb(agent_btn_install_h, [](lv_event_t* e) {
         (void)e;
+        if (g_agent_install_running.exchange(true)) return;
+        agent_update_button_states();
         std::thread([]() {
             bool ok = app_install_hermes("auto", nullptr, nullptr);
             ui_log("[Settings-Agent] Hermes install %s", ok ? "ok" : "failed");
             ui_toast(ok ? tr("Hermes 安装成功", "Hermes installed") : tr("Hermes 安装失败", "Hermes install failed"));
+            g_agent_install_running.store(false);
         }).detach();
     }, LV_EVENT_CLICKED, nullptr);
 
-    lv_obj_t* btn_install_c = aw_btn_create(row_btn, tr("安装 Claude", "Install Claude"), BTN_SECONDARY, SCALE(150), SCALE(34));
-    lv_obj_add_event_cb(btn_install_c, [](lv_event_t* e) {
+    agent_btn_install_c = aw_btn_create(row_btn, tr("安装 Claude", "Install Claude"), BTN_SECONDARY, SCALE(150), SCALE(34));
+    lv_obj_add_event_cb(agent_btn_install_c, [](lv_event_t* e) {
         (void)e;
+        if (g_agent_install_running.exchange(true)) return;
+        agent_update_button_states();
         std::thread([]() {
             bool ok = app_install_claude_cli("auto", nullptr, nullptr);
             ui_log("[Settings-Agent] Claude install %s", ok ? "ok" : "failed");
             ui_toast(ok ? tr("Claude 安装成功", "Claude installed") : tr("Claude 安装失败", "Claude install failed"));
+            g_agent_install_running.store(false);
         }).detach();
     }, LV_EVENT_CLICKED, nullptr);
 
-    lv_obj_t* btn_save = aw_btn_create(row_btn, tr("保存 Agent 设置", "Save Agent Config"), BTN_PRIMARY, SCALE(180), SCALE(34));
-    lv_obj_add_event_cb(btn_save, [](lv_event_t* e) {
+    agent_btn_recheck = aw_btn_create(row_btn, tr("重检状态", "Recheck State"), BTN_SECONDARY, SCALE(140), SCALE(34));
+    lv_obj_add_event_cb(agent_btn_recheck, [](lv_event_t* e) {
+        (void)e;
+        Runtime rt = agent_runtime_dd ? (Runtime)lv_dropdown_get_selected(agent_runtime_dd) : Runtime::OpenClaw;
+        std::string p = agent_claude_path_ta ? lv_textarea_get_text(agent_claude_path_ta) : "";
+        agent_recheck_async(rt, p);
+    }, LV_EVENT_CLICKED, nullptr);
+
+    agent_btn_save = aw_btn_create(row_btn, tr("保存 Agent 设置", "Save Agent Config"), BTN_PRIMARY, SCALE(180), SCALE(34));
+    lv_obj_add_event_cb(agent_btn_save, [](lv_event_t* e) {
         (void)e;
         if (!agent_runtime_dd || !agent_leader_sw || !agent_hermes_sw || !agent_claude_path_ta) return;
+        Runtime prev_rt = g_agent_last_committed_runtime;
         Runtime rt = (Runtime)lv_dropdown_get_selected(agent_runtime_dd);
         bool leader_mode = lv_obj_has_state(agent_leader_sw, LV_STATE_CHECKED);
         bool hermes_enabled = lv_obj_has_state(agent_hermes_sw, LV_STATE_CHECKED);
         const char* claude_path = lv_textarea_get_text(agent_claude_path_ta);
+
+        bool installed = false;
+        bool healthy = false;
+        AgentHealthState st = eval_runtime_health(rt, claude_path, &installed, &healthy);
+        if (st == AgentHealthState::Conflict) {
+            ui_toast_error(tr("配置冲突，请先修复后再保存", "Config conflict. Fix before saving."));
+            refresh_agent_runtime_state_ui();
+            return;
+        }
+
         app_set_active_runtime(rt);
         bool ok = settings_save_agent_config(
             leader_mode ? CFG_AGENT_MODE_LEADER : CFG_AGENT_MODE_SINGLE,
@@ -1379,7 +1665,48 @@ static void build_agent_tab(lv_obj_t* tab) {
             claude_path ? claude_path : "");
         ui_log("[Settings-Agent] Save %s (runtime=%d leader=%d hermes=%d)", ok ? "ok" : "failed", (int)rt, leader_mode ? 1 : 0, hermes_enabled ? 1 : 0);
         ui_toast(ok ? tr("Agent 设置已保存", "Agent settings saved") : tr("Agent 设置保存失败", "Save failed"));
+        if (ok) {
+            if (rt != prev_rt) {
+                g_agent_prev_runtime = prev_rt;
+                g_agent_last_committed_runtime = rt;
+                if (agent_effect_label) {
+                    lv_label_set_text_fmt(agent_effect_label, "%s: %s -> %s",
+                        g_lang == Lang::CN ? "已切换，建议新开会话验证" : "Switched, validate in a new session",
+                        runtime_name(prev_rt), runtime_name(rt));
+                    lv_obj_set_style_text_color(agent_effect_label, g_colors->info, 0);
+                }
+                if (agent_btn_rollback) {
+                    lv_obj_clear_flag(agent_btn_rollback, LV_OBJ_FLAG_HIDDEN);
+                    lv_obj_clear_state(agent_btn_rollback, LV_STATE_DISABLED);
+                }
+            }
+            refresh_agent_runtime_state_ui();
+        }
     }, LV_EVENT_CLICKED, nullptr);
+
+    agent_btn_rollback = aw_btn_create(row_btn, tr("回滚运行时", "Rollback Runtime"), BTN_SECONDARY, SCALE(150), SCALE(34));
+    lv_obj_add_event_cb(agent_btn_rollback, [](lv_event_t* e) {
+        (void)e;
+        Runtime cur = g_agent_last_committed_runtime;
+        Runtime target = g_agent_prev_runtime;
+        app_set_active_runtime(target);
+        if (agent_runtime_dd) lv_dropdown_set_selected(agent_runtime_dd, (uint16_t)((int)target));
+        g_agent_last_committed_runtime = target;
+        g_agent_prev_runtime = cur;
+        if (agent_effect_label) {
+            lv_label_set_text_fmt(agent_effect_label, "%s: %s",
+                g_lang == Lang::CN ? "已回滚到" : "Rolled back to",
+                runtime_name(target));
+            lv_obj_set_style_text_color(agent_effect_label, g_colors->success, 0);
+        }
+        ui_toast_success(tr("运行时已回滚", "Runtime rolled back"));
+        refresh_agent_runtime_state_ui();
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_flag(agent_btn_rollback, LV_OBJ_FLAG_HIDDEN);
+
+    if (!g_agent_install_poll_timer) g_agent_install_poll_timer = lv_timer_create(agent_install_poll_cb, 180, nullptr);
+    agent_update_button_states();
+    refresh_agent_runtime_state_ui();
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1426,6 +1753,7 @@ static void model_dropdown_cb(lv_event_t* e) {
     /* Clear input field for new key entry */
     if (acc_apikey_ta) {
         lv_textarea_set_text(acc_apikey_ta, "");
+        update_model_action_buttons_state();
     }
 }
 
@@ -1495,22 +1823,36 @@ static void apikey_verify_cb(lv_event_t* e) {
         }
 
         /* Update UI from main thread */
-        struct VerifyResult { char msg[256]; lv_obj_t* lbl; };
+        struct VerifyResult { char msg[256]; lv_obj_t* lbl; int severity; };
         VerifyResult* result = new VerifyResult;
         result->lbl = status_lbl;
+        result->severity = 2;
         if (strncmp(http_code, "200", 3) == 0) {
             snprintf(result->msg, sizeof(result->msg), "Verify: ✅ %s key is valid!", prov_copy.c_str());
+            result->severity = 0;
         } else if (strncmp(http_code, "401", 3) == 0 || strncmp(http_code, "403", 3) == 0) {
-            snprintf(result->msg, sizeof(result->msg), "Verify: ❌ %s key is invalid (HTTP %s)", prov_copy.c_str(), http_code);
+            snprintf(result->msg, sizeof(result->msg), "Verify: ❌ %s auth failed (HTTP %s)", prov_copy.c_str(), http_code);
+            result->severity = 2;
+        } else if (strncmp(http_code, "429", 3) == 0) {
+            snprintf(result->msg, sizeof(result->msg), "Verify: ⚠️ %s rate limited (HTTP 429)", prov_copy.c_str());
+            result->severity = 1;
+        } else if (http_code[0] == '5') {
+            snprintf(result->msg, sizeof(result->msg), "Verify: ⚠️ %s service unavailable (HTTP %s)", prov_copy.c_str(), http_code);
+            result->severity = 1;
+        } else if (http_code[0] == '\0' || strncmp(http_code, "000", 3) == 0) {
+            snprintf(result->msg, sizeof(result->msg), "Verify: ⚠️ network unavailable");
+            result->severity = 1;
         } else {
-            snprintf(result->msg, sizeof(result->msg), "Verify: ⚠️ %s HTTP %s (network issue?)", prov_copy.c_str(), http_code);
+            snprintf(result->msg, sizeof(result->msg), "Verify: ⚠️ %s unexpected response (HTTP %s)", prov_copy.c_str(), http_code);
+            result->severity = 1;
         }
         lv_async_call([](void* p) {
             VerifyResult* r = (VerifyResult*)p;
             if (r->lbl && lv_obj_is_valid(r->lbl)) {
                 lv_label_set_text(r->lbl, r->msg);
-                bool ok = (strncmp(r->msg + 9, "\xE2\x9C\x85", 3) == 0); /* ✅ */
-                lv_obj_set_style_text_color(r->lbl, ok ? g_colors->success : g_colors->danger, 0);
+                if (r->severity == 0) lv_obj_set_style_text_color(r->lbl, g_colors->success, 0);
+                else if (r->severity == 1) lv_obj_set_style_text_color(r->lbl, g_colors->warning, 0);
+                else lv_obj_set_style_text_color(r->lbl, g_colors->danger, 0);
             }
             delete r;
         }, result);
@@ -1550,6 +1892,12 @@ static void apikey_save_cb(lv_event_t* e) {
     const char* api_key_text = nullptr;
     if (acc_apikey_ta) {
         api_key_text = lv_textarea_get_text(acc_apikey_ta);
+    }
+
+    if (!api_key_text || !api_key_text[0]) {
+        ui_toast_warn(tr("请先输入 API Key", "Please enter API key first"));
+        update_model_action_buttons_state();
+        return;
     }
 
     /* Update globals */
@@ -1917,6 +2265,10 @@ static void build_model_tab(lv_obj_t* tab) {
     apply_input_style(acc_apikey_ta);
     lv_textarea_set_text_selection(acc_apikey_ta, true);
     lv_group_add_obj(lv_group_get_default(), acc_apikey_ta);
+    lv_obj_add_event_cb(acc_apikey_ta, [](lv_event_t* e) {
+        (void)e;
+        update_model_action_buttons_state();
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
 
     /* Pre-populate with real key from openclaw.json */
     {
@@ -1953,26 +2305,42 @@ static void build_model_tab(lv_obj_t* tab) {
     lv_obj_center(lbl_show);
 
     /* Verify button — test API key validity */
-    lv_obj_t* btn_verify = lv_button_create(row_btns);
-    lv_obj_set_size(btn_verify, SCALE(100), SCALE(32));
-    lv_obj_set_style_bg_color(btn_verify, g_colors->success, 0);
-    lv_obj_set_style_radius(btn_verify, SCALE(g_colors->radius_sm), 0);
-    lv_obj_add_event_cb(btn_verify, apikey_verify_cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* lbl_verify = lv_label_create(btn_verify);
+    model_btn_verify = lv_button_create(row_btns);
+    lv_obj_set_size(model_btn_verify, SCALE(100), SCALE(32));
+    lv_obj_set_style_bg_color(model_btn_verify, g_colors->success, 0);
+    lv_obj_set_style_radius(model_btn_verify, SCALE(g_colors->radius_sm), 0);
+    lv_obj_add_event_cb(model_btn_verify, apikey_verify_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_verify = lv_label_create(model_btn_verify);
     lv_label_set_text(lbl_verify, "Verify");
     lv_obj_set_style_text_font(lbl_verify, CJK_FONT, 0);
     lv_obj_center(lbl_verify);
 
     /* Save button */
-    lv_obj_t* btn_save = lv_button_create(row_btns);
-    lv_obj_set_size(btn_save, SCALE(100), SCALE(32));
-    lv_obj_set_style_bg_color(btn_save, g_colors->accent_secondary, 0);
-    lv_obj_set_style_radius(btn_save, SCALE(g_colors->radius_sm), 0);
-    lv_obj_add_event_cb(btn_save, apikey_save_cb, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* lbl_save = lv_label_create(btn_save);
+    model_btn_save = lv_button_create(row_btns);
+    lv_obj_set_size(model_btn_save, SCALE(100), SCALE(32));
+    lv_obj_set_style_bg_color(model_btn_save, g_colors->accent_secondary, 0);
+    lv_obj_set_style_radius(model_btn_save, SCALE(g_colors->radius_sm), 0);
+    lv_obj_add_event_cb(model_btn_save, apikey_save_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_save = lv_label_create(model_btn_save);
     lv_label_set_text(lbl_save, "Save");
     lv_obj_set_style_text_font(lbl_save, CJK_FONT, 0);
     lv_obj_center(lbl_save);
+
+    /* Save & Test button */
+    model_btn_save_test = lv_button_create(row_btns);
+    lv_obj_set_size(model_btn_save_test, SCALE(140), SCALE(32));
+    lv_obj_set_style_bg_color(model_btn_save_test, g_colors->accent, 0);
+    lv_obj_set_style_radius(model_btn_save_test, SCALE(g_colors->radius_sm), 0);
+    lv_obj_add_event_cb(model_btn_save_test, [](lv_event_t* e) {
+        apikey_save_cb(e);
+        apikey_verify_cb(e);
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_save_test = lv_label_create(model_btn_save_test);
+    lv_label_set_text(lbl_save_test, tr("保存并测试", "Save & Test"));
+    lv_obj_set_style_text_font(lbl_save_test, CJK_FONT_SMALL, 0);
+    lv_obj_center(lbl_save_test);
+
+    update_model_action_buttons_state();
 
     /* Update current model display */
     if (g_selected_model[0] && model_current_label) {
@@ -2415,13 +2783,105 @@ static void log_export_cb(lv_event_t* e) {
     log_tab_refresh_list();
 }
 
+static void settings_show_confirm_dialog(const char* title, const char* message, void (*on_confirm)()) {
+    if (g_settings_confirm_overlay) {
+        lv_obj_del(g_settings_confirm_overlay);
+        g_settings_confirm_overlay = nullptr;
+    }
+
+    lv_obj_t* overlay = lv_obj_create(lv_screen_active());
+    g_settings_confirm_overlay = overlay;
+    lv_obj_set_size(overlay, LV_PCT(100), LV_PCT(100));
+    lv_obj_set_style_bg_color(overlay, g_colors->bg, 0);
+    lv_obj_set_style_bg_opa(overlay, LV_OPA_50, 0);
+    lv_obj_set_style_border_width(overlay, 0, 0);
+    lv_obj_set_style_pad_all(overlay, 0, 0);
+    lv_obj_clear_flag(overlay, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* box = lv_obj_create(overlay);
+    lv_obj_set_size(box, SCALE(520), LV_SIZE_CONTENT);
+    lv_obj_center(box);
+    lv_obj_set_style_bg_color(box, g_colors->panel, 0);
+    lv_obj_set_style_border_color(box, g_colors->border, 0);
+    lv_obj_set_style_border_width(box, 1, 0);
+    lv_obj_set_style_radius(box, SCALE(g_colors->radius_lg), 0);
+    lv_obj_set_style_pad_all(box, 16, 0);
+    lv_obj_set_style_pad_gap(box, 10, 0);
+    lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(box, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* t = lv_label_create(box);
+    lv_label_set_text(t, title ? title : tr("确认操作", "Confirm"));
+    lv_obj_set_style_text_font(t, CJK_FONT, 0);
+    lv_obj_set_style_text_color(t, g_colors->text, 0);
+
+    lv_obj_t* m = lv_label_create(box);
+    lv_label_set_text(m, message ? message : tr("该操作不可撤销。", "This action cannot be undone."));
+    lv_label_set_long_mode(m, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(m, LV_PCT(100));
+    lv_obj_set_style_text_font(m, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_color(m, g_colors->text_dim, 0);
+
+    lv_obj_t* row = lv_obj_create(box);
+    lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_set_style_pad_gap(row, 8, 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* btn_cancel = aw_btn_create(row, tr("取消", "Cancel"), BTN_OUTLINED, SCALE(120), SCALE(34));
+    lv_obj_add_event_cb(btn_cancel, [](lv_event_t* e) {
+        (void)e;
+        if (g_settings_confirm_overlay) {
+            lv_obj_del(g_settings_confirm_overlay);
+            g_settings_confirm_overlay = nullptr;
+        }
+    }, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* btn_ok = aw_btn_create(row, tr("确认", "Confirm"), BTN_PRIMARY, SCALE(120), SCALE(34));
+    lv_obj_add_event_cb(btn_ok, [](lv_event_t* e) {
+        void (*cb)() = (void (*)())lv_event_get_user_data(e);
+        if (cb) cb();
+        if (g_settings_confirm_overlay) {
+            lv_obj_del(g_settings_confirm_overlay);
+            g_settings_confirm_overlay = nullptr;
+        }
+    }, LV_EVENT_CLICKED, (void*)on_confirm);
+}
+
+static void settings_confirm_clear_chat() {
+    extern void clear_chat_history();
+    clear_chat_history();
+    ui_log("[Chat] Chat history cleared");
+}
+
+static void settings_confirm_import_migration() {
+    if (g_pending_migration_import_path.empty()) return;
+    char err[256] = {0};
+    if (migration_import(g_pending_migration_import_path.c_str(), err, sizeof(err))) {
+        ui_log("[Migration] Imported from %s", g_pending_migration_import_path.c_str());
+    } else {
+        ui_log("[Migration] Import failed: %s", err);
+    }
+    g_pending_migration_import_path.clear();
+}
+
 /* Clear button callback */
 static void log_clear_cb(lv_event_t* e) {
     (void)e;
-    ui_log_clear_entries();
-    app_log_clear();
-    ui_log("[Log] Log cleared");
-    log_tab_refresh_list();
+    settings_show_confirm_dialog(
+        tr("确认清空日志", "Confirm clear logs"),
+        tr("该操作将删除当前日志列表，且不可撤销。", "This will clear logs and cannot be undone."),
+        +[]() {
+            ui_log_clear_entries();
+            app_log_clear();
+            ui_log("[Log] Log cleared");
+            log_tab_refresh_list();
+        });
 }
 
 static void build_log_tab(lv_obj_t* tab) {
@@ -2639,6 +3099,12 @@ static void build_feature_tab(lv_obj_t* tab) {
     lv_obj_set_style_text_color(title, g_colors->accent, 0);
     lv_obj_set_style_text_font(title, CJK_FONT, 0);
 
+    lv_obj_t* risk = lv_label_create(tab);
+    lv_label_set_text(risk, tr("实验项：修改可能影响稳定性，建议按需开启。",
+                               "Experimental: changes may affect stability."));
+    lv_obj_set_style_text_color(risk, g_colors->warning, 0);
+    lv_obj_set_style_text_font(risk, CJK_FONT_SMALL, 0);
+
     const auto& flags = feature_flags().get_all_flags();
     for (const auto& f : flags) {
         lv_obj_t* row = lv_obj_create(tab);
@@ -2700,6 +3166,17 @@ static void build_tracing_tab(lv_obj_t* tab) {
     lv_obj_set_flex_align(tab, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_gap(tab, 10, 0);
 
+    lv_obj_t* title = lv_label_create(tab);
+    lv_label_set_text(title, tr("追踪（调试）", "Tracing (Debug)"));
+    lv_obj_set_style_text_color(title, g_colors->accent, 0);
+    lv_obj_set_style_text_font(title, CJK_FONT, 0);
+
+    lv_obj_t* risk = lv_label_create(tab);
+    lv_label_set_text(risk, tr("实验/调试能力：仅用于排障，常态使用建议关闭。",
+                               "Experimental debug tooling. Keep disabled in normal usage."));
+    lv_obj_set_style_text_color(risk, g_colors->warning, 0);
+    lv_obj_set_style_text_font(risk, CJK_FONT_SMALL, 0);
+
     lv_obj_t* filter_row = lv_obj_create(tab);
     lv_obj_set_size(filter_row, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(filter_row, LV_OPA_TRANSP, 0);
@@ -2750,10 +3227,16 @@ static void build_tracing_tab(lv_obj_t* tab) {
         ui_log("[Tracing] Exported to %s", path);
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_add_event_cb(btn_clr, [](lv_event_t*) {
-        std::ofstream trunc(TraceManager::instance().get_trace_path(), std::ios::trunc);
-        trunc.close();
-        if (trace_list_ta) lv_textarea_set_text(trace_list_ta, "");
-        ui_log("[Tracing] traces.jsonl cleared");
+        settings_show_confirm_dialog(
+            tr("确认清空追踪", "Confirm clear tracing"),
+            tr("该操作将删除 traces.jsonl 内容，且不可撤销。",
+               "This will clear traces.jsonl and cannot be undone."),
+            +[]() {
+                std::ofstream trunc(TraceManager::instance().get_trace_path(), std::ios::trunc);
+                trunc.close();
+                if (trace_list_ta) lv_textarea_set_text(trace_list_ta, "");
+                ui_log("[Tracing] traces.jsonl cleared");
+            });
     }, LV_EVENT_CLICKED, nullptr);
 
     trace_list_ta = lv_textarea_create(tab);
@@ -2941,9 +3424,10 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_set_style_radius(btn_clear_chat, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_clear_chat, [](lv_event_t* e) {
         (void)e;
-        extern void clear_chat_history();
-        clear_chat_history();
-        ui_log("[Chat] Chat history cleared");
+        settings_show_confirm_dialog(
+            tr("确认清除聊天", "Confirm clear chat"),
+            tr("该操作将删除聊天历史，且不可撤销。", "This will clear chat history and cannot be undone."),
+            settings_confirm_clear_chat);
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* l_clr = lv_label_create(btn_clear_chat);
     lv_label_set_text(l_clr, tr("清除聊天", "Clear Chat"));
@@ -3012,12 +3496,11 @@ static void build_about_tab(lv_obj_t* tab) {
         ofn.lpstrFilter = "ZIP Files\0*.zip\0All Files\0*.*\0";
         ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
         if (GetOpenFileNameA(&ofn)) {
-            char err[256] = {0};
-            if (migration_import(file_buf, err, sizeof(err))) {
-                ui_log("[Migration] Imported from %s", file_buf);
-            } else {
-                ui_log("[Migration] Import failed: %s", err);
-            }
+            g_pending_migration_import_path = file_buf;
+            settings_show_confirm_dialog(
+                tr("确认导入迁移", "Confirm import migration"),
+                tr("导入将覆盖部分本地配置，建议先备份。", "Import may overwrite local config. Backup is recommended."),
+                settings_confirm_import_migration);
         }
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* l_mig_imp = lv_label_create(btn_mig_import);
