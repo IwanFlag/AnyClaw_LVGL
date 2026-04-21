@@ -17,6 +17,10 @@ void health_stop();
 /* Set callback for status changes */
 void health_set_callback(HealthStatusCallback cb);
 
+/* Non-blocking status cache populated by health thread.
+ * Returns true when at least one health cycle has produced status. */
+bool health_try_get_last_status(ClawStatus* out_status);
+
 /* Get count of active sessions (from last health check) */
 int health_get_session_count();
 

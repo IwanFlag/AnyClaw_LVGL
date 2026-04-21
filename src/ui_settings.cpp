@@ -55,8 +55,8 @@ static const lv_font_t* FONT(int base_px) {
 #include <windows.h>
 
 /* Use app.h declaration for app_get_cjk_font() */
-#define CJK_FONT (app_get_cjk_font() ? app_get_cjk_font() : NULL)
-#define CJK_FONT_SMALL (app_get_cjk_font() ? app_get_cjk_font() : FONT(12))
+#define CJK_FONT (app_get_cjk_font() ? app_get_cjk_font() : FONT(14))
+#define CJK_FONT_SMALL (app_get_cjk_font_small() ? app_get_cjk_font_small() : (app_get_cjk_font() ? app_get_cjk_font() : FONT(12)))
 
 /* Forward declaration: tr() is used before its definition in this file. */
 static const char* tr(const char* cn, const char* en);
@@ -3608,6 +3608,31 @@ static void build_about_tab(lv_obj_t* tab) {
     lv_obj_center(l_ver);
 }
 
+/* C2 is the main workspace flow, not a heavy settings page.
+ * Keep a lightweight guidance tab to align IA with PRD/Design. */
+static void build_c2_tab(lv_obj_t* tab) {
+    apply_dark_style(tab);
+    lv_obj_set_style_pad_all(tab, 16, 0);
+    lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(tab, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_gap(tab, 10, 0);
+
+    lv_obj_t* title = lv_label_create(tab);
+    lv_label_set_text(title, tr("C2 对话与任务中心", "C2 Chat & Task Center"));
+    apply_section_label(title);
+
+    lv_obj_t* hint = lv_label_create(tab);
+    lv_label_set_text(hint, tr(
+        "C2 的主要交互在主界面完成：统一输入、双结果视图、执行轨迹。\n"
+        "请回到主界面进行 Chat/Work 操作。",
+        "C2 interactions are handled in the main workspace: unified input, dual-result view, and execution trace.\n"
+        "Return to main workspace for Chat/Work actions."));
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(hint, LV_PCT(100));
+    lv_obj_set_style_text_color(hint, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(hint, CJK_FONT, 0);
+}
+
 /* ═══════════════════════════════════════════════════════════════
  *  Settings panel open/close
  * ═══════════════════════════════════════════════════════════════ */
@@ -3956,27 +3981,26 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_set_style_border_width(tab_btns, 2, LV_PART_ITEMS);
     lv_obj_set_style_pad_ver(tab_btns, 8, LV_PART_ITEMS); /* Short divider, not full height */
 
-    /* Create tabs */
-    lv_obj_t* tab_gen = lv_tabview_add_tab(settings_tabs, "General");
-    lv_obj_t* tab_agent = lv_tabview_add_tab(settings_tabs, tr("Agent", "Agent"));
-    lv_obj_t* tab_perm = lv_tabview_add_tab(settings_tabs, "Permissions");
-    lv_obj_t* tab_model = lv_tabview_add_tab(settings_tabs, "Model");
-    lv_obj_t* tab_log = lv_tabview_add_tab(settings_tabs, tr("日志", "Log"));
-    lv_obj_t* tab_ff = lv_tabview_add_tab(settings_tabs, tr("开关", "Feature"));
-    lv_obj_t* tab_trace = lv_tabview_add_tab(settings_tabs, tr("追踪", "Tracing"));
-    lv_obj_t* tab_kb = lv_tabview_add_tab(settings_tabs, tr("知识库", "KB"));
-    lv_obj_t* tab_about = lv_tabview_add_tab(settings_tabs, "About");
+    /* Create IA-aligned tabs (C1~C4) */
+    lv_obj_t* tab_c1 = lv_tabview_add_tab(settings_tabs, tr("C1 开始使用", "C1 Getting Started"));
+    lv_obj_t* tab_c2 = lv_tabview_add_tab(settings_tabs, tr("C2 对话任务", "C2 Chat/Task"));
+    lv_obj_t* tab_c3 = lv_tabview_add_tab(settings_tabs, tr("C3 Agent", "C3 Agent"));
+    lv_obj_t* tab_c4 = lv_tabview_add_tab(settings_tabs, tr("C4 诊断系统", "C4 Diagnostics"));
 
-    /* Build each tab */
-    build_general_tab(tab_gen);
-    build_agent_tab(tab_agent);
-    build_permissions_tab(tab_perm);
-    build_model_tab(tab_model);
-    build_log_tab(tab_log);
-    build_feature_tab(tab_ff);
-    build_tracing_tab(tab_trace);
-    build_kb_tab(tab_kb);
-    build_about_tab(tab_about);
+    /* Build each center by combining existing pages */
+    build_general_tab(tab_c1);
+    build_model_tab(tab_c1);
+
+    build_c2_tab(tab_c2);
+
+    build_agent_tab(tab_c3);
+    build_permissions_tab(tab_c3);
+    build_kb_tab(tab_c3);
+
+    build_log_tab(tab_c4);
+    build_feature_tab(tab_c4);
+    build_tracing_tab(tab_c4);
+    build_about_tab(tab_c4);
 
     /* Initially hidden */
     lv_obj_add_flag(settings_panel, LV_OBJ_FLAG_HIDDEN);

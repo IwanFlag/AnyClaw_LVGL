@@ -1138,11 +1138,21 @@ int main(int argc, char* argv[]) {
 
         /* Log first iteration and every 100th to stderr (bypasses log buffer) */
         auto dt_lvt = std::chrono::duration_cast<std::chrono::milliseconds>(after_lvt - loop_start).count();
+        auto dt_wheel = std::chrono::duration_cast<std::chrono::milliseconds>(after_wheel - before_wheel).count();
+        auto dt_tray = std::chrono::duration_cast<std::chrono::milliseconds>(after_tray - before_tray).count();
+        auto dt_loop = std::chrono::duration_cast<std::chrono::milliseconds>(after_tray - loop_start).count();
+
+        /* Stall watchdog: log only when a stage blocks abnormally long. */
+        if (dt_lvt > 1500 || dt_wheel > 1500 || dt_tray > 1500 || dt_loop > 2000) {
+            LOG_W("LOOP", "UI stall detected: loop=%lldms lvt=%lldms wheel=%lldms tray=%lldms count=%d",
+                  (long long)dt_loop, (long long)dt_lvt, (long long)dt_wheel, (long long)dt_tray, loop_count);
+        }
+
         if (loop_count == 1 || loop_count % 100 == 0) {
             fprintf(stderr, "[LOOP] #%d lvt=%lldms wheel=%lldms tray=%lldms\n",
                     loop_count, (long long)dt_lvt,
-                    (long long)std::chrono::duration_cast<std::chrono::milliseconds>(after_wheel - before_wheel).count(),
-                    (long long)std::chrono::duration_cast<std::chrono::milliseconds>(after_tray - before_tray).count());
+                    (long long)dt_wheel,
+                    (long long)dt_tray);
             fflush(stderr);
         }
         if (loop_count == 10) {

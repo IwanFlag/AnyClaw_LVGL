@@ -8089,8 +8089,11 @@ static void lang_toggle_cb(lv_event_t* e) {
 }
 
 void app_refresh_status() {
-    OpenClawInfo info = app_detect_openclaw();
-    ClawStatus status = app_check_status(info);
+    ClawStatus status = ClawStatus::Checking;
+    if (!health_try_get_last_status(&status)) {
+        OpenClawInfo info = app_detect_openclaw();
+        status = app_check_status(info);
+    }
 
     /* Update status text (small dim, next to LED) */
     if (status_label) {

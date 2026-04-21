@@ -19,6 +19,8 @@ static HealthStatusCallback g_callback = nullptr;
 static int g_httpFailCount = 0;
 static bool g_autoRestarted = false;
 static bool g_firstPoll = true;  /* First poll → Checking state */
+static volatile LONG g_last_status_valid = 0;
+static volatile LONG g_last_status = (LONG)ClawStatus::Checking;
 extern int g_refresh_interval_ms;  /* Configurable check interval from ui_main.cpp */
 
 /* Check if node.exe process exists */
@@ -241,6 +243,9 @@ static unsigned __stdcall health_thread(void* arg) {
         g_status_reason = reason;
 
         /* Update tray state based on status */
+        g_last_status = (LONG)newStatus;
+        g_last_status_valid = 1;
+
         switch (newStatus) {
             case ClawStatus::Ready:
                 tray_set_state(TrayState::Green);
@@ -273,6 +278,8 @@ void health_start() {
     g_httpFailCount = 0;
     g_autoRestarted = false;
     g_firstPoll = true;
+    g_last_status_valid = 1;
+    g_last_status = (LONG)ClawStatus::Checking;
 
     g_hThread = (HANDLE)_beginthreadex(nullptr, 0, health_thread, nullptr, 0, nullptr);
     if (!g_hThread) {
@@ -295,4 +302,11 @@ void health_stop() {
 
 void health_set_callback(HealthStatusCallback cb) {
     g_callback = cb;
+}
+
+bool health_try_get_last_status(ClawStatus* out_status) {
+    if (!out_status) return false;
+    if (!g_last_status_valid) return false;
+    *out_status = (ClawStatus)g_last_status;
+    return true;
 }
