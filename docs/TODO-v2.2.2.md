@@ -149,9 +149,10 @@ C1 控制栏   ████████████ 100%  ✅ (origin/main 981f4
 C2 左NAV    ████████████ 100%  ✅ (origin/main 981f4bf)
 C3 分隔条   ████████████ 100%  ✅ (origin/main 981f4bf, 像素验证通过)
 C4-C8      ⏭️  v2.3 规划，跳过
-编译打包    ████████████ 100%  ✅ (build PASSED, exe 运行正常)
-版本号     ████████████ 100%  ✅ v2.2.1 → v2.2.11 (ui_main.cpp:8602)
-模型搜索    ████████████ 100%  ✅ build_model_tab 加搜索过滤输入框 (ui_settings.cpp)
+| 文档同步    ████████████ 100%  ✅ PRD §3/§4.7/§5/Design §16 控制行描述对齐
+| 编译打包    ████████████ 100%  ✅ (build PASSED, exe 运行正常)
+| 版本号      ████████████ 100%  ✅ v2.2.1 → v2.2.11 (ui_main.cpp:8602)
+| 模型搜索    ████████████ 100%  ✅ build_model_tab 加搜索过滤输入框 (ui_settings.cpp)
 ```
 
 ---
@@ -159,6 +160,9 @@ C4-C8      ⏭️  v2.3 规划，跳过
 ## 日志
 
 ```
-[3d78fa5] feat: control bar reorder [Agent▼][Report][AI行为▼], nav bottom toggle, Last Report
-[da8ca7d] docs: update Design.md v2.2.2
+[d9a8c5a] feat: control bar reorder + nav bottom toggle (C1+C2)
+[5ec1c75] feat: remove splitter divider (C3)
+[981f4bf] fix: restore dropdowns, tray pump timing
+[d8a058a] feat: version v2.2.11 + model search filter
+[1771142] docs: sync PRD/Design control row to match code
 ```
