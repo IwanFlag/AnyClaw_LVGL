@@ -56,6 +56,10 @@ static const lv_font_t* FONT(int base_px) {
 
 /* Use app.h declaration for app_get_cjk_font() */
 #define CJK_FONT (app_get_cjk_font() ? app_get_cjk_font() : NULL)
+#define CJK_FONT_SMALL (app_get_cjk_font() ? app_get_cjk_font() : FONT(12))
+
+/* Forward declaration: tr() is used before its definition in this file. */
+static const char* tr(const char* cn, const char* en);
 
 /* Log buffer accessors from ui_main.cpp */
 extern int  ui_log_get_count();
@@ -1235,7 +1239,7 @@ static void build_general_tab(lv_obj_t* tab) {
             lv_obj_t* dd = (lv_obj_t*)lv_event_get_user_data(e);
             if (!dd) return;
             lv_dropdown_set_selected(dd, (uint16_t)sel);
-            lv_event_send(dd, LV_EVENT_VALUE_CHANGED, nullptr);
+            lv_obj_send_event(dd, LV_EVENT_VALUE_CHANGED, nullptr);
         }, LV_EVENT_CLICKED, theme_dd);
         lv_obj_t* l = lv_label_create(b);
         lv_label_set_text(l, txt);

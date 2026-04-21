@@ -153,7 +153,6 @@ extern const lv_font_t lv_font_source_han_sans_sc_14_cjk;
 #define LV_SDL_FULLSCREEN        0
 #define LV_SDL_DIRECT_EXIT       1
 #define LV_SDL_ACCELERATED       1
-#define LV_SDL_USE_EGL           1
 #define LV_SDL_MOUSEWHEEL_MODE_ENCODER  0
 #define LV_SDL_MOUSEWHEEL_MODE_CROWN    1
 #define LV_SDL_MOUSEWHEEL_MODE          LV_SDL_MOUSEWHEEL_MODE_CROWN

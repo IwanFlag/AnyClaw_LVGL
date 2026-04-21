@@ -979,6 +979,17 @@ static void work_cron_enable_cb(lv_event_t* e);
 static void work_cron_disable_cb(lv_event_t* e);
 static void work_cron_delete_cb(lv_event_t* e);
 static lv_obj_t* create_dialog(lv_obj_t* parent, const char* title, int w, int h, lv_obj_t** out_overlay);
+static void work_add_step_card(const char* action, const char* detail, bool done, bool write_op);
+static void work_append_md_block(const char* title, const char* text);
+
+/* Forward declarations for globals used by config persistence before their definitions. */
+static bool g_work_chat_collapsed = false;
+static bool g_work_chat_collapsed_pref = false;
+static bool g_c2_dual_result = true;
+static bool g_wizard_leader_mode = true;
+static Runtime g_wizard_active_runtime = Runtime::OpenClaw;
+static bool g_wizard_hermes_enabled = false;
+static char g_wizard_claude_code_path[260] = {0};
 
 /* Escape a string for JSON (handles \, ", newlines) */
 static std::string json_escape(const char* s) {
@@ -1975,8 +1986,6 @@ static lv_obj_t* mode_lbl_work_chat_state = nullptr;
 static lv_obj_t* mode_ta_work_chat_feed = nullptr;
 static lv_obj_t* mode_ta_work_chat_input = nullptr;
 static lv_obj_t* mode_btn_work_chat_toggle = nullptr;
-static bool g_work_chat_collapsed = false;
-static bool g_work_chat_collapsed_pref = false;
 static int g_work_step_stream_h = 160;
 static int g_work_output_h = 180;
 static lv_obj_t* mode_ta_lan_host = nullptr;
@@ -2091,7 +2100,6 @@ static lv_obj_t* btn_upload_widget = nullptr; /* Upload button */
 static lv_obj_t* btn_voice_widget = nullptr; /* Voice mode quick button */
 static lv_obj_t* btn_work_widget = nullptr; /* Send-as-task quick button */
 static lv_obj_t* ctrl_btn_dual_view = nullptr;
-static bool g_c2_dual_result = true;
 static constexpr int CHAT_ACTION_BTN_BASE = 40;
 static constexpr int CHAT_ACTION_BTN_MARGIN = 6;
 static constexpr int CHAT_ACTION_BTN_GAP = 6;
@@ -6601,6 +6609,7 @@ static void stream_timer_cb(lv_timer_t* timer) {
             work_add_step_card("模型输出完成", "结果已写入 Output Area", true, false);
             g_work_waiting_ai = false;
             g_work_last_prompt[0] = '\0';
+            c2_refresh_work_chat_state_label();
         }
         execute_ai_ui_action_if_any(stream_snapshot);
         if (mode_ta_work_chat_feed && stream_snapshot[0]) {
@@ -9892,10 +9901,6 @@ static int g_wizard_model_sel = 0;
 static char g_wizard_model_name[128] = {0};  /* Stored model name string (survives dropdown deletion) */
 static char g_wizard_nickname[128] = {0};
 static int g_wizard_tz_sel = 4;          /* timezone index, default Asia/Shanghai */
-static bool g_wizard_leader_mode = true;
-static Runtime g_wizard_active_runtime = Runtime::OpenClaw;
-static bool g_wizard_hermes_enabled = false;
-static char g_wizard_claude_code_path[260] = {0};
 static bool g_wiz_im_tg_connected = false;
 static bool g_wiz_im_discord_connected = false;
 static bool g_wiz_im_whatsapp_connected = false;
