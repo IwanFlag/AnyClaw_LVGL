@@ -1344,6 +1344,8 @@ void save_theme_config() {
         f << "  \"proactive_summary_enabled\": " << (g_proactive_summary_enabled ? 1 : 0) << ",\n";
         f << "  \"proactive_idle_threshold_minutes\": " << g_proactive_idle_threshold_minutes << ",\n";
         f << "  \"work_show_advanced\": " << (g_work_show_advanced ? 1 : 0) << ",\n";
+        f << "  \"c2_dual_result\": " << (g_c2_dual_result ? 1 : 0) << ",\n";
+        f << "  \"work_chat_collapsed\": " << (g_work_chat_collapsed_pref ? 1 : 0) << ",\n";
         f << "  \"profile_user_name\": \"" << json_escape(g_profile_user_name) << "\",\n";
         f << "  \"profile_user_role\": \"" << json_escape(g_profile_user_role) << "\",\n";
         f << "  \"profile_user_persona\": \"" << json_escape(g_profile_user_persona) << "\",\n";
@@ -1481,6 +1483,11 @@ void load_theme_config() {
     if (pit >= 5 && pit <= 240) g_proactive_idle_threshold_minutes = pit;
     int wsa = json_extract_int(content.c_str(), "work_show_advanced", -1);
     if (wsa >= 0) g_work_show_advanced = (wsa == 1);
+    int c2dr = json_extract_int(content.c_str(), "c2_dual_result", -1);
+    if (c2dr >= 0) g_c2_dual_result = (c2dr == 1);
+    int wcc = json_extract_int(content.c_str(), "work_chat_collapsed", -1);
+    if (wcc >= 0) g_work_chat_collapsed_pref = (wcc == 1);
+    g_work_chat_collapsed = g_c2_dual_result ? false : g_work_chat_collapsed_pref;
     if (g_llm_access_mode == LLM_DIRECT_API) {
         /* User requested Direct API mode to be paused for now. */
         g_llm_access_mode = LLM_GATEWAY;
@@ -1969,6 +1976,7 @@ static lv_obj_t* mode_ta_work_chat_feed = nullptr;
 static lv_obj_t* mode_ta_work_chat_input = nullptr;
 static lv_obj_t* mode_btn_work_chat_toggle = nullptr;
 static bool g_work_chat_collapsed = false;
+static bool g_work_chat_collapsed_pref = false;
 static int g_work_step_stream_h = 160;
 static int g_work_output_h = 180;
 static lv_obj_t* mode_ta_lan_host = nullptr;
@@ -3705,17 +3713,58 @@ static void c2_refresh_dual_view_button() {
     lv_label_set_text(lbl, g_c2_dual_result ? tr({"Dual: ON", "双结果: 开"}) : tr({"Dual: OFF", "双结果: 关"}));
 }
 
+static void c2_refresh_work_chat_toggle_button() {
+    if (!mode_btn_work_chat_toggle) return;
+    lv_obj_t* lbl = lv_obj_get_child(mode_btn_work_chat_toggle, 0);
+    if (lbl) {
+        if (g_c2_dual_result) lv_label_set_text(lbl, "=");
+        else lv_label_set_text(lbl, g_work_chat_collapsed ? ">" : "<");
+    }
+    if (g_c2_dual_result) lv_obj_add_state(mode_btn_work_chat_toggle, LV_STATE_DISABLED);
+    else lv_obj_clear_state(mode_btn_work_chat_toggle, LV_STATE_DISABLED);
+}
+
+static void c2_set_work_state_label(const I18n& i18n_text) {
+    if (!mode_lbl_work_chat_state) return;
+    lv_label_set_text(mode_lbl_work_chat_state, tr(i18n_text));
+}
+
+static void c2_refresh_work_chat_state_label() {
+    if (!mode_lbl_work_chat_state) return;
+    if (g_work_waiting_ai) {
+        c2_set_work_state_label({"State: executing task", "状态：正在执行任务"});
+    } else if (g_c2_dual_result) {
+        c2_set_work_state_label({"State: dual-result pinned", "状态：双结果固定"});
+    } else {
+        c2_set_work_state_label(g_work_chat_collapsed
+            ? I18n{"State: collapsed", "状态：已折叠"}
+            : I18n{"State: ready", "状态：就绪"});
+    }
+}
+
 static void c2_apply_work_panel_policy() {
     if (!mode_work_chat_panel) return;
     if (g_c2_dual_result) {
         g_work_chat_collapsed = false;
         if (mode_ta_work_chat_feed) lv_obj_clear_flag(mode_ta_work_chat_feed, LV_OBJ_FLAG_HIDDEN);
         if (mode_ta_work_chat_input) lv_obj_clear_flag(mode_ta_work_chat_input, LV_OBJ_FLAG_HIDDEN);
-        if (mode_btn_work_chat_toggle) {
-            lv_obj_t* lbl = lv_obj_get_child(mode_btn_work_chat_toggle, 0);
-            if (lbl) lv_label_set_text(lbl, "=");
+    } else {
+        if (g_work_chat_collapsed) {
+            if (mode_ta_work_chat_feed) lv_obj_add_flag(mode_ta_work_chat_feed, LV_OBJ_FLAG_HIDDEN);
+            if (mode_ta_work_chat_input) lv_obj_add_flag(mode_ta_work_chat_input, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            if (mode_ta_work_chat_feed) lv_obj_clear_flag(mode_ta_work_chat_feed, LV_OBJ_FLAG_HIDDEN);
+            if (mode_ta_work_chat_input) lv_obj_clear_flag(mode_ta_work_chat_input, LV_OBJ_FLAG_HIDDEN);
         }
     }
+    c2_refresh_work_chat_toggle_button();
+    c2_refresh_work_chat_state_label();
+}
+
+static void c2_commit_work_panel_policy(bool persist_pref) {
+    c2_apply_work_panel_policy();
+    relayout_panels();
+    if (persist_pref) save_theme_config();
 }
 
 static void c2_mirror_prompt_to_work(const char* text) {
@@ -3729,14 +3778,21 @@ static void c2_mirror_prompt_to_work(const char* text) {
         lv_textarea_add_text(mode_ta_work_chat_feed, "\n[Unified] ");
         lv_textarea_add_text(mode_ta_work_chat_feed, text);
     }
-    if (mode_lbl_work_chat_state) lv_label_set_text(mode_lbl_work_chat_state, "State: mirrored from Chat");
+    c2_refresh_work_chat_state_label();
 }
 
 static void c2_dual_view_toggle_cb(lv_event_t* e) {
     (void)e;
+    if (!g_c2_dual_result) {
+        /* Turning Dual ON: remember current collapse preference. */
+        g_work_chat_collapsed_pref = g_work_chat_collapsed;
+    }
     g_c2_dual_result = !g_c2_dual_result;
-    c2_apply_work_panel_policy();
-    relayout_panels();
+    if (!g_c2_dual_result) {
+        /* Turning Dual OFF: restore user's previous preference. */
+        g_work_chat_collapsed = g_work_chat_collapsed_pref;
+    }
+    c2_commit_work_panel_policy(true);
     c2_refresh_dual_view_button();
     ui_log("[C2] Dual result view: %s", g_c2_dual_result ? "on" : "off");
 }
@@ -3970,10 +4026,8 @@ static void update_chat_status_label(const char* text, bool busy) {
     lv_label_set_text(mode_lbl_chat_status, text ? text : "");
     const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
     lv_obj_set_style_text_color(mode_lbl_chat_status, busy ? c->accent : c->text_dim, 0);
-    if (mode_lbl_work_chat_state) {
-        lv_label_set_text_fmt(mode_lbl_work_chat_state, "State: %s", text ? text : "");
-        lv_obj_set_style_text_color(mode_lbl_work_chat_state, busy ? c->accent : c->text_dim, 0);
-    }
+    /* Keep Work state label owned by C2 panel policy to avoid Chat status overriding it. */
+    c2_refresh_work_chat_state_label();
 }
 
 static void update_work_advanced_visibility() {
@@ -5058,7 +5112,8 @@ static void relayout_panels() {
     if (g_c2_dual_result) work_chat_w = std::max(SCALE(260), content_w * 42 / 100);
     int work_primary_w = content_w - (g_c2_dual_result ? (work_chat_w + SCALE(20)) : SCALE(16));
     work_primary_w = std::max(work_primary_w, SCALE(280));
-    int profile_w = std::min(work_primary_w, SCALE(520));
+    int profile_cap = g_c2_dual_result ? SCALE(760) : SCALE(520);
+    int profile_w = std::min(work_primary_w, profile_cap);
 
     if (mode_panel_work) {
         lv_obj_set_style_pad_right(mode_panel_work, g_c2_dual_result ? (work_chat_w + SCALE(12)) : 0, 0);
@@ -5080,6 +5135,7 @@ static void relayout_panels() {
     if (mode_work_chat_panel) {
         lv_obj_set_width(mode_work_chat_panel, work_chat_w);
         if (g_c2_dual_result) lv_obj_set_height(mode_work_chat_panel, std::max(SCALE(220), content_h - SCALE(16)));
+        else lv_obj_set_height(mode_work_chat_panel, g_work_chat_collapsed ? SCALE(40) : SCALE(220));
         lv_obj_set_pos(mode_work_chat_panel, std::max(SCALE(8), content_w - work_chat_w - SCALE(8)), SCALE(8));
     }
     if (mode_ta_work_chat_feed) lv_obj_set_width(mode_ta_work_chat_feed, std::max(SCALE(16), work_chat_w - SCALE(24)));
@@ -6601,6 +6657,10 @@ static void chat_start_stream(const char* user_message) {
     }
     if (!chat_cont) {
         LOG_W("Chat", "chat_cont is null, cannot start stream");
+        if (g_work_waiting_ai) {
+            g_work_waiting_ai = false;
+            c2_refresh_work_chat_state_label();
+        }
         return;
     }
     LOG_I("Chat", "Starting stream: msg=%.60s%s", user_message,
@@ -6618,6 +6678,11 @@ static void chat_start_stream(const char* user_message) {
             chat_add_user_bubble(tr(S_NO_TOKEN));
             ui_log("[Chat] Cannot read Gateway token");
             update_chat_status_label("Gateway config missing", false);
+            if (g_work_waiting_ai) {
+                work_add_step_card("模型调用失败", "Gateway 配置缺失，任务未发出", true, false);
+                g_work_waiting_ai = false;
+                c2_refresh_work_chat_state_label();
+            }
             return;
         }
     }
@@ -6707,6 +6772,22 @@ static void chat_start_stream(const char* user_message) {
     /* Start background thread for API call */
     char* msg_copy = _strdup(user_message);
     g_stream_thread = (HANDLE)_beginthreadex(nullptr, 0, chat_api_thread, msg_copy, 0, nullptr);
+    if (!g_stream_thread) {
+        if (msg_copy) free(msg_copy);
+        g_streaming = false;
+        if (g_stream_timer) {
+            lv_timer_del(g_stream_timer);
+            g_stream_timer = nullptr;
+        }
+        update_send_button_state();
+        update_chat_status_label("Stream start failed", false);
+        if (g_work_waiting_ai) {
+            work_add_step_card("模型调用失败", "流式线程启动失败", true, false);
+            g_work_waiting_ai = false;
+            c2_refresh_work_chat_state_label();
+        }
+        return;
+    }
 
     set_ai_next_step("Calling Gateway /v1/chat/completions");
     append_ai_script_log("[request] POST /v1/chat/completions stream=true");
@@ -6993,6 +7074,7 @@ static void work_send_cb(lv_event_t* e) {
         lv_textarea_add_text(mode_ta_work_chat_feed, "\n[Work] ");
         lv_textarea_add_text(mode_ta_work_chat_feed, text);
     }
+    c2_refresh_work_chat_state_label();
     set_ai_next_step("Work mode: executing task");
     append_ai_script_log("[work] prompt submitted");
     if (g_ai_interaction_mode == AIMODE_PLAN) {
@@ -7035,31 +7117,13 @@ static void work_chat_toggle_cb(lv_event_t* e) {
     (void)e;
     if (!mode_work_chat_panel || !mode_ta_work_chat_feed || !mode_ta_work_chat_input) return;
     if (g_c2_dual_result) {
-        g_work_chat_collapsed = false;
-        if (mode_btn_work_chat_toggle) {
-            lv_obj_t* lbl = lv_obj_get_child(mode_btn_work_chat_toggle, 0);
-            if (lbl) lv_label_set_text(lbl, "=");
-        }
-        if (mode_lbl_work_chat_state) lv_label_set_text(mode_lbl_work_chat_state, "State: dual-result pinned");
-        relayout_panels();
+        c2_commit_work_panel_policy(false);
+        ui_log("[C2] Work chat collapse is locked while Dual is on");
         return;
     }
     g_work_chat_collapsed = !g_work_chat_collapsed;
-    int cw = std::max(200, RIGHT_PANEL_W - CHAT_GAP * 2);
-    lv_obj_set_width(mode_work_chat_panel, g_work_chat_collapsed ? SCALE(40) : (cw * 38 / 100));
-    lv_obj_set_height(mode_work_chat_panel, g_work_chat_collapsed ? SCALE(40) : SCALE(220));
-    if (mode_btn_work_chat_toggle) {
-        lv_obj_t* lbl = lv_obj_get_child(mode_btn_work_chat_toggle, 0);
-        if (lbl) lv_label_set_text(lbl, g_work_chat_collapsed ? ">" : "<");
-    }
-    if (g_work_chat_collapsed) {
-        lv_obj_add_flag(mode_ta_work_chat_feed, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(mode_ta_work_chat_input, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        lv_obj_clear_flag(mode_ta_work_chat_feed, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(mode_ta_work_chat_input, LV_OBJ_FLAG_HIDDEN);
-    }
-    relayout_panels();
+    g_work_chat_collapsed_pref = g_work_chat_collapsed;
+    c2_commit_work_panel_policy(true);
 }
 
 static void work_vertical_splitter_cb(lv_event_t* e) {
@@ -8072,6 +8136,7 @@ void update_ui_language() {
                 : "Type task... (Enter send, Shift+Enter newline)");
     }
     c2_refresh_dual_view_button();
+    c2_refresh_work_chat_state_label();
 
     /* Refresh status (re-renders status text + task list in new language) */
     app_refresh_status();
@@ -12729,7 +12794,6 @@ void app_ui_init() {
         mode_btn_work_chat_toggle = aw_btn_create(mode_work_chat_panel, "<", BTN_SECONDARY, SCALE(36), SCALE(30));
         lv_obj_add_event_cb(mode_btn_work_chat_toggle, work_chat_toggle_cb, LV_EVENT_CLICKED, nullptr);
         mode_lbl_work_chat_state = lv_label_create(mode_work_chat_panel);
-        lv_label_set_text(mode_lbl_work_chat_state, "State: Ready");
         lv_obj_set_style_text_color(mode_lbl_work_chat_state, c->text_dim, 0);
         lv_obj_set_style_text_font(mode_lbl_work_chat_state, CJK_FONT_SMALL, 0);
         mode_ta_work_chat_feed = aw_textarea_create(mode_work_chat_panel, "Agent summary...", false, card_w - 24, SCALE(100));
