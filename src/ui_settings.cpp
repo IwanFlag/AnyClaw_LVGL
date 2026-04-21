@@ -14,6 +14,7 @@
 #include "kb_store.h"
 #include "app_log.h"
 #include "theme.h"
+#include "runtime_mgr.h"
 #include "SDL.h"
 #include "lang.h"
 #include "lvgl.h"
@@ -112,6 +113,10 @@ static lv_obj_t* gen_workspace_status = nullptr;
 static lv_obj_t* gen_auth_email_sw = nullptr;
 static lv_obj_t* gen_auth_calendar_sw = nullptr;
 static lv_obj_t* gen_apps_scan_ta = nullptr;
+static lv_obj_t* agent_runtime_dd = nullptr;
+static lv_obj_t* agent_leader_sw = nullptr;
+static lv_obj_t* agent_hermes_sw = nullptr;
+static lv_obj_t* agent_claude_path_ta = nullptr;
 static std::vector<std::string> g_workspace_choices;
 
 static int lang_to_dropdown_index(Lang lang) {
@@ -134,9 +139,59 @@ static Lang dropdown_index_to_lang(int idx) {
 static void settings_close_cb(lv_event_t* e);
 static void settings_tab_change_cb(lv_event_t* e);
 static void build_permissions_tab(lv_obj_t* tab);
+static void build_agent_tab(lv_obj_t* tab);
 static void build_feature_tab(lv_obj_t* tab);
 static void build_tracing_tab(lv_obj_t* tab);
 static void build_kb_tab(lv_obj_t* tab);
+
+static std::string settings_config_path() {
+    const char* appdata = std::getenv("APPDATA");
+    if (!appdata || !appdata[0]) return "config.json";
+    return std::string(appdata) + "\\AnyClaw_LVGL\\config.json";
+}
+
+static bool settings_upsert_json_raw(std::string& content, const char* key, const std::string& raw_value) {
+    if (content.empty()) content = "{}\n";
+    std::string keyq = std::string("\"") + key + "\"";
+    size_t pos = content.find(keyq);
+    if (pos != std::string::npos) {
+        size_t colon = content.find(':', pos);
+        if (colon == std::string::npos) return false;
+        size_t end = content.find_first_of(",}\n", colon + 1);
+        if (end == std::string::npos) end = content.size() - 1;
+        content.replace(colon + 1, end - colon - 1, " " + raw_value);
+        return true;
+    }
+    size_t lb = content.rfind('}');
+    if (lb == std::string::npos) return false;
+    bool has_any = content.find(':') != std::string::npos;
+    std::string ins = has_any
+        ? std::string(",\n  ") + keyq + ": " + raw_value + "\n"
+        : std::string("\n  ") + keyq + ": " + raw_value + "\n";
+    content.insert(lb, ins);
+    return true;
+}
+
+static bool settings_save_agent_config(const char* agent_mode, bool leader_mode, bool hermes_enabled, const char* claude_path) {
+    std::string path = settings_config_path();
+    std::ifstream f(path);
+    std::string content;
+    if (f.is_open()) {
+        content.assign((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        f.close();
+    }
+    if (!settings_upsert_json_raw(content, CFG_KEY_AGENT_MODE, std::string("\"") + agent_mode + "\"")) return false;
+    if (!settings_upsert_json_raw(content, CFG_KEY_LEADER_MODE, leader_mode ? "1" : "0")) return false;
+    if (!settings_upsert_json_raw(content, CFG_KEY_HERMES_ENABLED, hermes_enabled ? "1" : "0")) return false;
+    std::string safe_path = claude_path ? claude_path : "";
+    std::replace(safe_path.begin(), safe_path.end(), '\\', '/');
+    if (!settings_upsert_json_raw(content, CFG_KEY_CLAUDE_PATH, std::string("\"") + safe_path + "\"")) return false;
+
+    std::ofstream out(path, std::ios::trunc);
+    if (!out.is_open()) return false;
+    out << content;
+    return true;
+}
 
 /* ═══════════════════════════════════════════════════════════════
  *  i18n helpers (single-language display)
@@ -915,6 +970,39 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_obj_t* theme_dd = ui_settings_add_theme_dropdown(tab);
     make_kv_row("Theme", theme_dd);
 
+    lv_obj_t* row_theme_btn = lv_obj_create(tab);
+    lv_obj_set_size(row_theme_btn, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_theme_btn, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_theme_btn, 0, 0);
+    lv_obj_set_style_pad_all(row_theme_btn, 0, 0);
+    lv_obj_set_style_pad_gap(row_theme_btn, 8, 0);
+    lv_obj_set_flex_flow(row_theme_btn, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_theme_btn, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row_theme_btn, LV_OBJ_FLAG_SCROLLABLE);
+
+    auto mk_theme_btn = [&](const char* txt, int idx) {
+        lv_obj_t* b = lv_button_create(row_theme_btn);
+        lv_obj_set_size(b, SCALE(98), SCALE(30));
+        lv_obj_set_style_bg_color(b, g_colors->btn_secondary, 0);
+        lv_obj_set_style_radius(b, SCALE(g_colors->radius_sm), 0);
+        lv_obj_set_user_data(b, (void*)(intptr_t)idx);
+        lv_obj_add_event_cb(b, [](lv_event_t* e) {
+            lv_obj_t* btn = (lv_obj_t*)lv_event_get_target(e);
+            int sel = (int)(intptr_t)lv_obj_get_user_data(btn);
+            lv_obj_t* dd = (lv_obj_t*)lv_event_get_user_data(e);
+            if (!dd) return;
+            lv_dropdown_set_selected(dd, (uint16_t)sel);
+            lv_event_send(dd, LV_EVENT_VALUE_CHANGED, nullptr);
+        }, LV_EVENT_CLICKED, theme_dd);
+        lv_obj_t* l = lv_label_create(b);
+        lv_label_set_text(l, txt);
+        lv_obj_set_style_text_font(l, CJK_FONT_SMALL, 0);
+        lv_obj_center(l);
+    };
+    mk_theme_btn("Matcha", 0);
+    mk_theme_btn("Peachy", 1);
+    mk_theme_btn("Mochi", 2);
+
     add_divider(tab);
 
     /* ── Security ── */
@@ -1135,6 +1223,135 @@ static void build_permissions_tab(lv_obj_t* tab) {
     perm_status_label = lv_label_create(row_btn);
     lv_label_set_text(perm_status_label, tr("未保存", "Not saved"));
     apply_hint_label(perm_status_label);
+}
+
+static void build_agent_tab(lv_obj_t* tab) {
+    apply_dark_style(tab);
+    lv_obj_set_style_pad_all(tab, 16, 0);
+    lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(tab, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_gap(tab, 10, 0);
+
+    lv_obj_t* title = lv_label_create(tab);
+    lv_label_set_text(title, tr("Agent 管理", "Agent Management"));
+    apply_section_label(title);
+
+    lv_obj_t* hint = lv_label_create(tab);
+    lv_label_set_text(hint, tr("管理 Leader 模式、运行时与可选 Agent 安装。",
+                               "Manage Leader mode, runtime and optional agent installs."));
+    apply_hint_label(hint);
+
+    lv_obj_t* row_runtime = lv_obj_create(tab);
+    lv_obj_set_size(row_runtime, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_runtime, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_runtime, 0, 0);
+    lv_obj_set_style_pad_all(row_runtime, 0, 0);
+    lv_obj_set_style_pad_gap(row_runtime, 8, 0);
+    lv_obj_set_flex_flow(row_runtime, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_runtime, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row_runtime, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* lbl_runtime = lv_label_create(row_runtime);
+    lv_label_set_text(lbl_runtime, tr("Active Runtime", "Active Runtime"));
+    lv_obj_set_style_text_font(lbl_runtime, CJK_FONT, 0);
+
+    agent_runtime_dd = lv_dropdown_create(row_runtime);
+    lv_dropdown_set_options(agent_runtime_dd, "OpenClaw\nHermes\nClaude");
+    lv_dropdown_set_selected(agent_runtime_dd, (uint16_t)((int)app_get_active_runtime()));
+    lv_obj_set_width(agent_runtime_dd, SCALE(180));
+    apply_input_style(agent_runtime_dd);
+
+    lv_obj_t* row_leader = lv_obj_create(tab);
+    lv_obj_set_size(row_leader, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_leader, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_leader, 0, 0);
+    lv_obj_set_style_pad_all(row_leader, 0, 0);
+    lv_obj_set_style_pad_gap(row_leader, 8, 0);
+    lv_obj_set_flex_flow(row_leader, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_leader, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row_leader, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* lbl_leader = lv_label_create(row_leader);
+    lv_label_set_text(lbl_leader, tr("Leader Mode", "Leader Mode"));
+    lv_obj_set_style_text_font(lbl_leader, CJK_FONT, 0);
+
+    agent_leader_sw = lv_switch_create(row_leader);
+    if (CFG_DEFAULT_LEADER_MODE) lv_obj_add_state(agent_leader_sw, LV_STATE_CHECKED);
+
+    lv_obj_t* row_hermes = lv_obj_create(tab);
+    lv_obj_set_size(row_hermes, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_hermes, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_hermes, 0, 0);
+    lv_obj_set_style_pad_all(row_hermes, 0, 0);
+    lv_obj_set_style_pad_gap(row_hermes, 8, 0);
+    lv_obj_set_flex_flow(row_hermes, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_hermes, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row_hermes, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* lbl_hermes = lv_label_create(row_hermes);
+    lv_label_set_text(lbl_hermes, tr("Hermes Enabled", "Hermes Enabled"));
+    lv_obj_set_style_text_font(lbl_hermes, CJK_FONT, 0);
+
+    agent_hermes_sw = lv_switch_create(row_hermes);
+    if (CFG_DEFAULT_HERMES_ENABLED) lv_obj_add_state(agent_hermes_sw, LV_STATE_CHECKED);
+
+    lv_obj_t* lbl_path = lv_label_create(tab);
+    lv_label_set_text(lbl_path, tr("Claude Code Path", "Claude Code Path"));
+    apply_hint_label(lbl_path);
+
+    agent_claude_path_ta = lv_textarea_create(tab);
+    lv_textarea_set_one_line(agent_claude_path_ta, true);
+    lv_textarea_set_placeholder_text(agent_claude_path_ta, "C:/Users/.../claude.exe");
+    lv_obj_set_width(agent_claude_path_ta, LV_PCT(100));
+    apply_input_style(agent_claude_path_ta);
+
+    lv_obj_t* row_btn = lv_obj_create(tab);
+    lv_obj_set_size(row_btn, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_btn, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_btn, 0, 0);
+    lv_obj_set_style_pad_all(row_btn, 0, 0);
+    lv_obj_set_style_pad_gap(row_btn, 8, 0);
+    lv_obj_set_flex_flow(row_btn, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_btn, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row_btn, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* btn_install_h = aw_btn_create(row_btn, tr("安装 Hermes", "Install Hermes"), BTN_SECONDARY, SCALE(150), SCALE(34));
+    lv_obj_add_event_cb(btn_install_h, [](lv_event_t* e) {
+        (void)e;
+        std::thread([]() {
+            bool ok = app_install_hermes("auto", nullptr, nullptr);
+            ui_log("[Settings-Agent] Hermes install %s", ok ? "ok" : "failed");
+            ui_toast(ok ? tr("Hermes 安装成功", "Hermes installed") : tr("Hermes 安装失败", "Hermes install failed"));
+        }).detach();
+    }, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* btn_install_c = aw_btn_create(row_btn, tr("安装 Claude", "Install Claude"), BTN_SECONDARY, SCALE(150), SCALE(34));
+    lv_obj_add_event_cb(btn_install_c, [](lv_event_t* e) {
+        (void)e;
+        std::thread([]() {
+            bool ok = app_install_claude_cli("auto", nullptr, nullptr);
+            ui_log("[Settings-Agent] Claude install %s", ok ? "ok" : "failed");
+            ui_toast(ok ? tr("Claude 安装成功", "Claude installed") : tr("Claude 安装失败", "Claude install failed"));
+        }).detach();
+    }, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* btn_save = aw_btn_create(row_btn, tr("保存 Agent 设置", "Save Agent Config"), BTN_PRIMARY, SCALE(180), SCALE(34));
+    lv_obj_add_event_cb(btn_save, [](lv_event_t* e) {
+        (void)e;
+        if (!agent_runtime_dd || !agent_leader_sw || !agent_hermes_sw || !agent_claude_path_ta) return;
+        Runtime rt = (Runtime)lv_dropdown_get_selected(agent_runtime_dd);
+        bool leader_mode = lv_obj_has_state(agent_leader_sw, LV_STATE_CHECKED);
+        bool hermes_enabled = lv_obj_has_state(agent_hermes_sw, LV_STATE_CHECKED);
+        const char* claude_path = lv_textarea_get_text(agent_claude_path_ta);
+        app_set_active_runtime(rt);
+        bool ok = settings_save_agent_config(
+            leader_mode ? CFG_AGENT_MODE_LEADER : CFG_AGENT_MODE_SINGLE,
+            leader_mode,
+            hermes_enabled,
+            claude_path ? claude_path : "");
+        ui_log("[Settings-Agent] Save %s (runtime=%d leader=%d hermes=%d)", ok ? "ok" : "failed", (int)rt, leader_mode ? 1 : 0, hermes_enabled ? 1 : 0);
+        ui_toast(ok ? tr("Agent 设置已保存", "Agent settings saved") : tr("Agent 设置保存失败", "Save failed"));
+    }, LV_EVENT_CLICKED, nullptr);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -2669,8 +2886,14 @@ static void build_about_tab(lv_obj_t* tab) {
                  getenv("USERPROFILE"));
         FILE* f = fopen(path, "w");
         if (f) {
+            const char* theme_name = "matcha";
+            switch (g_theme) {
+                case Theme::Peachy: theme_name = "peachy"; break;
+                case Theme::Mochi:  theme_name = "mochi"; break;
+                default:            theme_name = "matcha"; break;
+            }
             fprintf(f, "{\n  \"version\": \"2.0\",\n");
-            fprintf(f, "  \"theme\": \"dark\",\n");
+            fprintf(f, "  \"theme\": \"%s\",\n", theme_name);
             fprintf(f, "  \"language\": \"en\",\n");
             fprintf(f, "  \"refresh_interval_ms\": %d\n", g_refresh_interval_ms);
             fprintf(f, "}\n");
@@ -3220,6 +3443,7 @@ void ui_settings_init(lv_obj_t* parent) {
 
     /* Create tabs */
     lv_obj_t* tab_gen = lv_tabview_add_tab(settings_tabs, "General");
+    lv_obj_t* tab_agent = lv_tabview_add_tab(settings_tabs, tr("Agent", "Agent"));
     lv_obj_t* tab_perm = lv_tabview_add_tab(settings_tabs, "Permissions");
     lv_obj_t* tab_model = lv_tabview_add_tab(settings_tabs, "Model");
     lv_obj_t* tab_log = lv_tabview_add_tab(settings_tabs, tr("日志", "Log"));
@@ -3230,6 +3454,7 @@ void ui_settings_init(lv_obj_t* parent) {
 
     /* Build each tab */
     build_general_tab(tab_gen);
+    build_agent_tab(tab_agent);
     build_permissions_tab(tab_perm);
     build_model_tab(tab_model);
     build_log_tab(tab_log);

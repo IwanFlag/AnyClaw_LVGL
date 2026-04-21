@@ -584,7 +584,7 @@
 | **正文** (消息/内容) | body | 400 | PJS Regular | Nunito Regular | PJS Regular |
 | **强调正文** | body | 600 | PJS SemiBold | Nunito SemiBold | PJS SemiBold |
 | **Chat 消息** | body | 400 | PJS Regular | Nunito Regular | PJS Regular |
-| **Chat 消息（Mochi引用块）** | body | 400 | — | — | Lora Regular | — | — |
+| **Chat 消息（Mochi引用块）** | body | 400 | — | — | Lora Regular |
 | **按钮文字** | body | 600 | PJS SemiBold | Nunito SemiBold | PJS SemiBold |
 | **输入框文字** | body | 400 | PJS Regular | Nunito Regular | PJS Regular |
 | **输入框占位符** | body | 400 | PJS Regular | Nunito Regular | PJS Regular |
@@ -969,57 +969,81 @@ int h1_px   = font_size(FONT_H1_PCT,   WIN_H, FONT_MIN_H1);    /* 800h → 22px 
 
 ### 5.3 品牌吉祥物（大蒜 + 龙虾）
 
-品牌角色用 **PNG**，按主题换色：
+品牌角色统一使用 **PNG**，采用「body/sprout 分层」方案，便于在 LVGL 内做轻量动画：
+- `body`：蒜瓣主体（左右轻摆、跳跃）
+- `sprout`：叶茎层（独立弹跳、喷火粒子）
+- 透明底统一使用 `COLORKEY = #FF00FF`（导出后替换为 alpha）
 
-#### Matcha v1 大蒜
+#### 角色设定与风格约束
 
-| 尺寸 | 文件 | 色调 |
-|------|------|------|
-| 24px | `garlic_24_matcha.png` | 蒜瓣薄荷绿渐变，叶茎 `#3DD68C` |
-| 32px | `garlic_32_matcha.png` | 同上 |
-| 48px | `garlic_48_matcha.png` | 同上 + 高光 |
-| 96px | `garlic_96_matcha.png` | 品牌用，完整细节 |
+| 项目 | 规范 |
+|------|------|
+| 风格关键词 | 日系 kawaii、圆润 Q 弹、年轻感、治愈感 |
+| 头身比例 | 1:1（头体一体化大蒜） |
+| 表情 | 微笑眯眼 + 两团腮红 |
+| 线条 | 轮廓线粗细保持统一，避免锯齿感 |
+| 动态基线 | idle 状态下 sprout 轻微呼吸，body 稳定 |
 
-#### Peachy v2 大蒜
+#### 大蒜三主题色板（精确色值）
 
-| 尺寸 | 文件 | 色调 |
-|------|------|------|
-| 24px | `garlic_24_peachy.png` | 蒜瓣暖杏渐变，叶茎 `#FF7F50` |
-| 32px | `garlic_32_peachy.png` | 同上 |
-| 48px | `garlic_48_peachy.png` | 同上 + 暖色高光 |
-| 96px | `garlic_96_peachy.png` | 品牌用，完整细节 |
+| 部位 | 🍵 Matcha | 🍑 Peachy | 🍡 Mochi |
+|------|-----------|-----------|----------|
+| 蒜瓣主体 | `#FFFFFF → #E8F5E9` | `#FFFFFF → #FFF0E6` | `#FFFDF9 → #F5EDE4` |
+| 蒜瓣轮廓 | `#B2DFDB` | `#FFD4B8` | `#D4C4B0` |
+| 叶茎/茎 | `#3DD68C` | `#FF7F50` | `#A67B5B` |
+| 叶茎高光 | `#6EE7B7` | `#FFB347` | `#C9A96E` |
+| 腮红 | `#FFB3B3` (40%) | `#FF9F7A` (40%) | `#C4868C` (40%) |
+| 眼睛 | `#2D3748` | `#5D3A1A` | `#4A3728` |
+| 眼睛高光 | `#FFFFFF` | `#FFFFFF` | `#FFFFFF` |
 
-#### Mochi v3 大蒜
+#### 龙虾 AI 头像色板（全主题共用）
 
-| 尺寸 | 文件 | 色调 |
-|------|------|------|
-| 24px | `garlic_24_mochi.png` | 蒜瓣奶茶棕渐变，叶茎 `#A67B5B` |
-| 32px | `garlic_32_mochi.png` | 同上 |
-| 48px | `garlic_48_mochi.png` | 同上 + 暖色高光 |
-| 96px | `garlic_96_mochi.png` | 品牌用，完整细节 |
+| 部位 | 色值 |
+|------|------|
+| 身体 | `#FF6B6B → #E84545` |
+| 肚子 | `#FFE0E0` |
+| 钳子 | `#FF4757` |
+| 触须 | `#FF8787` |
+| 腮红 | `#FFB3B3` (40%) |
 
-#### 龙虾 AI 头像
+#### 文件路径与命名
 
-| 尺寸 | 文件 | 说明 |
-|------|------|------|
-| 24px | `lobster_24.png` | 聊天气泡内头像 |
-| 32px | `lobster_32.png` | 左侧面板 |
-| 48px | `lobster_48.png` | 关于页 |
+| 类型 | 路径规范 | 说明 |
+|------|---------|------|
+| 大蒜主体 | `assets/mascot/{theme}/garlic_48.png` | body 层 |
+| 大蒜叶茎 | `assets/mascot/{theme}/garlic_sprout.png` | sprout 层 |
+| AI 小头像 | `assets/icons/ai/garlic_24.png` | 通用小尺寸 |
+| 龙虾头像 | `assets/icons/ai/lobster_24.png` / `lobster_32.png` / `lobster_48.png` | 三档展示 |
 
-> 龙虾头像不按主题换色，保持品牌一致性。
+#### DPI 与尺寸策略
+
+| 尺寸 | 目标 |
+|------|------|
+| 16px | 极简轮廓（保证可辨识） |
+| 24px | 聊天气泡基础头像 |
+| 32px | 面板与列表完整形态 |
+| 48px | 标准品牌展示 |
+| 96px | 插画级细节（欢迎页/About） |
 
 ### 5.4 托盘图标
 
-大蒜+LED 合体，按主题 + 状态组合：
+大蒜 + LED 合体图标，按主题与运行状态组合：
 
 | 状态 | Matcha LED | Peachy LED | Mochi LED |
 |------|-----------|------------|-----------|
-| 空闲 | 白 `#E8ECF4` | 暖灰 `#8B7355` | 暖灰 `#B0A394` |
-| 运行中 | 薄荷绿 `#3DD68C` | 珊瑚橘 `#FF7F50` | 奶茶棕 `#A67B5B` |
-| 异常 | 红 `#FF6B6B` | 暖红 `#FF5C5C` | 砖红 `#C47070` |
-| 检测中 | 黄 `#FFBE3D` | 暖橙 `#FFB347` | 香槟金 `#C9A96E` |
+| 空闲 | `#E8ECF4` | `#8B7355` | `#B0A394` |
+| 运行中 | `#3DD68C` | `#FF7F50` | `#A67B5B` |
+| 异常 | `#FF6B6B` | `#FF5C5C` | `#C47070` |
+| 检测中 | `#FFBE3D` | `#FFB347` | `#C9A96E` |
 
-尺寸：16/20/32/48px（PNG，因托盘 API 需要位图）。
+命名规范：`assets/tray/{theme}/tray_{state}_{size}.png`
+
+示例：
+- `assets/tray/matcha/tray_active_32.png`
+- `assets/tray/peachy/tray_error_16.png`
+- `assets/tray/mochi/tray_idle_48.png`
+
+尺寸：16/20/32/48px（PNG，托盘 API 使用位图）。
 
 ### 5.5 图标层级
 
@@ -1036,6 +1060,35 @@ int h1_px   = font_size(FONT_H1_PCT,   WIN_H, FONT_MIN_H1);    /* 800h → 22px 
 | `ICON_HUGE` | 12.0% | 96px | 48px | 品牌展示 |
 
 > 示例：窗口高 1200px 时 ICON_MEDIUM = 1200 × 3.0% = 36px。
+
+### 5.6 资源生成工作流
+
+#### 工具链
+
+| 工具 | 用途 |
+|------|------|
+| `rsvg-convert` | SVG 转多尺寸 PNG |
+| `pngquant` | 有损压缩，减小包体 |
+| `optipng` | 无损优化，进一步压缩 |
+
+#### 产出流程
+
+```
+设计稿 (SVG)
+  → rsvg-convert 批量导出 16/20/24/32/48/96
+  → pngquant 质量压缩
+  → optipng 无损优化
+  → 视觉验收 + 尺寸验收 + 色值验收
+```
+
+#### 质量标准
+
+| 维度 | 标准 |
+|------|------|
+| 透明通道 | RGBA + alpha 正确，无黑边 |
+| 体积阈值 | 24px < 1KB；48px < 5KB；96px < 15KB |
+| 色值偏差 | 主题关键色偏差不超过 ±2 |
+| 可辨识性 | 16px 下仍可区分大蒜/龙虾主体特征 |
 
 ---
 

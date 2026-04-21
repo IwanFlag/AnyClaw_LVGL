@@ -1,168 +1,91 @@
-# AnyClaw LVGL v2.2.2 实现追踪
+﻿# AnyClaw 会话总计划追踪（v2.2.3）
 
-> 基于 PRD v2.2.2 + Design.md v2.2.2，Auto 模式
-
----
-
-## 文档更新
-
-| 位置 | 改动 | 状态 |
-|------|------|------|
-| Design.md UI-11/12 ASCII 图 | 移除分隔条，控制行改为 [Agent▼][Report][AI行为▼] | ✅ 已完成 |
-| Design.md §15 控制行 | 同上 | ✅ 已完成 |
-| Design.md §15 UI-22 | 更新 Agent/Report/AI行为 | ✅ 已完成 |
-| Design.md 向导 6→7 步 | Step2=Agent, Step6=Leader, Step7=个人信息 | ✅ 已完成 |
-| Design.md §12 窗口系统 | 重读完整确认无报错 | ✅ 已完成 |
+> 来源：本次会话（PRD + Design 梳理、与代码一致性校对、后续开发计划）
+> 更新时间：2026-04-22
 
 ---
 
-## 代码改动
+## 0. 目标范围
 
-### C1. 控制栏重组 — [Agent▼][Report][AI行为▼]
-
-| 子任务 | 状态 |
-|--------|------|
-| 顺序改为 Agent▼ → Report → AI行为▼ | ✅ 已完成 |
-| Agent 下拉选项改为 OpenClaw/Hermes/Claude | ✅ 已完成 |
-| 删除 AI托管 下拉 (ctrl_dd_ai_host) | ✅ 已完成 |
-| 删除 Text\|Voice 按钮 (ctrl_btn_text_voice) | ✅ 已完成 |
-| 添加 Report 按钮 | ✅ 已完成 |
-| Agent 下拉添加回调（模型联动） | ✅ 已完成(stub) |
-
-**位置：** `src/ui_main.cpp:11896-11964`
-**依赖：** C5
+- [x] G0-1 梳理并统一 PRD / Design 的产品与设计描述
+- [x] G0-2 合并 4T-07 关键设计规范到 Design
+- [ ] G0-3 按文档补齐代码实现（主题、向导、配置、设置页）
+- [ ] G0-4 修复高优先级缺陷（字体乱码、卡死、GUI 异常）
 
 ---
 
-### C2. 左 NAV 底部 Chat/Work 切换按钮
+## 1. 文档阶段（已完成）
 
-| 子任务 | 状态 |
-|--------|------|
-| nav_session 改为全局变量 + 点击回调 | ✅ 已完成 |
-| 初始图标：Chat=⇢ / Work=◂ | ✅ 已完成 |
-| apply_mode_switch_visuals() 更新图标 | ✅ 已完成 |
-| 颜色：accent（当前模式）/ dim（另一个） | ✅ 已完成 |
+### 1.1 PRD.md
 
-**位置：** `src/ui_main.cpp:11694-11711` + `apply_mode_switch_visuals()`
+- [x] P1-1 Step 2 增加 Agent 安装卡片交互细节（OpenClaw/Hermes/Claude）
+- [x] P1-2 Step 6 改为可跳过（Skip -> 单 Agent）
+- [x] P1-3 左导航宽度统一为 窗口宽 x 6%，最小 36px
+- [x] P1-4 左侧面板统一为 可用宽 x 25%，最小 160px
+- [x] P1-5 Settings 增加 Agent Tab 描述
 
----
+### 1.2 Design.md
 
-### C3. Work 模式 "Open Last Boot Report" → "Last Report"
-
-| 子任务 | 状态 |
-|--------|------|
-| 行 12044 文字修改 | ✅ 已完成 |
-
----
-
-### C2. 左 NAV 底部 Chat/Work 切换按钮
-
-| 子任务 | 状态 |
-|--------|------|
-| 查找左 NAV 代码位置 | 🔍 待完成 |
-| 单按钮图标替换会话图标 | 🔍 待完成 |
-| hover tooltip 显示模式 | 🔍 待完成 |
-| 切换逻辑 < 150ms | 🔍 待完成 |
-
-**PRD：** 左 NAV 底部，单按钮，替换会话图标位置
+- [x] D1-1 统一为三套主打主题（Matcha/Peachy/Mochi）
+- [x] D1-2 修复章节编号与残留冲突（含旧主题残留）
+- [x] D1-3 字体规范统一到 Noto Sans SC
+- [x] D1-4 NAV_W/LEFT_PANEL_W 数值对齐代码（6%、341px）
+- [x] D1-5 UI-45 主题按钮更新为 Matcha/Peachy/Mochi
+- [x] D1-6 UI-52~54 更新为三套主打主题
+- [x] D1-7 重写 5.3 吉祥物规范（含三主题精确色板）
+- [x] D1-8 完善 5.4 托盘图标（含 Mochi + 命名规范）
+- [x] D1-9 新增 5.6 资源生成工作流（rsvg-convert/pngquant/optipng）
+- [x] D1-10 修复 3.3 表格列错误（Mochi 引用行）
 
 ---
 
-### C3. 移除分隔条
+## 2. 代码补齐阶段（进行中）
 
-| 子任务 | 状态 |
-|--------|------|
-| 查找分隔线代码 | 🔍 待完成 |
+### 2.1 主题系统
 
-**PRD：** 左 NAV 与内容区之间无分隔条
+- [x] C2-1 `src/theme.h` 主题枚举收敛为 Matcha/Peachy/Mochi
+- [x] C2-2 全量更新主题分支与映射（移除 Dark/Light/Classic）
+- [x] C2-3 验证配置 theme 字段与 UI 显示一致
 
----
+### 2.2 向导系统（7 步）
 
-### C4. 左侧面板自动刷新（2s）
+- [x] C2-4 `src/ui_main.cpp` `WIZARD_STEPS: 6 -> 7`
+- [x] C2-5 补齐 Step short names / titles 的第 6 步（Leader）
+- [x] C2-6 Step 2 增加 Hermes/Claude 安装卡片 UI
+- [x] C2-7 新增 Step 6 Leader 模式确认 + Skip 降级逻辑
+- [x] C2-8 向导状态写入 config 字段（agent_mode/leader_mode 等）
 
-| 子任务 | 状态 |
-|--------|------|
-| 确认 Session/Cron 列表是否已有 2s 刷新 | 🔍 待完成 |
+### 2.3 配置与设置页
 
-**PRD：** Chat 模式左侧面板 2s 间隔自动刷新
-
----
-
-### C5. Agent 下拉模型联动
-
-| 子任务 | 状态 |
-|--------|------|
-| 定义 AgentType 枚举 | 🔍 待完成 |
-| 每个 Agent 对应模型配置 | 🔍 待完成 |
-| 切换 Agent 时联动切换模型 | 🔍 待完成 |
-
-**依赖：** C1
+- [x] C2-9 `src/app_config.h` 增加 agent_mode/leader_mode/hermes_enabled/claude_code_path/active_runtime
+- [x] C2-10 `src/ui_settings.cpp` 增加 Agent 管理 Tab
+- [x] C2-11 General Tab 主题按钮与文档一致（三主题）
 
 ---
 
-### C6. Runtime Agent 安装向导 (Step 2)
+## 3. 缺陷修复阶段（待执行）
 
-| 子任务 | 状态 |
-|--------|------|
-| 查找向导代码位置 | 🔍 待完成 |
-| Step 2 改为 Agent 安装界面 | 🔍 待完成 |
+### 3.1 高优先级
 
-**PRD：** OpenClaw 必须 / Hermes 可选 / Claude 可选
+- [ ] B3-1 字体乱码：检查 CJK fallback 链与字体加载覆盖
+- [ ] B3-2 App 卡死：排查主线程阻塞（openclaw_mgr / async_task）
 
----
+### 3.2 中优先级
 
-### C7. Leader 模式确认 (Step 6)
-
-| 子任务 | 状态 |
-|--------|------|
-| 新增 Step 6 向导页面 | 🔍 待完成 |
-
-**PRD：** 默认开启，Skip 切换单 Agent 模式
+- [ ] B3-3 GUI 异常：布局、hover、流式渲染稳定性修复
 
 ---
 
-### C8. Boot Check 自动运行
+## 4. 验证与验收（待执行）
 
-| 子任务 | 状态 |
-|--------|------|
-| 确认启动时自动跑 | 🔍 待完成 |
-
-**PRD：** 从控制行移除，启动自动跑
-
----
-
-## 编译验证
-
-| 步骤 | 命令 | 状态 |
-|------|------|------|
-| 增量编译 | `pwsh -File build.ps1` | 🔍 待测试 |
-| 完整重建 | 删除 build 目录后编译 | 🔍 待测试 |
-| exe 启动截图验证 | — | 🔍 待测试 |
-| Git push | — | 🔍 待完成 |
+- [ ] V4-1 文档一致性复核（PRD <-> Design <-> 代码）
+- [ ] V4-2 编译验证（MSVC 构建通过）
+- [ ] V4-3 运行验证（向导7步、主题切换、设置页Tab）
+- [ ] V4-4 回归验证（中文显示、托盘状态、会话流程）
 
 ---
 
-## 进度总览
+## 5. 当前结论
 
-```
-C1 控制栏   ████████████ 100%  ✅ (origin/main 981f4bf)
-C2 左NAV    ████████████ 100%  ✅ (origin/main 981f4bf)
-C3 分隔条   ████████████ 100%  ✅ (origin/main 981f4bf, 像素验证通过)
-C4-C8      ⏭️  v2.3 规划，跳过
-| 文档同步    ████████████ 100%  ✅ PRD §3/§4.7/§5/Design §16 控制行描述对齐
-| 编译打包    ████████████ 100%  ✅ (build PASSED, exe 运行正常)
-| 版本号      ████████████ 100%  ✅ v2.2.1 → v2.2.11 (ui_main.cpp:8602)
-| 模型搜索    ████████████ 100%  ✅ build_model_tab 加搜索过滤输入框 (ui_settings.cpp)
-```
-
----
-
-## 日志
-
-```
-[d9a8c5a] feat: control bar reorder + nav bottom toggle (C1+C2)
-[5ec1c75] feat: remove splitter divider (C3)
-[981f4bf] fix: restore dropdowns, tray pump timing
-[d8a058a] feat: version v2.2.11 + model search filter
-[1771142] docs: sync PRD/Design control row to match code
-```
+- [x] 文档阶段已完成，可作为后续开发基线
+- [ ] 代码阶段未开始（按本清单从 2.1 顺序推进）

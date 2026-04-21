@@ -116,7 +116,7 @@ struct ThemeFonts {
     lv_font_t* freetype_title; /* FreeType title font (may be NULL) */
 };
 
-enum class Theme { Dark, Peachy, Classic, Mochi, Light };
+enum class Theme { Matcha = 0, Peachy = 1, Mochi = 2 };
 
 extern const ThemeColors* g_colors;
 extern ThemeFonts g_theme_fonts;

@@ -268,4 +268,25 @@
 #define LP_ROW_GAP          4
 #define NAV_QUICK_AREA_H_PCT NAV_QUICK_H_PCT
 
+/* ╔═══════════════════════════════════════════════════════════╗
+ * ║  Agent Mode Config Keys / Defaults                        ║
+ * ╚═══════════════════════════════════════════════════════════╝ */
+#define CFG_KEY_AGENT_MODE      "agent_mode"
+#define CFG_KEY_LEADER_MODE     "leader_mode"
+#define CFG_KEY_HERMES_ENABLED  "hermes_enabled"
+#define CFG_KEY_CLAUDE_PATH     "claude_code_path"
+#define CFG_KEY_ACTIVE_RUNTIME  "active_runtime"
+
+#define CFG_AGENT_MODE_LEADER   "leader"
+#define CFG_AGENT_MODE_SINGLE   "single"
+#define CFG_RUNTIME_OPENCLAW    "openclaw"
+#define CFG_RUNTIME_HERMES      "hermes"
+#define CFG_RUNTIME_CLAUDE      "claude"
+
+#define CFG_DEFAULT_LEADER_MODE    1
+#define CFG_DEFAULT_HERMES_ENABLED 0
+#define CFG_DEFAULT_CLAUDE_PATH    ""
+#define CFG_DEFAULT_AGENT_MODE     CFG_AGENT_MODE_LEADER
+#define CFG_DEFAULT_ACTIVE_RUNTIME CFG_RUNTIME_OPENCLAW
+
 #endif /* APP_CONFIG_H */

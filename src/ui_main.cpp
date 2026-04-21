@@ -44,6 +44,7 @@
 #include "output_renderer.h"
 #include "workspace.h"
 #include "permissions.h"
+#include "runtime_mgr.h"
 #include "cjk_font_data.h"
 #include "markdown.h"
 #include "widgets/aw_form.h"
@@ -156,11 +157,9 @@ static void init_system_font() {
  *  font data as universal fallback.
  *
  *  Font files expected per theme (see Design §3.4):
- *    Matcha:  PlusJakartaSans-{Regular,SemiBold,Bold}.ttf + HarmonyOS_Sans_SC_*.otf
+ *    Matcha:  Inter-*.ttf + SourceHanSansSC-*.otf
  *    Peachy:  Nunito-{Regular,Bold}.ttf + HarmonyOS_Sans_SC_*.otf
  *    Mochi:   PlusJakartaSans-*.ttf + Lora-*.ttf + 思源宋体_SC_*.otf
- *    Dark:    Inter-*.ttf + 思源黑体_SC_*.otf
- *    Light:   Inter-*.ttf + HarmonyOS_Sans_SC_*.otf
  *    All:     JetBrainsMono-Regular.ttf
  * ═══════════════════════════════════════════════════════════════ */
 
@@ -223,7 +222,7 @@ struct ThemeFontPaths {
 };
 
 static const ThemeFontPaths FONT_PATHS[] = {
-    /* Theme::Dark — Inter + 思源黑体 SC */
+        /* Theme::Matcha — Inter + 思源黑体 SC */
     { "assets/fonts/Inter-Regular.ttf", "assets/fonts/Inter-SemiBold.ttf",
       "assets/fonts/Inter-Bold.ttf", "assets/fonts/SourceHanSansSC-Regular.otf",
       "assets/fonts/SourceHanSansSC-Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
@@ -231,18 +230,10 @@ static const ThemeFontPaths FONT_PATHS[] = {
     { "assets/fonts/Nunito-Regular.ttf", "assets/fonts/Nunito-Bold.ttf",
       "assets/fonts/Nunito-Bold.ttf", "assets/fonts/HarmonyOS_Sans_SC_Regular.otf",
       "assets/fonts/HarmonyOS_Sans_SC_Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
-    /* Theme::Classic — Inter + 思源黑体 SC (same as Dark) */
-    { "assets/fonts/Inter-Regular.ttf", "assets/fonts/Inter-SemiBold.ttf",
-      "assets/fonts/Inter-Bold.ttf", "assets/fonts/SourceHanSansSC-Regular.otf",
-      "assets/fonts/SourceHanSansSC-Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
     /* Theme::Mochi — PJS + Lora + 思源宋体 SC */
     { "assets/fonts/PlusJakartaSans-Regular.ttf", "assets/fonts/PlusJakartaSans-SemiBold.ttf",
       "assets/fonts/Lora-Bold.ttf", "assets/fonts/HarmonyOS_Sans_SC_Regular.otf",
       "assets/fonts/SourceHanSerifSC-Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
-    /* Theme::Light — Inter + HarmonyOS Sans SC */
-    { "assets/fonts/Inter-Regular.ttf", "assets/fonts/Inter-SemiBold.ttf",
-      "assets/fonts/Inter-Bold.ttf", "assets/fonts/HarmonyOS_Sans_SC_Regular.otf",
-      "assets/fonts/HarmonyOS_Sans_SC_Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
 };
 
 void init_theme_fonts(Theme theme) {
@@ -257,7 +248,7 @@ void init_theme_fonts(Theme theme) {
     static const int SZ_CODE    = 12;
 
     int ti = (int)theme;
-    if (ti < 0 || ti > 4) ti = 0;
+    if (ti < 0 || ti > 2) ti = 0;
     const ThemeFontPaths& paths = FONT_PATHS[ti];
 
     /* Create embedded fallback for when theme files are not available */
@@ -493,7 +484,7 @@ static lv_color_t blend_with_tint(lv_color_t base, lv_color_t tint) {
 }
 
 /* ═══ Theme System (P2-4) ═══ */
-Theme g_theme = Theme::Dark;
+Theme g_theme = Theme::Matcha;
 static const ThemeColors THEME_DARK = {
     /* ══ 🍵 Matcha v1 (default) ══ */
     /* ── Backgrounds ── */
@@ -1364,6 +1355,15 @@ void save_theme_config() {
         f << "  \"gemma_install_opt_in\": " << (g_gemma_install_opt_in ? 1 : 0) << ",\n";
         f << "  \"gemma_model_mask\": " << g_gemma_model_mask << ",\n";
         f << "  \"remote_guard_armed\": " << (g_remote_guard_armed ? 1 : 0) << ",\n";
+                f << "  \"agent_mode\": \"" << (g_wizard_leader_mode ? "leader" : "single") << "\",\n";
+                f << "  \"leader_mode\": " << (g_wizard_leader_mode ? 1 : 0) << ",\n";
+                f << "  \"active_runtime\": \""
+                    << ((g_wizard_active_runtime == Runtime::Hermes) ? "hermes"
+                            : (g_wizard_active_runtime == Runtime::Claude) ? "claude"
+                            : "openclaw")
+                    << "\",\n";
+                f << "  \"hermes_enabled\": " << (g_wizard_hermes_enabled ? 1 : 0) << ",\n";
+                f << "  \"claude_code_path\": \"" << json_escape(g_wizard_claude_code_path) << "\",\n";
         f << "  \"app_auth_email\": " << (g_app_auth_email ? 1 : 0) << ",\n";
         f << "  \"app_auth_calendar\": " << (g_app_auth_calendar ? 1 : 0) << ",\n";
         f << "  \"model_name\": \"" << json_escape(g_selected_model) << "\",\n";
@@ -1382,14 +1382,30 @@ void load_theme_config() {
 
     /* FIX 1: Use robust JSON extraction instead of hand-written lambda */
     int theme = json_extract_int(content.c_str(), "theme", -1);
-    if (theme >= 0 && theme <= 4) {
-        g_theme = (Theme)theme;
+    if (theme >= 0) {
+        /* Backward compatibility for legacy 5-theme config:
+         * 0=Dark -> Matcha, 1=Peachy -> Peachy, 2=Classic -> Matcha,
+         * 3=Mochi -> Mochi, 4=Light -> Peachy */
+        switch (theme) {
+            case 0:
+            case 2:
+                g_theme = Theme::Matcha;
+                break;
+            case 1:
+            case 4:
+                g_theme = Theme::Peachy;
+                break;
+            case 3:
+                g_theme = Theme::Mochi;
+                break;
+            default:
+                break;
+        }
+
         switch (g_theme) {
-            case Theme::Dark:    g_colors = &THEME_DARK; break;
-            case Theme::Peachy:   g_colors = &THEME_PEACHY; break;
-            case Theme::Classic: g_colors = &THEME_CLASSIC; break;
-            case Theme::Mochi:   g_colors = &THEME_MOCHI; break;
-            case Theme::Light:   g_colors = &THEME_LIGHT; break;
+            case Theme::Matcha: g_colors = &THEME_DARK; break;
+            case Theme::Peachy: g_colors = &THEME_PEACHY; break;
+            case Theme::Mochi:  g_colors = &THEME_MOCHI; break;
         }
     }
     /* Language forced to English — do not restore from config file */
@@ -1483,6 +1499,22 @@ void load_theme_config() {
     if (gmm >= 0 && gmm <= 7) g_gemma_model_mask = gmm;
     int rg = json_extract_int(content.c_str(), "remote_guard_armed", -1);
     if (rg >= 0) g_remote_guard_armed = (rg == 1);
+    int lm2 = json_extract_int(content.c_str(), "leader_mode", -1);
+    if (lm2 >= 0) g_wizard_leader_mode = (lm2 == 1);
+    int he = json_extract_int(content.c_str(), "hermes_enabled", -1);
+    if (he >= 0) g_wizard_hermes_enabled = (he == 1);
+    char mode_buf[32] = {0};
+    if (json_extract_string(content.c_str(), "agent_mode", mode_buf, sizeof(mode_buf))) {
+        if (strcmp(mode_buf, "single") == 0) g_wizard_leader_mode = false;
+        if (strcmp(mode_buf, "leader") == 0) g_wizard_leader_mode = true;
+    }
+    char rt_buf[32] = {0};
+    if (json_extract_string(content.c_str(), "active_runtime", rt_buf, sizeof(rt_buf))) {
+        if (strcmp(rt_buf, "hermes") == 0) g_wizard_active_runtime = Runtime::Hermes;
+        else if (strcmp(rt_buf, "claude") == 0) g_wizard_active_runtime = Runtime::Claude;
+        else g_wizard_active_runtime = Runtime::OpenClaw;
+    }
+    json_extract_string(content.c_str(), "claude_code_path", g_wizard_claude_code_path, sizeof(g_wizard_claude_code_path));
     int ae = json_extract_int(content.c_str(), "app_auth_email", -1);
     if (ae >= 0) g_app_auth_email = (ae == 1);
     int ac = json_extract_int(content.c_str(), "app_auth_calendar", -1);
@@ -1515,17 +1547,15 @@ static void theme_dropdown_cb(lv_event_t* e) {
     if (sel == (uint16_t)g_theme) return;
     g_theme = (Theme)sel;
     switch (g_theme) {
-        case Theme::Dark:    g_colors = &THEME_DARK; break;
-        case Theme::Peachy:   g_colors = &THEME_PEACHY; break;
-        case Theme::Classic: g_colors = &THEME_CLASSIC; break;
-        case Theme::Mochi:   g_colors = &THEME_MOCHI; break;
-        case Theme::Light:   g_colors = &THEME_LIGHT; break;
+        case Theme::Matcha: g_colors = &THEME_DARK; break;
+        case Theme::Peachy: g_colors = &THEME_PEACHY; break;
+        case Theme::Mochi:  g_colors = &THEME_MOCHI; break;
     }
     save_theme_config();
     init_theme_fonts(g_theme); /* Reload per-theme fonts */
     apply_theme_to_all();
-    static const char* names[] = {"Matcha_v1", "Peachy_v2", "Classic", "Mochi", "Light"};
-    const char* theme_name = (sel < 5) ? names[sel] : "?";
+    static const char* names[] = {"Matcha", "Peachy", "Mochi"};
+    const char* theme_name = (sel < 3) ? names[sel] : "?";
     ui_log("[Theme] Switched to %s", theme_name);
     ui_toast_success(g_lang == Lang::CN ? "主题已切换" : "Theme switched");
 }
@@ -1534,7 +1564,7 @@ static void theme_dropdown_cb(lv_event_t* e) {
 lv_obj_t* ui_settings_add_theme_dropdown(lv_obj_t* tab) {
     const ThemeColors* c = g_colors;
     lv_obj_t* dd = lv_dropdown_create(tab);
-    lv_dropdown_set_options(dd, "Matcha_v1\nPeachy_v2\nClassic\nMochi\nLight");
+    lv_dropdown_set_options(dd, "Matcha\nPeachy\nMochi");
     lv_dropdown_set_selected(dd, (uint16_t)g_theme);
     lv_obj_set_width(dd, SCALE(160));
     lv_obj_set_style_bg_color(dd, c->surface, 0);
@@ -7902,46 +7932,81 @@ void update_ui_language() {
 
 /* ── Tooltip overlay for truncated labels ── */
 static lv_obj_t* g_tooltip_overlay = nullptr;
+static lv_timer_t* g_label_hover_timer = nullptr;
+static lv_obj_t* g_pending_label_hover = nullptr;
+
+/* Cancel pending label hover timer */
+static void cancel_label_hover_timer(void) {
+    if (g_label_hover_timer) {
+        lv_timer_del(g_label_hover_timer);
+        g_label_hover_timer = nullptr;
+    }
+    g_pending_label_hover = nullptr;
+}
+
+/* Timer callback: show label tooltip after debounce */
+static void on_label_hover_timer(lv_timer_t* t) {
+    if (g_label_hover_timer == t) g_label_hover_timer = nullptr;
+    lv_timer_del(t); /* one-shot debounce timer */
+
+    if (!g_pending_label_hover || !g_colors) return;
+    if (!lv_obj_is_valid(g_pending_label_hover)) {
+        g_pending_label_hover = nullptr;
+        return;
+    }
+
+    /* Check if text is actually truncated */
+    const char* txt = lv_label_get_text(g_pending_label_hover);
+    if (!txt || !txt[0]) { g_pending_label_hover = nullptr; return; }
+
+    lv_coord_t label_w = lv_obj_get_width(g_pending_label_hover);
+    const lv_font_t* font = lv_obj_get_style_text_font(g_pending_label_hover, LV_PART_MAIN);
+    lv_point_t txt_size;
+    lv_text_get_size(&txt_size, txt, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    if (txt_size.x <= label_w) { g_pending_label_hover = nullptr; return; }
+
+    /* Create tooltip overlay if not exists */
+    if (!g_tooltip_overlay) {
+        g_tooltip_overlay = lv_label_create(lv_scr_act());
+        lv_obj_set_style_bg_color(g_tooltip_overlay, g_colors->raised, 0);
+        lv_obj_set_style_bg_opa(g_tooltip_overlay, LV_OPA_COVER, 0);
+        lv_obj_set_style_text_color(g_tooltip_overlay, g_colors->text, 0);
+        lv_obj_set_style_text_font(g_tooltip_overlay, CJK_FONT_SMALL, 0);
+        lv_obj_set_style_radius(g_tooltip_overlay, SCALE(g_colors->radius_sm), 0);
+        lv_obj_set_style_pad_all(g_tooltip_overlay, 4, 0);
+        lv_obj_set_style_border_width(g_tooltip_overlay, 1, 0);
+        lv_obj_set_style_border_color(g_tooltip_overlay, g_colors->border_strong, 0);
+    }
+    lv_label_set_text(g_tooltip_overlay, txt);
+    lv_obj_clear_flag(g_tooltip_overlay, LV_OBJ_FLAG_HIDDEN);
+
+    lv_area_t area;
+    lv_obj_get_coords(g_pending_label_hover, &area);
+    lv_obj_set_pos(g_tooltip_overlay, area.x1, area.y2 + 2);
+    lv_obj_move_foreground(g_tooltip_overlay);
+    g_pending_label_hover = nullptr;
+}
 
 /* Show full text on hover */
 static void label_hover_cb(lv_event_t* e) {
     lv_obj_t* lbl = (lv_obj_t*)lv_event_get_target(e);
     lv_event_code_t code = lv_event_get_code(e);
 
-    if (code == LV_EVENT_FOCUSED || code == LV_EVENT_HOVER_OVER) {
-        /* Check if text is actually truncated */
-        const char* txt = lv_label_get_text(lbl);
-        if (!txt || !txt[0]) return;
-
-        /* Get label coords and text width */
-        lv_coord_t label_w = lv_obj_get_width(lbl);
-        const lv_font_t* font = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
-        lv_point_t txt_size;
-        lv_text_get_size(&txt_size, txt, font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-        /* Only show tooltip if text is wider than label */
-        if (txt_size.x <= label_w) return;
-
-        /* Create tooltip overlay if not exists */
-        if (!g_tooltip_overlay) {
-            g_tooltip_overlay = lv_label_create(lv_scr_act());
-            lv_obj_set_style_bg_color(g_tooltip_overlay, g_colors->raised, 0);
-            lv_obj_set_style_bg_opa(g_tooltip_overlay, LV_OPA_COVER, 0);
-            lv_obj_set_style_text_color(g_tooltip_overlay, g_colors->text, 0);
-            lv_obj_set_style_text_font(g_tooltip_overlay, CJK_FONT_SMALL, 0);
-            lv_obj_set_style_radius(g_tooltip_overlay, SCALE(g_colors->radius_sm), 0);
-            lv_obj_set_style_pad_all(g_tooltip_overlay, 4, 0);
-            lv_obj_set_style_border_width(g_tooltip_overlay, 1, 0);
-            lv_obj_set_style_border_color(g_tooltip_overlay, g_colors->border_strong, 0);
+    if (code == LV_EVENT_HOVER_OVER) {
+        /* Debounce: 80ms delay before showing tooltip */
+        cancel_label_hover_timer();
+        g_pending_label_hover = lbl;
+        g_label_hover_timer = lv_timer_create(on_label_hover_timer, 80, nullptr);
+        lv_timer_set_repeat_count(g_label_hover_timer, 1);
+    } else if (code == LV_EVENT_HOVER_LEAVE) {
+        cancel_label_hover_timer();
+        if (g_tooltip_overlay) {
+            lv_obj_add_flag(g_tooltip_overlay, LV_OBJ_FLAG_HIDDEN);
         }
-        lv_label_set_text(g_tooltip_overlay, txt);
-        lv_obj_clear_flag(g_tooltip_overlay, LV_OBJ_FLAG_HIDDEN);
-
-        /* Position tooltip below the label */
-        lv_area_t area;
-        lv_obj_get_coords(lbl, &area);
-        lv_obj_set_pos(g_tooltip_overlay, area.x1, area.y2 + 2);
-        lv_obj_move_foreground(g_tooltip_overlay);
-    } else if (code == LV_EVENT_DEFOCUSED || code == LV_EVENT_HOVER_LEAVE) {
+    } else if (code == LV_EVENT_DELETE) {
+        if (g_pending_label_hover == lbl) {
+            cancel_label_hover_timer();
+        }
         if (g_tooltip_overlay) {
             lv_obj_add_flag(g_tooltip_overlay, LV_OBJ_FLAG_HIDDEN);
         }
@@ -7952,6 +8017,7 @@ static void label_hover_cb(lv_event_t* e) {
 static void add_label_hover_tooltip(lv_obj_t* lbl) {
     lv_obj_add_event_cb(lbl, label_hover_cb, LV_EVENT_HOVER_OVER, nullptr);
     lv_obj_add_event_cb(lbl, label_hover_cb, LV_EVENT_HOVER_LEAVE, nullptr);
+    lv_obj_add_event_cb(lbl, label_hover_cb, LV_EVENT_DELETE, nullptr);
 }
 
 /*
@@ -9581,10 +9647,10 @@ static void create_title_bar(lv_obj_t* scr) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  Setup Wizard — First-launch 6-step onboarding
+ *  Setup Wizard — First-launch 7-step onboarding
  * ═══════════════════════════════════════════════════════════════ */
 
-#define WIZARD_STEPS 6
+#define WIZARD_STEPS 7
 static lv_obj_t* g_wizard_modal = nullptr;
 static lv_obj_t* g_wizard_box = nullptr;
 static lv_obj_t* g_wizard_step_label = nullptr;
@@ -9605,6 +9671,10 @@ static int g_wizard_model_sel = 0;
 static char g_wizard_model_name[128] = {0};  /* Stored model name string (survives dropdown deletion) */
 static char g_wizard_nickname[128] = {0};
 static int g_wizard_tz_sel = 4;          /* timezone index, default Asia/Shanghai */
+static bool g_wizard_leader_mode = true;
+static Runtime g_wizard_active_runtime = Runtime::OpenClaw;
+static bool g_wizard_hermes_enabled = false;
+static char g_wizard_claude_code_path[260] = {0};
 static bool g_wiz_im_tg_connected = false;
 static bool g_wiz_im_discord_connected = false;
 static bool g_wiz_im_whatsapp_connected = false;
@@ -9625,6 +9695,8 @@ static lv_obj_t* g_wiz_btn_en = nullptr;
 static lv_obj_t* g_wiz_detect_lbl = nullptr;
 static lv_obj_t* g_wiz_api_ta = nullptr;
 static lv_obj_t* g_wiz_model_dd = nullptr;
+static lv_obj_t* g_wiz_leader_sw = nullptr;
+static lv_obj_t* g_wiz_runtime_dd = nullptr;
 static lv_obj_t* g_wiz_nick_ta = nullptr;
 static lv_obj_t* g_wiz_tz_dd = nullptr;
 static lv_obj_t* g_wiz_summary_lbl = nullptr;
@@ -9663,6 +9735,7 @@ static const I18n wizard_step_short_names[WIZARD_STEPS] = {
     {"Model", "模型"},
     {"Local", "本地模型"},
     {"IM", "IM"},
+    {"Leader", "Leader"},
     {"Confirm", "确认"}
 };
 
@@ -9747,7 +9820,8 @@ static const I18n wizard_step_titles[WIZARD_STEPS] = {
     {"Model & API Key", "模型 & API 密钥"},        /* Step 2 */
     {"Local Models (Optional)", "本地模型（可选）"}, /* Step 3 */
     {"Connect IM (Optional)", "连接 IM（可选）"},    /* Step 4 */
-    {"Profile & Confirm", "个人信息 & 确认"}        /* Step 5 */
+    {"Leader Mode", "Leader 模式"},               /* Step 5 */
+    {"Profile & Confirm", "个人信息 & 确认"}        /* Step 6 */
 };
 
 /* Wizard text strings — bilingual */
@@ -9790,6 +9864,10 @@ static const I18n W_INIT_GATEWAY = {"Initializing gateway...", "正在初始化 
 static const I18n W_VERIFYING    = {"Verifying installation...", "正在验证安装..."};
 static const I18n W_SETUP_OK     = {"Setup complete! OpenClaw is ready.", "安装完成！OpenClaw 已就绪。"};
 static const I18n W_SETUP_FAIL   = {"Setup failed. Check logs for details.", "安装失败，请查看日志。"};
+static const I18n W_LEADER_HINT  = {"Choose whether to enable Leader mode and preferred runtime.", "请选择是否开启 Leader 模式及默认运行时。"};
+static const I18n W_LEADER_NOTE  = {"Skip keeps single-agent mode (OpenClaw only).", "Skip 将降级为单 Agent 模式（仅 OpenClaw）。"};
+static const I18n W_AGENT_HINT   = {"Optional: install and check Hermes / Claude runtimes.", "可选：安装并检测 Hermes / Claude 运行时。"};
+static const I18n W_LEADER_SKIP  = {"Skip Leader (single-agent)", "跳过 Leader（单 Agent）"};
 static const I18n W_NICK_HINT    = {"Enter your nickname:", "输入你的昵称："};
 static const I18n W_TZ_HINT      = {"Timezone:", "时区："};
 static const I18n W_SUMMARY      = {"Configuration Summary:", "配置摘要："};
@@ -9814,6 +9892,9 @@ static void wizard_update_step();
 static void wizard_close_cb(lv_event_t* e);
 static void wizard_set_next_enabled(bool enabled);
 static void wizard_gemma_skip_cb(lv_event_t* e);
+static void wizard_leader_skip_cb(lv_event_t* e);
+static void wizard_install_hermes_cb(lv_event_t* e);
+static void wizard_install_claude_cb(lv_event_t* e);
 static void wizard_build_step_im();
 
 /* Navigate to a specific step */
@@ -10533,6 +10614,36 @@ static void wiz_model_change_cb(lv_event_t* e) {
     lv_label_set_text(g_wiz_provider_hint, hint_buf);
 }
 
+static void wizard_install_hermes_cb(lv_event_t* e) {
+    (void)e;
+    ui_log("[Wizard] Installing Hermes runtime...");
+    std::thread([]() {
+        bool ok = app_install_hermes("auto", nullptr, nullptr);
+        if (ok) {
+            ui_log("[Wizard] Hermes installed");
+            ui_toast_success(g_lang == Lang::CN ? "Hermes 安装成功" : "Hermes installed");
+        } else {
+            ui_log("[Wizard] Hermes install failed");
+            ui_toast_error(g_lang == Lang::CN ? "Hermes 安装失败" : "Hermes install failed");
+        }
+    }).detach();
+}
+
+static void wizard_install_claude_cb(lv_event_t* e) {
+    (void)e;
+    ui_log("[Wizard] Installing Claude runtime...");
+    std::thread([]() {
+        bool ok = app_install_claude_cli("auto", nullptr, nullptr);
+        if (ok) {
+            ui_log("[Wizard] Claude installed");
+            ui_toast_success(g_lang == Lang::CN ? "Claude 安装成功" : "Claude installed");
+        } else {
+            ui_log("[Wizard] Claude install failed");
+            ui_toast_error(g_lang == Lang::CN ? "Claude 安装失败" : "Claude install failed");
+        }
+    }).detach();
+}
+
 static void wizard_build_step_model_api() {
     /* ── Model Selection ── */
     lv_obj_t* hint_m = lv_label_create(g_wizard_content);
@@ -10607,6 +10718,68 @@ static void wizard_build_step_model_api() {
     lv_obj_set_style_text_font(g_wiz_api_ta, CJK_FONT, 0);
     lv_obj_set_style_pad_all(g_wiz_api_ta, 8, 0);
     lv_group_add_obj(lv_group_get_default(), g_wiz_api_ta);
+
+    /* ── Optional agent runtime install cards (Hermes / Claude) ── */
+    lv_obj_t* div2 = lv_obj_create(g_wizard_content);
+    lv_obj_set_size(div2, LV_PCT(100), 1);
+    lv_obj_set_style_bg_color(div2, g_colors->divider, 0);
+    lv_obj_set_style_border_width(div2, 0, 0);
+    lv_obj_clear_flag(div2, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* hint_agent = lv_label_create(g_wizard_content);
+    lv_label_set_text(hint_agent, tr(W_AGENT_HINT));
+    lv_obj_set_style_text_color(hint_agent, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(hint_agent, CJK_FONT_SMALL, 0);
+    lv_label_set_long_mode(hint_agent, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(hint_agent, LV_PCT(100));
+
+    EnvCheckResult env = app_check_environment();
+
+    auto add_runtime_card = [&](const char* title, bool installed, bool healthy, const char* version, lv_event_cb_t install_cb) {
+        lv_obj_t* card = lv_obj_create(g_wizard_content);
+        lv_obj_set_size(card, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_color(card, g_colors->surface, 0);
+        lv_obj_set_style_border_color(card, g_colors->border, 0);
+        lv_obj_set_style_border_width(card, 1, 0);
+        lv_obj_set_style_radius(card, SCALE(g_colors->radius_md), 0);
+        lv_obj_set_style_pad_all(card, 10, 0);
+        lv_obj_set_style_pad_gap(card, 8, 0);
+        lv_obj_set_flex_flow(card, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(card, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* left = lv_obj_create(card);
+        lv_obj_set_size(left, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(left, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(left, 0, 0);
+        lv_obj_set_style_pad_all(left, 0, 0);
+        lv_obj_set_style_pad_gap(left, 4, 0);
+        lv_obj_set_flex_flow(left, LV_FLEX_FLOW_COLUMN);
+        lv_obj_clear_flag(left, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* t = lv_label_create(left);
+        lv_label_set_text(t, title);
+        lv_obj_set_style_text_color(t, g_colors->text, 0);
+        lv_obj_set_style_text_font(t, CJK_FONT, 0);
+
+        lv_obj_t* s = lv_label_create(left);
+        char status[192];
+        snprintf(status, sizeof(status), "%s%s%s",
+            installed ? (g_lang == Lang::CN ? "已安装" : "Installed") : (g_lang == Lang::CN ? "未安装" : "Missing"),
+            (installed && version && version[0]) ? "  v" : "",
+            (installed && version && version[0]) ? version : "");
+        lv_label_set_text(s, status);
+        lv_obj_set_style_text_color(s, installed ? (healthy ? g_colors->success : g_colors->warning) : g_colors->warning, 0);
+        lv_obj_set_style_text_font(s, CJK_FONT_SMALL, 0);
+
+        lv_obj_t* btn = aw_btn_create(card,
+            installed ? (g_lang == Lang::CN ? "重检" : "Recheck") : (g_lang == Lang::CN ? "安装" : "Install"),
+            BTN_SECONDARY, SCALE(108), SCALE(32));
+        lv_obj_add_event_cb(btn, install_cb, LV_EVENT_CLICKED, nullptr);
+    };
+
+    add_runtime_card("Hermes Agent", env.hermes_ok, env.hermes_healthy, env.hermes_ver, wizard_install_hermes_cb);
+    add_runtime_card("Claude CLI", env.claude_ok, env.claude_healthy, env.claude_ver, wizard_install_claude_cb);
 }
 
 /* ── Step 3: Local Gemma Models (Optional) ── */
@@ -10905,7 +11078,106 @@ static void wizard_build_step_im() {
     lv_obj_set_style_text_font(skip_hint, CJK_FONT_SMALL, 0);
 }
 
-/* ── Step 5: Profile & Confirm ── */
+static void wizard_build_step_leader() {
+    lv_obj_t* hint = lv_label_create(g_wizard_content);
+    lv_label_set_text(hint, tr(W_LEADER_HINT));
+    lv_obj_set_style_text_color(hint, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(hint, CJK_FONT, 0);
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(hint, LV_PCT(100));
+
+    lv_obj_t* box = lv_obj_create(g_wizard_content);
+    lv_obj_set_size(box, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(box, g_colors->surface, 0);
+    lv_obj_set_style_border_width(box, 1, 0);
+    lv_obj_set_style_border_color(box, g_colors->border, 0);
+    lv_obj_set_style_radius(box, SCALE(g_colors->radius_md), 0);
+    lv_obj_set_style_pad_all(box, 12, 0);
+    lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_gap(box, 8, 0);
+    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* title = lv_label_create(box);
+    lv_label_set_text(title, "OpenClaw Leader");
+    lv_obj_set_style_text_color(title, g_colors->accent_secondary, 0);
+    lv_obj_set_style_text_font(title, CJK_FONT, 0);
+
+    lv_obj_t* desc = lv_label_create(box);
+    lv_label_set_text(desc, tr(W_LEADER_NOTE));
+    lv_obj_set_style_text_color(desc, g_colors->text, 0);
+    lv_obj_set_style_text_font(desc, CJK_FONT, 0);
+    lv_label_set_long_mode(desc, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(desc, LV_PCT(100));
+
+    lv_obj_t* row = lv_obj_create(box);
+    lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_set_style_pad_gap(row, 8, 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* sw_label = lv_label_create(row);
+    lv_label_set_text(sw_label, g_lang == Lang::CN ? "启用 Leader 模式" : "Enable Leader mode");
+    lv_obj_set_style_text_color(sw_label, g_colors->text, 0);
+    lv_obj_set_style_text_font(sw_label, CJK_FONT_SMALL, 0);
+
+    g_wiz_leader_sw = lv_switch_create(row);
+    if (g_wizard_leader_mode) lv_obj_add_state(g_wiz_leader_sw, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(g_wiz_leader_sw, [](lv_event_t* e) {
+        lv_obj_t* sw = (lv_obj_t*)lv_event_get_target(e);
+        g_wizard_leader_mode = lv_obj_has_state(sw, LV_STATE_CHECKED);
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    lv_obj_t* rt_label = lv_label_create(box);
+    lv_label_set_text(rt_label, g_lang == Lang::CN ? "默认运行时" : "Default runtime");
+    lv_obj_set_style_text_color(rt_label, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(rt_label, CJK_FONT_SMALL, 0);
+
+    g_wiz_runtime_dd = lv_dropdown_create(box);
+    lv_dropdown_set_options(g_wiz_runtime_dd, "OpenClaw\nHermes\nClaude");
+    lv_dropdown_set_selected(g_wiz_runtime_dd, (uint16_t)((int)g_wizard_active_runtime));
+    lv_obj_set_width(g_wiz_runtime_dd, LV_PCT(100));
+    lv_obj_set_style_bg_color(g_wiz_runtime_dd, g_colors->panel, 0);
+    lv_obj_set_style_text_color(g_wiz_runtime_dd, g_colors->text, 0);
+    lv_obj_set_style_border_color(g_wiz_runtime_dd, g_colors->border, 0);
+    lv_obj_set_style_border_width(g_wiz_runtime_dd, 1, 0);
+    lv_obj_set_style_radius(g_wiz_runtime_dd, SCALE(g_colors->radius_sm), 0);
+    lv_obj_set_style_text_font(g_wiz_runtime_dd, CJK_FONT, 0);
+    lv_obj_set_style_text_font(g_wiz_runtime_dd, FONT(14), LV_PART_INDICATOR);
+    lv_obj_set_style_text_font(g_wiz_runtime_dd, CJK_FONT, LV_PART_ITEMS);
+    lv_obj_set_style_text_color(g_wiz_runtime_dd, g_colors->text, LV_PART_ITEMS);
+    lv_obj_set_style_bg_color(g_wiz_runtime_dd, g_colors->panel, LV_PART_ITEMS);
+    lv_obj_add_event_cb(g_wiz_runtime_dd, [](lv_event_t* e) {
+        lv_obj_t* dd = (lv_obj_t*)lv_event_get_target(e);
+        uint16_t sel = lv_dropdown_get_selected(dd);
+        if (sel <= 2) g_wizard_active_runtime = (Runtime)sel;
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    lv_obj_t* btn_skip = lv_button_create(box);
+    lv_obj_set_size(btn_skip, LV_PCT(100), SCALE(34));
+    lv_obj_set_style_bg_color(btn_skip, g_colors->btn_secondary, 0);
+    lv_obj_set_style_radius(btn_skip, SCALE(g_colors->radius_md), 0);
+    lv_obj_add_event_cb(btn_skip, wizard_leader_skip_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* skip_lbl = lv_label_create(btn_skip);
+    lv_label_set_text(skip_lbl, tr(W_LEADER_SKIP));
+    lv_obj_set_style_text_font(skip_lbl, CJK_FONT_SMALL, 0);
+    lv_obj_center(skip_lbl);
+}
+
+static void wizard_leader_skip_cb(lv_event_t* e) {
+    (void)e;
+    g_wizard_leader_mode = false;
+    g_wizard_active_runtime = Runtime::OpenClaw;
+    if (g_wiz_leader_sw) lv_obj_clear_state(g_wiz_leader_sw, LV_STATE_CHECKED);
+    if (g_wiz_runtime_dd) lv_dropdown_set_selected(g_wiz_runtime_dd, (uint16_t)Runtime::OpenClaw);
+    ui_log("[Wizard] Leader mode skipped, fallback to single-agent OpenClaw");
+    wizard_go_step(g_wizard_step + 1);
+}
+
+/* ── Step 6: Profile & Confirm ── */
 static const char* tz_options =
     "UTC-12\nUTC-11\nUTC-10\nUTC-9\nUTC-8 (PST)\nUTC-7 (MST)\n"
     "UTC-6 (CST-US)\nUTC-5 (EST)\nUTC-4\nUTC-3\nUTC-2\nUTC-1\n"
@@ -10933,14 +11205,18 @@ static void wizard_build_summary_text(char* buf, int buf_size) {
 
     const char* gemma_sw = g_gemma_install_opt_in ? "enabled" : "disabled";
     const char* gemma_models = gemma_mask_to_text(g_gemma_model_mask);
+    const char* leader_mode = g_wizard_leader_mode ? "leader" : "single";
+    const char* runtime_str = (g_wizard_active_runtime == Runtime::Hermes) ? "Hermes"
+        : (g_wizard_active_runtime == Runtime::Claude) ? "Claude" : "OpenClaw";
     snprintf(buf, buf_size,
-        "%s %s\n%s %s\n%s %s\n%s %s\n%s %s\n%s %s\nGemma Local %s\nGemma Models %s\nIM Telegram %s / Discord %s / WhatsApp %s",
+        "%s %s\n%s %s\n%s %s\n%s %s\n%s %s\n%s %s\nLeader Mode %s\nActive Runtime %s\nGemma Local %s\nGemma Models %s\nIM Telegram %s / Discord %s / WhatsApp %s",
         tr(W_LANG_LABEL), lang_str,
         tr(W_OC_LABEL), detect_str,
         tr(W_APIK_LABEL), api_str,
         tr(W_MODEL_LABEL), model_str,
         tr(W_NAME_LABEL), nick_str,
         tr(W_TZ_HINT), tz_str,
+        leader_mode, runtime_str,
         gemma_sw, gemma_models,
         tg, dc, wa);
 }
@@ -11104,12 +11380,19 @@ static void wizard_update_step() {
         char* free_tag = strstr(g_wizard_model_name, " [free]");
         if (free_tag) *free_tag = '\0';
     }
-    if (g_wizard_step == 5 && g_wiz_nick_ta) {
+    if (g_wizard_step == 6 && g_wiz_nick_ta) {
         const char* t = lv_textarea_get_text(g_wiz_nick_ta);
         if (t) snprintf(g_wizard_nickname, sizeof(g_wizard_nickname), "%s", t);
     }
-    if (g_wizard_step == 5 && g_wiz_tz_dd) {
+    if (g_wizard_step == 6 && g_wiz_tz_dd) {
         g_wizard_tz_sel = lv_dropdown_get_selected(g_wiz_tz_dd);
+    }
+    if (g_wizard_step == 5 && g_wiz_leader_sw) {
+        g_wizard_leader_mode = lv_obj_has_state(g_wiz_leader_sw, LV_STATE_CHECKED);
+    }
+    if (g_wizard_step == 5 && g_wiz_runtime_dd) {
+        uint16_t sel = lv_dropdown_get_selected(g_wiz_runtime_dd);
+        if (sel <= 2) g_wizard_active_runtime = (Runtime)sel;
     }
 
     /* Clear content area */
@@ -11152,7 +11435,8 @@ static void wizard_update_step() {
         case 2: wizard_build_step_model_api(); break;    /* Model + API Key */
         case 3: wizard_build_step_gemma(); break;        /* Local Gemma models (optional) */
         case 4: wizard_build_step_im(); break;           /* IM connect (optional) */
-        case 5: wizard_build_step_profile(); break;      /* Nickname + timezone + summary */
+        case 5: wizard_build_step_leader(); break;       /* Leader mode */
+        case 6: wizard_build_step_profile(); break;      /* Nickname + timezone + summary */
     }
 
     /* Update buttons */
@@ -11198,12 +11482,19 @@ static void wizard_next_cb(lv_event_t* e) {
         char* free_tag = strstr(g_wizard_model_name, " [free]");
         if (free_tag) *free_tag = '\0';
     }
-    if (g_wizard_step == 5 && g_wiz_nick_ta) {
+    if (g_wizard_step == 6 && g_wiz_nick_ta) {
         const char* t = lv_textarea_get_text(g_wiz_nick_ta);
         if (t) snprintf(g_wizard_nickname, sizeof(g_wizard_nickname), "%s", t);
     }
-    if (g_wizard_step == 5 && g_wiz_tz_dd) {
+    if (g_wizard_step == 6 && g_wiz_tz_dd) {
         g_wizard_tz_sel = lv_dropdown_get_selected(g_wiz_tz_dd);
+    }
+    if (g_wizard_step == 5 && g_wiz_leader_sw) {
+        g_wizard_leader_mode = lv_obj_has_state(g_wiz_leader_sw, LV_STATE_CHECKED);
+    }
+    if (g_wizard_step == 5 && g_wiz_runtime_dd) {
+        uint16_t sel = lv_dropdown_get_selected(g_wiz_runtime_dd);
+        if (sel <= 2) g_wizard_active_runtime = (Runtime)sel;
     }
 
     if (g_wizard_step < WIZARD_STEPS - 1) {
@@ -11304,6 +11595,13 @@ static void wizard_next_cb(lv_event_t* e) {
                 g_selected_model
             );
         }
+
+        /* Persist active runtime according to leader-mode decision */
+        if (!g_wizard_leader_mode) {
+            g_wizard_active_runtime = Runtime::OpenClaw;
+        }
+        g_wizard_hermes_enabled = (g_wizard_active_runtime == Runtime::Hermes);
+        app_set_active_runtime(g_wizard_active_runtime);
 
         ui_log("[Wizard] Setup completed. Lang=%s, Model=%d, Nick=%s, TZ=%s",
                g_wizard_lang_sel == 0 ? "CN" : "EN",
