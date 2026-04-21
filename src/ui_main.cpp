@@ -947,6 +947,7 @@ static void search_next_cb(lv_event_t* e);      /* Forward */
 static void relayout_panels();                  /* Forward */
 static void apply_mode_switch_visuals();
 static void work_send_cb(lv_event_t* e);
+static void work_prompt_input_cb(lv_event_t* e);
 static void chat_send_cb(lv_event_t* e);
 static void work_chat_toggle_cb(lv_event_t* e);
 static void work_chat_send_cb(lv_event_t* e);
@@ -3704,6 +3705,19 @@ static void c2_refresh_dual_view_button() {
     lv_label_set_text(lbl, g_c2_dual_result ? tr({"Dual: ON", "双结果: 开"}) : tr({"Dual: OFF", "双结果: 关"}));
 }
 
+static void c2_apply_work_panel_policy() {
+    if (!mode_work_chat_panel) return;
+    if (g_c2_dual_result) {
+        g_work_chat_collapsed = false;
+        if (mode_ta_work_chat_feed) lv_obj_clear_flag(mode_ta_work_chat_feed, LV_OBJ_FLAG_HIDDEN);
+        if (mode_ta_work_chat_input) lv_obj_clear_flag(mode_ta_work_chat_input, LV_OBJ_FLAG_HIDDEN);
+        if (mode_btn_work_chat_toggle) {
+            lv_obj_t* lbl = lv_obj_get_child(mode_btn_work_chat_toggle, 0);
+            if (lbl) lv_label_set_text(lbl, "=");
+        }
+    }
+}
+
 static void c2_mirror_prompt_to_work(const char* text) {
     if (!text || !text[0]) return;
     if (mode_ta_work_prompt) lv_textarea_set_text(mode_ta_work_prompt, text);
@@ -3711,12 +3725,18 @@ static void c2_mirror_prompt_to_work(const char* text) {
     g_work_waiting_ai = true;
     work_append_md_block("Unified Input", text);
     work_add_step_card("统一入口任务", text, false, false);
+    if (mode_ta_work_chat_feed) {
+        lv_textarea_add_text(mode_ta_work_chat_feed, "\n[Unified] ");
+        lv_textarea_add_text(mode_ta_work_chat_feed, text);
+    }
     if (mode_lbl_work_chat_state) lv_label_set_text(mode_lbl_work_chat_state, "State: mirrored from Chat");
 }
 
 static void c2_dual_view_toggle_cb(lv_event_t* e) {
     (void)e;
     g_c2_dual_result = !g_c2_dual_result;
+    c2_apply_work_panel_policy();
+    relayout_panels();
     c2_refresh_dual_view_button();
     ui_log("[C2] Dual result view: %s", g_c2_dual_result ? "on" : "off");
 }
@@ -5034,7 +5054,22 @@ static void relayout_panels() {
     if (mode_dd_ai_mode) lv_obj_set_width(mode_dd_ai_mode, std::min(content_w - 16, SCALE(360)));
     if (mode_lbl_work_hint) lv_obj_set_width(mode_lbl_work_hint, content_w - 16);
     if (mode_lbl_gemma_recommend) lv_obj_set_width(mode_lbl_gemma_recommend, content_w - 16);
-    int profile_w = std::min(content_w - 16, SCALE(520));
+    int work_chat_w = g_work_chat_collapsed ? SCALE(40) : (content_w * 38 / 100);
+    if (g_c2_dual_result) work_chat_w = std::max(SCALE(260), content_w * 42 / 100);
+    int work_primary_w = content_w - (g_c2_dual_result ? (work_chat_w + SCALE(20)) : SCALE(16));
+    work_primary_w = std::max(work_primary_w, SCALE(280));
+    int profile_w = std::min(work_primary_w, SCALE(520));
+
+    if (mode_panel_work) {
+        lv_obj_set_style_pad_right(mode_panel_work, g_c2_dual_result ? (work_chat_w + SCALE(12)) : 0, 0);
+        uint32_t child_cnt = lv_obj_get_child_count(mode_panel_work);
+        for (uint32_t i = 0; i < child_cnt; ++i) {
+            lv_obj_t* ch = lv_obj_get_child(mode_panel_work, i);
+            if (!ch || ch == mode_work_chat_panel) continue;
+            lv_obj_set_width(ch, std::max(SCALE(180), profile_w + SCALE(24)));
+        }
+    }
+
     if (mode_ta_user_name) lv_obj_set_width(mode_ta_user_name, profile_w);
     if (mode_ta_user_role) lv_obj_set_width(mode_ta_user_role, profile_w);
     if (mode_ta_ai_name) lv_obj_set_width(mode_ta_ai_name, profile_w);
@@ -5042,9 +5077,9 @@ static void relayout_panels() {
     if (mode_ta_ai_persona) lv_obj_set_width(mode_ta_ai_persona, profile_w);
     if (mode_ta_ai_skills) lv_obj_set_width(mode_ta_ai_skills, profile_w);
     if (mode_ta_work_prompt) lv_obj_set_width(mode_ta_work_prompt, profile_w);
-    int work_chat_w = g_work_chat_collapsed ? SCALE(40) : (content_w * 38 / 100);
     if (mode_work_chat_panel) {
         lv_obj_set_width(mode_work_chat_panel, work_chat_w);
+        if (g_c2_dual_result) lv_obj_set_height(mode_work_chat_panel, std::max(SCALE(220), content_h - SCALE(16)));
         lv_obj_set_pos(mode_work_chat_panel, std::max(SCALE(8), content_w - work_chat_w - SCALE(8)), SCALE(8));
     }
     if (mode_ta_work_chat_feed) lv_obj_set_width(mode_ta_work_chat_feed, std::max(SCALE(16), work_chat_w - SCALE(24)));
@@ -6954,6 +6989,10 @@ static void work_send_cb(lv_event_t* e) {
     g_work_waiting_ai = true;
     work_append_md_block("User", text);
     work_add_step_card("接收任务", text, false, false);
+    if (mode_ta_work_chat_feed) {
+        lv_textarea_add_text(mode_ta_work_chat_feed, "\n[Work] ");
+        lv_textarea_add_text(mode_ta_work_chat_feed, text);
+    }
     set_ai_next_step("Work mode: executing task");
     append_ai_script_log("[work] prompt submitted");
     if (g_ai_interaction_mode == AIMODE_PLAN) {
@@ -6995,6 +7034,16 @@ static void chat_send_to_work_cb(lv_event_t* e) {
 static void work_chat_toggle_cb(lv_event_t* e) {
     (void)e;
     if (!mode_work_chat_panel || !mode_ta_work_chat_feed || !mode_ta_work_chat_input) return;
+    if (g_c2_dual_result) {
+        g_work_chat_collapsed = false;
+        if (mode_btn_work_chat_toggle) {
+            lv_obj_t* lbl = lv_obj_get_child(mode_btn_work_chat_toggle, 0);
+            if (lbl) lv_label_set_text(lbl, "=");
+        }
+        if (mode_lbl_work_chat_state) lv_label_set_text(mode_lbl_work_chat_state, "State: dual-result pinned");
+        relayout_panels();
+        return;
+    }
     g_work_chat_collapsed = !g_work_chat_collapsed;
     int cw = std::max(200, RIGHT_PANEL_W - CHAT_GAP * 2);
     lv_obj_set_width(mode_work_chat_panel, g_work_chat_collapsed ? SCALE(40) : (cw * 38 / 100));
@@ -7661,8 +7710,16 @@ static void chat_input_cb(lv_event_t* e) {
         if (key == LV_KEY_ENTER) {
             /* Check if Shift is held (Shift+Enter = newline) */
             bool shift_held = false;
+            bool ctrl_held = false;
             SDL_Keymod mod = SDL_GetModState();
             if (mod & (KMOD_LSHIFT | KMOD_RSHIFT)) shift_held = true;
+            if (mod & (KMOD_LCTRL | KMOD_RCTRL)) ctrl_held = true;
+
+            if (ctrl_held && !shift_held) {
+                chat_send_to_work_cb(e);
+                lv_event_stop_processing(e);
+                return;
+            }
 
             if (!shift_held) {
                 /* Plain Enter → send message, stop textarea from inserting newline */
@@ -7672,6 +7729,19 @@ static void chat_input_cb(lv_event_t* e) {
             /* Shift+Enter → let textarea handle as newline */
         }
     }
+}
+
+static void work_prompt_input_cb(lv_event_t* e) {
+    if (lv_event_get_code(e) != LV_EVENT_KEY) return;
+    uint32_t key = lv_event_get_key(e);
+    if (key != LV_KEY_ENTER) return;
+
+    SDL_Keymod mod = SDL_GetModState();
+    bool shift_held = (mod & (KMOD_LSHIFT | KMOD_RSHIFT)) != 0;
+    if (shift_held) return;
+
+    work_send_cb(e);
+    lv_event_stop_processing(e);
 }
 
 /* ── P2-3: Task list management ── */
@@ -7989,7 +8059,19 @@ void update_ui_language() {
     }
 
     /* Chat input placeholder */
-    if (chat_input) lv_textarea_set_placeholder_text(chat_input, "输入消息... (Shift+Enter 换行)");
+    if (chat_input) {
+        lv_textarea_set_placeholder_text(chat_input,
+            g_lang == Lang::CN
+                ? "输入消息... (Shift+Enter 换行, Ctrl+Enter 任务)"
+                : "Type message... (Shift+Enter newline, Ctrl+Enter task)");
+    }
+    if (mode_ta_work_prompt) {
+        lv_textarea_set_placeholder_text(mode_ta_work_prompt,
+            g_lang == Lang::CN
+                ? "输入任务... (Enter 发送, Shift+Enter 换行)"
+                : "Type task... (Enter send, Shift+Enter newline)");
+    }
+    c2_refresh_dual_view_button();
 
     /* Refresh status (re-renders status text + task list in new language) */
     app_refresh_status();
@@ -12619,9 +12701,10 @@ void app_ui_init() {
         lv_label_set_long_mode(mode_lbl_work_md_output, LV_LABEL_LONG_WRAP);
         render_work_md_doc();
 
-        mode_ta_work_prompt = aw_textarea_create(mode_sec_work_console, "输入任务... (Shift+Enter 换行)", false, card_w - 24, SCALE(96));
+        mode_ta_work_prompt = aw_textarea_create(mode_sec_work_console, "输入任务... (Enter 发送, Shift+Enter 换行)", false, card_w - 24, SCALE(96));
         lv_textarea_set_one_line(mode_ta_work_prompt, false);
         lv_textarea_set_text_selection(mode_ta_work_prompt, true);
+        lv_obj_add_event_cb(mode_ta_work_prompt, work_prompt_input_cb, LV_EVENT_KEY, nullptr);
         lv_obj_set_style_radius(mode_ta_work_prompt, SCALE(g_colors->radius_lg), 0);
         lv_obj_set_style_pad_all(mode_ta_work_prompt, 12, 0);
         lv_obj_set_style_pad_ver(mode_ta_work_prompt, 10, 0);
@@ -12655,6 +12738,7 @@ void app_ui_init() {
         lv_textarea_set_one_line(mode_ta_work_chat_input, false);
         lv_obj_t* btn_work_chat_send = aw_btn_create(mode_work_chat_panel, "Send", BTN_PRIMARY, SCALE(100), SCALE(30));
         lv_obj_add_event_cb(btn_work_chat_send, work_chat_send_cb, LV_EVENT_CLICKED, nullptr);
+        c2_apply_work_panel_policy();
 
         lv_obj_t* sec_gemma = aw_form_section_create(mode_panel_work, "Local Gemma 4 Install", card_w);
         lv_obj_t* row_gemma_sw = lv_obj_create(sec_gemma);
@@ -13246,7 +13330,7 @@ void app_ui_init() {
     chat_input = lv_textarea_create(mode_panel_chat);
     lv_obj_set_size(chat_input, content_w - CHAT_GAP * 2, input_h);
     lv_obj_set_pos(chat_input, CHAT_GAP, input_y);
-    lv_textarea_set_placeholder_text(chat_input, "输入消息... (Shift+Enter 换行)");
+    lv_textarea_set_placeholder_text(chat_input, "输入消息... (Shift+Enter 换行, Ctrl+Enter 任务)");
     lv_textarea_set_one_line(chat_input, false);
     lv_textarea_set_max_length(chat_input, 2000);
     lv_textarea_set_text_selection(chat_input, true);  /* Enable mouse text selection */

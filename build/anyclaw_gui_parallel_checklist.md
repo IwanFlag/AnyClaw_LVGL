@@ -286,3 +286,18 @@
 - 已完成 C2 双结果视图首版：统一输入一次，Chat/Work 两侧均可看到任务上下文与后续结果。
 - 已完成向导阶段化表达：Step 标题与步骤条改为 `Phase A / Phase B` 心智模型。
 - 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+
+### Delta 2026-04-22 #18
+
+- 已实现 C2 稳定双结果布局：Dual 开启时 Work Chat 面板固定展开并放大宽度，避免折叠导致结果丢焦。
+- 已实现统一入口快捷分发：Chat 输入支持 `Ctrl+Enter` 直达 Work 任务路径。
+- 已实现双向上下文增强：Chat/Work 发送均追加到 Work Chat Feed，便于同屏追踪执行脉络。
+- 已更新输入提示文案：明确 Shift+Enter 换行、Ctrl+Enter 任务。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+
+### Delta 2026-04-22 #19
+
+- 已实现 Work 双栏避让布局：Dual 开启时主内容区自动预留右栏空间，减少遮挡与覆盖。
+- 已实现 Work 输入快捷发送：`Enter` 直接发送任务，`Shift+Enter` 保留换行。
+- 已实现 Work 面板宽度重算策略：窗口缩放时右栏与主内容同步重排。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
