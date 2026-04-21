@@ -278,3 +278,11 @@
 - 已实现 About 高影响操作确认：清除聊天、导入迁移需二次确认。
 - 已细化 Save & Test 失败分类：鉴权失败/限流/服务不可用/网络异常。
 - 影响代码: [src/ui_settings.cpp](../src/ui_settings.cpp)
+
+### Delta 2026-04-22 #17
+
+- 已实现 C2 统一入口增强：Chat 发送可镜像到 Work 结果视图（Dual 开关）。
+- 已新增 Chat 侧任务快捷入口：`W` 按钮可直接按 Work 任务路径发起执行并切到 Work 页。
+- 已完成 C2 双结果视图首版：统一输入一次，Chat/Work 两侧均可看到任务上下文与后续结果。
+- 已完成向导阶段化表达：Step 标题与步骤条改为 `Phase A / Phase B` 心智模型。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)

@@ -2080,6 +2080,9 @@ static UiMainMode g_ui_mode = UI_MODE_CHAT;
 static lv_obj_t* btn_send_widget = nullptr; /* Send button */
 static lv_obj_t* btn_upload_widget = nullptr; /* Upload button */
 static lv_obj_t* btn_voice_widget = nullptr; /* Voice mode quick button */
+static lv_obj_t* btn_work_widget = nullptr; /* Send-as-task quick button */
+static lv_obj_t* ctrl_btn_dual_view = nullptr;
+static bool g_c2_dual_result = true;
 static constexpr int CHAT_ACTION_BTN_BASE = 40;
 static constexpr int CHAT_ACTION_BTN_MARGIN = 6;
 static constexpr int CHAT_ACTION_BTN_GAP = 6;
@@ -3694,6 +3697,30 @@ static void update_work_empty_state() {
     else lv_obj_add_flag(mode_work_empty_card, LV_OBJ_FLAG_HIDDEN);
 }
 
+static void c2_refresh_dual_view_button() {
+    if (!ctrl_btn_dual_view) return;
+    lv_obj_t* lbl = lv_obj_get_child(ctrl_btn_dual_view, 0);
+    if (!lbl) return;
+    lv_label_set_text(lbl, g_c2_dual_result ? tr({"Dual: ON", "双结果: 开"}) : tr({"Dual: OFF", "双结果: 关"}));
+}
+
+static void c2_mirror_prompt_to_work(const char* text) {
+    if (!text || !text[0]) return;
+    if (mode_ta_work_prompt) lv_textarea_set_text(mode_ta_work_prompt, text);
+    snprintf(g_work_last_prompt, sizeof(g_work_last_prompt), "%s", text);
+    g_work_waiting_ai = true;
+    work_append_md_block("Unified Input", text);
+    work_add_step_card("统一入口任务", text, false, false);
+    if (mode_lbl_work_chat_state) lv_label_set_text(mode_lbl_work_chat_state, "State: mirrored from Chat");
+}
+
+static void c2_dual_view_toggle_cb(lv_event_t* e) {
+    (void)e;
+    g_c2_dual_result = !g_c2_dual_result;
+    c2_refresh_dual_view_button();
+    ui_log("[C2] Dual result view: %s", g_c2_dual_result ? "on" : "off");
+}
+
 static void layout_chat_action_buttons(int content_w, int input_y, int input_h) {
     const int btn_size = SCALE(CHAT_ACTION_BTN_BASE);
     const int btn_margin = SCALE(CHAT_ACTION_BTN_MARGIN);
@@ -3706,6 +3733,9 @@ static void layout_chat_action_buttons(int content_w, int input_y, int input_h) 
     }
     if (btn_voice_widget) {
         lv_obj_set_pos(btn_voice_widget, content_w - CHAT_GAP - btn_size - btn_margin - (btn_size + btn_gap) * 2, input_y + input_h - btn_size - btn_margin);
+    }
+    if (btn_work_widget) {
+        lv_obj_set_pos(btn_work_widget, content_w - CHAT_GAP - btn_size - btn_margin - (btn_size + btn_gap) * 3, input_y + input_h - btn_size - btn_margin);
     }
 }
 
@@ -5071,6 +5101,7 @@ static void relayout_panels() {
         int base_x = content_w - CHAT_GAP - btn_size - btn_margin;
         if (btn_upload_widget) base_x -= (btn_size + btn_gap);
         if (btn_voice_widget) base_x -= (btn_size + btn_gap);
+        if (btn_work_widget) base_x -= (btn_size + btn_gap);
         lv_obj_set_pos(g_search_btn, base_x - btn_size - btn_gap, input_y + input_h - btn_size - btn_margin);
     }
     /* mode_dd_chat_ai_mode is now in ctrl_bar, no need to reposition here */
@@ -6857,6 +6888,7 @@ static void chat_send_cb(lv_event_t* e) {
         update_send_button_state();
         return;
     }
+    if (g_c2_dual_result) c2_mirror_prompt_to_work(text);
     std::string prompt = text;
     if (g_ai_interaction_mode == AIMODE_PLAN) {
         prompt = build_plan_mode_prompt(text);
@@ -6893,6 +6925,7 @@ static void chat_send_btn_cb(lv_event_t* e) {
         update_send_button_state();
         return;
     }
+    if (g_c2_dual_result) c2_mirror_prompt_to_work(text);
     std::string prompt = text;
     if (g_ai_interaction_mode == AIMODE_PLAN) {
         prompt = build_plan_mode_prompt(text);
@@ -6930,6 +6963,33 @@ static void work_send_cb(lv_event_t* e) {
         submit_prompt_to_chat(text);
     }
     lv_textarea_set_text(mode_ta_work_prompt, "");
+}
+
+static void chat_send_to_work_cb(lv_event_t* e) {
+    (void)e;
+    if (!chat_input) return;
+    if (is_streaming_now()) {
+        ui_log("[C2] Wait for current AI reply to finish");
+        return;
+    }
+    const char* text = lv_textarea_get_text(chat_input);
+    if (!text || !text[0]) return;
+
+    c2_mirror_prompt_to_work(text);
+    std::string prompt = text;
+    if (g_ai_interaction_mode == AIMODE_PLAN) prompt = build_plan_mode_prompt(text);
+    submit_prompt_to_chat(prompt.c_str());
+    set_ai_next_step("Work mode: executing task");
+    append_ai_script_log("[c2] prompt submitted from chat to work");
+
+    lv_textarea_set_text(chat_input, "");
+    chat_input_reset_height();
+    update_send_button_state();
+
+    g_ui_mode = UI_MODE_WORK;
+    apply_mode_switch_visuals();
+    relayout_panels();
+    ui_log("[C2] Prompt routed to Work view");
 }
 
 static void work_chat_toggle_cb(lv_event_t* e) {
@@ -7576,6 +7636,11 @@ static void update_send_button_state() {
         if (g_streaming) lv_obj_add_state(btn_voice_widget, LV_STATE_DISABLED);
         else lv_obj_clear_state(btn_voice_widget, LV_STATE_DISABLED);
         lv_obj_set_style_opa(btn_voice_widget, g_streaming ? LV_OPA_40 : LV_OPA_COVER, 0);
+    }
+    if (btn_work_widget) {
+        if (g_streaming) lv_obj_add_state(btn_work_widget, LV_STATE_DISABLED);
+        else lv_obj_clear_state(btn_work_widget, LV_STATE_DISABLED);
+        lv_obj_set_style_opa(btn_work_widget, g_streaming ? LV_OPA_40 : LV_OPA_COVER, 0);
     }
 }
 
@@ -9017,6 +9082,9 @@ void apply_theme_to_all() {
     if (btn_voice_widget) {
         lv_obj_set_style_bg_color(btn_voice_widget, c->btn_secondary, 0);
     }
+    if (btn_work_widget) {
+        lv_obj_set_style_bg_color(btn_work_widget, c->btn_secondary, 0);
+    }
     /* Search button */
     if (g_search_btn) {
         lv_obj_set_style_bg_color(g_search_btn, c->btn_secondary, 0);
@@ -9736,13 +9804,13 @@ static lv_obj_t* g_wizard_step_labels[WIZARD_STEPS] = {nullptr};
 static lv_obj_t* g_wizard_step_lines[WIZARD_STEPS - 1] = {nullptr};
 
 static const I18n wizard_step_short_names[WIZARD_STEPS] = {
-    {"Language", "语言"},
-    {"Env", "环境"},
-    {"Model", "模型"},
-    {"Local", "本地模型"},
-    {"IM", "IM"},
-    {"Leader", "Leader"},
-    {"Confirm", "确认"}
+    {"A-Language", "A-语言"},
+    {"A-Env", "A-环境"},
+    {"A-Model", "A-模型"},
+    {"B-Local", "B-本地"},
+    {"B-IM", "B-IM"},
+    {"B-Leader", "B-Leader"},
+    {"B-Confirm", "B-确认"}
 };
 
 static void wizard_update_step_bar(int current_step);
@@ -9821,13 +9889,13 @@ static void save_wizard_completed() {
 
 /* Step title strings */
 static const I18n wizard_step_titles[WIZARD_STEPS] = {
-    {"Language", "语言"},                         /* Step 0 */
-    {"OpenClaw Detection", "OpenClaw 检测"},       /* Step 1 */
-    {"Model & API Key", "模型 & API 密钥"},        /* Step 2 */
-    {"Local Models (Optional)", "本地模型（可选）"}, /* Step 3 */
-    {"Connect IM (Optional)", "连接 IM（可选）"},    /* Step 4 */
-    {"Leader Mode", "Leader 模式"},               /* Step 5 */
-    {"Profile & Confirm", "个人信息 & 确认"}        /* Step 6 */
+    {"Phase A · Language", "阶段A · 语言"},                         /* Step 0 */
+    {"Phase A · OpenClaw Detection", "阶段A · OpenClaw 检测"},       /* Step 1 */
+    {"Phase A · Model & API Key", "阶段A · 模型 & API 密钥"},        /* Step 2 */
+    {"Phase B · Local Models (Optional)", "阶段B · 本地模型（可选）"}, /* Step 3 */
+    {"Phase B · Connect IM (Optional)", "阶段B · 连接 IM（可选）"},    /* Step 4 */
+    {"Phase B · Leader Mode", "阶段B · Leader 模式"},               /* Step 5 */
+    {"Phase B · Profile & Confirm", "阶段B · 个人信息 & 确认"}        /* Step 6 */
 };
 
 /* Wizard text strings — bilingual */
@@ -11427,8 +11495,11 @@ static void wizard_update_step() {
     g_wiz_install_progress_bar = nullptr;
 
     /* Update step indicator */
-    char step_text[32];
-    snprintf(step_text, sizeof(step_text), tr(W_STEP_FMT), g_wizard_step + 1, WIZARD_STEPS);
+    char step_text[48];
+    const char* phase_txt = (g_lang == Lang::CN)
+        ? ((g_wizard_step <= 2) ? "阶段A" : "阶段B")
+        : ((g_wizard_step <= 2) ? "Phase A" : "Phase B");
+    snprintf(step_text, sizeof(step_text), "%s  ·  %d/%d", phase_txt, g_wizard_step + 1, WIZARD_STEPS);
     lv_label_set_text(g_wizard_step_label, step_text);
 
     /* Update step indicator bar */
@@ -11722,8 +11793,8 @@ void ui_show_setup_wizard() {
 
     /* Step counter (right of title) */
     g_wizard_step_label = lv_label_create(header);
-    char step_text[32];
-    snprintf(step_text, sizeof(step_text), tr(W_STEP_FMT), 1, WIZARD_STEPS);
+    char step_text[48];
+    snprintf(step_text, sizeof(step_text), "%s  ·  %d/%d", g_lang == Lang::CN ? "阶段A" : "Phase A", 1, WIZARD_STEPS);
     lv_label_set_text(g_wizard_step_label, step_text);
     lv_obj_set_style_text_color(g_wizard_step_label, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(g_wizard_step_label, FONT(11), 0);
@@ -12300,6 +12371,22 @@ void app_ui_init() {
     lv_obj_set_style_text_font(mode_dd_chat_ai_mode, CJK_FONT_SMALL, 0);
     lv_obj_set_style_text_font(mode_dd_chat_ai_mode, FONT(12), LV_PART_INDICATOR);
     lv_obj_add_event_cb(mode_dd_chat_ai_mode, ai_mode_dropdown_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    dd_x += DD_W + DD_GAP;
+    ctrl_btn_dual_view = lv_btn_create(ctrl_bar);
+    lv_obj_set_size(ctrl_btn_dual_view, SCALE(110), DD_H);
+    lv_obj_set_pos(ctrl_btn_dual_view, dd_x, (SCALE(CTRL_BAR_H) - DD_H) / 2);
+    lv_obj_set_style_bg_color(ctrl_btn_dual_view, c->btn_secondary, 0);
+    lv_obj_set_style_bg_opa(ctrl_btn_dual_view, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(ctrl_btn_dual_view, SCALE(g_colors->radius_sm), 0);
+    lv_obj_set_style_border_width(ctrl_btn_dual_view, 0, 0);
+    lv_obj_clear_flag(ctrl_btn_dual_view, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(ctrl_btn_dual_view, c2_dual_view_toggle_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_dual = lv_label_create(ctrl_btn_dual_view);
+    lv_obj_set_style_text_color(lbl_dual, c->text, 0);
+    lv_obj_set_style_text_font(lbl_dual, CJK_FONT_SMALL, 0);
+    lv_obj_center(lbl_dual);
+    c2_refresh_dual_view_button();
 
     int content_w = mode_content_w();
     int content_h = mode_content_h();
@@ -13254,6 +13341,23 @@ void app_ui_init() {
         lv_label_set_text(voice_lbl, "V");
         lv_obj_set_style_text_color(voice_lbl, c->text_inverse, 0);
         lv_obj_center(voice_lbl);
+
+        btn_work_widget = lv_button_create(mode_panel_chat);
+        lv_obj_set_size(btn_work_widget, btn_size, btn_size);
+        lv_obj_set_pos(btn_work_widget, btn_x - (btn_size + btn_gap) * 3, btn_y);
+        lv_obj_set_style_radius(btn_work_widget, btn_size / 2, 0);
+        lv_obj_set_style_bg_color(btn_work_widget, c->surface, 0);
+        lv_obj_set_style_bg_opa(btn_work_widget, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(btn_work_widget, 1, 0);
+        lv_obj_set_style_border_color(btn_work_widget, c->border, 0);
+        lv_obj_clear_flag(btn_work_widget, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(btn_work_widget, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+        lv_obj_add_event_cb(btn_work_widget, chat_send_to_work_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_add_event_cb(btn_work_widget, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
+        lv_obj_t* work_lbl = lv_label_create(btn_work_widget);
+        lv_label_set_text(work_lbl, "W");
+        lv_obj_set_style_text_color(work_lbl, c->text_inverse, 0);
+        lv_obj_center(work_lbl);
 
         /* Track input text changes to update button state */
         lv_obj_add_event_cb(chat_input, chat_input_value_changed_for_btn_cb, LV_EVENT_VALUE_CHANGED, nullptr);
