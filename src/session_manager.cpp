@@ -179,8 +179,8 @@ SessionManager& session_mgr() { return g_session_mgr; }
 
 bool SessionManager::refresh() {
     TraceSpan span("session_refresh");
-    sessions_.clear();
-    last_error_.clear();
+    std::vector<SessionInfo> new_sessions;
+    std::string new_error;
 
     /* ── 优先：HTTP 直调 Gateway API（毫秒级，无子进程开销）── */
     char response[16384] = {0};
@@ -189,11 +189,19 @@ bool SessionManager::refresh() {
     int code = http_get(url, response, sizeof(response), 1);
 
     if (code >= 200 && code < 500 && response[0] != '\0') {
-        bool parsed = parse_json(response);
+        bool parsed = parse_json(response, new_sessions);
         if (parsed) {
+            std::lock_guard<std::mutex> lk(mtx_);
+            sessions_ = std::move(new_sessions);
+            last_error_.clear();
             return true;  /* span 在作用域结束时自动记录 */
         }
-        last_error_ = "Invalid sessions JSON";
+        new_error = "Invalid sessions JSON";
+        {
+            std::lock_guard<std::mutex> lk(mtx_);
+            sessions_.clear();
+            last_error_ = new_error;
+        }
         span.set_fail();
         return false;
     }
@@ -208,21 +216,31 @@ bool SessionManager::refresh() {
     );
 
     if (!ok || output[0] == '\0') {
+        std::lock_guard<std::mutex> lk(mtx_);
+        sessions_.clear();
         last_error_ = "Failed to query sessions";
         LOG_W("SESSION", "sessions.list CLI fallback failed");
         span.set_fail();
         return false;
     }
 
-    bool parsed = parse_json(output);
+    bool parsed = parse_json(output, new_sessions);
     if (!parsed) {
+        std::lock_guard<std::mutex> lk(mtx_);
+        sessions_.clear();
         last_error_ = "Invalid sessions JSON";
         span.set_fail();
+        return false;
+    }
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        sessions_ = std::move(new_sessions);
+        last_error_.clear();
     }
     return parsed;
 }
 
-bool SessionManager::parse_json(const char* json) {
+bool SessionManager::parse_json(const char* json, std::vector<SessionInfo>& out_sessions) const {
     /* Walk through JSON array of session objects.
      * Each session has: key, agentId, origin{provider,surface,chatType}, lastChannel, ageMs, etc.
      * We find each "key":"..." entry and extract fields from surrounding context.
@@ -272,7 +290,7 @@ bool SessionManager::parse_json(const char* json) {
             si.tokenCount = tokens;
         }
 
-        sessions_.push_back(std::move(si));
+        out_sessions.push_back(std::move(si));
         count++;
 
         /* Move past this session block */
@@ -289,6 +307,7 @@ bool SessionManager::parse_json(const char* json) {
 
 std::vector<SessionInfo> SessionManager::active_sessions(long long threshold_ms) const {
     std::vector<SessionInfo> result;
+    std::lock_guard<std::mutex> lk(mtx_);
     for (const auto& s : sessions_) {
         if (s.is_active(threshold_ms)) {
             result.push_back(s);
@@ -299,6 +318,7 @@ std::vector<SessionInfo> SessionManager::active_sessions(long long threshold_ms)
 
 int SessionManager::active_count(long long threshold_ms) const {
     int count = 0;
+    std::lock_guard<std::mutex> lk(mtx_);
     for (const auto& s : sessions_) {
         if (s.is_active(threshold_ms)) count++;
     }
@@ -322,6 +342,7 @@ bool SessionManager::abort_session(const char* session_key) {
     bool ok = exec_cmd_local(cmd, output, sizeof(output), 10000);
 
     if (!ok) {
+        std::lock_guard<std::mutex> lk(mtx_);
         last_error_ = "Failed to execute session reset";
         LOG_W("SESSION", "Abort session '%s' failed: exec error", session_key);
         span.set_fail();
@@ -341,6 +362,7 @@ bool SessionManager::abort_all() {
     );
 
     if (!ok) {
+        std::lock_guard<std::mutex> lk(mtx_);
         last_error_ = "Failed to reset all sessions";
         LOG_W("SESSION", "Abort all sessions failed");
         span.set_fail();
@@ -364,4 +386,14 @@ std::string SessionManager::format_active_info(long long threshold_ms) const {
         result += buf;
     }
     return result;
+}
+
+std::vector<SessionInfo> SessionManager::sessions() const {
+    std::lock_guard<std::mutex> lk(mtx_);
+    return sessions_;
+}
+
+std::string SessionManager::last_error() const {
+    std::lock_guard<std::mutex> lk(mtx_);
+    return last_error_;
 }

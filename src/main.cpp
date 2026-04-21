@@ -470,15 +470,28 @@ int main(int argc, char* argv[]) {
     LOG_I("MAIN", "Log file: %s", app_log_file().c_str());
     LOG_I("MAIN", "Log enabled: %d  level: %d", g_log_enabled, g_log_level);
 
-    /* P2: Prevent multiple instances */
+    /* P2: Prevent multiple instances.
+     * Do not show a blocking message box (looks like app freeze to users).
+     * Instead, try to bring the existing instance to front and exit quietly. */
     if (!acquire_instance_mutex()) {
-        /* Show native MessageBox and exit immediately — no second instance allowed */
-        MessageBoxA(nullptr,
-            "AnyClaw is already running.\n\n"
-            "An instance of AnyClaw LVGL is already active in the system tray.",
+        const char* titles[] = {
+            "AnyClaw LVGL v2.0 - Desktop Manager",
             "AnyClaw LVGL",
-            MB_OK | MB_ICONWARNING | MB_TOPMOST);
-        return 1;
+            nullptr
+        };
+        HWND existing = nullptr;
+        for (int i = 0; titles[i]; ++i) {
+            existing = FindWindowA(nullptr, titles[i]);
+            if (existing) break;
+        }
+        if (existing) {
+            ShowWindow(existing, SW_RESTORE);
+            SetForegroundWindow(existing);
+            FlashWindow(existing, TRUE);
+            return 0;
+        }
+        LOG_W("MAIN", "Another instance is running but no main window was found; exit silently to avoid blocking popup");
+        return 0;
     }
 
     /* Console hidden in release build (WIN32 subsystem) — use anyclaw_app.log for debug */
@@ -611,28 +624,10 @@ int main(int argc, char* argv[]) {
     /* Create SDL window using LVGL's official driver (EGL preferred, software fallback) */
     lv_display_t* disp = lv_sdl_window_create(win_w, win_h);
     if (!disp) {
-        LOG_E("MAIN", "lv_sdl_window_create failed (EGL init error?). Retrying without EGL...");
-        /* EGL/GLES2 not available at runtime — fallback to software rendering */
-#if LV_SDL_USE_EGL
-        /* Force software mode by reinitializing SDL without EGL */
-        lv_sdl_quit();
-        SDL_Quit();
-        /* Software render driver hint is not needed as LVGL handles this internally
-         * when LV_SDL_USE_EGL is not set. We just log the degradation. */
-        LOG_W("MAIN", "EGL unavailable on this system, falling back to software rendering");
-        /* Re-init SDL */
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
-            LOG_E("MAIN", "SDL re-init failed: %s", SDL_GetError());
-        }
-        /* Note: software fallback requires recompiling with LV_SDL_USE_EGL=0.
-         * At runtime, we inform the user and continue best-effort. */
-        MessageBoxA(nullptr,
-            "GPU acceleration (EGL) is not available on this system.\n"
-            "The application will run with software rendering.\n\n"
-            "For best performance, ensure your GPU drivers are up to date.",
-            "AnyClaw LVGL - GPU Fallback",
-            MB_OK | MB_ICONWARNING | MB_TOPMOST);
-#endif
+        LOG_E("MAIN", "lv_sdl_window_create failed; abort startup to avoid invalid display access");
+        app_log_shutdown();
+        release_instance_mutex();
+        return 1;
     }
 
     /* Bug 1: Enable window resizing so maximize/restore works */

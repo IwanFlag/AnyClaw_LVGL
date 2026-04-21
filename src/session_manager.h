@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <mutex>
 
 /* Parsed session info from Gateway */
 struct SessionInfo {
@@ -29,7 +30,7 @@ public:
     bool refresh();
 
     /* Get all parsed sessions */
-    const std::vector<SessionInfo>& sessions() const { return sessions_; }
+    std::vector<SessionInfo> sessions() const;
 
     /* Get only active sessions (ageMs < threshold) */
     std::vector<SessionInfo> active_sessions(long long threshold_ms = 300000) const;
@@ -47,13 +48,14 @@ public:
     std::string format_active_info(long long threshold_ms = 300000) const;
 
     /* Get last error message */
-    const char* last_error() const { return last_error_.c_str(); }
+    std::string last_error() const;
 
 private:
     std::vector<SessionInfo> sessions_;
     std::string last_error_;
+    mutable std::mutex mtx_;
 
-    bool parse_json(const char* json);
+    bool parse_json(const char* json, std::vector<SessionInfo>& out_sessions) const;
 };
 
 /* Global singleton */

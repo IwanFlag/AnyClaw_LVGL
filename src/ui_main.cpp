@@ -8090,10 +8090,7 @@ static void lang_toggle_cb(lv_event_t* e) {
 
 void app_refresh_status() {
     ClawStatus status = ClawStatus::Checking;
-    if (!health_try_get_last_status(&status)) {
-        OpenClawInfo info = app_detect_openclaw();
-        status = app_check_status(info);
-    }
+    (void)health_try_get_last_status(&status);
 
     /* Update status text (small dim, next to LED) */
     if (status_label) {
