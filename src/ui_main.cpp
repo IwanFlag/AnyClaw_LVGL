@@ -8599,7 +8599,7 @@ void ui_show_about_dialog() {
     const ThemeColors* c = g_colors;
 
     static const I18n S_ABOUT_TITLE = {"About", "关于"};
-    static const I18n S_VERSION = {"Version v2.2.1", "版本 v2.2.1"};
+    static const I18n S_VERSION = {"Version v2.2.11", "版本 v2.2.11"};
     static const I18n S_SLOGAN = {"Your OpenClaw Desktop Manager", "龙虾要吃蒜蓉的 🧄🦞"};
     static const I18n S_CLOSE = {"Close", "关闭"};
 

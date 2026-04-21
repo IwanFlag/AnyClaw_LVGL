@@ -93,6 +93,7 @@ static lv_obj_t* api_key_status_label = nullptr;
 
 /* ── Model tab widgets ── */
 static lv_obj_t* model_dropdown = nullptr;
+static lv_obj_t* model_search_input = nullptr;
 static lv_obj_t* model_current_label = nullptr;
 static lv_obj_t* model_provider_hint = nullptr; /* "Provider: openrouter/xiaomi" */
 static lv_obj_t* failover_list_container = nullptr; /* checkbox list for failover models */
@@ -1398,6 +1399,51 @@ static void build_model_tab(lv_obj_t* tab) {
     lv_obj_t* lbl_select = lv_label_create(tab);
     lv_label_set_text(lbl_select, tr("选择模型", "Select Model"));
     apply_section_label(lbl_select);
+
+    /* Model search filter input */
+    model_search_input = lv_textarea_create(tab);
+    lv_textarea_set_one_line(model_search_input, true);
+    lv_textarea_set_placeholder_text(model_search_input, tr("搜索模型...", "Search models..."));
+    lv_obj_set_width(model_search_input, LV_PCT(100));
+    lv_obj_set_height(model_search_input, SCALE(56));
+    apply_input_style(model_search_input);
+    lv_textarea_set_text_selection(model_search_input, true);
+    lv_group_add_obj(lv_group_get_default(), model_search_input);
+    lv_obj_add_event_cb(model_search_input, [](lv_event_t* e) {
+        lv_obj_t* ta = lv_event_get_target_obj(e);
+        const char* kw = lv_textarea_get_text(ta);
+
+        /* Rebuild dropdown options filtered by keyword */
+        char filtered[4096] = {0};
+        int count = 0;
+        for (int i = 0; i < model_get_count(); i++) {
+            const char* mname = model_get_name(i);
+            /* Case-insensitive substring match */
+            bool match = false;
+            if (!kw || !kw[0]) {
+                match = true;
+            } else {
+                const char* p = mname;
+                while (*p) {
+                    if (tolower((unsigned char)*p) == tolower((unsigned char)*kw)) {
+                        /* Try matching rest */
+                        const char* k = kw;
+                        while (*k && *p && tolower((unsigned char)*p) == tolower((unsigned char)*k)) {
+                            k++; p++;
+                        }
+                        if (!*k) { match = true; break; }
+                    }
+                    p++;
+                }
+            }
+            if (match) {
+                if (count > 0) strcat(filtered, "\n");
+                strcat(filtered, mname);
+                count++;
+            }
+        }
+        if (model_dropdown) lv_dropdown_set_options(model_dropdown, filtered);
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
 
     /* Insert user's Gateway model into list if not already present */
     if (gw_model[0]) {
