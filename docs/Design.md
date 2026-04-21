@@ -1,6 +1,6 @@
-# AnyClaw LVGL — 设计规范 v2.2.2
+# AnyClaw LVGL — 设计规范 v2.2.3
 
-> 版本：v2.2.11 | 目标用户：大学生 & 职场年轻人 | 更新时间：2026-04-21
+> 版本：v2.2.3（整合修订） | 目标用户：大学生 & 职场年轻人 | 更新时间：2026-04-21
 > 本文档定义 AnyClaw "长什么样、怎么画、画在哪"。产品需求见 `PRD.md`。
 
 ---
@@ -30,8 +30,7 @@
 | MODE-01 | §6.1 | 界面模式切换 | UI-21 | §15 交互组件 | 🔧 |
 | AIMODE-01 | §6.2 | AI 交互模式 | UI-22, UI-29, UI-32 | §15 交互组件 | ✅ |
 | CTRL-01 | §6.3 | UI 控制权模式 | UI-22 | §15 交互组件 | 🔧 |
-|| RT-01 | §12.1.5 | 运行时系统 | — | §12 窗口系统 | 🔧 |
-|| RT-01 | §12.1.5 | 三 Agent 并行（Leader 模式） | — | §12 窗口系统 | 🔧 |
+| RT-01 | §12.1.5 | 运行时系统 / 三 Agent 并行（Leader 模式） | — | §12 窗口系统 | 🔧 |
 | MODEL-01 | §7.2 | 云端模型管理 | UI-35, UI-47 | §16 配置界面 | ✅ |
 | LOCAL-01 | §7.3 | 本地模型管理 | UI-07, UI-42 | §16 配置界面 | 🔧 |
 | FAILOVER-01 | §7.4 | Model Failover | UI-47 | §16 配置界面 | ✅ |
@@ -128,7 +127,7 @@
 
 ### 2.1 主题体系
 
-五套主题，三套主打 + 两套备选，通过 Settings General Tab 切换，即时生效无需重启。
+三套主打主题，通过 Settings General Tab 切换，即时生效无需重启。
 
 **主打主题（完整规格）：**
 
@@ -137,13 +136,6 @@
 | `matcha` | 抹茶 Matcha v1 | 深色系，薄荷绿清新风，长时间使用 | ✅ 默认 |
 | `peachy` | 桃气 Peachy v2 | 暖色系，珊瑚橘苹果风，年轻人友好 | |
 | `mochi` | 糯 Mochi v3 | 米白系，奶茶棕温柔风，质感文艺 | |
-
-**备选主题（精简规格）：**
-
-| 主题 ID | 名称 | 定位 |
-|---------|------|------|
-| `dark` | 经典暗色 | 低饱和度偏好，VS Code 风 |
-| `light` | 亮色 | 日间/高亮环境 |
 
 ---
 
@@ -462,90 +454,20 @@
 | 英文 | **Lora** | Merriweather | Georgia, serif |
 | 等宽 | JetBrains Mono | Fira Code | Consolas, monospace |
 
-> Mochi 是三个主打主题中唯一使用衬线体的——思源宋体 + Lora 传递"安静阅读"的质感。标题用衬线，正文 UI 仍用 HarmonyOS Sans SC（可读性）。
+> Mochi 是三个主打主题中唯一使用衬线体的——思源宋体 + Lora 传递"安静阅读"的质感。标题用衬线，正文 UI 仍用 Noto Sans SC（可读性）。
 
 **混合策略：**
 
 | 场景 | 使用字体 |
 |------|---------|
-| 正文、消息、UI 控件 | HarmonyOS Sans SC / Plus Jakarta Sans（无衬线，保证可读性） |
+| 正文、消息、UI 控件 | Noto Sans SC / Plus Jakarta Sans（无衬线，保证可读性） |
 | 标题、品牌文案、About 页 | 思源宋体 SC / Lora（衬线，传递质感） |
 | 引用块、笔记 | 思源宋体 SC / Lora（衬线，阅读感） |
 | 代码块 | JetBrains Mono（等宽） |
 
 ---
 
-# 🌑 备选主题
-
-### 2.5 经典暗色 (dark)
-
-> VS Code 风，低饱和度偏好。
-
-| Token | 色值 |
-|-------|------|
-| `bg` | `#1E1E1E` |
-| `surface` | `#252526` |
-| `panel` | `#2D2D30` |
-| `raised` | `#383838` |
-| `overlay` | `#404040` |
-| `text_primary` | `#CCCCCC` |
-| `text_secondary` | `#808080` |
-| `accent` | `#007ACC` |
-| `success` | `#4EC9B0` |
-| `warning` | `#CE9178` |
-| `danger` | `#F44336` |
-| `info` | `#569CD6` |
-| `bubble_user_bg` | `#264F78` |
-| `bubble_ai_bg` | `#2D2D30` |
-| `border` | `#3E3E42` |
-
-### 2.6 亮色 (light)
-
-> 日间/高亮环境。
-
-| Token | 色值 |
-|-------|------|
-| `bg` | `#F5F7FA` |
-| `surface` | `#EBEEF2` |
-| `panel` | `#FFFFFF` |
-| `raised` | `#FFFFFF` |
-| `overlay` | `#E2E5EA` |
-| `text_primary` | `#1A1D27` |
-| `text_secondary` | `#6B7280` |
-| `accent` | `#2BB673` |
-| `success` | `#16A34A` |
-| `warning` | `#D97706` |
-| `danger` | `#DC2626` |
-| `info` | `#3B82F6` |
-| `bubble_user_bg` | `#DCFCE7` |
-| `bubble_ai_bg` | `#F1F5F9` |
-| `border` | `#E2E5EA` |
-
-### 2.7 怀旧暗色 (classic)
-
-> 极简深灰，保留兼容。
-
-| Token | 色值 |
-|-------|------|
-| `bg` | `#2D2D2D` |
-| `surface` | `#333333` |
-| `panel` | `#3C3C3C` |
-| `raised` | `#444444` |
-| `overlay` | `#505050` |
-| `text_primary` | `#FFFFFF` |
-| `text_secondary` | `#B0B0B0` |
-| `accent` | `#82AAF0` |
-| `success` | `#4CAF50` |
-| `warning` | `#FFC107` |
-| `danger` | `#F44336` |
-| `info` | `#2196F3` |
-| `bubble_user_bg` | `#4070C0` |
-| `bubble_ai_bg` | `#3C3C3C` |
-| `border` | `#555555` |
-
----
-
-### 2.7 色彩使用规则
+### 2.5 色彩使用规则
 
 | 规则 | 说明 |
 |------|------|
@@ -558,7 +480,7 @@
 | Mochi 圆角微收敛 | 卡片/弹窗 radius -SCALE(2) 对比 Matcha |
 | 主题切换 | 300ms 全局色值过渡，不硬切 |
 
-### 2.8 三套主打主题完整对照表
+### 2.6 三套主打主题完整对照表
 
 | Token | 🍵 Matcha v1 | 🍑 Peachy v2 | 🍡 Mochi v3 |
 |-------|-------------|-------------|------------|
@@ -582,7 +504,7 @@
 | `border` | `#3DD68C0A` | `#F0E0D0` | `#D6CFC4` |
 | `focus_glow` | `#3DD68C30` | `#FF7F5030` | `#A67B5B25` |
 | 英文字体 | Plus Jakarta Sans | Nunito | Plus Jakarta Sans(正文) / Lora(标题) |
-| 中文字体 | HarmonyOS Sans SC | HarmonyOS Sans SC | HarmonyOS Sans SC(正文) / 思源宋体SC(标题) |
+| 中文字体 | Noto Sans SC | Noto Sans SC | Noto Sans SC(正文) / 思源宋体SC(标题) |
 | 圆角风格 | 标准 SCALE(8/12/16) | 放大 SCALE(12/20/22) | 微收敛 SCALE(8/10/14) |
 | 阴影色相 | 冷黑 | 暖棕 | 暖棕（更淡） |
 | 按钮风格 | accent 渐变圆形 | 双色渐变圆形 | accent 纯色圆形 |
@@ -593,24 +515,24 @@
 
 > 需求 → PRD §3 主界面
 
-### 3.1 字体栈（5 主题）
+### 3.1 字体栈（三套主打主题）
 
 #### 🍵 Matcha v1 — 清新锐利
 
 | 类型 | 主选 | 备选 | 回退 |
 |------|------|------|------|
-| 中文（UI/正文/标题通用） | **HarmonyOS Sans SC** | 思源黑体 SC | PingFang SC, 微软雅黑, sans-serif |
+| 中文（UI/正文/标题通用） | **Noto Sans SC** | 思源黑体 SC | PingFang SC, 微软雅黑, sans-serif |
 | 英文（UI/正文） | **Plus Jakarta Sans** | Inter | Segoe UI, sans-serif |
 | 英文（标题/品牌） | **Plus Jakarta Sans Bold** | Inter Bold | Segoe UI Bold, sans-serif |
 | 等宽 | **JetBrains Mono** | Fira Code | Consolas, monospace |
 
-> Plus Jakarta Sans 比 Inter 更圆润有温度，比 Montserrat 更现代。HarmonyOS Sans SC 比微软雅黑清晰锐利，Variable Weight 支持好。全主题统一无衬线，干净利落。
+> Plus Jakarta Sans 比 Inter 更圆润有温度，比 Montserrat 更现代。Noto Sans SC 比微软雅黑清晰锐利，Variable Weight 支持好。全主题统一无衬线，干净利落。
 
 #### 🍑 Peachy v2 — 温暖亲和
 
 | 类型 | 主选 | 备选 | 回退 |
 |------|------|------|------|
-| 中文（UI/正文/标题通用） | **HarmonyOS Sans SC** | 思源黑体 SC | PingFang SC, 微软雅黑, sans-serif |
+| 中文（UI/正文/标题通用） | **Noto Sans SC** | 思源黑体 SC | PingFang SC, 微软雅黑, sans-serif |
 | 英文（UI/正文） | **Nunito** | Quicksand | Segoe UI, sans-serif |
 | 英文（标题/品牌） | **Nunito Bold** | Quicksand Bold | Segoe UI Bold, sans-serif |
 | 等宽 | **JetBrains Mono** | Fira Code | Consolas, monospace |
@@ -621,33 +543,13 @@
 
 | 类型 | 用途 | 主选 | 备选 | 回退 |
 |------|------|------|------|------|
-| 中文 UI 控件 | 按钮/输入/菜单 | **HarmonyOS Sans SC** | 思源黑体 SC | PingFang SC, sans-serif |
+| 中文 UI 控件 | 按钮/输入/菜单 | **Noto Sans SC** | 思源黑体 SC | PingFang SC, sans-serif |
 | 中文 标题/引用 | 弹窗标题/引用块 | **思源宋体 SC** | LXGW WenKai | Noto Serif SC, serif |
 | 英文 UI 控件 | 按钮/输入/标签 | **Plus Jakarta Sans** | Inter | Segoe UI, sans-serif |
 | 英文 标题/引用 | 品牌/About/引用 | **Lora** | Merriweather | Georgia, serif |
 | 等宽 | 代码/日志 | **JetBrains Mono** | Fira Code | Consolas, monospace |
 
 > Mochi 混用衬线体——UI 控件用无衬线保证可读性，标题和引用用衬线传递「安静阅读」质感。思源宋体 SC + Lora 传递茶道美学。
-
-#### 🌑 经典暗色 Dark — VS Code 风
-
-| 类型 | 主选 | 备选 | 回退 |
-|------|------|------|------|
-| 中文 | **思源黑体 SC** | HarmonyOS Sans SC | 微软雅黑, sans-serif |
-| 英文 | **Inter** | SF Pro Display | Segoe UI, sans-serif |
-| 等宽 | **JetBrains Mono** | Fira Code | Consolas, monospace |
-
-> 经典暗色偏好开发者风格，Inter + 思源黑体是经典组合。
-
-#### ☀️ 亮色 Light — 日间高亮
-
-| 类型 | 主选 | 备选 | 回退 |
-|------|------|------|------|
-| 中文 | **HarmonyOS Sans SC** | 思源黑体 SC | PingFang SC, 微软雅黑, sans-serif |
-| 英文 | **Inter** | SF Pro Display | Segoe UI, sans-serif |
-| 等宽 | **JetBrains Mono** | Fira Code | Consolas, monospace |
-
-> 亮色主题追求简洁通用，Inter + HarmonyOS Sans SC 干净无干扰。
 
 ### 3.2 字号体系
 
@@ -673,35 +575,35 @@
 > 每个 UI 元素 = 字体族 + 字号 Token + 字重。按主题分列。
 > "无衬线" = 该主题的 UI 正文字体；"衬线" = 该主题的标题/引用字体（仅 Mochi 有）。
 
-| UI 元素 | 字号 | 字重 | 🍵 Matcha | 🍑 Peachy | 🍡 Mochi | 🌑 Dark | ☀️ Light |
-|---------|------|------|-----------|-----------|----------|---------|----------|
-| **品牌标题** (标题栏/About) | display | 700 | PJS Bold | Nunito Bold | Lora Bold | Inter Bold | Inter Bold |
-| **弹窗标题** | h1 | 700 | PJS Bold | Nunito Bold | 思源宋体 SC Bold | Inter Bold | Inter Bold |
-| **区域标题** (面板/Tab) | h2 | 600 | PJS SemiBold | Nunito SemiBold | 思源宋体 SC Bold | Inter SemiBold | Inter SemiBold |
-| **卡片标题** (StepCard/Session) | h3 | 600 | PJS SemiBold | Nunito SemiBold | PJS SemiBold | Inter SemiBold | Inter SemiBold |
-| **正文** (消息/内容) | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
-| **强调正文** | body | 600 | PJS SemiBold | Nunito SemiBold | PJS SemiBold | Inter SemiBold | Inter SemiBold |
-| **Chat 消息** | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
+| UI 元素 | 字号 | 字重 | 🍵 Matcha | 🍑 Peachy | 🍡 Mochi |
+|---------|------|------|-----------|-----------|----------|
+| **品牌标题** (标题栏/About) | display | 700 | PJS Bold | Nunito Bold | Lora Bold |
+| **弹窗标题** | h1 | 700 | PJS Bold | Nunito Bold | 思源宋体 SC Bold |
+| **区域标题** (面板/Tab) | h2 | 600 | PJS SemiBold | Nunito SemiBold | 思源宋体 SC Bold |
+| **卡片标题** (StepCard/Session) | h3 | 600 | PJS SemiBold | Nunito SemiBold | PJS SemiBold |
+| **正文** (消息/内容) | body | 400 | PJS Regular | Nunito Regular | PJS Regular |
+| **强调正文** | body | 600 | PJS SemiBold | Nunito SemiBold | PJS SemiBold |
+| **Chat 消息** | body | 400 | PJS Regular | Nunito Regular | PJS Regular |
 | **Chat 消息（Mochi引用块）** | body | 400 | — | — | Lora Regular | — | — |
-| **按钮文字** | body | 600 | PJS SemiBold | Nunito SemiBold | PJS SemiBold | Inter SemiBold | Inter SemiBold |
-| **输入框文字** | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
-| **输入框占位符** | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
-| **下拉选项** | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
-| **次要信息** (时间戳/说明) | small | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
-| **标签/胶囊** | caption | 500 | PJS Medium | Nunito Medium | PJS Medium | Inter Medium | Inter Medium |
-| **代码块** | code | 400 | JetBrains Mono | JetBrains Mono | JetBrains Mono | JetBrains Mono | JetBrains Mono |
-| **行内代码** | code | 400 | JetBrains Mono | JetBrains Mono | JetBrains Mono | JetBrains Mono | JetBrains Mono |
-| **终端日志** | code | 400 | JetBrains Mono | JetBrains Mono | JetBrains Mono | JetBrains Mono | JetBrains Mono |
-| **步骤指示器文字** | small | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
-| **向导步骤名** | caption | 500 | PJS Medium | Nunito Medium | PJS Medium | Inter Medium | Inter Medium |
-| **设置行标签** | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
-| **设置行说明** | small | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
-| **Toast 通知** | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
-| **Tooltip** | small | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
-| **空状态文案** | body | 400 | PJS Regular | Nunito Regular | PJS Regular | Inter Regular | Inter Regular |
-| **中文** (上述所有 CJK 场景) | 同上 | 同上 | HarmonyOS Sans SC | HarmonyOS Sans SC | 无衬线=HarmOS SC / 衬线=思源宋体 SC | 思源黑体 SC | HarmonyOS Sans SC |
+| **按钮文字** | body | 600 | PJS SemiBold | Nunito SemiBold | PJS SemiBold |
+| **输入框文字** | body | 400 | PJS Regular | Nunito Regular | PJS Regular |
+| **输入框占位符** | body | 400 | PJS Regular | Nunito Regular | PJS Regular |
+| **下拉选项** | body | 400 | PJS Regular | Nunito Regular | PJS Regular |
+| **次要信息** (时间戳/说明) | small | 400 | PJS Regular | Nunito Regular | PJS Regular |
+| **标签/胶囊** | caption | 500 | PJS Medium | Nunito Medium | PJS Medium |
+| **代码块** | code | 400 | JetBrains Mono | JetBrains Mono | JetBrains Mono |
+| **行内代码** | code | 400 | JetBrains Mono | JetBrains Mono | JetBrains Mono |
+| **终端日志** | code | 400 | JetBrains Mono | JetBrains Mono | JetBrains Mono |
+| **步骤指示器文字** | small | 400 | PJS Regular | Nunito Regular | PJS Regular |
+| **向导步骤名** | caption | 500 | PJS Medium | Nunito Medium | PJS Medium |
+| **设置行标签** | body | 400 | PJS Regular | Nunito Regular | PJS Regular |
+| **设置行说明** | small | 400 | PJS Regular | Nunito Regular | PJS Regular |
+| **Toast 通知** | body | 400 | PJS Regular | Nunito Regular | PJS Regular |
+| **Tooltip** | small | 400 | PJS Regular | Nunito Regular | PJS Regular |
+| **空状态文案** | body | 400 | PJS Regular | Nunito Regular | PJS Regular |
+| **中文** (上述所有 CJK 场景) | 同上 | 同上 | Noto Sans SC | Noto Sans SC | 无衬线=Noto SC / 衬线=思源宋体 SC |
 
-**缩写：** PJS = Plus Jakarta Sans, HarmOS = HarmonyOS, 思源宋体 SC = Source Han Serif SC
+**缩写：** PJS = Plus Jakarta Sans, Noto SC = Noto Sans SC, 思源宋体 SC = Source Han Serif SC
 
 **字重速查：**
 
@@ -723,8 +625,8 @@
 | `PlusJakartaSans-Bold.ttf` | ~25KB | Bold 700 |
 | `Nunito-Regular.ttf` | ~25KB | Regular 400 |
 | `Nunito-Bold.ttf` | ~25KB | Bold 700 |
-| `HarmonyOS_Sans_SC_Regular.otf` | ~2MB | Regular 400 |
-| `HarmonyOS_Sans_SC_Bold.otf` | ~2MB | Bold 700 |
+| `NotoSansSC-Regular.otf` | ~2MB | Regular 400 |
+| `NotoSansSC-Bold.otf` | ~2MB | Bold 700 |
 | `Lora-Regular.ttf` | ~150KB | Regular 400 |
 | `Lora-Bold.ttf` | ~150KB | Bold 700 |
 | `JetBrainsMono-Regular.ttf` | ~300KB | Regular 400 |
@@ -767,19 +669,19 @@ struct ThemeFonts {
 
 #### 各主题字体对应关系
 
-| Font 指针 | 🍵 Matcha | 🍑 Peachy | 🍡 Mochi | 🌑 Dark | ☀️ Light |
-|-----------|-----------|-----------|----------|---------|----------|
-| `display` | PJS Bold 28px | Nunito Bold 28px | Lora Bold 28px | Inter Bold 28px | Inter Bold 28px |
-| `h1` | PJS Bold 22px | Nunito Bold 22px | 思源宋体 Bold 22px | Inter Bold 22px | Inter Bold 22px |
-| `h2` | PJS SemiBold 18px | Nunito SemiBold 18px | 思源宋体 Bold 18px | Inter SemiBold 18px | Inter SemiBold 18px |
-| `h3` | PJS SemiBold 15px | Nunito SemiBold 15px | PJS SemiBold 15px | Inter SemiBold 15px | Inter SemiBold 15px |
-| `body` | PJS Regular 13px | Nunito Regular 13px | PJS Regular 13px | Inter Regular 13px | Inter Regular 13px |
-| `body_strong` | PJS SemiBold 13px | Nunito SemiBold 13px | PJS SemiBold 13px | Inter SemiBold 13px | Inter SemiBold 13px |
-| `small` | PJS Regular 11px | Nunito Regular 11px | PJS Regular 11px | Inter Regular 11px | Inter Regular 11px |
-| `caption` | PJS Medium 10px | Nunito Medium 10px | PJS Medium 10px | Inter Medium 10px | Inter Medium 10px |
-| `code` | JetBrains Mono 12px | JetBrains Mono 12px | JetBrains Mono 12px | JetBrains Mono 12px | JetBrains Mono 12px |
-| `cjk_body` | HarmOS SC Reg | HarmOS SC Reg | HarmOS SC Reg | 思源黑体 SC Reg | HarmOS SC Reg |
-| `cjk_title` | HarmOS SC Bold | HarmOS SC Bold | 思源宋体 SC Bold | 思源黑体 SC Bold | HarmOS SC Bold |
+| Font 指针 | 🍵 Matcha | 🍑 Peachy | 🍡 Mochi |
+|-----------|-----------|-----------|----------|
+| `display` | PJS Bold 28px | Nunito Bold 28px | Lora Bold 28px |
+| `h1` | PJS Bold 22px | Nunito Bold 22px | 思源宋体 Bold 22px |
+| `h2` | PJS SemiBold 18px | Nunito SemiBold 18px | 思源宋体 Bold 18px |
+| `h3` | PJS SemiBold 15px | Nunito SemiBold 15px | PJS SemiBold 15px |
+| `body` | PJS Regular 13px | Nunito Regular 13px | PJS Regular 13px |
+| `body_strong` | PJS SemiBold 13px | Nunito SemiBold 13px | PJS SemiBold 13px |
+| `small` | PJS Regular 11px | Nunito Regular 11px | PJS Regular 11px |
+| `caption` | PJS Medium 10px | Nunito Medium 10px | PJS Medium 10px |
+| `code` | JetBrains Mono 12px | JetBrains Mono 12px | JetBrains Mono 12px |
+| `cjk_body` | Noto SC Reg | Noto SC Reg | Noto SC Reg |
+| `cjk_title` | Noto SC Bold | Noto SC Bold | 思源宋体 SC Bold |
 
 > Mochi 的 `cjk_title` 使用思源宋体 SC（衬线），与其他主题不同。
 > 所有 CJK 字体通过 `lv_font_t->fallback` 链接到对应英文主字体，实现中英混排自动切换。
@@ -788,7 +690,7 @@ struct ThemeFonts {
 
 ```
 英文渲染请求 → 主字体（如 PJS Regular）
-  → 找不到字形 → fallback → CJK 字体（如 HarmOS SC Regular）
+  → 找不到字形 → fallback → CJK 字体（如 Noto SC Regular）
     → 找不到字形 → fallback → 系统字体（msyh / segoeui）
       → 找不到字形 → LVGL 内置位图字体
 ```
@@ -908,7 +810,7 @@ int h1_px   = font_size(FONT_H1_PCT,   WIN_H, FONT_MIN_H1);    /* 800h → 22px 
 
 | Token | 公式 | 800px 基准 | 最小值 |
 |-------|------|-----------|--------|
-| `NAV_W` | 窗口宽 × 4% | 32px | 40px |
+| `NAV_W` | 窗口宽 × 6% | 48px | 36px |
 | `NAV_ICON_BTN` | 导航宽 × 70% | 28px | — |
 | `NAV_QUICK_H` | 内容区高 × 25% | — | — |
 
@@ -916,7 +818,7 @@ int h1_px   = font_size(FONT_H1_PCT,   WIN_H, FONT_MIN_H1);    /* 800h → 22px 
 
 | Token | 公式 | 1450px 基准 | 最小值 |
 |-------|------|------------|--------|
-| `LEFT_PANEL_W` | 可用宽 × 25% | 353px | 160px |
+| `LEFT_PANEL_W` | 可用宽 × 25% | 341px | 160px |
 | `LP_ROW_H` | 左面板高 × 8% | — | 24px |
 | `TASK_ITEM_H` | 左面板高 × 8% | — | 24px |
 
@@ -1110,14 +1012,14 @@ int h1_px   = font_size(FONT_H1_PCT,   WIN_H, FONT_MIN_H1);    /* 800h → 22px 
 
 大蒜+LED 合体，按主题 + 状态组合：
 
-| 状态 | Matcha LED | Peachy LED |
-|------|-----------|------------|
-| 空闲 | 白 `#E8ECF4` | 暖灰 `#8B7355` |
-| 运行中 | 薄荷绿 `#3DD68C` | 珊瑚橘 `#FF7F50` |
-| 异常 | 红 `#FF6B6B` | 暖红 `#FF5C5C` |
-| 检测中 | 黄 `#FFBE3D` | 暖橙 `#FFB347` |
+| 状态 | Matcha LED | Peachy LED | Mochi LED |
+|------|-----------|------------|-----------|
+| 空闲 | 白 `#E8ECF4` | 暖灰 `#8B7355` | 暖灰 `#B0A394` |
+| 运行中 | 薄荷绿 `#3DD68C` | 珊瑚橘 `#FF7F50` | 奶茶棕 `#A67B5B` |
+| 异常 | 红 `#FF6B6B` | 暖红 `#FF5C5C` | 砖红 `#C47070` |
+| 检测中 | 黄 `#FFBE3D` | 暖橙 `#FFB347` | 香槟金 `#C9A96E` |
 
-尺寸：16/20/32/48/96px（PNG，因托盘 API 需要位图）。
+尺寸：16/20/32/48px（PNG，因托盘 API 需要位图）。
 
 ### 5.5 图标层级
 
@@ -1296,6 +1198,9 @@ int h1_px   = font_size(FONT_H1_PCT,   WIN_H, FONT_MIN_H1);    /* 800h → 22px 
   Peachy:
     Off:  bg=#E0D0C0, thumb=#B8A089
     On:   bg=accent(#FF7F50), thumb=white
+  Mochi:
+    Off:  bg=#D6CFC4, thumb=#B0A394
+    On:   bg=accent(#A67B5B), thumb=white
   动画: 200ms ease-out 滑动 + thumb 弹性回弹
 ```
 
@@ -2193,7 +2098,7 @@ icon-only，hover 300ms 显示 tooltip。
   Mochi:  #A67B5B → #C9A96E (渐变)
 ```
 
-### UI-52 ~ UI-56: 五套主题
+### UI-52 ~ UI-54: 三套主打主题
 
 **主打主题：**
 
@@ -2201,14 +2106,7 @@ icon-only，hover 300ms 显示 tooltip。
 |------|----|-------|------|--------|------|
 | 🍵 Matcha v1 (默认) | #0F1117 | #1A1D27 | #E8ECF4 | #3DD68C | 薄荷绿深色 |
 | 🍑 Peachy v2 | #FFF8F3 | #FFFFFF | #2D1B14 | #FF7F50 | 珊瑚橘暖色 |
-
-**备选主题：**
-
-| 主题 | bg | panel | text | accent | 风格 |
-|------|----|-------|------|--------|------|
-| 经典暗色 | #1E1E1E | #2D2D30 | #CCCCCC | #007ACC | VS Code 风 |
-| 亮色 | #F5F7FA | #FFFFFF | #1A1D27 | #2BB673 | 日间高亮 |
-| 怀旧暗色 | #2D2D2D | #3C3C3C | #FFFFFF | #82AAF0 | 极简深灰 |
+| 🍡 Mochi v3 | #FAF6F0 | #FFFDF9 | #3D3226 | #A67B5B | 奶茶棕米白 |
 
 主题切换：300ms 全局色值过渡，不硬切。Peachy 圆角放大（radius +radius_lg）。
 
@@ -2827,7 +2725,7 @@ Chat 和 Work 模式的输入区完全相同，区别仅在于输出区。控制
 │  Boot Start        [====]  Start on boot                 │
 │  Auto Start        [    ]  Restart on crash              │
 │  ─────────────────────────────────────────────────────── │
-│  Theme             [■ Dark] [□ Light] [□ Classic]        │
+│  Theme             [■ Matcha] [□ Peachy] [□ Mochi]       │
 │  Language          [CN / EN ▾]                            │
 │  Exit Confirm      [====]  弹出退出确认                  │
 │  Close on Exit     [====]  Close OpenClaw on exit        │
