@@ -381,3 +381,9 @@
 - Resources 快照已补充 workspace 健康信息（exists/writable），用于快速诊断权限与目录可用性。
 - 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
 
+### Delta 2026-04-23 #31
+
+- 已完成 Tasks 一键任务模板执行：新增 Health Check / Workspace Sync / Resource Audit 三个模板按钮。
+- 行为：点击后自动生成任务提示并立即触发 Work 执行，同时自动切换到 Work 视图查看执行过程。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+
