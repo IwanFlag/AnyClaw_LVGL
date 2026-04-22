@@ -373,10 +373,3 @@
 - 已新增对应只读快照视图，支持手动刷新与缩放自适应。
 - 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
 
-### Delta 2026-04-22 #29
-
-- 已将 Tasks/Resources 面板按钮接入真实数据：
-  - Tasks：读取当前任务部件数量与会话管理器活跃会话，生成实时快照。
-  - Resources：读取 workspace root 并扫描文件/目录统计，同时统计 assets 文件数。
-- 已新增只读结果视图用于展示实时统计，替代纯占位文案。
-- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
