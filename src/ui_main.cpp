@@ -222,18 +222,18 @@ struct ThemeFontPaths {
 };
 
 static const ThemeFontPaths FONT_PATHS[] = {
-        /* Theme::Matcha — Inter + 思源黑体 SC */
+                /* Theme::Matcha — Inter + Noto Sans SC */
     { "assets/fonts/Inter-Regular.ttf", "assets/fonts/Inter-SemiBold.ttf",
-      "assets/fonts/Inter-Bold.ttf", "assets/fonts/SourceHanSansSC-Regular.otf",
-      "assets/fonts/SourceHanSansSC-Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
-    /* Theme::Peachy — Nunito + HarmonyOS Sans SC */
+            "assets/fonts/Inter-Bold.ttf", "assets/fonts/NotoSansSC-Regular.otf",
+            "assets/fonts/NotoSansSC-Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
+        /* Theme::Peachy — Nunito + Noto Sans SC */
     { "assets/fonts/Nunito-Regular.ttf", "assets/fonts/Nunito-Bold.ttf",
-      "assets/fonts/Nunito-Bold.ttf", "assets/fonts/HarmonyOS_Sans_SC_Regular.otf",
-      "assets/fonts/HarmonyOS_Sans_SC_Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
-    /* Theme::Mochi — PJS + Lora + 思源宋体 SC */
+            "assets/fonts/Nunito-Bold.ttf", "assets/fonts/NotoSansSC-Regular.otf",
+            "assets/fonts/NotoSansSC-Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
+        /* Theme::Mochi — PJS + Lora + Noto Sans SC */
     { "assets/fonts/PlusJakartaSans-Regular.ttf", "assets/fonts/PlusJakartaSans-SemiBold.ttf",
-      "assets/fonts/Lora-Bold.ttf", "assets/fonts/HarmonyOS_Sans_SC_Regular.otf",
-      "assets/fonts/SourceHanSerifSC-Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
+            "assets/fonts/Lora-Bold.ttf", "assets/fonts/NotoSansSC-Regular.otf",
+            "assets/fonts/NotoSansSC-Bold.otf", "assets/fonts/JetBrainsMono-Regular.ttf" },
 };
 
 void init_theme_fonts(Theme theme) {
@@ -4482,6 +4482,34 @@ static bool ask_mode_confirm_action(const char* reason, const char* suggestion, 
         return ok;
     }
 
+    {
+        char default_choice[64] = "allow";
+        if (options_csv && options_csv[0]) {
+            char opts[256];
+            snprintf(opts, sizeof(opts), "%s", options_csv);
+            for (char* p = opts; *p; ++p) {
+                if (*p == ',') *p = '|';
+            }
+            char* ctxp = nullptr;
+            char* tok = strtok_s(opts, "|", &ctxp);
+            if (tok && tok[0]) {
+                while (*tok == ' ' || *tok == '\t') tok++;
+                snprintf(default_choice, sizeof(default_choice), "%s", tok);
+            }
+        }
+
+        char msg[896];
+        snprintf(msg, sizeof(msg),
+                 "AI Ask Mode decision required.\n\nReason: %s\nSuggestion: %s\n\nYes = continue\nNo = reject",
+                 reason ? reason : "(none)",
+                 suggestion ? suggestion : "(none)");
+        bool ok = MessageBoxA(nullptr, msg, "AnyClaw Ask Feedback", MB_ICONQUESTION | MB_YESNO | MB_TOPMOST | MB_SETFOREGROUND) == IDYES;
+        if (out_answer && out_answer_cap > 0) {
+            snprintf(out_answer, out_answer_cap, "%s", ok ? default_choice : "reject");
+        }
+        return ok;
+    }
+
     lv_obj_t* overlay = nullptr;
     lv_obj_t* box = create_dialog(lv_screen_active(), "AnyClaw Ask Feedback", 0, 0, &overlay);
     if (!box || !overlay) return false;
@@ -8490,6 +8518,19 @@ int ui_permission_confirm(const char* perm_key, const char* target) {
     if (!g_ui_ready || g_ui_thread_id == 0 || GetCurrentThreadId() != g_ui_thread_id) {
         return -1;
     }
+
+    {
+        char msg[768];
+        snprintf(msg, sizeof(msg),
+                 "Agent requests command permission.\n\nPermission: %s\nTarget: %s\n\nYes = allow once\nNo = deny\nCancel = allow and remember",
+                 perm_key ? perm_key : "exec_shell",
+                 target ? target : "(unknown)");
+        int r = MessageBoxA(nullptr, msg, "AnyClaw Permission", MB_ICONQUESTION | MB_YESNOCANCEL | MB_TOPMOST | MB_SETFOREGROUND);
+        if (r == IDYES) return 1;
+        if (r == IDCANCEL) return 2;
+        return 0;
+    }
+
     static bool in_dialog = false;
     if (in_dialog) return 0;
     in_dialog = true;
@@ -9687,22 +9728,6 @@ static void create_title_bar(lv_obj_t* scr) {
 
     /* EN language toggle button removed - default language is English */
 
-    auto create_top_small_btn = [&](const char* txt, lv_event_cb_t cb) -> lv_obj_t* {
-        lv_obj_t* b = lv_button_create(title_bar);
-        lv_obj_set_style_bg_color(b, c->btn_secondary, 0);
-        lv_obj_set_style_radius(b, SCALE(g_colors->radius_sm), 0);
-        lv_obj_set_style_border_width(b, 0, 0);
-        lv_obj_clear_flag(b, LV_OBJ_FLAG_EVENT_BUBBLE);
-        lv_obj_add_event_cb(b, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
-        lv_obj_add_event_cb(b, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_CLICKED, nullptr);
-        lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, nullptr);
-        lv_obj_t* lbl = lv_label_create(b);
-        lv_label_set_text(lbl, txt);
-        lv_obj_set_style_text_font(lbl, CJK_FONT_SMALL, 0);
-        lv_obj_center(lbl);
-        return b;
-    };
-
     /* ═══ Window control buttons (top-right of title bar) ═══ */
     {
         int wc_btn_size = SCALE(28);  /* Smaller square buttons */
@@ -9719,12 +9744,7 @@ static void create_title_bar(lv_obj_t* scr) {
             }
         }
 
-        /* Right-top quick controls: mode switch + device + settings (left of minimize). */
-        int top_gap = SCALE(6);
-        int mode_w = SCALE(150);
-        int side_w = SCALE(68);
         int top_y = wc_btn_y;
-        int right_x = wc_base_x - top_gap;
 
         /* Status LED in title bar */
         int led_sz = TITLE_H * TITLE_LED_PCT / 100;
@@ -9732,8 +9752,8 @@ static void create_title_bar(lv_obj_t* scr) {
         lv_obj_set_size(led_ok, led_sz, led_sz);
         lv_led_set_color(led_ok, g_colors->warning);
         lv_led_off(led_ok);
-        right_x -= led_sz + SCALE(6);
-        lv_obj_set_pos(led_ok, right_x, top_y + (wc_btn_h - led_sz) / 2);
+        int led_x = wc_base_x - SCALE(6) - led_sz;
+        lv_obj_set_pos(led_ok, led_x, top_y + (wc_btn_h - led_sz) / 2);
 
         /* Model name (short) */
         {
@@ -9752,56 +9772,12 @@ static void create_title_bar(lv_obj_t* scr) {
                 lv_label_set_text(title_model, short_name);
                 lv_obj_set_style_text_color(title_model, g_colors->text_dim, 0);
                 lv_obj_set_style_text_font(title_model, FONT(10), 0);
-                right_x -= model_w;
-                lv_obj_set_pos(title_model, right_x, top_y + 4);
+                int model_x = led_x - SCALE(6) - model_w;
+                lv_obj_set_pos(title_model, model_x, top_y + 4);
                 lv_obj_set_width(title_model, model_w - SCALE(8));
                 lv_label_set_long_mode(title_model, LV_LABEL_LONG_MODE_DOTS);
-            } else {
-                right_x -= led_sz + SCALE(6);
             }
         }
-
-        top_btn_settings = create_top_small_btn("设置", [](lv_event_t* e) {
-            (void)e;
-            if (ui_settings_is_open()) return;
-            ui_settings_open();
-        });
-        right_x -= (side_w + top_gap);
-        lv_obj_set_size(top_btn_settings, side_w, wc_btn_h);
-        lv_obj_set_pos(top_btn_settings, right_x, top_y);
-
-        mode_bar = lv_obj_create(title_bar);
-        lv_obj_set_size(mode_bar, mode_w, wc_btn_h);
-        right_x -= (mode_w + top_gap);
-        lv_obj_set_pos(mode_bar, right_x, top_y);
-        lv_obj_set_style_bg_color(mode_bar, c->surface, 0);
-        lv_obj_set_style_border_width(mode_bar, 0, 0);
-        lv_obj_set_style_radius(mode_bar, 14, 0);
-        lv_obj_set_style_pad_all(mode_bar, 2, 0);
-        lv_obj_clear_flag(mode_bar, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_clear_flag(mode_bar, LV_OBJ_FLAG_EVENT_BUBBLE);
-        lv_obj_set_flex_flow(mode_bar, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(mode_bar, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_set_style_pad_gap(mode_bar, 4, 0);
-        auto create_mode_btn = [&](const char* txt, lv_event_cb_t cb) -> lv_obj_t* {
-            lv_obj_t* b = lv_button_create(mode_bar);
-            lv_obj_set_height(b, wc_btn_h - 4);
-            lv_obj_set_flex_grow(b, 1);
-            lv_obj_set_style_border_width(b, 0, 0);
-            lv_obj_set_style_radius(b, 5, 0);
-            lv_obj_set_style_bg_color(b, c->btn_secondary, 0);
-            lv_obj_clear_flag(b, LV_OBJ_FLAG_EVENT_BUBBLE);
-            lv_obj_add_event_cb(b, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
-            lv_obj_add_event_cb(b, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_CLICKED, nullptr);
-            lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, nullptr);
-            lv_obj_t* lbl = lv_label_create(b);
-            lv_label_set_text(lbl, txt);
-            lv_obj_set_style_text_font(lbl, CJK_FONT_SMALL, 0);
-            lv_obj_center(lbl);
-            return b;
-        };
-        top_mode_chat = create_mode_btn("Chat", mode_chat_cb);
-        top_mode_work = create_mode_btn("Work", mode_work_cb);
 
         /* Minimize button - 灰色 */
         btn_minimize = lv_button_create(title_bar);
@@ -9871,10 +9847,10 @@ static void create_title_bar(lv_obj_t* scr) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  Setup Wizard — First-launch 7-step onboarding
+ *  Setup Wizard — First-launch Phase A 4-step onboarding
  * ═══════════════════════════════════════════════════════════════ */
 
-#define WIZARD_STEPS 7
+#define WIZARD_STEPS 4
 static lv_obj_t* g_wizard_modal = nullptr;
 static lv_obj_t* g_wizard_box = nullptr;
 static lv_obj_t* g_wizard_step_label = nullptr;
@@ -9931,10 +9907,15 @@ static lv_obj_t* g_wiz_btn_install_local = nullptr;
 static lv_obj_t* g_wiz_btn_cancel_install = nullptr;
 static lv_obj_t* g_wiz_install_active_label = nullptr;
 static lv_timer_t* g_wiz_install_poll_timer = nullptr;
+static lv_timer_t* g_wiz_detect_poll_timer = nullptr;
 static std::atomic<bool> g_wiz_install_running(false);
 static std::atomic<bool> g_wiz_install_result_ready(false);
+static std::atomic<bool> g_wiz_detect_running(false);
+static std::atomic<bool> g_wiz_detect_result_ready(false);
 static bool g_wiz_install_result_ok = false;
 static char g_wiz_install_result_msg[512] = {0};
+static EnvCheckResult g_wiz_detect_env{};
+static bool g_wiz_detect_net_ok = false;
 static lv_obj_t* g_wiz_install_progress_panel = nullptr;
 static lv_obj_t* g_wiz_install_progress_task = nullptr;
 static lv_obj_t* g_wiz_install_progress_step = nullptr;
@@ -9959,10 +9940,7 @@ static const I18n wizard_step_short_names[WIZARD_STEPS] = {
     {"A-Language", "A-语言"},
     {"A-Env", "A-环境"},
     {"A-Model", "A-模型"},
-    {"B-Local", "B-本地"},
-    {"B-IM", "B-IM"},
-    {"B-Leader", "B-Leader"},
-    {"B-Confirm", "B-确认"}
+    {"A-Complete", "A-完成"}
 };
 
 static void wizard_update_step_bar(int current_step);
@@ -10044,10 +10022,7 @@ static const I18n wizard_step_titles[WIZARD_STEPS] = {
     {"Phase A · Language", "阶段A · 语言"},                         /* Step 0 */
     {"Phase A · OpenClaw Detection", "阶段A · OpenClaw 检测"},       /* Step 1 */
     {"Phase A · Model & API Key", "阶段A · 模型 & API 密钥"},        /* Step 2 */
-    {"Phase B · Local Models (Optional)", "阶段B · 本地模型（可选）"}, /* Step 3 */
-    {"Phase B · Connect IM (Optional)", "阶段B · 连接 IM（可选）"},    /* Step 4 */
-    {"Phase B · Leader Mode", "阶段B · Leader 模式"},               /* Step 5 */
-    {"Phase B · Profile & Confirm", "阶段B · 个人信息 & 确认"}        /* Step 6 */
+    {"Phase A · Complete", "阶段A · 完成"}                          /* Step 3 */
 };
 
 /* Wizard text strings — bilingual */
@@ -10113,6 +10088,14 @@ static const I18n W_OC_LABEL     = {"OpenClaw:", "OpenClaw："};
 static const I18n W_APIK_LABEL   = {"API Key:", "API 密钥："};
 static const I18n W_NICK_PH      = {"Your nickname...", "你的昵称..."};
 static const I18n W_NONE         = {"(none)", "（无）"};
+static const I18n W_FINAL_HINT   = {
+    "Final step: review your setup and enter AnyClaw. Advanced features are optional and can be configured later in C3.",
+    "最后一步：确认当前配置并进入 AnyClaw。进阶能力是可选项，可稍后在 C3 中配置。"
+};
+static const I18n W_STAGEB_HINT  = {
+    "Stage B recommendations (non-blocking): Local Models, IM Connect, Leader/Runtime management.",
+    "阶段B 推荐（非阻断）：本地模型、IM 连接、Leader/Runtime 管理。"
+};
 
 static void wizard_update_step();
 static void wizard_close_cb(lv_event_t* e);
@@ -10270,6 +10253,14 @@ static void wiz_install_poll_cb(lv_timer_t* t) {
         lv_timer_del(g_wiz_install_poll_timer);
         g_wiz_install_poll_timer = nullptr;
     }
+}
+
+static void wiz_detect_poll_cb(lv_timer_t* t) {
+    (void)t;
+    if (!g_wizard_modal || g_wizard_step != 1) return;
+    if (!g_wiz_detect_result_ready.load()) return;
+    g_wiz_detect_result_ready.store(false);
+    wizard_go_step(1);
 }
 
 /* ── Gateway init (async, for users with OC already installed) ── */
@@ -10542,14 +10533,51 @@ static void wiz_install_oc_cb(lv_event_t* e) {
 
 /* ── Step 1: Detection (Node.js → npm → Network → OpenClaw → Gateway) ── */
 static void wizard_build_step_detect() {
+    if (!g_wiz_detect_result_ready.load()) {
+        lv_obj_t* hint = lv_label_create(g_wizard_content);
+        lv_label_set_text(hint, tr(W_DETECT_HINT));
+        lv_obj_set_style_text_color(hint, g_colors->text_dim, 0);
+        lv_obj_set_style_text_font(hint, CJK_FONT, 0);
+
+        wizard_add_status_row(g_wizard_content, tr(W_RUNNING), g_colors->warning);
+        wizard_set_next_enabled(false);
+
+        if (!g_wiz_detect_running.load()) {
+            g_wiz_detect_running.store(true);
+            std::thread([]() {
+                EnvCheckResult env = app_check_environment();
+                char net_resp[128] = {0};
+                int net_code = http_get("https://openrouter.ai/api/v1/models", net_resp, sizeof(net_resp), 2);
+                bool net_ok = (net_code > 0 && net_code < 500);
+                bool gw_ok = false;
+                if (env.openclaw_ok) {
+                    char gw_resp[128] = {0};
+                    int gw_code = http_get("http://127.0.0.1:18789/health", gw_resp, sizeof(gw_resp), 2);
+                    gw_ok = (gw_code > 0 && gw_code < 500);
+                }
+                env.gateway_ok = gw_ok;
+                g_wiz_detect_env = env;
+                g_wiz_detect_net_ok = net_ok;
+                g_wiz_detect_running.store(false);
+                g_wiz_detect_result_ready.store(true);
+            }).detach();
+        }
+
+        if (!g_wiz_detect_poll_timer) {
+            g_wiz_detect_poll_timer = lv_timer_create(wiz_detect_poll_cb, 120, nullptr);
+        }
+        return;
+    }
+
+    EnvCheckResult env = g_wiz_detect_env;
+    bool net_ok = g_wiz_detect_net_ok;
+
     lv_obj_t* hint = lv_label_create(g_wizard_content);
     lv_label_set_text(hint, tr(W_DETECT_HINT));
     lv_obj_set_style_text_color(hint, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(hint, CJK_FONT, 0);
-    lv_refr_now(NULL); /* Render before blocking calls */
 
     /* ═══ 1. Full environment check ═══ */
-    EnvCheckResult env = app_check_environment();
     g_wizard_openclaw_ok = env.openclaw_ok ? 1 : 0;
     g_wizard_hermes_ok = env.hermes_ok;
     g_wizard_hermes_healthy = env.hermes_healthy;
@@ -10581,10 +10609,6 @@ static void wizard_build_step_detect() {
     }
 
     /* ═══ 2. Network check ═══ */
-    char net_resp[128] = {0};
-    int net_code = http_get("https://openrouter.ai/api/v1/models", net_resp, sizeof(net_resp), 2);
-    bool net_ok = (net_code > 0 && net_code < 500);
-
     wizard_add_status_row(g_wizard_content,
         net_ok ? tr(W_NET_OK) : tr(W_NET_FAIL),
         net_ok ? g_colors->success : g_colors->danger);
@@ -10596,10 +10620,7 @@ static void wizard_build_step_detect() {
         wizard_add_status_row(g_wizard_content, buf, g_colors->success);
 
         /* ═══ 3b. Gateway health (only if OC is installed) ═══ */
-        char gw_resp[128] = {0};
-        int gw_code = http_get("http://127.0.0.1:18789/health", gw_resp, sizeof(gw_resp), 2);
-        bool gw_ok = (gw_code > 0 && gw_code < 500);
-        env.gateway_ok = gw_ok;
+        bool gw_ok = env.gateway_ok;
 
         wizard_add_status_row(g_wizard_content,
             gw_ok ? tr(W_GW_OK) : tr(W_GW_DOWN),
@@ -11452,6 +11473,13 @@ static void wizard_build_summary_text(char* buf, int buf_size) {
 }
 
 static void wizard_build_step_profile() {
+    lv_obj_t* final_hint = lv_label_create(g_wizard_content);
+    lv_label_set_text(final_hint, tr(W_FINAL_HINT));
+    lv_label_set_long_mode(final_hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(final_hint, LV_PCT(100));
+    lv_obj_set_style_text_color(final_hint, g_colors->accent_secondary, 0);
+    lv_obj_set_style_text_font(final_hint, CJK_FONT_SMALL, 0);
+
     /* ── Nickname ── */
     lv_obj_t* hint = lv_label_create(g_wizard_content);
     lv_label_set_text(hint, tr(W_NICK_HINT));
@@ -11530,9 +11558,16 @@ static void wizard_build_step_profile() {
     lv_obj_set_style_text_font(g_wiz_summary_lbl, CJK_FONT, 0);
     lv_label_set_long_mode(g_wiz_summary_lbl, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(g_wiz_summary_lbl, LV_PCT(100));
+
+    lv_obj_t* stageb = lv_label_create(g_wizard_content);
+    lv_label_set_text(stageb, tr(W_STAGEB_HINT));
+    lv_label_set_long_mode(stageb, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(stageb, LV_PCT(100));
+    lv_obj_set_style_text_color(stageb, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(stageb, CJK_FONT_SMALL, 0);
 }
 
-/* Refresh summary text when returning to step 6 */
+/* Refresh summary text when returning to final step */
 /* ── Build step content ── */
 static void wizard_update_step_bar(int current_step) {
     if (!g_wizard_step_bar) return;
@@ -11610,11 +11645,11 @@ static void wizard_update_step() {
         char* free_tag = strstr(g_wizard_model_name, " [free]");
         if (free_tag) *free_tag = '\0';
     }
-    if (g_wizard_step == 6 && g_wiz_nick_ta) {
+    if (g_wizard_step == 3 && g_wiz_nick_ta) {
         const char* t = lv_textarea_get_text(g_wiz_nick_ta);
         if (t) snprintf(g_wizard_nickname, sizeof(g_wizard_nickname), "%s", t);
     }
-    if (g_wizard_step == 6 && g_wiz_tz_dd) {
+    if (g_wizard_step == 3 && g_wiz_tz_dd) {
         g_wizard_tz_sel = lv_dropdown_get_selected(g_wiz_tz_dd);
     }
     if (g_wizard_step == 5 && g_wiz_leader_sw) {
@@ -11648,9 +11683,7 @@ static void wizard_update_step() {
 
     /* Update step indicator */
     char step_text[48];
-    const char* phase_txt = (g_lang == Lang::CN)
-        ? ((g_wizard_step <= 2) ? "阶段A" : "阶段B")
-        : ((g_wizard_step <= 2) ? "Phase A" : "Phase B");
+    const char* phase_txt = (g_lang == Lang::CN) ? "阶段A" : "Phase A";
     snprintf(step_text, sizeof(step_text), "%s  ·  %d/%d", phase_txt, g_wizard_step + 1, WIZARD_STEPS);
     lv_label_set_text(g_wizard_step_label, step_text);
 
@@ -11666,10 +11699,7 @@ static void wizard_update_step() {
         case 0: wizard_build_step_lang(); break;
         case 1: wizard_build_step_detect(); break;       /* May override: wizard_set_next_enabled(critical_ok) */
         case 2: wizard_build_step_model_api(); break;    /* Model + API Key */
-        case 3: wizard_build_step_gemma(); break;        /* Local Gemma models (optional) */
-        case 4: wizard_build_step_im(); break;           /* IM connect (optional) */
-        case 5: wizard_build_step_leader(); break;       /* Leader mode */
-        case 6: wizard_build_step_profile(); break;      /* Nickname + timezone + summary */
+        case 3: wizard_build_step_profile(); break;      /* Final confirm */
     }
 
     /* Update buttons */
@@ -11715,11 +11745,11 @@ static void wizard_next_cb(lv_event_t* e) {
         char* free_tag = strstr(g_wizard_model_name, " [free]");
         if (free_tag) *free_tag = '\0';
     }
-    if (g_wizard_step == 6 && g_wiz_nick_ta) {
+    if (g_wizard_step == 3 && g_wiz_nick_ta) {
         const char* t = lv_textarea_get_text(g_wiz_nick_ta);
         if (t) snprintf(g_wizard_nickname, sizeof(g_wizard_nickname), "%s", t);
     }
-    if (g_wizard_step == 6 && g_wiz_tz_dd) {
+    if (g_wizard_step == 3 && g_wiz_tz_dd) {
         g_wizard_tz_sel = lv_dropdown_get_selected(g_wiz_tz_dd);
     }
     if (g_wizard_step == 5 && g_wiz_leader_sw) {
@@ -11863,6 +11893,12 @@ static void wizard_close_cb(lv_event_t* e) {
         lv_timer_del(g_wiz_install_poll_timer);
         g_wiz_install_poll_timer = nullptr;
     }
+    if (g_wiz_detect_poll_timer) {
+        lv_timer_del(g_wiz_detect_poll_timer);
+        g_wiz_detect_poll_timer = nullptr;
+    }
+    g_wiz_detect_running.store(false);
+    g_wiz_detect_result_ready.store(false);
     if (g_wizard_modal) {
         lv_obj_del(g_wizard_modal);
         g_wizard_modal = nullptr;
@@ -11886,6 +11922,8 @@ void ui_show_setup_wizard() {
     g_wizard_step = 0;
     g_wizard_oc_installed_now = false; /* Reset install tracking */
     g_wizard_session_finished = false;
+    g_wiz_detect_running.store(false);
+    g_wiz_detect_result_ready.store(false);
     /* FIX P2: Pre-fill wizard state from saved config */
     if (g_api_key[0] && !g_wizard_api_key[0]) {
         snprintf(g_wizard_api_key, sizeof(g_wizard_api_key), "%s", g_api_key);
@@ -13528,12 +13566,8 @@ void app_ui_init() {
         lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -8);
     }
 
-    /* ═══ Settings UI ═══ */
-    lv_timer_create([](lv_timer_t* t) {
-        lv_obj_t* root = (lv_obj_t*)t->user_data;
-        if (root) ui_settings_init(root);
-        lv_timer_del(t);
-    }, 260, scr);
+    /* Settings panel is lazily initialized on first open to avoid
+       startup-time UI stalls caused by building all tabs up front. */
 
     /* Initial refresh - populates task list */
     run_proactive_startup_once();
