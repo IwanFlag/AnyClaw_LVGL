@@ -1963,6 +1963,10 @@ static lv_obj_t* right_panel = nullptr;
 static lv_obj_t* module_placeholder = nullptr;
 static lv_obj_t* module_placeholder_title = nullptr;
 static lv_obj_t* module_placeholder_desc = nullptr;
+static lv_obj_t* module_tasks_panel = nullptr;
+static lv_obj_t* module_files_panel = nullptr;
+static lv_obj_t* module_tasks_state = nullptr;
+static lv_obj_t* module_files_state = nullptr;
 static lv_obj_t* mode_bar = nullptr;
 static lv_obj_t* mode_btn_chat = nullptr;
 static lv_obj_t* mode_btn_voice = nullptr;
@@ -4986,10 +4990,18 @@ static void apply_nav_module_visuals() {
                 ? tr(I18n{"Tasks Center", "任务中心"})
                 : tr(I18n{"Resources Center", "资源中心"});
             const char* desc = (g_ui_nav_module == UI_NAV_TASKS)
-                ? tr(I18n{"Task scheduling/overview UI is being integrated.", "任务调度与总览界面正在接入中。"})
-                : tr(I18n{"Workspace/files/skills UI is being integrated.", "工作区/文件/技能界面正在接入中。"});
+                ? tr(I18n{"Task scheduling, queue and execution shortcuts.", "任务调度、队列与执行快捷入口。"})
+                : tr(I18n{"Workspace, files and skill assets shortcuts.", "工作区、文件与技能资源快捷入口。"});
             if (module_placeholder_title) lv_label_set_text(module_placeholder_title, title);
             if (module_placeholder_desc) lv_label_set_text(module_placeholder_desc, desc);
+            if (module_tasks_panel) {
+                if (g_ui_nav_module == UI_NAV_TASKS) lv_obj_clear_flag(module_tasks_panel, LV_OBJ_FLAG_HIDDEN);
+                else lv_obj_add_flag(module_tasks_panel, LV_OBJ_FLAG_HIDDEN);
+            }
+            if (module_files_panel) {
+                if (g_ui_nav_module == UI_NAV_FILES) lv_obj_clear_flag(module_files_panel, LV_OBJ_FLAG_HIDDEN);
+                else lv_obj_add_flag(module_files_panel, LV_OBJ_FLAG_HIDDEN);
+            }
             lv_obj_clear_flag(module_placeholder, LV_OBJ_FLAG_HIDDEN);
         }
     }
@@ -12752,7 +12764,99 @@ void app_ui_init() {
     lv_obj_set_style_text_align(module_placeholder_desc, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(module_placeholder_desc, CJK_FONT_SMALL, 0);
     lv_obj_set_style_text_color(module_placeholder_desc, c->text_dim, 0);
-    lv_label_set_text(module_placeholder_desc, tr(I18n{"Task scheduling/overview UI is being integrated.", "任务调度与总览界面正在接入中。"}));
+    lv_label_set_text(module_placeholder_desc, tr(I18n{"Task scheduling, queue and execution shortcuts.", "任务调度、队列与执行快捷入口。"}));
+
+    module_tasks_panel = lv_obj_create(module_placeholder);
+    lv_obj_set_width(module_tasks_panel, std::min(content_w - SCALE(40), SCALE(760)));
+    lv_obj_set_height(module_tasks_panel, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(module_tasks_panel, c->surface, 0);
+    lv_obj_set_style_bg_opa(module_tasks_panel, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(module_tasks_panel, 1, 0);
+    lv_obj_set_style_border_color(module_tasks_panel, c->border, 0);
+    lv_obj_set_style_radius(module_tasks_panel, SCALE(g_colors->radius_lg), 0);
+    lv_obj_set_style_pad_all(module_tasks_panel, SCALE(14), 0);
+    lv_obj_set_style_pad_gap(module_tasks_panel, SCALE(8), 0);
+    lv_obj_set_flex_flow(module_tasks_panel, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(module_tasks_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_clear_flag(module_tasks_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* t_title = lv_label_create(module_tasks_panel);
+    lv_label_set_text(t_title, tr(I18n{"Task Queue", "任务队列"}));
+    lv_obj_set_style_text_color(t_title, c->text, 0);
+    lv_obj_set_style_text_font(t_title, CJK_FONT, 0);
+    module_tasks_state = lv_label_create(module_tasks_panel);
+    lv_label_set_text(module_tasks_state, tr(I18n{"State: ready", "状态：就绪"}));
+    lv_obj_set_style_text_color(module_tasks_state, c->text_dim, 0);
+    lv_obj_set_style_text_font(module_tasks_state, CJK_FONT_SMALL, 0);
+    lv_obj_t* row_tasks_btn = lv_obj_create(module_tasks_panel);
+    lv_obj_set_width(row_tasks_btn, LV_PCT(100));
+    lv_obj_set_height(row_tasks_btn, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_tasks_btn, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_tasks_btn, 0, 0);
+    lv_obj_set_style_pad_all(row_tasks_btn, 0, 0);
+    lv_obj_set_style_pad_gap(row_tasks_btn, SCALE(8), 0);
+    lv_obj_set_flex_flow(row_tasks_btn, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_tasks_btn, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row_tasks_btn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* btn_task_refresh = aw_btn_create(row_tasks_btn, "Refresh Queue", BTN_SECONDARY, SCALE(150), SCALE(34));
+    lv_obj_add_event_cb(btn_task_refresh, [](lv_event_t* e) {
+        (void)e;
+        if (module_tasks_state) lv_label_set_text(module_tasks_state, tr(I18n{"State: queue refreshed", "状态：队列已刷新"}));
+        ui_log("[Tasks] Queue refresh requested");
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* btn_task_run = aw_btn_create(row_tasks_btn, "Run Pending", BTN_PRIMARY, SCALE(140), SCALE(34));
+    lv_obj_add_event_cb(btn_task_run, [](lv_event_t* e) {
+        (void)e;
+        if (module_tasks_state) lv_label_set_text(module_tasks_state, tr(I18n{"State: executing pending tasks", "状态：正在执行待处理任务"}));
+        ui_log("[Tasks] Run pending requested");
+    }, LV_EVENT_CLICKED, nullptr);
+
+    module_files_panel = lv_obj_create(module_placeholder);
+    lv_obj_set_width(module_files_panel, std::min(content_w - SCALE(40), SCALE(760)));
+    lv_obj_set_height(module_files_panel, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(module_files_panel, c->surface, 0);
+    lv_obj_set_style_bg_opa(module_files_panel, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(module_files_panel, 1, 0);
+    lv_obj_set_style_border_color(module_files_panel, c->border, 0);
+    lv_obj_set_style_radius(module_files_panel, SCALE(g_colors->radius_lg), 0);
+    lv_obj_set_style_pad_all(module_files_panel, SCALE(14), 0);
+    lv_obj_set_style_pad_gap(module_files_panel, SCALE(8), 0);
+    lv_obj_set_flex_flow(module_files_panel, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(module_files_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_clear_flag(module_files_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* f_title = lv_label_create(module_files_panel);
+    lv_label_set_text(f_title, tr(I18n{"Resource Hub", "资源中心"}));
+    lv_obj_set_style_text_color(f_title, c->text, 0);
+    lv_obj_set_style_text_font(f_title, CJK_FONT, 0);
+    module_files_state = lv_label_create(module_files_panel);
+    lv_label_set_text(module_files_state, tr(I18n{"State: ready", "状态：就绪"}));
+    lv_obj_set_style_text_color(module_files_state, c->text_dim, 0);
+    lv_obj_set_style_text_font(module_files_state, CJK_FONT_SMALL, 0);
+    lv_obj_t* row_files_btn = lv_obj_create(module_files_panel);
+    lv_obj_set_width(row_files_btn, LV_PCT(100));
+    lv_obj_set_height(row_files_btn, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_files_btn, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_files_btn, 0, 0);
+    lv_obj_set_style_pad_all(row_files_btn, 0, 0);
+    lv_obj_set_style_pad_gap(row_files_btn, SCALE(8), 0);
+    lv_obj_set_flex_flow(row_files_btn, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_files_btn, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row_files_btn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* btn_files_scan = aw_btn_create(row_files_btn, "Scan Workspace", BTN_SECONDARY, SCALE(160), SCALE(34));
+    lv_obj_add_event_cb(btn_files_scan, [](lv_event_t* e) {
+        (void)e;
+        if (module_files_state) lv_label_set_text(module_files_state, tr(I18n{"State: workspace scan requested", "状态：已请求扫描工作区"}));
+        ui_log("[Resources] Workspace scan requested");
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* btn_files_open = aw_btn_create(row_files_btn, "Open Asset Dir", BTN_PRIMARY, SCALE(150), SCALE(34));
+    lv_obj_add_event_cb(btn_files_open, [](lv_event_t* e) {
+        (void)e;
+        const char* asset_dir = "assets";
+        ShellExecuteA(nullptr, "open", asset_dir, nullptr, nullptr, SW_SHOWNORMAL);
+        if (module_files_state) lv_label_set_text(module_files_state, tr(I18n{"State: asset folder opened", "状态：资源目录已打开"}));
+        ui_log("[Resources] Open asset dir: %s", asset_dir);
+    }, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_add_flag(module_files_panel, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(module_placeholder, LV_OBJ_FLAG_HIDDEN);
 
     {
