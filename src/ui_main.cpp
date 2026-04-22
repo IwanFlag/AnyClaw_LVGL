@@ -4969,6 +4969,7 @@ static void update_main_title() {
 static void refresh_tasks_module_data(bool run_pending) {
     if (!module_tasks_state) return;
     SessionManager& sm = session_mgr();
+    bool refreshed = sm.refresh();
     auto sessions = sm.active_sessions();
     int visible_tasks = g_task_count;
     int active_sessions = (int)sessions.size();
@@ -4977,12 +4978,13 @@ static void refresh_tasks_module_data(bool run_pending) {
 
     if (run_pending) {
         lv_label_set_text_fmt(module_tasks_state,
-            "%s", tr(I18n{"State: run request accepted", "状态：已接收执行请求"}));
-        ui_log("[Tasks] Run pending requested (visible=%d, sessions=%d)", visible_tasks, active_sessions);
+            "%s", tr(I18n{"State: session cache synced", "状态：会话缓存已同步"}));
+        app_refresh_status();
+        ui_log("[Tasks] Session sync requested (ok=%d, visible=%d, sessions=%d)", refreshed ? 1 : 0, visible_tasks, active_sessions);
     } else {
         lv_label_set_text_fmt(module_tasks_state,
             "%s", tr(I18n{"State: queue refreshed", "状态：队列已刷新"}));
-        ui_log("[Tasks] Queue refreshed (visible=%d, sessions=%d)", visible_tasks, active_sessions);
+        ui_log("[Tasks] Queue refreshed (ok=%d, visible=%d, sessions=%d)", refreshed ? 1 : 0, visible_tasks, active_sessions);
     }
 
     if (!module_tasks_view) return;
@@ -5009,6 +5011,7 @@ static void refresh_files_module_data(bool scan_workspace) {
     if (!module_files_state || !module_files_view) return;
     namespace fs = std::filesystem;
     std::string ws_root = workspace_get_root();
+    WorkspaceHealth wh = workspace_check_health();
     int ws_files = 0;
     int ws_dirs = 0;
     int asset_files = 0;
@@ -5040,10 +5043,14 @@ static void refresh_files_module_data(bool scan_workspace) {
     char buf[2048] = {0};
     snprintf(buf, sizeof(buf),
              "Workspace root:\n%s\n\n"
+             "Exists: %s\n"
+             "Writable: %s\n"
              "Workspace files: %d\n"
              "Workspace dirs: %d\n"
              "Assets files: %d\n",
              ws_root.empty() ? "(empty)" : ws_root.c_str(),
+             wh.exists ? "yes" : "no",
+             wh.writable ? "yes" : "no",
              ws_files, ws_dirs, asset_files);
     lv_textarea_set_text(module_files_view, buf);
     ui_log("[Resources] Summary refreshed (scan=%d, files=%d, dirs=%d, assets=%d)",
@@ -12897,10 +12904,24 @@ void app_ui_init() {
         (void)e;
         refresh_tasks_module_data(false);
     }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* btn_task_run = aw_btn_create(row_tasks_btn, "Run Pending", BTN_PRIMARY, SCALE(140), SCALE(34));
+    lv_obj_t* btn_task_run = aw_btn_create(row_tasks_btn, "Sync Sessions", BTN_PRIMARY, SCALE(140), SCALE(34));
     lv_obj_add_event_cb(btn_task_run, [](lv_event_t* e) {
         (void)e;
         refresh_tasks_module_data(true);
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* btn_task_abort_all = aw_btn_create(row_tasks_btn, "Abort All", BTN_SECONDARY, SCALE(120), SCALE(34));
+    lv_obj_add_event_cb(btn_task_abort_all, [](lv_event_t* e) {
+        (void)e;
+        bool ok = session_mgr().abort_all();
+        if (ok) {
+            if (module_tasks_state) lv_label_set_text(module_tasks_state, tr(I18n{"State: all sessions aborted", "状态：所有会话已终止"}));
+            ui_toast_warn(g_lang == Lang::CN ? "已终止全部会话" : "All sessions aborted");
+        } else {
+            if (module_tasks_state) lv_label_set_text(module_tasks_state, tr(I18n{"State: abort all failed", "状态：全部终止失败"}));
+            ui_toast_error(g_lang == Lang::CN ? "终止会话失败" : "Abort sessions failed");
+        }
+        app_refresh_status();
+        refresh_tasks_module_data(false);
     }, LV_EVENT_CLICKED, nullptr);
     module_tasks_view = aw_textarea_create(module_tasks_panel, "Task queue snapshot...", false, std::min(content_w - SCALE(80), SCALE(700)), SCALE(180));
     lv_textarea_set_text_selection(module_tasks_view, true);
@@ -12950,6 +12971,29 @@ void app_ui_init() {
         refresh_files_module_data(false);
         if (module_files_state) lv_label_set_text(module_files_state, tr(I18n{"State: asset folder opened", "状态：资源目录已打开"}));
         ui_log("[Resources] Open asset dir: %s", asset_dir);
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* btn_files_sync = aw_btn_create(row_files_btn, "Sync Managed", BTN_SECONDARY, SCALE(140), SCALE(34));
+    lv_obj_add_event_cb(btn_files_sync, [](lv_event_t* e) {
+        (void)e;
+        bool ok = workspace_sync_managed_sections();
+        if (module_files_state) {
+            lv_label_set_text(module_files_state,
+                ok ? tr(I18n{"State: managed sections synced", "状态：托管段落已同步"})
+                   : tr(I18n{"State: managed sync failed", "状态：托管段落同步失败"}));
+        }
+        if (!ok) ui_toast_error(g_lang == Lang::CN ? "工作区同步失败" : "Workspace sync failed");
+        refresh_files_module_data(false);
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* btn_files_open_ws = aw_btn_create(row_files_btn, "Open Workspace", BTN_SECONDARY, SCALE(160), SCALE(34));
+    lv_obj_add_event_cb(btn_files_open_ws, [](lv_event_t* e) {
+        (void)e;
+        std::string ws = workspace_get_root();
+        if (!ws.empty()) {
+            ShellExecuteA(nullptr, "open", ws.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            if (module_files_state) lv_label_set_text(module_files_state, tr(I18n{"State: workspace opened", "状态：工作区已打开"}));
+            ui_log("[Resources] Open workspace: %s", ws.c_str());
+        }
+        refresh_files_module_data(false);
     }, LV_EVENT_CLICKED, nullptr);
     module_files_view = aw_textarea_create(module_files_panel, "Resource snapshot...", false, std::min(content_w - SCALE(80), SCALE(700)), SCALE(180));
     lv_textarea_set_text_selection(module_files_view, true);
