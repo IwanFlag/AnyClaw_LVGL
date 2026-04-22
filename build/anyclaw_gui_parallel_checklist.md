@@ -358,3 +358,9 @@
 - Tasks 提供队列刷新/执行入口；Resources 提供工作区扫描与资源目录打开入口。
 - 切换逻辑已更新：根据当前模块显示对应面板并同步标题说明。
 - 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+
+### Delta 2026-04-22 #28
+
+- 已补齐 Tasks/Resources 骨架在窗口缩放时的自适应宽度重排。
+- 目标：避免非 Bot 页面在小窗口挤压或大窗口过窄，保持卡片可读性。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
