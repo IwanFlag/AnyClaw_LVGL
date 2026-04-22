@@ -367,6 +367,14 @@
 
 ### Delta 2026-04-22 #29
 
+- 已将 Tasks/Resources 快捷按钮接入真实数据读取：
+  - Tasks：读取当前任务控件数、活动会话数、Cron 会话数，并输出任务快照。
+  - Resources：读取工作区根目录并统计文件/目录数量，同时统计 assets 文件数。
+- 已新增对应只读快照视图，支持手动刷新与缩放自适应。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+
+### Delta 2026-04-22 #29
+
 - 已将 Tasks/Resources 面板按钮接入真实数据：
   - Tasks：读取当前任务部件数量与会话管理器活跃会话，生成实时快照。
   - Resources：读取 workspace root 并扫描文件/目录统计，同时统计 assets 文件数。
