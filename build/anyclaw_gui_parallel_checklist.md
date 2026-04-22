@@ -344,3 +344,10 @@
 - 已补充 C4 页首说明，明确该中心承载日志、特性、Tracing、关于信息。
 - 影响代码: [src/ui_settings.cpp](../src/ui_settings.cpp)
 - 关联提交: `6790ebd`
+
+### Delta 2026-04-22 #26
+
+- 已为 C2 设置引导页增加“返回主界面”主按钮，减少用户在设置内迷航。
+- 行为：点击后直接关闭设置面板，回到主工作区继续 C2 统一输入流程。
+- 影响代码: [src/ui_settings.cpp](../src/ui_settings.cpp)
+- 关联提交: `2dbacc9`
