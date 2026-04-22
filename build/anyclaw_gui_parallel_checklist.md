@@ -364,3 +364,11 @@
 - 已补齐 Tasks/Resources 骨架在窗口缩放时的自适应宽度重排。
 - 目标：避免非 Bot 页面在小窗口挤压或大窗口过窄，保持卡片可读性。
 - 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+
+### Delta 2026-04-22 #29
+
+- 已将 Tasks/Resources 面板按钮接入真实数据：
+  - Tasks：读取当前任务部件数量与会话管理器活跃会话，生成实时快照。
+  - Resources：读取 workspace root 并扫描文件/目录统计，同时统计 assets 文件数。
+- 已新增只读结果视图用于展示实时统计，替代纯占位文案。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
