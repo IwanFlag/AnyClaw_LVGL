@@ -946,6 +946,8 @@ static void search_prev_cb(lv_event_t* e);      /* Forward */
 static void search_next_cb(lv_event_t* e);      /* Forward */
 static void relayout_panels();                  /* Forward */
 static void apply_mode_switch_visuals();
+static void apply_nav_module_visuals();
+static void update_main_title();
 static void work_send_cb(lv_event_t* e);
 static void work_prompt_input_cb(lv_event_t* e);
 static void chat_send_cb(lv_event_t* e);
@@ -1613,6 +1615,10 @@ static const char* tr_title(const I18n& s) {
 
 /* ── I18n Strings ── */
 static const I18n STR_TITLE       = {"AnyClaw Desktop Manager", "AnyClaw 桌面管理器"};
+static const I18n STR_TITLE_BOT_CHAT = {"Bot · Chat", "Bot · 对话"};
+static const I18n STR_TITLE_BOT_WORK = {"Bot · Work", "Bot · 任务"};
+static const I18n STR_TITLE_TASKS = {"Tasks", "任务"};
+static const I18n STR_TITLE_FILES = {"Resources", "资源"};
 
 static const I18n STR_LOG         = {"Log", "日志"};
 // STR_VERSION, STR_PORT removed — no longer displayed on main panel
@@ -1948,9 +1954,15 @@ static void loading_show() {
 /* Splitter / Resizable panels */
 static lv_obj_t* splitter = nullptr;
 static lv_obj_t* left_nav = nullptr;     /* icon-only module nav */
+static lv_obj_t* nav_btn_bot = nullptr;
+static lv_obj_t* nav_btn_tasks = nullptr;
+static lv_obj_t* nav_btn_files = nullptr;
 static lv_obj_t* nav_session = nullptr;   /* bottom nav: Chat/Work toggle */
 static lv_obj_t* left_panel = nullptr;
 static lv_obj_t* right_panel = nullptr;
+static lv_obj_t* module_placeholder = nullptr;
+static lv_obj_t* module_placeholder_title = nullptr;
+static lv_obj_t* module_placeholder_desc = nullptr;
 static lv_obj_t* mode_bar = nullptr;
 static lv_obj_t* mode_btn_chat = nullptr;
 static lv_obj_t* mode_btn_voice = nullptr;
@@ -2094,6 +2106,8 @@ static const int CTRL_BAR_H = 40;
 static int MODE_BAR_H = 36;
 enum UiMainMode { UI_MODE_CHAT = 0, UI_MODE_WORK = 1 };
 static UiMainMode g_ui_mode = UI_MODE_CHAT;
+enum UiNavModule { UI_NAV_BOT = 0, UI_NAV_TASKS = 1, UI_NAV_FILES = 2 };
+static UiNavModule g_ui_nav_module = UI_NAV_BOT;
 /* chat_cont is declared above for early chat-history restore helpers */
 static lv_obj_t* btn_send_widget = nullptr; /* Send button */
 static lv_obj_t* btn_upload_widget = nullptr; /* Upload button */
@@ -4887,6 +4901,15 @@ static void voice_stt_poll_cb(lv_timer_t* t) {
 
 static void apply_mode_switch_visuals() {
     if (!mode_panel_chat || !mode_panel_work) return;
+
+    if (g_ui_nav_module != UI_NAV_BOT) {
+        lv_obj_add_flag(mode_panel_chat, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(mode_panel_work, LV_OBJ_FLAG_HIDDEN);
+        if (ctrl_bar) lv_obj_add_flag(ctrl_bar, LV_OBJ_FLAG_HIDDEN);
+        update_main_title();
+        return;
+    }
+
     if (g_ui_mode == UI_MODE_CHAT) {
         lv_obj_clear_flag(mode_panel_chat, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(mode_panel_work, LV_OBJ_FLAG_HIDDEN);
@@ -4918,9 +4941,70 @@ static void apply_mode_switch_visuals() {
             lv_obj_set_style_text_color(lbl, (g_ui_mode == UI_MODE_WORK) ? nc->accent : nc->text_dim, 0);
         }
     }
+
+    update_main_title();
 }
 
-static void mode_chat_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_CHAT; apply_mode_switch_visuals(); relayout_panels(); }
+static void update_main_title() {
+    if (!title_label) return;
+    const I18n* s = &STR_TITLE;
+    if (g_ui_nav_module == UI_NAV_BOT) {
+        s = (g_ui_mode == UI_MODE_CHAT) ? &STR_TITLE_BOT_CHAT : &STR_TITLE_BOT_WORK;
+    } else if (g_ui_nav_module == UI_NAV_TASKS) {
+        s = &STR_TITLE_TASKS;
+    } else if (g_ui_nav_module == UI_NAV_FILES) {
+        s = &STR_TITLE_FILES;
+    }
+    lv_label_set_text(title_label, tr(*s));
+}
+
+static void apply_nav_module_visuals() {
+    auto paint_nav_btn = [](lv_obj_t* btn, bool selected) {
+        if (!btn) return;
+        const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
+        lv_obj_set_style_bg_opa(btn, selected ? LV_OPA_20 : LV_OPA_TRANSP, 0);
+        lv_obj_set_style_bg_color(btn, selected ? c->accent : c->text_hint, 0);
+        lv_obj_t* lbl = lv_obj_get_child(btn, 0);
+        if (lbl && lv_obj_check_type(lbl, &lv_label_class)) {
+            lv_obj_set_style_text_color(lbl, selected ? c->accent : c->text_dim, 0);
+        }
+    };
+
+    paint_nav_btn(nav_btn_bot, g_ui_nav_module == UI_NAV_BOT);
+    paint_nav_btn(nav_btn_tasks, g_ui_nav_module == UI_NAV_TASKS);
+    paint_nav_btn(nav_btn_files, g_ui_nav_module == UI_NAV_FILES);
+
+    if (g_ui_nav_module == UI_NAV_BOT) {
+        if (left_panel) lv_obj_clear_flag(left_panel, LV_OBJ_FLAG_HIDDEN);
+        if (right_panel) lv_obj_clear_flag(right_panel, LV_OBJ_FLAG_HIDDEN);
+        if (module_placeholder) lv_obj_add_flag(module_placeholder, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        if (left_panel) lv_obj_add_flag(left_panel, LV_OBJ_FLAG_HIDDEN);
+        if (right_panel) lv_obj_clear_flag(right_panel, LV_OBJ_FLAG_HIDDEN);
+        if (module_placeholder) {
+            const char* title = (g_ui_nav_module == UI_NAV_TASKS)
+                ? tr(I18n{"Tasks Center", "任务中心"})
+                : tr(I18n{"Resources Center", "资源中心"});
+            const char* desc = (g_ui_nav_module == UI_NAV_TASKS)
+                ? tr(I18n{"Task scheduling/overview UI is being integrated.", "任务调度与总览界面正在接入中。"})
+                : tr(I18n{"Workspace/files/skills UI is being integrated.", "工作区/文件/技能界面正在接入中。"});
+            if (module_placeholder_title) lv_label_set_text(module_placeholder_title, title);
+            if (module_placeholder_desc) lv_label_set_text(module_placeholder_desc, desc);
+            lv_obj_clear_flag(module_placeholder, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    apply_mode_switch_visuals();
+    relayout_panels();
+}
+
+static void mode_chat_cb(lv_event_t* e) {
+    (void)e;
+    if (g_ui_nav_module != UI_NAV_BOT) return;
+    g_ui_mode = UI_MODE_CHAT;
+    apply_mode_switch_visuals();
+    relayout_panels();
+}
 static void mode_voice_cb(lv_event_t* e) {
     (void)e;
     if (InterlockedCompareExchange(&g_voice_stt_running, 0, 0)) {
@@ -4945,7 +5029,13 @@ static void mode_voice_cb(lv_event_t* e) {
     if (g_voice_stt_poll_timer) lv_timer_del(g_voice_stt_poll_timer);
     g_voice_stt_poll_timer = lv_timer_create(voice_stt_poll_cb, 160, nullptr);
 }
-static void mode_work_cb(lv_event_t* e) { (void)e; g_ui_mode = UI_MODE_WORK; apply_mode_switch_visuals(); relayout_panels(); }
+static void mode_work_cb(lv_event_t* e) {
+    (void)e;
+    if (g_ui_nav_module != UI_NAV_BOT) return;
+    g_ui_mode = UI_MODE_WORK;
+    apply_mode_switch_visuals();
+    relayout_panels();
+}
 static void mode_chat_work_toggle_cb(lv_event_t* e) {
     (void)e;
     g_ui_mode = (g_ui_mode == UI_MODE_WORK) ? UI_MODE_CHAT : UI_MODE_WORK;
@@ -5089,6 +5179,7 @@ void ui_relayout_all() {
 /* ── Splitter relayout: update all panels and children ── */
 static void relayout_panels() {
     if (!left_panel || !right_panel || !splitter) return;
+    bool bot_module = (g_ui_nav_module == UI_NAV_BOT);
 
     /* Recompute from percentages */
     TITLE_H   = std::max(WIN_H * TITLE_H_PCT / 100, SCALE(TITLE_H_MIN));
@@ -5100,11 +5191,16 @@ static void relayout_panels() {
     PANEL_GAP   = std::max(WIN_W * SAFE_PAD_PCT / 100, SCALE(GAP_BASE));
     SPLITTER_W  = std::max((int)(WIN_W * SPLITTER_W_PCT / 100), SCALE(SPLITTER_W_MIN));
 
-    LEFT_PANEL_W  = std::max(avail_w * LEFT_PANEL_PCT / 100, SCALE(LEFT_PANEL_MIN_W));
-    RIGHT_PANEL_W = avail_w - LEFT_PANEL_W - PANEL_GAP;  /* no splitter — removed v2.2.11 */
-    if (RIGHT_PANEL_W < SCALE(RIGHT_PANEL_MIN_W)) {
-        RIGHT_PANEL_W = SCALE(RIGHT_PANEL_MIN_W);
-        LEFT_PANEL_W = avail_w - RIGHT_PANEL_W - PANEL_GAP;
+    if (bot_module) {
+        LEFT_PANEL_W  = std::max(avail_w * LEFT_PANEL_PCT / 100, SCALE(LEFT_PANEL_MIN_W));
+        RIGHT_PANEL_W = avail_w - LEFT_PANEL_W - PANEL_GAP;  /* no splitter — removed v2.2.11 */
+        if (RIGHT_PANEL_W < SCALE(RIGHT_PANEL_MIN_W)) {
+            RIGHT_PANEL_W = SCALE(RIGHT_PANEL_MIN_W);
+            LEFT_PANEL_W = avail_w - RIGHT_PANEL_W - PANEL_GAP;
+        }
+    } else {
+        LEFT_PANEL_W = 0;
+        RIGHT_PANEL_W = std::max(SCALE(RIGHT_PANEL_MIN_W), avail_w - SCALE(8));
     }
 
     /* Move & resize left nav */
@@ -5115,11 +5211,13 @@ static void relayout_panels() {
 
     /* Move & resize left panel */
     int panel_x = nav_w + SCALE(8);
-    lv_obj_set_size(left_panel, LEFT_PANEL_W, PANEL_H);
-    lv_obj_set_pos(left_panel, panel_x, PANEL_TOP);
+    if (bot_module) {
+        lv_obj_set_size(left_panel, LEFT_PANEL_W, PANEL_H);
+        lv_obj_set_pos(left_panel, panel_x, PANEL_TOP);
+    }
 
     /* Move & resize right panel (no splitter — removed in v2.2.11) */
-    int right_x = panel_x + LEFT_PANEL_W + PANEL_GAP;
+    int right_x = bot_module ? (panel_x + LEFT_PANEL_W + PANEL_GAP) : panel_x;
     lv_obj_set_size(right_panel, RIGHT_PANEL_W, PANEL_H);
     lv_obj_set_pos(right_panel, right_x, PANEL_TOP);
 
@@ -5130,14 +5228,23 @@ static void relayout_panels() {
 
     int content_w = mode_content_w();
     int content_h = mode_content_h();
+    int content_y = CHAT_GAP + SCALE(CTRL_BAR_H);
+    if (!bot_module) {
+        content_h = PANEL_H - CHAT_GAP * 2;
+        content_y = CHAT_GAP;
+    }
 
     if (mode_panel_chat) {
         lv_obj_set_size(mode_panel_chat, content_w, content_h);
-        lv_obj_set_pos(mode_panel_chat, CHAT_GAP, CHAT_GAP + SCALE(CTRL_BAR_H));
+        lv_obj_set_pos(mode_panel_chat, CHAT_GAP, content_y);
     }
     if (mode_panel_work) {
         lv_obj_set_size(mode_panel_work, content_w, content_h);
-        lv_obj_set_pos(mode_panel_work, CHAT_GAP, CHAT_GAP + SCALE(CTRL_BAR_H));
+        lv_obj_set_pos(mode_panel_work, CHAT_GAP, content_y);
+    }
+    if (module_placeholder) {
+        lv_obj_set_size(module_placeholder, content_w, content_h);
+        lv_obj_set_pos(module_placeholder, CHAT_GAP, content_y);
     }
     if (mode_dd_control) lv_obj_set_width(mode_dd_control, std::min(content_w - 16, SCALE(360)));
     if (mode_dd_llm) lv_obj_set_width(mode_dd_llm, std::min(content_w - 16, SCALE(360)));
@@ -8136,11 +8243,10 @@ void app_refresh_status() {
 }
 
 void update_ui_language() {
-    static const I18n S_TITLE = {"AnyClaw Desktop Manager", "AnyClaw 桌面管理器"};
     static const I18n S_SEND  = {"Send", "发送"};
 
     /* Title bar */
-    if (title_label) lv_label_set_text(title_label, tr(S_TITLE));
+    update_main_title();
 
     /* Left panel */
     static const I18n S_GW_STATUS = {"Gateway Status", "Gateway 状态"};
@@ -12285,12 +12391,32 @@ void app_ui_init() {
         lv_obj_set_style_text_font(l, CJK_FONT, 0);
         lv_obj_set_style_text_color(l, active ? c->accent : c->text_dim, 0);
         lv_obj_center(l);
+        (void)tip;
         return b;
     };
 
-    create_nav_btn("\xF0\x9F\xA6\x9E", "Bot", true);   /* 🦞 Bot */
-    create_nav_btn("\xE2\x9A\xA1", "Tasks", false);     /* ⚡ Tasks */
-    create_nav_btn("\xF0\x9F\x93\x81", "Files", false); /* 📁 Files */
+    nav_btn_bot = create_nav_btn("\xF0\x9F\xA6\x9E", "Bot", true);       /* 🦞 Bot */
+    nav_btn_tasks = create_nav_btn("\xE2\x9A\xA1", "Tasks", false);       /* ⚡ Tasks */
+    nav_btn_files = create_nav_btn("\xF0\x9F\x93\x81", "Files", false);   /* 📁 Files */
+
+    lv_obj_add_event_cb(nav_btn_bot, [](lv_event_t* e) {
+        (void)e;
+        if (g_ui_nav_module == UI_NAV_BOT) return;
+        g_ui_nav_module = UI_NAV_BOT;
+        apply_nav_module_visuals();
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(nav_btn_tasks, [](lv_event_t* e) {
+        (void)e;
+        if (g_ui_nav_module == UI_NAV_TASKS) return;
+        g_ui_nav_module = UI_NAV_TASKS;
+        apply_nav_module_visuals();
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(nav_btn_files, [](lv_event_t* e) {
+        (void)e;
+        if (g_ui_nav_module == UI_NAV_FILES) return;
+        g_ui_nav_module = UI_NAV_FILES;
+        apply_nav_module_visuals();
+    }, LV_EVENT_CLICKED, nullptr);
 
     /* Bottom section: quick access */
     lv_obj_t* nav_bot = lv_obj_create(left_nav);
@@ -12312,6 +12438,7 @@ void app_ui_init() {
     lv_obj_set_style_border_width(nav_session, 0, 0);
     lv_obj_add_event_cb(nav_session, [](lv_event_t* e) {
         (void)e;
+        if (g_ui_nav_module != UI_NAV_BOT) return;
         /* Toggle Chat ↔ Work mode */
         if (g_ui_mode == UI_MODE_CHAT) g_ui_mode = UI_MODE_WORK;
         else g_ui_mode = UI_MODE_CHAT;
@@ -12604,6 +12731,30 @@ void app_ui_init() {
     lv_obj_set_flex_align(mode_panel_work, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_gap(mode_panel_work, 8, 0);
     lv_obj_set_scroll_dir(mode_panel_work, LV_DIR_VER);
+
+    module_placeholder = lv_obj_create(pr);
+    lv_obj_set_size(module_placeholder, content_w, content_h);
+    lv_obj_set_pos(module_placeholder, CHAT_GAP, CHAT_GAP + SCALE(CTRL_BAR_H));
+    lv_obj_set_style_bg_opa(module_placeholder, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(module_placeholder, 0, 0);
+    lv_obj_set_style_pad_all(module_placeholder, SCALE(24), 0);
+    lv_obj_clear_flag(module_placeholder, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(module_placeholder, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(module_placeholder, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(module_placeholder, SCALE(10), 0);
+    module_placeholder_title = lv_label_create(module_placeholder);
+    lv_obj_set_style_text_font(module_placeholder_title, CJK_FONT, 0);
+    lv_obj_set_style_text_color(module_placeholder_title, c->text, 0);
+    lv_label_set_text(module_placeholder_title, tr(I18n{"Tasks Center", "任务中心"}));
+    module_placeholder_desc = lv_label_create(module_placeholder);
+    lv_label_set_long_mode(module_placeholder_desc, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(module_placeholder_desc, SCALE(420));
+    lv_obj_set_style_text_align(module_placeholder_desc, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(module_placeholder_desc, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_color(module_placeholder_desc, c->text_dim, 0);
+    lv_label_set_text(module_placeholder_desc, tr(I18n{"Task scheduling/overview UI is being integrated.", "任务调度与总览界面正在接入中。"}));
+    lv_obj_add_flag(module_placeholder, LV_OBJ_FLAG_HIDDEN);
+
     {
         int card_w = std::min(content_w - 16, SCALE(560));
         lv_obj_t* sec_runtime = aw_form_section_create(mode_panel_work, "Runtime Mode", card_w);
@@ -13587,6 +13738,8 @@ void app_ui_init() {
 
     /* ═══ Create title bar LAST - ensures it's above all panels ═══ */
     create_title_bar(scr);
+    update_main_title();
+    apply_nav_module_visuals();
 
     /* Show loading overlay while OpenClaw is starting */
     loading_show();
