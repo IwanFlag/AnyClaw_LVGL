@@ -1998,6 +1998,7 @@ static lv_obj_t* mode_lbl_work_chat_state = nullptr;
 static lv_obj_t* mode_ta_work_chat_feed = nullptr;
 static lv_obj_t* mode_ta_work_chat_input = nullptr;
 static lv_obj_t* mode_btn_work_chat_toggle = nullptr;
+static lv_obj_t* mode_btn_work_chat_send = nullptr;
 static int g_work_step_stream_h = 160;
 static int g_work_output_h = 180;
 static lv_obj_t* mode_ta_lan_host = nullptr;
@@ -3756,7 +3757,7 @@ static void c2_refresh_work_chat_state_label() {
     if (g_work_waiting_ai) {
         c2_set_work_state_label({"State: executing task", "状态：正在执行任务"});
     } else if (g_c2_dual_result) {
-        c2_set_work_state_label({"State: dual-result pinned", "状态：双结果固定"});
+        c2_set_work_state_label({"State: dual-result pinned (single input)", "状态：双结果固定（单入口）"});
     } else {
         c2_set_work_state_label(g_work_chat_collapsed
             ? I18n{"State: collapsed", "状态：已折叠"}
@@ -3769,16 +3770,15 @@ static void c2_apply_work_panel_policy() {
     if (g_c2_dual_result) {
         g_work_chat_collapsed = false;
         if (mode_ta_work_chat_feed) lv_obj_clear_flag(mode_ta_work_chat_feed, LV_OBJ_FLAG_HIDDEN);
-        if (mode_ta_work_chat_input) lv_obj_clear_flag(mode_ta_work_chat_input, LV_OBJ_FLAG_HIDDEN);
     } else {
         if (g_work_chat_collapsed) {
             if (mode_ta_work_chat_feed) lv_obj_add_flag(mode_ta_work_chat_feed, LV_OBJ_FLAG_HIDDEN);
-            if (mode_ta_work_chat_input) lv_obj_add_flag(mode_ta_work_chat_input, LV_OBJ_FLAG_HIDDEN);
         } else {
             if (mode_ta_work_chat_feed) lv_obj_clear_flag(mode_ta_work_chat_feed, LV_OBJ_FLAG_HIDDEN);
-            if (mode_ta_work_chat_input) lv_obj_clear_flag(mode_ta_work_chat_input, LV_OBJ_FLAG_HIDDEN);
         }
     }
+    if (mode_ta_work_chat_input) lv_obj_add_flag(mode_ta_work_chat_input, LV_OBJ_FLAG_HIDDEN);
+    if (mode_btn_work_chat_send) lv_obj_add_flag(mode_btn_work_chat_send, LV_OBJ_FLAG_HIDDEN);
     c2_refresh_work_chat_toggle_button();
     c2_refresh_work_chat_state_label();
 }
@@ -4328,12 +4328,12 @@ static void execute_ai_ui_action_if_any(const char* text) {
             handled = true;
         } else { success = false; fail_reason = "chat_send_input_empty"; }
     } else if (strcmp(action, "send_work_message") == 0) {
-        if (mode_ta_work_chat_input && value[0]) {
-            lv_textarea_set_text(mode_ta_work_chat_input, value);
-            work_chat_send_cb(nullptr);
+        if (mode_ta_work_prompt && value[0]) {
+            lv_textarea_set_text(mode_ta_work_prompt, value);
+            work_send_cb(nullptr);
             ui_log("[CTRL] AI ui_action send_work_message");
             handled = true;
-        } else { success = false; fail_reason = "work_chat_input_unavailable"; }
+        } else { success = false; fail_reason = "work_prompt_unavailable"; }
     } else if (strcmp(action, "toggle_work_chat") == 0) {
         work_chat_toggle_cb(nullptr);
         ui_log("[CTRL] AI ui_action toggle_work_chat");
@@ -12990,12 +12990,12 @@ void app_ui_init() {
         mode_lbl_work_chat_state = lv_label_create(mode_work_chat_panel);
         lv_obj_set_style_text_color(mode_lbl_work_chat_state, c->text_dim, 0);
         lv_obj_set_style_text_font(mode_lbl_work_chat_state, CJK_FONT_SMALL, 0);
-        mode_ta_work_chat_feed = aw_textarea_create(mode_work_chat_panel, "Agent summary...", false, card_w - 24, SCALE(100));
+        mode_ta_work_chat_feed = aw_textarea_create(mode_work_chat_panel, "Agent summary (mirrored from unified input)...", false, card_w - 24, SCALE(100));
         lv_textarea_set_text_selection(mode_ta_work_chat_feed, true);
-        mode_ta_work_chat_input = aw_textarea_create(mode_work_chat_panel, "Input for Work chat...", false, card_w - 24, SCALE(56));
+        mode_ta_work_chat_input = aw_textarea_create(mode_work_chat_panel, "Unified input only: use main task box above", false, card_w - 24, SCALE(56));
         lv_textarea_set_one_line(mode_ta_work_chat_input, false);
-        lv_obj_t* btn_work_chat_send = aw_btn_create(mode_work_chat_panel, "Send", BTN_PRIMARY, SCALE(100), SCALE(30));
-        lv_obj_add_event_cb(btn_work_chat_send, work_chat_send_cb, LV_EVENT_CLICKED, nullptr);
+        mode_btn_work_chat_send = aw_btn_create(mode_work_chat_panel, "Send", BTN_PRIMARY, SCALE(100), SCALE(30));
+        lv_obj_add_event_cb(mode_btn_work_chat_send, work_chat_send_cb, LV_EVENT_CLICKED, nullptr);
         c2_apply_work_panel_policy();
 
         lv_obj_t* sec_gemma = aw_form_section_create(mode_panel_work, "Local Gemma 4 Install", card_w);
