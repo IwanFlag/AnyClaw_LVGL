@@ -3641,6 +3641,16 @@ static void build_c2_tab(lv_obj_t* tab) {
     lv_obj_set_width(hint, LV_PCT(100));
     lv_obj_set_style_text_color(hint, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(hint, CJK_FONT, 0);
+
+    lv_obj_t* btn_back = lv_button_create(tab);
+    lv_obj_set_size(btn_back, SCALE(220), SCALE(38));
+    lv_obj_set_style_bg_color(btn_back, g_colors->accent_secondary, 0);
+    lv_obj_set_style_radius(btn_back, SCALE(g_colors->radius_sm), 0);
+    lv_obj_add_event_cb(btn_back, settings_close_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_back = lv_label_create(btn_back);
+    lv_label_set_text(lbl_back, tr("返回主界面", "Back To Workspace"));
+    lv_obj_set_style_text_font(lbl_back, CJK_FONT, 0);
+    lv_obj_center(lbl_back);
 }
 
 /* ═══════════════════════════════════════════════════════════════
