@@ -373,3 +373,11 @@
 - 已新增对应只读快照视图，支持手动刷新与缩放自适应。
 - 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
 
+### Delta 2026-04-22 #30
+
+- 已将 Tasks/Resources 从“统计查看”推进到“可执行操作”链路：
+  - Tasks：新增会话同步（Sync Sessions）与全部会话终止（Abort All）动作，并联动状态刷新。
+  - Resources：新增托管段落同步（Sync Managed）与打开工作区目录（Open Workspace）动作。
+- Resources 快照已补充 workspace 健康信息（exists/writable），用于快速诊断权限与目录可用性。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+
