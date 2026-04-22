@@ -950,6 +950,7 @@ static void apply_nav_module_visuals();
 static void update_main_title();
 static void refresh_tasks_module_data(bool run_pending);
 static void refresh_files_module_data(bool scan_workspace);
+static void run_tasks_template(const char* template_name, const char* prompt);
 static void work_send_cb(lv_event_t* e);
 static void work_prompt_input_cb(lv_event_t* e);
 static void chat_send_cb(lv_event_t* e);
@@ -5055,6 +5056,35 @@ static void refresh_files_module_data(bool scan_workspace) {
     lv_textarea_set_text(module_files_view, buf);
     ui_log("[Resources] Summary refreshed (scan=%d, files=%d, dirs=%d, assets=%d)",
            scan_workspace ? 1 : 0, ws_files, ws_dirs, asset_files);
+}
+
+static void run_tasks_template(const char* template_name, const char* prompt) {
+    if (!mode_ta_work_prompt || !prompt || !prompt[0]) {
+        if (module_tasks_state) lv_label_set_text(module_tasks_state, tr(I18n{"State: template unavailable", "状态：模板不可用"}));
+        return;
+    }
+    if (is_streaming_now()) {
+        if (module_tasks_state) lv_label_set_text(module_tasks_state, tr(I18n{"State: wait current response", "状态：请等待当前响应完成"}));
+        ui_toast_warn(g_lang == Lang::CN ? "请等待当前响应完成" : "Wait for current response");
+        return;
+    }
+
+    lv_textarea_set_text(mode_ta_work_prompt, prompt);
+    snprintf(g_work_last_prompt, sizeof(g_work_last_prompt), "%s", prompt);
+    work_send_cb(nullptr);
+
+    if (module_tasks_state) {
+        char state[256] = {0};
+        snprintf(state, sizeof(state), "%s: %s",
+                 tr(I18n{"State: template executed", "状态：模板已执行"}),
+                 template_name ? template_name : "task");
+        lv_label_set_text(module_tasks_state, state);
+    }
+    ui_log("[Tasks] Template executed: %s", template_name ? template_name : "task");
+
+    g_ui_nav_module = UI_NAV_BOT;
+    g_ui_mode = UI_MODE_WORK;
+    apply_nav_module_visuals();
 }
 
 static void apply_nav_module_visuals() {
@@ -12923,6 +12953,39 @@ void app_ui_init() {
         app_refresh_status();
         refresh_tasks_module_data(false);
     }, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* row_task_tpl = lv_obj_create(module_tasks_panel);
+    lv_obj_set_width(row_task_tpl, LV_PCT(100));
+    lv_obj_set_height(row_task_tpl, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_task_tpl, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_task_tpl, 0, 0);
+    lv_obj_set_style_pad_all(row_task_tpl, 0, 0);
+    lv_obj_set_style_pad_gap(row_task_tpl, SCALE(8), 0);
+    lv_obj_set_flex_flow(row_task_tpl, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(row_task_tpl, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row_task_tpl, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* btn_tpl_health = aw_btn_create(row_task_tpl, "Template: Health Check", BTN_PRIMARY, SCALE(210), SCALE(34));
+    lv_obj_add_event_cb(btn_tpl_health, [](lv_event_t* e) {
+        (void)e;
+        run_tasks_template("Health Check",
+            "执行系统健康检查并输出摘要：网关状态、活动会话、运行时状态、最近错误日志。最后给出可执行修复建议。");
+    }, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* btn_tpl_workspace = aw_btn_create(row_task_tpl, "Template: Workspace Sync", BTN_SECONDARY, SCALE(230), SCALE(34));
+    lv_obj_add_event_cb(btn_tpl_workspace, [](lv_event_t* e) {
+        (void)e;
+        run_tasks_template("Workspace Sync",
+            "检查并同步工作区托管文件（AGENTS/TOOLS/MEMORY），列出变更项并给出下一步建议。不要修改工作区外文件。");
+    }, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* btn_tpl_resource = aw_btn_create(row_task_tpl, "Template: Resource Audit", BTN_SECONDARY, SCALE(220), SCALE(34));
+    lv_obj_add_event_cb(btn_tpl_resource, [](lv_event_t* e) {
+        (void)e;
+        run_tasks_template("Resource Audit",
+            "扫描 assets 下字体/图标/声音资源，输出缺失项、重复项和命名建议，最终给出修复优先级。不要直接删除文件。");
+    }, LV_EVENT_CLICKED, nullptr);
+
     module_tasks_view = aw_textarea_create(module_tasks_panel, "Task queue snapshot...", false, std::min(content_w - SCALE(80), SCALE(700)), SCALE(180));
     lv_textarea_set_text_selection(module_tasks_view, true);
     refresh_tasks_module_data(false);
