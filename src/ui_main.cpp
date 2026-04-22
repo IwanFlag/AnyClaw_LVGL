@@ -948,6 +948,8 @@ static void relayout_panels();                  /* Forward */
 static void apply_mode_switch_visuals();
 static void apply_nav_module_visuals();
 static void update_main_title();
+static void refresh_tasks_module_data(bool run_pending);
+static void refresh_files_module_data(bool scan_workspace);
 static void work_send_cb(lv_event_t* e);
 static void work_prompt_input_cb(lv_event_t* e);
 static void chat_send_cb(lv_event_t* e);
@@ -1967,6 +1969,8 @@ static lv_obj_t* module_tasks_panel = nullptr;
 static lv_obj_t* module_files_panel = nullptr;
 static lv_obj_t* module_tasks_state = nullptr;
 static lv_obj_t* module_files_state = nullptr;
+static lv_obj_t* module_tasks_view = nullptr;
+static lv_obj_t* module_files_view = nullptr;
 static lv_obj_t* mode_bar = nullptr;
 static lv_obj_t* mode_btn_chat = nullptr;
 static lv_obj_t* mode_btn_voice = nullptr;
@@ -4962,6 +4966,90 @@ static void update_main_title() {
     lv_label_set_text(title_label, tr(*s));
 }
 
+static void refresh_tasks_module_data(bool run_pending) {
+    if (!module_tasks_state) return;
+    SessionManager& sm = session_mgr();
+    auto sessions = sm.active_sessions();
+    int visible_tasks = g_task_count;
+    int active_sessions = (int)sessions.size();
+    int cron_sessions = 0;
+    for (const auto& s : sessions) if (s.isCron) cron_sessions++;
+
+    if (run_pending) {
+        lv_label_set_text_fmt(module_tasks_state,
+            "%s", tr(I18n{"State: run request accepted", "状态：已接收执行请求"}));
+        ui_log("[Tasks] Run pending requested (visible=%d, sessions=%d)", visible_tasks, active_sessions);
+    } else {
+        lv_label_set_text_fmt(module_tasks_state,
+            "%s", tr(I18n{"State: queue refreshed", "状态：队列已刷新"}));
+        ui_log("[Tasks] Queue refreshed (visible=%d, sessions=%d)", visible_tasks, active_sessions);
+    }
+
+    if (!module_tasks_view) return;
+    char buf[2048] = {0};
+    snprintf(buf, sizeof(buf),
+             "Visible task widgets: %d\n"
+             "Active sessions: %d\n"
+             "Cron sessions: %d\n\n",
+             visible_tasks, active_sessions, cron_sessions);
+    for (int i = 0; i < g_task_count && i < 8; i++) {
+        const char* name = g_tasks[i].name[0] ? g_tasks[i].name : "(unnamed)";
+        const char* status = g_tasks[i].status[0] ? g_tasks[i].status : "unknown";
+        char line[220] = {0};
+        snprintf(line, sizeof(line), "%d. %s [%s]\n", i + 1, name, status);
+        strncat_s(buf, sizeof(buf), line, _TRUNCATE);
+    }
+    if (g_task_count == 0) {
+        strncat_s(buf, sizeof(buf), tr(I18n{"No task widgets yet.", "当前无任务条目。"}), _TRUNCATE);
+    }
+    lv_textarea_set_text(module_tasks_view, buf);
+}
+
+static void refresh_files_module_data(bool scan_workspace) {
+    if (!module_files_state || !module_files_view) return;
+    namespace fs = std::filesystem;
+    std::string ws_root = workspace_get_root();
+    int ws_files = 0;
+    int ws_dirs = 0;
+    int asset_files = 0;
+
+    std::error_code ec;
+    if (scan_workspace && !ws_root.empty() && fs::exists(ws_root, ec)) {
+        for (fs::recursive_directory_iterator it(ws_root, fs::directory_options::skip_permission_denied, ec), end;
+             it != end && ws_files < 2000; it.increment(ec)) {
+            if (ec) break;
+            if (it->is_regular_file(ec)) ws_files++;
+            else if (it->is_directory(ec)) ws_dirs++;
+        }
+    }
+
+    const std::string assets_dir = "assets";
+    if (fs::exists(assets_dir, ec)) {
+        for (fs::recursive_directory_iterator it(assets_dir, fs::directory_options::skip_permission_denied, ec), end;
+             it != end && asset_files < 1000; it.increment(ec)) {
+            if (ec) break;
+            if (it->is_regular_file(ec)) asset_files++;
+        }
+    }
+
+    lv_label_set_text(module_files_state,
+        scan_workspace
+            ? tr(I18n{"State: workspace scanned", "状态：工作区已扫描"})
+            : tr(I18n{"State: quick asset summary", "状态：资源快速摘要"}));
+
+    char buf[2048] = {0};
+    snprintf(buf, sizeof(buf),
+             "Workspace root:\n%s\n\n"
+             "Workspace files: %d\n"
+             "Workspace dirs: %d\n"
+             "Assets files: %d\n",
+             ws_root.empty() ? "(empty)" : ws_root.c_str(),
+             ws_files, ws_dirs, asset_files);
+    lv_textarea_set_text(module_files_view, buf);
+    ui_log("[Resources] Summary refreshed (scan=%d, files=%d, dirs=%d, assets=%d)",
+           scan_workspace ? 1 : 0, ws_files, ws_dirs, asset_files);
+}
+
 static void apply_nav_module_visuals() {
     auto paint_nav_btn = [](lv_obj_t* btn, bool selected) {
         if (!btn) return;
@@ -5261,6 +5349,9 @@ static void relayout_panels() {
         if (module_placeholder_desc) lv_obj_set_width(module_placeholder_desc, std::max(SCALE(260), module_card_w));
         if (module_tasks_panel) lv_obj_set_width(module_tasks_panel, std::max(SCALE(260), module_card_w));
         if (module_files_panel) lv_obj_set_width(module_files_panel, std::max(SCALE(260), module_card_w));
+        int module_view_w = std::max(SCALE(220), module_card_w - SCALE(40));
+        if (module_tasks_view) lv_obj_set_width(module_tasks_view, module_view_w);
+        if (module_files_view) lv_obj_set_width(module_files_view, module_view_w);
     }
     if (mode_dd_control) lv_obj_set_width(mode_dd_control, std::min(content_w - 16, SCALE(360)));
     if (mode_dd_llm) lv_obj_set_width(mode_dd_llm, std::min(content_w - 16, SCALE(360)));
@@ -12804,15 +12895,16 @@ void app_ui_init() {
     lv_obj_t* btn_task_refresh = aw_btn_create(row_tasks_btn, "Refresh Queue", BTN_SECONDARY, SCALE(150), SCALE(34));
     lv_obj_add_event_cb(btn_task_refresh, [](lv_event_t* e) {
         (void)e;
-        if (module_tasks_state) lv_label_set_text(module_tasks_state, tr(I18n{"State: queue refreshed", "状态：队列已刷新"}));
-        ui_log("[Tasks] Queue refresh requested");
+        refresh_tasks_module_data(false);
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* btn_task_run = aw_btn_create(row_tasks_btn, "Run Pending", BTN_PRIMARY, SCALE(140), SCALE(34));
     lv_obj_add_event_cb(btn_task_run, [](lv_event_t* e) {
         (void)e;
-        if (module_tasks_state) lv_label_set_text(module_tasks_state, tr(I18n{"State: executing pending tasks", "状态：正在执行待处理任务"}));
-        ui_log("[Tasks] Run pending requested");
+        refresh_tasks_module_data(true);
     }, LV_EVENT_CLICKED, nullptr);
+    module_tasks_view = aw_textarea_create(module_tasks_panel, "Task queue snapshot...", false, std::min(content_w - SCALE(80), SCALE(700)), SCALE(180));
+    lv_textarea_set_text_selection(module_tasks_view, true);
+    refresh_tasks_module_data(false);
 
     module_files_panel = lv_obj_create(module_placeholder);
     lv_obj_set_width(module_files_panel, std::min(content_w - SCALE(40), SCALE(760)));
@@ -12848,17 +12940,20 @@ void app_ui_init() {
     lv_obj_t* btn_files_scan = aw_btn_create(row_files_btn, "Scan Workspace", BTN_SECONDARY, SCALE(160), SCALE(34));
     lv_obj_add_event_cb(btn_files_scan, [](lv_event_t* e) {
         (void)e;
-        if (module_files_state) lv_label_set_text(module_files_state, tr(I18n{"State: workspace scan requested", "状态：已请求扫描工作区"}));
-        ui_log("[Resources] Workspace scan requested");
+        refresh_files_module_data(true);
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* btn_files_open = aw_btn_create(row_files_btn, "Open Asset Dir", BTN_PRIMARY, SCALE(150), SCALE(34));
     lv_obj_add_event_cb(btn_files_open, [](lv_event_t* e) {
         (void)e;
         const char* asset_dir = "assets";
         ShellExecuteA(nullptr, "open", asset_dir, nullptr, nullptr, SW_SHOWNORMAL);
+        refresh_files_module_data(false);
         if (module_files_state) lv_label_set_text(module_files_state, tr(I18n{"State: asset folder opened", "状态：资源目录已打开"}));
         ui_log("[Resources] Open asset dir: %s", asset_dir);
     }, LV_EVENT_CLICKED, nullptr);
+    module_files_view = aw_textarea_create(module_files_panel, "Resource snapshot...", false, std::min(content_w - SCALE(80), SCALE(700)), SCALE(180));
+    lv_textarea_set_text_selection(module_files_view, true);
+    refresh_files_module_data(false);
 
     lv_obj_add_flag(module_files_panel, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(module_placeholder, LV_OBJ_FLAG_HIDDEN);
