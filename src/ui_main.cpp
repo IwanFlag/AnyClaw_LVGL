@@ -5257,6 +5257,10 @@ static void relayout_panels() {
     if (module_placeholder) {
         lv_obj_set_size(module_placeholder, content_w, content_h);
         lv_obj_set_pos(module_placeholder, CHAT_GAP, content_y);
+        int module_card_w = std::min(content_w - SCALE(40), SCALE(760));
+        if (module_placeholder_desc) lv_obj_set_width(module_placeholder_desc, std::max(SCALE(260), module_card_w));
+        if (module_tasks_panel) lv_obj_set_width(module_tasks_panel, std::max(SCALE(260), module_card_w));
+        if (module_files_panel) lv_obj_set_width(module_files_panel, std::max(SCALE(260), module_card_w));
     }
     if (mode_dd_control) lv_obj_set_width(mode_dd_control, std::min(content_w - 16, SCALE(360)));
     if (mode_dd_llm) lv_obj_set_width(mode_dd_llm, std::min(content_w - 16, SCALE(360)));
