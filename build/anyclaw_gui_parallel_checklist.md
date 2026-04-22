@@ -351,3 +351,10 @@
 - 行为：点击后直接关闭设置面板，回到主工作区继续 C2 统一输入流程。
 - 影响代码: [src/ui_settings.cpp](../src/ui_settings.cpp)
 - 关联提交: `2dbacc9`
+
+### Delta 2026-04-22 #27
+
+- 已将左导航中部非 Bot 区从纯占位升级为“可交互页面骨架”：Tasks/Resources 各自独立面板、状态标签与快捷按钮。
+- Tasks 提供队列刷新/执行入口；Resources 提供工作区扫描与资源目录打开入口。
+- 切换逻辑已更新：根据当前模块显示对应面板并同步标题说明。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
