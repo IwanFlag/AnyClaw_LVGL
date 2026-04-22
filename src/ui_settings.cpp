@@ -60,6 +60,7 @@ static const lv_font_t* FONT(int base_px) {
 
 /* Forward declaration: tr() is used before its definition in this file. */
 static const char* tr(const char* cn, const char* en);
+void ui_settings_init(lv_obj_t* parent);
 
 /* Log buffer accessors from ui_main.cpp */
 extern int  ui_log_get_count();
@@ -1480,12 +1481,12 @@ static void build_agent_tab(lv_obj_t* tab) {
     lv_obj_set_style_pad_gap(tab, 10, 0);
 
     lv_obj_t* title = lv_label_create(tab);
-    lv_label_set_text(title, tr("Agent 管理", "Agent Management"));
+    lv_label_set_text(title, tr("C3 Agent 中心", "C3 Agent Center"));
     apply_section_label(title);
 
     lv_obj_t* hint = lv_label_create(tab);
-    lv_label_set_text(hint, tr("管理 Leader 模式、运行时与可选 Agent 安装。",
-                               "Manage Leader mode, runtime and optional agent installs."));
+    lv_label_set_text(hint, tr("管理运行时、Leader 策略与权限治理。",
+                               "Manage runtime, leader policy and permission governance."));
     apply_hint_label(hint);
 
     Runtime rt_cfg = app_get_active_runtime();
@@ -2895,6 +2896,15 @@ static void build_log_tab(lv_obj_t* tab) {
     lv_obj_set_flex_align(tab, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_gap(tab, 10, 0);
 
+    lv_obj_t* title = lv_label_create(tab);
+    lv_label_set_text(title, tr("C4 系统与诊断中心", "C4 System & Diagnostics"));
+    apply_section_label(title);
+
+    lv_obj_t* hint = lv_label_create(tab);
+    lv_label_set_text(hint, tr("用于日志、特性开关、Tracing 与关于信息。",
+                               "For logs, feature flags, tracing and about information."));
+    apply_hint_label(hint);
+
     /* ═══ Log Settings (moved from General tab) ═══ */
     /* Row: [Log System label] [switch] [hint] */
     lv_obj_t* row_log = lv_obj_create(tab);
@@ -3623,9 +3633,9 @@ static void build_c2_tab(lv_obj_t* tab) {
 
     lv_obj_t* hint = lv_label_create(tab);
     lv_label_set_text(hint, tr(
-        "C2 的主要交互在主界面完成：统一输入、双结果视图、执行轨迹。\n"
+        "C2 的主要交互在主界面完成：统一单输入、双结果视图、执行轨迹。\n"
         "请回到主界面进行 Chat/Work 操作。",
-        "C2 interactions are handled in the main workspace: unified input, dual-result view, and execution trace.\n"
+        "C2 interactions are handled in the main workspace: single unified input, dual-result view, and execution trace.\n"
         "Return to main workspace for Chat/Work actions."));
     lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(hint, LV_PCT(100));
@@ -3770,6 +3780,11 @@ static void ui_settings_sync_model() {
 }
 
 void ui_settings_open() {
+    if (!settings_panel) {
+        lv_obj_t* root = lv_screen_active();
+        if (!root) return;
+        ui_settings_init(root);
+    }
     if (!settings_panel) return;
     lv_obj_clear_flag(settings_panel, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(settings_panel);
@@ -3983,9 +3998,9 @@ void ui_settings_init(lv_obj_t* parent) {
 
     /* Create IA-aligned tabs (C1~C4) */
     lv_obj_t* tab_c1 = lv_tabview_add_tab(settings_tabs, tr("C1 开始使用", "C1 Getting Started"));
-    lv_obj_t* tab_c2 = lv_tabview_add_tab(settings_tabs, tr("C2 对话任务", "C2 Chat/Task"));
+    lv_obj_t* tab_c2 = lv_tabview_add_tab(settings_tabs, tr("C2 对话与任务", "C2 Chat & Task"));
     lv_obj_t* tab_c3 = lv_tabview_add_tab(settings_tabs, tr("C3 Agent", "C3 Agent"));
-    lv_obj_t* tab_c4 = lv_tabview_add_tab(settings_tabs, tr("C4 诊断系统", "C4 Diagnostics"));
+    lv_obj_t* tab_c4 = lv_tabview_add_tab(settings_tabs, tr("C4 系统诊断", "C4 Diagnostics"));
 
     /* Build each center by combining existing pages */
     build_general_tab(tab_c1);
