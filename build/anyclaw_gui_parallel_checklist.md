@@ -301,3 +301,46 @@
 - 已实现 Work 输入快捷发送：`Enter` 直接发送任务，`Shift+Enter` 保留换行。
 - 已实现 Work 面板宽度重算策略：窗口缩放时右栏与主内容同步重排。
 - 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+
+### Delta 2026-04-22 #20
+
+- 已将首次向导主流程收敛为阶段 A 四步闭环（语言 -> 环境就绪 -> 模型/API -> 完成），去除阶段 B 在主流程中的阻断路径。
+- 已在完成页补充“阶段 B 非阻断推荐”说明（本地模型/IM/Leader/Runtime），与 PRD/Design 的双阶段模型对齐。
+- 已修复主题 CJK 字体映射：改为有效的 `NotoSansSC` 字体文件，避免占位字体导致中文乱码。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+
+### Delta 2026-04-22 #21
+
+- 已将设置面板改为首次打开时懒初始化，移除启动阶段预构建，避免在 LVGL 定时器早期执行大块 UI 构建导致主线程长阻塞。
+- 已调整托盘消息泵为“预算内泵全线程消息”，防止仅泵托盘窗口导致主窗口消息饥饿。
+- 挂起复测结果：标准 6 秒窗口内 `Responding=True` 且 `IsHungAppWindow=False`，主循环心跳连续。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp), [src/ui_settings.cpp](../src/ui_settings.cpp), [src/tray.cpp](../src/tray.cpp)
+
+### Delta 2026-04-22 #22
+
+- 已完成标题栏入口收敛：移除标题栏中的设置入口与模式条重复创建逻辑，避免与左导航/主工作区职责冲突。
+- 目标：减少同一功能多入口造成的心智分裂，为后续 IA 收口打基础。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+- 关联提交: `b7eeb6d`
+
+### Delta 2026-04-22 #23
+
+- 已完成左侧中部导航真实切页：Bot / Tasks / Resources 按钮不再只做高亮，已接入实际页面切换行为。
+- 已实现主标题动态联动：标题随模块与 Chat/Work 显示层变化更新。
+- 已新增非 Bot 模块占位页与布局策略：进入 Tasks/Resources 时右侧全宽展示占位内容，Bot 区域正常隐藏/恢复。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+- 关联提交: `7c96d92`
+
+### Delta 2026-04-22 #24
+
+- 已完成 C2 单入口收敛：Work Chat 次输入与发送按钮统一隐藏，保留双结果展示能力。
+- 已将控制动作 `send_work_message` 统一路由到主任务输入框，避免旁路输入导致行为不一致。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+- 关联提交: `f822da6`
+
+### Delta 2026-04-22 #25
+
+- 已完成设置页 IA 文案对齐：C2/C3/C4 页签与页内标题说明统一到“中心”语义。
+- 已补充 C4 页首说明，明确该中心承载日志、特性、Tracing、关于信息。
+- 影响代码: [src/ui_settings.cpp](../src/ui_settings.cpp)
+- 关联提交: `6790ebd`
