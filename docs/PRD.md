@@ -1298,7 +1298,7 @@ struct ResourceLimits {
 
 | Tab | 内容 |
 |-----|------|
-| General | 开机自启动 / 语言 / 主题 / 退出确认 / Reconfigure Wizard |
+| General | 开机自启动(boot_start) / 崩溃自重启(auto_start) / 语言 / 主题 / 退出确认 / Reconfigure Wizard |
 | Agent | Runtime/Leader/可选 Agent 安装状态、启用开关、路径与端口配置 |
 | Permissions | 19 项权限编辑（Allow/Deny/Ask/ReadOnly） |
 | Model | 当前模型 / 模型列表 / API Key / Failover |
@@ -1308,7 +1308,7 @@ struct ResourceLimits {
 | Tracing | 追踪与观测配置 |
 | About | 品牌信息 / 版本 / Tech Stack / 配置导入导出 / 迁移 |
 
-> 设计 → UI-45, UI-46, UI-47, UI-48, UI-49
+> 设计 → UI-45, UI-46, UI-47, UI-48, UI-48A, UI-49
 
 ### 11.1.1 用户视角 IA（4 大中心）
 
@@ -1674,6 +1674,12 @@ Authorization: Bearer ***
 - 崩溃日志：`%APPDATA%\AnyClaw_LVGL\crash_logs\crash_*.log`，保留最近 10 个
 - `SetUnhandledExceptionFilter` 捕获异常，dbghelp 符号解析（最多 64 帧）
 
+**崩溃恢复 UI（UI-56）：**
+- 启动时检测 `last_crash.txt` 是否存在
+- 存在则弹出"💥 AnyClaw 异常退出"弹窗，显示崩溃摘要
+- 用户可选择 [查看日志] 或 [继续启动]
+- 日志内容分级：FATAL ERROR（红色）、Exception（橙色）、Call Stack（灰色）
+
 > 设计 → UI-56
 
 ### 13.3 通知体系
@@ -1688,19 +1694,27 @@ Authorization: Bearer ***
 | 警报 | 弹窗 + 声音 | "磁盘空间不足 100MB" | ✅ |
 
 **通知渠道：**
-- 托盘气泡通知（`tray_balloon`）
-- Toast 通知（右下角滑入，3 秒自动消失）
-- 模态弹窗（警报级）
+- 托盘气泡通知（`tray_balloon`）— Windows 系统托盘区域弹出气泡，带 title + message + timeout
+- Toast 通知（右下角滑入，3 秒自动消失，最多同时 3 条，向上堆叠）
+- 模态弹窗（警报级，需用户操作）
 - 日志记录（所有级别）
 
 > 设计 → UI-37, UI-38, UI-58
 
 ### 13.4 更新管理
-
-| 对象 | 方式 |
+|| 对象 | 方式 |
 |------|------|
 | AnyClaw | GitHub Releases 自动检测 + 一键下载覆盖 |
 | OpenClaw | `openclaw update` 命令 |
+
+**更新检测 UI（UI-57）：**
+- 启动时检测 GitHub Releases 最新版本，与当前版本比较
+- 发现新版本时弹出更新提示弹窗，显示"当前版本 → 新版本"
+- 下载进度条实时显示百分比、速度、剩余时间
+- 三源自动回退：HuggingFace → ModelScope → 镜像站
+- 用户可选择 [立即更新] 或 [稍后提醒]
+
+> 设计 → UI-57
 
 ### 13.5 Feature Flags
 - **功能编号：** FF-01 **优先级：** P1 **状态：** ✅ 已实现
@@ -1739,14 +1753,20 @@ Authorization: Bearer ***
 
 **授权系统：** HMAC-SHA256 + Base32 编码的时间递增密钥方案。
 - 免费版无需密钥，`license_seq=0` 且 `license_expiry=0` 视为试用期（始终有效）
-- License 激活弹窗：试用期结束时阻断，要求输入密钥
+
+**License 激活弹窗（UI-33）交互逻辑：**
+- 试用期结束时首次启动 AnyClaw 时弹出，阻断主界面
+- 显示内容：标题"License Activation"、警告"Trial Period Ended"、当前序列号(next seq)提示、密钥输入框
+- 输入密钥后点击 [Activate]：本地验证 HMAC 签名 → 写入 `license_seq` 和 `license_expiry` → 弹窗关闭
+- 验证失败：输入框下方显示错误原因，允许重试
+- 点击 [Close]：关闭弹窗并退出程序（不能跳过）
 
 > 设计 → UI-33
 
 ### 13.8 版本号规范
 - 格式：`v{主版本}.{次版本}.{修订号}`
-- 当前：`v2.2.2`
-- 存储：`#define ANYCLAW_VERSION "2.2.2"`
+- 当前：`v2.2.11`
+- 存储：`#define ANYCLAW_VERSION "2.2.11"`
 
 ---
 
