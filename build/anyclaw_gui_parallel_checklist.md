@@ -412,3 +412,13 @@
 - 已完成回归构建验证：`build/build_oneclick.bat` 通过，产物正常输出。
 - 影响代码: [src/app_config.h](../src/app_config.h), [src/ui_main.cpp](../src/ui_main.cpp)
 
+### Delta 2026-04-23 #35
+
+- 已完成主界面视觉对齐第二批（状态层级/按钮语义/文案一致性）：
+  - `Dual View` 按钮新增语义化状态：开启时使用主按钮视觉（含渐变），关闭时回落次按钮视觉。
+  - Work 状态标签按语义分层着色：执行中=强调色、就绪=提示色、双结果固定=主文本色。
+  - Tasks / Resources 状态标签字体统一收口到 `small` 层级，提升信息密度一致性。
+  - `Abort All` 调整为危险动作样式（Danger），与其副作用等级保持一致。
+- 已完成回归构建验证：`build/build_oneclick.bat` 通过，产物正常输出。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+
