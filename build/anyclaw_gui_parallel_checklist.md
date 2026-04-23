@@ -422,3 +422,14 @@
 - 已完成回归构建验证：`build/build_oneclick.bat` 通过，产物正常输出。
 - 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
 
+### Delta 2026-04-23 #36
+
+- 已完成主界面文案一致性与可读性第三批打磨：
+  - Tasks / Resources 主操作按钮统一为中英双语文案（刷新/同步/打开/模板等）。
+  - Work 面板关键文案统一双语：输出区标题、渲染器状态、主任务输入提示、发送按钮、提示文案、聊天面板标题与占位文本。
+  - 目标：降低英文硬编码造成的信息割裂，保持 C2/C3 入口的一致阅读体验。
+- 已完成回归验证：
+  - 编译通过：`build/build_oneclick.bat`
+  - 运行通过：`build/bin/AnyClaw_LVGL.exe` 可正常拉起
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+
