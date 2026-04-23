@@ -1976,8 +1976,12 @@ static lv_obj_t* module_files_filter_all = nullptr;
 static lv_obj_t* module_files_filter_fonts = nullptr;
 static lv_obj_t* module_files_filter_icons = nullptr;
 static lv_obj_t* module_files_filter_sounds = nullptr;
+static lv_obj_t* module_files_search_input = nullptr;
+static lv_obj_t* module_files_ext_dd = nullptr;
 enum ModuleFileFilter { MODULE_FILE_ALL = 0, MODULE_FILE_FONTS = 1, MODULE_FILE_ICONS = 2, MODULE_FILE_SOUNDS = 3 };
 static ModuleFileFilter g_module_file_filter = MODULE_FILE_ALL;
+static int g_module_file_ext_filter = 0;  /* 0=all */
+static char g_module_files_search[128] = "";
 static lv_obj_t* mode_bar = nullptr;
 static lv_obj_t* mode_btn_chat = nullptr;
 static lv_obj_t* mode_btn_voice = nullptr;
@@ -5025,6 +5029,7 @@ static void refresh_files_module_data(bool scan_workspace) {
     int asset_fonts = 0;
     int asset_icons = 0;
     int asset_sounds = 0;
+    int matched_total = 0;
     std::vector<std::string> filtered_entries;
     filtered_entries.reserve(32);
 
@@ -5039,6 +5044,27 @@ static void refresh_files_module_data(bool scan_workspace) {
     }
 
     const std::string assets_dir = "assets";
+    std::string search = g_module_files_search;
+    std::transform(search.begin(), search.end(), search.begin(), ::tolower);
+
+    auto has_suffix = [](const std::string& text, const char* suffix) {
+        size_t n = strlen(suffix);
+        if (text.size() < n) return false;
+        return text.compare(text.size() - n, n, suffix) == 0;
+    };
+
+    auto pass_ext_filter = [&](const std::string& lower) {
+        switch (g_module_file_ext_filter) {
+            case 1: return has_suffix(lower, ".png");
+            case 2: return has_suffix(lower, ".svg");
+            case 3: return has_suffix(lower, ".ttf") || has_suffix(lower, ".otf");
+            case 4: return has_suffix(lower, ".wav") || has_suffix(lower, ".mp3") || has_suffix(lower, ".ogg");
+            case 5: return has_suffix(lower, ".json");
+            case 6: return has_suffix(lower, ".md");
+            default: return true;
+        }
+    };
+
     if (fs::exists(assets_dir, ec)) {
         for (fs::recursive_directory_iterator it(assets_dir, fs::directory_options::skip_permission_denied, ec), end;
              it != end && asset_files < 1000; it.increment(ec)) {
@@ -5059,7 +5085,12 @@ static void refresh_files_module_data(bool scan_workspace) {
                     || (g_module_file_filter == MODULE_FILE_FONTS && is_font)
                     || (g_module_file_filter == MODULE_FILE_ICONS && is_icon)
                     || (g_module_file_filter == MODULE_FILE_SOUNDS && is_sound);
-                if (pass && filtered_entries.size() < 20) filtered_entries.push_back(p);
+                if (pass && !search.empty() && lower.find(search) == std::string::npos) pass = false;
+                if (pass && !pass_ext_filter(lower)) pass = false;
+                if (pass) {
+                    matched_total++;
+                    if (filtered_entries.size() < 20) filtered_entries.push_back(p);
+                }
             }
         }
     }
@@ -5090,18 +5121,28 @@ static void refresh_files_module_data(bool scan_workspace) {
              "Assets files: %d\n"
              "  - fonts: %d\n"
              "  - icons: %d\n"
-             "  - sounds: %d\n\n",
+             "  - sounds: %d\n"
+             "Matched: %d\n\n",
              ws_root.empty() ? "(empty)" : ws_root.c_str(),
              wh.exists ? "yes" : "no",
              wh.writable ? "yes" : "no",
-             ws_files, ws_dirs, asset_files, asset_fonts, asset_icons, asset_sounds);
+             ws_files, ws_dirs, asset_files, asset_fonts, asset_icons, asset_sounds, matched_total);
 
     const char* filter_name = "all";
     if (g_module_file_filter == MODULE_FILE_FONTS) filter_name = "fonts";
     else if (g_module_file_filter == MODULE_FILE_ICONS) filter_name = "icons";
     else if (g_module_file_filter == MODULE_FILE_SOUNDS) filter_name = "sounds";
-    char head[96] = {0};
-    snprintf(head, sizeof(head), "Filter: %s\n", filter_name);
+    const char* ext_name = "any";
+    if (g_module_file_ext_filter == 1) ext_name = ".png";
+    else if (g_module_file_ext_filter == 2) ext_name = ".svg";
+    else if (g_module_file_ext_filter == 3) ext_name = "font";
+    else if (g_module_file_ext_filter == 4) ext_name = "audio";
+    else if (g_module_file_ext_filter == 5) ext_name = ".json";
+    else if (g_module_file_ext_filter == 6) ext_name = ".md";
+    char head[160] = {0};
+    snprintf(head, sizeof(head), "Filter: %s | Ext: %s | Search: %s\n",
+             filter_name, ext_name,
+             search.empty() ? "(none)" : search.c_str());
     strncat_s(buf, sizeof(buf), head, _TRUNCATE);
     if (filtered_entries.empty()) {
         strncat_s(buf, sizeof(buf), tr(I18n{"(no entries)", "（无匹配条目）"}), _TRUNCATE);
@@ -13151,6 +13192,47 @@ void app_ui_init() {
     lv_obj_add_event_cb(module_files_filter_sounds, [](lv_event_t* e) {
         (void)e;
         g_module_file_filter = MODULE_FILE_SOUNDS;
+        refresh_files_module_data(false);
+    }, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* row_files_query = lv_obj_create(module_files_panel);
+    lv_obj_set_width(row_files_query, LV_PCT(100));
+    lv_obj_set_height(row_files_query, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_files_query, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_files_query, 0, 0);
+    lv_obj_set_style_pad_all(row_files_query, 0, 0);
+    lv_obj_set_style_pad_gap(row_files_query, SCALE(8), 0);
+    lv_obj_set_flex_flow(row_files_query, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(row_files_query, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row_files_query, LV_OBJ_FLAG_SCROLLABLE);
+
+    module_files_search_input = aw_textarea_create(row_files_query, "Search path keyword...", false, SCALE(250), SCALE(34));
+    lv_textarea_set_one_line(module_files_search_input, true);
+    lv_obj_add_event_cb(module_files_search_input, [](lv_event_t* e) {
+        (void)e;
+        const char* text = lv_textarea_get_text(module_files_search_input);
+        snprintf(g_module_files_search, sizeof(g_module_files_search), "%s", text ? text : "");
+        refresh_files_module_data(false);
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    module_files_ext_dd = lv_dropdown_create(row_files_query);
+    lv_dropdown_set_options(module_files_ext_dd, "Ext: Any\n.png\n.svg\n.ttf/.otf\n.wav/.mp3/.ogg\n.json\n.md");
+    lv_dropdown_set_selected(module_files_ext_dd, (uint16_t)g_module_file_ext_filter);
+    lv_obj_set_size(module_files_ext_dd, SCALE(170), SCALE(34));
+    lv_obj_add_event_cb(module_files_ext_dd, [](lv_event_t* e) {
+        (void)e;
+        g_module_file_ext_filter = (int)lv_dropdown_get_selected(module_files_ext_dd);
+        refresh_files_module_data(false);
+    }, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    lv_obj_t* btn_files_clear_filter = aw_btn_create(row_files_query, "Clear Filters", BTN_SECONDARY, SCALE(130), SCALE(34));
+    lv_obj_add_event_cb(btn_files_clear_filter, [](lv_event_t* e) {
+        (void)e;
+        g_module_file_filter = MODULE_FILE_ALL;
+        g_module_file_ext_filter = 0;
+        g_module_files_search[0] = '\0';
+        if (module_files_search_input) lv_textarea_set_text(module_files_search_input, "");
+        if (module_files_ext_dd) lv_dropdown_set_selected(module_files_ext_dd, 0);
         refresh_files_module_data(false);
     }, LV_EVENT_CLICKED, nullptr);
 
