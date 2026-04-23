@@ -1972,6 +1972,12 @@ static lv_obj_t* module_tasks_state = nullptr;
 static lv_obj_t* module_files_state = nullptr;
 static lv_obj_t* module_tasks_view = nullptr;
 static lv_obj_t* module_files_view = nullptr;
+static lv_obj_t* module_files_filter_all = nullptr;
+static lv_obj_t* module_files_filter_fonts = nullptr;
+static lv_obj_t* module_files_filter_icons = nullptr;
+static lv_obj_t* module_files_filter_sounds = nullptr;
+enum ModuleFileFilter { MODULE_FILE_ALL = 0, MODULE_FILE_FONTS = 1, MODULE_FILE_ICONS = 2, MODULE_FILE_SOUNDS = 3 };
+static ModuleFileFilter g_module_file_filter = MODULE_FILE_ALL;
 static lv_obj_t* mode_bar = nullptr;
 static lv_obj_t* mode_btn_chat = nullptr;
 static lv_obj_t* mode_btn_voice = nullptr;
@@ -5016,6 +5022,11 @@ static void refresh_files_module_data(bool scan_workspace) {
     int ws_files = 0;
     int ws_dirs = 0;
     int asset_files = 0;
+    int asset_fonts = 0;
+    int asset_icons = 0;
+    int asset_sounds = 0;
+    std::vector<std::string> filtered_entries;
+    filtered_entries.reserve(32);
 
     std::error_code ec;
     if (scan_workspace && !ws_root.empty() && fs::exists(ws_root, ec)) {
@@ -5032,9 +5043,37 @@ static void refresh_files_module_data(bool scan_workspace) {
         for (fs::recursive_directory_iterator it(assets_dir, fs::directory_options::skip_permission_denied, ec), end;
              it != end && asset_files < 1000; it.increment(ec)) {
             if (ec) break;
-            if (it->is_regular_file(ec)) asset_files++;
+            if (it->is_regular_file(ec)) {
+                asset_files++;
+                std::string p = it->path().generic_string();
+                std::string lower = p;
+                std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+                bool is_font = lower.find("/fonts/") != std::string::npos;
+                bool is_icon = lower.find("/icons/") != std::string::npos;
+                bool is_sound = lower.find("/sounds/") != std::string::npos;
+                if (is_font) asset_fonts++;
+                if (is_icon) asset_icons++;
+                if (is_sound) asset_sounds++;
+
+                bool pass = (g_module_file_filter == MODULE_FILE_ALL)
+                    || (g_module_file_filter == MODULE_FILE_FONTS && is_font)
+                    || (g_module_file_filter == MODULE_FILE_ICONS && is_icon)
+                    || (g_module_file_filter == MODULE_FILE_SOUNDS && is_sound);
+                if (pass && filtered_entries.size() < 20) filtered_entries.push_back(p);
+            }
         }
     }
+
+    auto paint_filter_btn = [](lv_obj_t* btn, bool selected) {
+        if (!btn) return;
+        const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
+        lv_obj_set_style_bg_color(btn, selected ? c->btn_action : c->btn_secondary, 0);
+        lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
+    };
+    paint_filter_btn(module_files_filter_all, g_module_file_filter == MODULE_FILE_ALL);
+    paint_filter_btn(module_files_filter_fonts, g_module_file_filter == MODULE_FILE_FONTS);
+    paint_filter_btn(module_files_filter_icons, g_module_file_filter == MODULE_FILE_ICONS);
+    paint_filter_btn(module_files_filter_sounds, g_module_file_filter == MODULE_FILE_SOUNDS);
 
     lv_label_set_text(module_files_state,
         scan_workspace
@@ -5048,11 +5087,31 @@ static void refresh_files_module_data(bool scan_workspace) {
              "Writable: %s\n"
              "Workspace files: %d\n"
              "Workspace dirs: %d\n"
-             "Assets files: %d\n",
+             "Assets files: %d\n"
+             "  - fonts: %d\n"
+             "  - icons: %d\n"
+             "  - sounds: %d\n\n",
              ws_root.empty() ? "(empty)" : ws_root.c_str(),
              wh.exists ? "yes" : "no",
              wh.writable ? "yes" : "no",
-             ws_files, ws_dirs, asset_files);
+             ws_files, ws_dirs, asset_files, asset_fonts, asset_icons, asset_sounds);
+
+    const char* filter_name = "all";
+    if (g_module_file_filter == MODULE_FILE_FONTS) filter_name = "fonts";
+    else if (g_module_file_filter == MODULE_FILE_ICONS) filter_name = "icons";
+    else if (g_module_file_filter == MODULE_FILE_SOUNDS) filter_name = "sounds";
+    char head[96] = {0};
+    snprintf(head, sizeof(head), "Filter: %s\n", filter_name);
+    strncat_s(buf, sizeof(buf), head, _TRUNCATE);
+    if (filtered_entries.empty()) {
+        strncat_s(buf, sizeof(buf), tr(I18n{"(no entries)", "（无匹配条目）"}), _TRUNCATE);
+    } else {
+        for (size_t i = 0; i < filtered_entries.size(); ++i) {
+            char line[220] = {0};
+            snprintf(line, sizeof(line), "%zu. %s\n", i + 1, filtered_entries[i].c_str());
+            strncat_s(buf, sizeof(buf), line, _TRUNCATE);
+        }
+    }
     lv_textarea_set_text(module_files_view, buf);
     ui_log("[Resources] Summary refreshed (scan=%d, files=%d, dirs=%d, assets=%d)",
            scan_workspace ? 1 : 0, ws_files, ws_dirs, asset_files);
@@ -13058,6 +13117,43 @@ void app_ui_init() {
         }
         refresh_files_module_data(false);
     }, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* row_files_filter = lv_obj_create(module_files_panel);
+    lv_obj_set_width(row_files_filter, LV_PCT(100));
+    lv_obj_set_height(row_files_filter, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_files_filter, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_files_filter, 0, 0);
+    lv_obj_set_style_pad_all(row_files_filter, 0, 0);
+    lv_obj_set_style_pad_gap(row_files_filter, SCALE(8), 0);
+    lv_obj_set_flex_flow(row_files_filter, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(row_files_filter, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row_files_filter, LV_OBJ_FLAG_SCROLLABLE);
+
+    module_files_filter_all = aw_btn_create(row_files_filter, "All", BTN_SECONDARY, SCALE(72), SCALE(32));
+    lv_obj_add_event_cb(module_files_filter_all, [](lv_event_t* e) {
+        (void)e;
+        g_module_file_filter = MODULE_FILE_ALL;
+        refresh_files_module_data(false);
+    }, LV_EVENT_CLICKED, nullptr);
+    module_files_filter_fonts = aw_btn_create(row_files_filter, "Fonts", BTN_SECONDARY, SCALE(86), SCALE(32));
+    lv_obj_add_event_cb(module_files_filter_fonts, [](lv_event_t* e) {
+        (void)e;
+        g_module_file_filter = MODULE_FILE_FONTS;
+        refresh_files_module_data(false);
+    }, LV_EVENT_CLICKED, nullptr);
+    module_files_filter_icons = aw_btn_create(row_files_filter, "Icons", BTN_SECONDARY, SCALE(86), SCALE(32));
+    lv_obj_add_event_cb(module_files_filter_icons, [](lv_event_t* e) {
+        (void)e;
+        g_module_file_filter = MODULE_FILE_ICONS;
+        refresh_files_module_data(false);
+    }, LV_EVENT_CLICKED, nullptr);
+    module_files_filter_sounds = aw_btn_create(row_files_filter, "Sounds", BTN_SECONDARY, SCALE(96), SCALE(32));
+    lv_obj_add_event_cb(module_files_filter_sounds, [](lv_event_t* e) {
+        (void)e;
+        g_module_file_filter = MODULE_FILE_SOUNDS;
+        refresh_files_module_data(false);
+    }, LV_EVENT_CLICKED, nullptr);
+
     module_files_view = aw_textarea_create(module_files_panel, "Resource snapshot...", false, std::min(content_w - SCALE(80), SCALE(700)), SCALE(180));
     lv_textarea_set_text_selection(module_files_view, true);
     refresh_files_module_data(false);
