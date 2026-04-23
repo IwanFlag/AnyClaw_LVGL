@@ -13123,17 +13123,17 @@ void app_ui_init() {
     lv_obj_set_flex_flow(row_tasks_btn, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_tasks_btn, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(row_tasks_btn, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t* btn_task_refresh = aw_btn_create(row_tasks_btn, "Refresh Queue", BTN_SECONDARY, SCALE(150), SCALE(34));
+    lv_obj_t* btn_task_refresh = aw_btn_create(row_tasks_btn, tr(I18n{"Refresh Queue", "刷新队列"}), BTN_SECONDARY, SCALE(150), SCALE(34));
     lv_obj_add_event_cb(btn_task_refresh, [](lv_event_t* e) {
         (void)e;
         refresh_tasks_module_data(false);
     }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* btn_task_run = aw_btn_create(row_tasks_btn, "Sync Sessions", BTN_PRIMARY, SCALE(140), SCALE(34));
+    lv_obj_t* btn_task_run = aw_btn_create(row_tasks_btn, tr(I18n{"Sync Sessions", "同步会话"}), BTN_PRIMARY, SCALE(140), SCALE(34));
     lv_obj_add_event_cb(btn_task_run, [](lv_event_t* e) {
         (void)e;
         refresh_tasks_module_data(true);
     }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* btn_task_abort_all = aw_btn_create(row_tasks_btn, "Abort All", BTN_DANGER, SCALE(120), SCALE(34));
+    lv_obj_t* btn_task_abort_all = aw_btn_create(row_tasks_btn, tr(I18n{"Abort All", "全部终止"}), BTN_DANGER, SCALE(120), SCALE(34));
     lv_obj_add_event_cb(btn_task_abort_all, [](lv_event_t* e) {
         (void)e;
         bool ok = session_mgr().abort_all();
@@ -13159,21 +13159,21 @@ void app_ui_init() {
     lv_obj_set_flex_align(row_task_tpl, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(row_task_tpl, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t* btn_tpl_health = aw_btn_create(row_task_tpl, "Template: Health Check", BTN_PRIMARY, SCALE(210), SCALE(34));
+    lv_obj_t* btn_tpl_health = aw_btn_create(row_task_tpl, tr(I18n{"Template: Health Check", "模板：健康检查"}), BTN_PRIMARY, SCALE(210), SCALE(34));
     lv_obj_add_event_cb(btn_tpl_health, [](lv_event_t* e) {
         (void)e;
         run_tasks_template("Health Check",
             "执行系统健康检查并输出摘要：网关状态、活动会话、运行时状态、最近错误日志。最后给出可执行修复建议。");
     }, LV_EVENT_CLICKED, nullptr);
 
-    lv_obj_t* btn_tpl_workspace = aw_btn_create(row_task_tpl, "Template: Workspace Sync", BTN_SECONDARY, SCALE(230), SCALE(34));
+    lv_obj_t* btn_tpl_workspace = aw_btn_create(row_task_tpl, tr(I18n{"Template: Workspace Sync", "模板：工作区同步"}), BTN_SECONDARY, SCALE(230), SCALE(34));
     lv_obj_add_event_cb(btn_tpl_workspace, [](lv_event_t* e) {
         (void)e;
         run_tasks_template("Workspace Sync",
             "检查并同步工作区托管文件（AGENTS/TOOLS/MEMORY），列出变更项并给出下一步建议。不要修改工作区外文件。");
     }, LV_EVENT_CLICKED, nullptr);
 
-    lv_obj_t* btn_tpl_resource = aw_btn_create(row_task_tpl, "Template: Resource Audit", BTN_SECONDARY, SCALE(220), SCALE(34));
+    lv_obj_t* btn_tpl_resource = aw_btn_create(row_task_tpl, tr(I18n{"Template: Resource Audit", "模板：资源审计"}), BTN_SECONDARY, SCALE(220), SCALE(34));
     lv_obj_add_event_cb(btn_tpl_resource, [](lv_event_t* e) {
         (void)e;
         run_tasks_template("Resource Audit",
@@ -13215,12 +13215,12 @@ void app_ui_init() {
     lv_obj_set_flex_flow(row_files_btn, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row_files_btn, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(row_files_btn, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t* btn_files_scan = aw_btn_create(row_files_btn, "Scan Workspace", BTN_SECONDARY, SCALE(160), SCALE(34));
+    lv_obj_t* btn_files_scan = aw_btn_create(row_files_btn, tr(I18n{"Scan Workspace", "扫描工作区"}), BTN_SECONDARY, SCALE(160), SCALE(34));
     lv_obj_add_event_cb(btn_files_scan, [](lv_event_t* e) {
         (void)e;
         refresh_files_module_data(true);
     }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* btn_files_open = aw_btn_create(row_files_btn, "Open Asset Dir", BTN_PRIMARY, SCALE(150), SCALE(34));
+    lv_obj_t* btn_files_open = aw_btn_create(row_files_btn, tr(I18n{"Open Asset Dir", "打开资源目录"}), BTN_PRIMARY, SCALE(150), SCALE(34));
     lv_obj_add_event_cb(btn_files_open, [](lv_event_t* e) {
         (void)e;
         const char* asset_dir = "assets";
@@ -13229,7 +13229,7 @@ void app_ui_init() {
         if (module_files_state) lv_label_set_text(module_files_state, tr(I18n{"State: asset folder opened", "状态：资源目录已打开"}));
         ui_log("[Resources] Open asset dir: %s", asset_dir);
     }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* btn_files_sync = aw_btn_create(row_files_btn, "Sync Managed", BTN_SECONDARY, SCALE(140), SCALE(34));
+    lv_obj_t* btn_files_sync = aw_btn_create(row_files_btn, tr(I18n{"Sync Managed", "同步托管段"}), BTN_SECONDARY, SCALE(140), SCALE(34));
     lv_obj_add_event_cb(btn_files_sync, [](lv_event_t* e) {
         (void)e;
         bool ok = workspace_sync_managed_sections();
@@ -13241,7 +13241,7 @@ void app_ui_init() {
         if (!ok) ui_toast_error(g_lang == Lang::CN ? "工作区同步失败" : "Workspace sync failed");
         refresh_files_module_data(false);
     }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* btn_files_open_ws = aw_btn_create(row_files_btn, "Open Workspace", BTN_SECONDARY, SCALE(160), SCALE(34));
+    lv_obj_t* btn_files_open_ws = aw_btn_create(row_files_btn, tr(I18n{"Open Workspace", "打开工作区"}), BTN_SECONDARY, SCALE(160), SCALE(34));
     lv_obj_add_event_cb(btn_files_open_ws, [](lv_event_t* e) {
         (void)e;
         std::string ws = workspace_get_root();
@@ -13524,13 +13524,13 @@ void app_ui_init() {
         lv_obj_set_style_pad_gap(mode_work_output_wrap, 8, 0);
 
         mode_lbl_work_output_title = lv_label_create(mode_work_output_wrap);
-        lv_label_set_text(mode_lbl_work_output_title, "Output: waiting");
+        lv_label_set_text(mode_lbl_work_output_title, tr(I18n{"Output: waiting", "输出：等待中"}));
         lv_obj_set_width(mode_lbl_work_output_title, LV_PCT(100));
         lv_obj_set_style_text_color(mode_lbl_work_output_title, c->text, 0);
         lv_obj_set_style_text_font(mode_lbl_work_output_title, CJK_FONT_SMALL, 0);
 
         mode_lbl_work_renderer = lv_label_create(mode_work_output_wrap);
-        lv_label_set_text(mode_lbl_work_renderer, "Renderer: preview");
+        lv_label_set_text(mode_lbl_work_renderer, tr(I18n{"Renderer: preview", "渲染器：预览"}));
         lv_obj_set_width(mode_lbl_work_renderer, LV_PCT(100));
         lv_obj_set_style_text_color(mode_lbl_work_renderer, c->accent, 0);
         lv_obj_set_style_text_font(mode_lbl_work_renderer, CJK_FONT_SMALL, 0);
@@ -13542,7 +13542,7 @@ void app_ui_init() {
         lv_label_set_long_mode(mode_lbl_work_md_output, LV_LABEL_LONG_WRAP);
         render_work_md_doc();
 
-        mode_ta_work_prompt = aw_textarea_create(mode_sec_work_console, "输入任务... (Enter 发送, Shift+Enter 换行)", false, card_w - 24, SCALE(96));
+        mode_ta_work_prompt = aw_textarea_create(mode_sec_work_console, tr(I18n{"Enter a task... (Enter to send, Shift+Enter newline)", "输入任务... (Enter 发送, Shift+Enter 换行)"}), false, card_w - 24, SCALE(96));
         lv_textarea_set_one_line(mode_ta_work_prompt, false);
         lv_textarea_set_text_selection(mode_ta_work_prompt, true);
         lv_obj_add_event_cb(mode_ta_work_prompt, work_prompt_input_cb, LV_EVENT_KEY, nullptr);
@@ -13553,15 +13553,15 @@ void app_ui_init() {
         lv_obj_set_style_border_color(mode_ta_work_prompt, c->border, 0);
         lv_obj_set_style_border_color(mode_ta_work_prompt, c->accent, LV_STATE_FOCUSED);
         lv_obj_set_style_border_width(mode_ta_work_prompt, 2, LV_STATE_FOCUSED);
-        lv_obj_t* btn_work_send = aw_btn_create(mode_sec_work_console, "Run In Work", BTN_PRIMARY, SCALE(160), SCALE(40));
+        lv_obj_t* btn_work_send = aw_btn_create(mode_sec_work_console, tr(I18n{"Run In Work", "在 Work 中执行"}), BTN_PRIMARY, SCALE(160), SCALE(40));
         lv_obj_set_style_radius(btn_work_send, SCALE(g_colors->radius_lg), 0);
         lv_obj_add_event_cb(btn_work_send, work_send_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_t* work_prompt_hint = lv_label_create(mode_sec_work_console);
-        lv_label_set_text(work_prompt_hint, "提示: 任务越具体，步骤拆解越准确。");
+        lv_label_set_text(work_prompt_hint, tr(I18n{"Tip: the more specific the task, the more accurate the step breakdown.", "提示：任务越具体，步骤拆解越准确。"}));
         lv_obj_set_style_text_color(work_prompt_hint, c->text_dim, 0);
         lv_obj_set_style_text_font(work_prompt_hint, CJK_FONT_SMALL, 0);
 
-        mode_work_chat_panel = aw_form_section_create(mode_panel_work, "Work Chat Panel", card_w);
+        mode_work_chat_panel = aw_form_section_create(mode_panel_work, tr(I18n{"Work Chat Panel", "Work 聊天面板"}), card_w);
         lv_obj_add_flag(mode_work_chat_panel, LV_OBJ_FLAG_FLOATING);
         int work_panel_w = content_w * 38 / 100;
         lv_obj_set_width(mode_work_chat_panel, work_panel_w);
@@ -13572,11 +13572,11 @@ void app_ui_init() {
         mode_lbl_work_chat_state = lv_label_create(mode_work_chat_panel);
         lv_obj_set_style_text_color(mode_lbl_work_chat_state, c->text_dim, 0);
         lv_obj_set_style_text_font(mode_lbl_work_chat_state, CJK_FONT_SMALL, 0);
-        mode_ta_work_chat_feed = aw_textarea_create(mode_work_chat_panel, "Agent summary (mirrored from unified input)...", false, card_w - 24, SCALE(100));
+        mode_ta_work_chat_feed = aw_textarea_create(mode_work_chat_panel, tr(I18n{"Agent summary (mirrored from unified input)...", "Agent 摘要（同步自主输入）..."}), false, card_w - 24, SCALE(100));
         lv_textarea_set_text_selection(mode_ta_work_chat_feed, true);
-        mode_ta_work_chat_input = aw_textarea_create(mode_work_chat_panel, "Unified input only: use main task box above", false, card_w - 24, SCALE(56));
+        mode_ta_work_chat_input = aw_textarea_create(mode_work_chat_panel, tr(I18n{"Unified input only: use the main task box above", "统一入口：请使用上方主任务输入框"}), false, card_w - 24, SCALE(56));
         lv_textarea_set_one_line(mode_ta_work_chat_input, false);
-        mode_btn_work_chat_send = aw_btn_create(mode_work_chat_panel, "Send", BTN_PRIMARY, SCALE(100), SCALE(30));
+        mode_btn_work_chat_send = aw_btn_create(mode_work_chat_panel, tr(I18n{"Send", "发送"}), BTN_PRIMARY, SCALE(100), SCALE(30));
         lv_obj_add_event_cb(mode_btn_work_chat_send, work_chat_send_cb, LV_EVENT_CLICKED, nullptr);
         c2_apply_work_panel_policy();
 
