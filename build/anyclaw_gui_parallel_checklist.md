@@ -402,3 +402,13 @@
 - 快照视图已追加匹配计数与过滤条件头信息，支持快速检查筛选结果。
 - 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
 
+### Delta 2026-04-23 #34
+
+- 已完成主界面视觉对齐第一批（高可见低风险）：
+  - 标题栏图标按设计 Token 改为 `TITLE_ICON = TITLE_H × 80%`，并同步标题文本对齐与字体层级。
+  - 标题栏右侧补齐 Chat/Work 模式切换与 Settings 按钮，统一与窗口控制区的尺寸/间距体系。
+  - 左导航图标按钮按设计比例从 `100%` 收敛为 `70%`，选中态增加边框与文本层级强化。
+  - Chat 控制条补充上下留白，核心控件文本从次级灰提升为主信息层级，状态标签改为 small 层级。
+- 已完成回归构建验证：`build/build_oneclick.bat` 通过，产物正常输出。
+- 影响代码: [src/app_config.h](../src/app_config.h), [src/ui_main.cpp](../src/ui_main.cpp)
+
