@@ -351,6 +351,62 @@ static int extract_int(const std::string& content, const std::string& key) {
     return json_extract_int(content.c_str(), key.c_str(), -1);
 }
 
+/* Extract port from gateway.bind URL like "http://localhost:18789" or "http://0.0.0.0:18789" */
+static int extract_port_from_bind_url(const std::string& content) {
+    char bind_url[256] = {0};
+    if (!json_extract_string(content.c_str(), "bind", bind_url, sizeof(bind_url)))
+        return 0;
+    /* Find last ':' which precedes the port number */
+    const char* colon = strrchr(bind_url, ':');
+    if (!colon || colon == bind_url) return 0;
+    colon++;
+    int port = 0;
+    while (*colon >= '0' && *colon <= '9') {
+        port = port * 10 + (*colon - '0');
+        colon++;
+    }
+    return (port > 0 && port < 65536) ? port : 0;
+}
+
+/* Extract port from URL-like strings in raw JSON (e.g. "http://localhost:18789") */
+static int extract_port_from_url_in_json(const std::string& content) {
+    /* Look for "localhost:PORT" or "127.0.0.1:PORT" pattern in raw JSON text */
+    static const char* patterns[] = { "localhost:", "127.0.0.1:", nullptr };
+    for (int i = 0; patterns[i]; i++) {
+        size_t pos = content.find(patterns[i]);
+        if (pos == std::string::npos) continue;
+        pos += strlen(patterns[i]);
+        if (pos >= content.size() || content[pos] < '0' || content[pos] > '9') continue;
+        int port = 0;
+        while (pos < content.size() && content[pos] >= '0' && content[pos] <= '9') {
+            port = port * 10 + (content[pos] - '0');
+            pos++;
+        }
+        if (port > 1024 && port < 65536) return port;
+    }
+    return 0;
+}
+
+/* Read gateway port from user config ~/.openclaw/openclaw.json */
+static int read_user_gateway_port() {
+    const char* userprofile = std::getenv("USERPROFILE");
+    if (!userprofile) return 0;
+    std::string user_cfg = std::string(userprofile) + "\\.openclaw\\openclaw.json";
+    std::ifstream uf(user_cfg);
+    if (!uf.is_open()) return 0;
+    std::string content((std::istreambuf_iterator<char>(uf)),
+                         std::istreambuf_iterator<char>());
+    /* Try gateway.controlUi.allowedOrigins URL pattern (e.g. "http://localhost:18789") */
+    int port = extract_port_from_url_in_json(content);
+    if (port > 0) return port;
+    /* Try gateway.bind URL format (e.g. "bind": "http://0.0.0.0:18789") */
+    port = extract_port_from_bind_url(content);
+    if (port > 0) return port;
+    /* Fallback: top-level "port" key */
+    port = extract_int(content, "port");
+    return (port > 0) ? port : 0;
+}
+
 /* FIX 1: Use robust JSON extraction from json_util.cpp */
 static void extract_string(const std::string& content, const std::string& key, char* out, int out_size) {
     json_extract_string(content.c_str(), key.c_str(), out, out_size);
@@ -389,6 +445,12 @@ OpenClawInfo app_detect_openclaw() {
                 extract_string(content, "version", info.version, sizeof(info.version));
             }
 
+            /* Override with user config gateway port (e.g. gateway.bind = "http://localhost:18789") */
+            {
+                int user_port = read_user_gateway_port();
+                if (user_port > 0) info.gateway_port = user_port;
+            }
+
             /* Get version from CLI */
             if (!info.version[0]) {
                 if (exec_cmd("openclaw --version", output, sizeof(output))) {
@@ -410,6 +472,11 @@ OpenClawInfo app_detect_openclaw() {
 
             std::string cfg = dir + "\\openclaw.json";
             strncpy(info.config_file, cfg.c_str(), sizeof(info.config_file)-1);
+
+            /* Read user config gateway port */
+            int user_port = read_user_gateway_port();
+            if (user_port > 0) info.gateway_port = user_port;
+
             return info;
         }
     }

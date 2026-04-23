@@ -4981,6 +4981,9 @@ static void apply_mode_switch_visuals() {
         if (lbl && lv_obj_check_type(lbl, &lv_label_class)) {
             lv_obj_set_style_text_color(lbl, selected ? c->text_inverse : c->text, 0);
             lv_obj_set_style_text_font(lbl, FONT(FONT_SIZE_SMALL), 0);
+        }
+    };
+    paint_btn(mode_btn_chat, g_ui_mode == UI_MODE_CHAT);
     paint_btn(mode_btn_work, g_ui_mode == UI_MODE_WORK);
     /* top_mode_chat / top_mode_work removed from title bar per Design.md */
 
@@ -10126,16 +10129,7 @@ static void create_title_bar(lv_obj_t* scr) {
 
         int top_y = wc_btn_y;
 
-        /* Status LED in title bar */
-        int led_sz = TITLE_H * TITLE_LED_PCT / 100;
-        led_ok = lv_led_create(title_bar);
-        lv_obj_set_size(led_ok, led_sz, led_sz);
-        lv_led_set_color(led_ok, g_colors->warning);
-        lv_led_off(led_ok);
-        int led_x = wc_base_x - SCALE(6) - led_sz;
-        lv_obj_set_pos(led_ok, led_x, top_y + (wc_btn_h - led_sz) / 2);
-
-        /* Model name (short) */
+        /* Model name (short) — positioned to left of window controls */
         {
             char gw_model_buf[128] = {0};
             app_get_current_model(gw_model_buf, sizeof(gw_model_buf));
@@ -10152,7 +10146,7 @@ static void create_title_bar(lv_obj_t* scr) {
                 lv_label_set_text(title_model, short_name);
                 lv_obj_set_style_text_color(title_model, g_colors->text_dim, 0);
                 lv_obj_set_style_text_font(title_model, CJK_FONT_SMALL, 0);
-                int model_x = led_x - SCALE(6) - model_w;
+                int model_x = wc_base_x - SCALE(6) - model_w;
                 lv_obj_set_pos(title_model, model_x, top_y + 4);
                 lv_obj_set_width(title_model, model_w - SCALE(8));
                 lv_label_set_long_mode(title_model, LV_LABEL_LONG_MODE_DOTS);
@@ -10169,11 +10163,8 @@ static void create_title_bar(lv_obj_t* scr) {
         lv_obj_set_style_border_width(btn_minimize, 1, 0);
         lv_obj_set_style_border_color(btn_minimize, c->border, 0);
         lv_obj_clear_flag(btn_minimize, LV_OBJ_FLAG_CLICK_FOCUSABLE);
-        lv_obj_clear_flag(btn_minimize, LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_clear_flag(btn_minimize, LV_OBJ_FLAG_EVENT_BUBBLE); /* Prevents drag bubble to title_bar */
         lv_obj_set_ext_click_area(btn_minimize, SCALE(6));
-        /* Stop event propagation so title bar drag handler doesn't swallow clicks */
-        lv_obj_add_event_cb(btn_minimize, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
-        lv_obj_add_event_cb(btn_minimize, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_CLICKED, nullptr);
         lv_obj_add_event_cb(btn_minimize, btn_minimize_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_t* lbl_min = lv_label_create(btn_minimize);
         lv_label_set_text(lbl_min, "-");
@@ -10190,10 +10181,8 @@ static void create_title_bar(lv_obj_t* scr) {
         lv_obj_set_style_border_width(btn_maximize, 1, 0);
         lv_obj_set_style_border_color(btn_maximize, c->border, 0);
         lv_obj_clear_flag(btn_maximize, LV_OBJ_FLAG_CLICK_FOCUSABLE);
-        lv_obj_clear_flag(btn_maximize, LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_clear_flag(btn_maximize, LV_OBJ_FLAG_EVENT_BUBBLE); /* Prevents drag bubble to title_bar */
         lv_obj_set_ext_click_area(btn_maximize, SCALE(6));
-        lv_obj_add_event_cb(btn_maximize, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
-        lv_obj_add_event_cb(btn_maximize, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_CLICKED, nullptr);
         lv_obj_add_event_cb(btn_maximize, btn_maximize_cb, LV_EVENT_CLICKED, nullptr);
         lbl_maximize = lv_label_create(btn_maximize);
         lv_label_set_text(lbl_maximize, "[]");
@@ -10210,82 +10199,20 @@ static void create_title_bar(lv_obj_t* scr) {
         lv_obj_set_style_border_width(btn_close, 1, 0);
         lv_obj_set_style_border_color(btn_close, c->border, 0);
         lv_obj_clear_flag(btn_close, LV_OBJ_FLAG_CLICK_FOCUSABLE);
-        lv_obj_clear_flag(btn_close, LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_clear_flag(btn_close, LV_OBJ_FLAG_EVENT_BUBBLE); /* Prevents drag bubble to title_bar */
         lv_obj_set_ext_click_area(btn_close, SCALE(6));
-        lv_obj_add_event_cb(btn_close, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
-        lv_obj_add_event_cb(btn_close, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_CLICKED, nullptr);
         lv_obj_add_event_cb(btn_close, btn_close_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_t* lbl_cls = lv_label_create(btn_close);
         lv_label_set_text(lbl_cls, "X");
         lv_obj_set_style_text_font(lbl_cls, CJK_FONT, 0);
         lv_obj_center(lbl_cls);
 
-        int mode_w = std::max(WIN_W * MODE_BAR_W_PCT / 100, MODE_BAR_W_MIN);
-        int side_w = std::max(WIN_W * SIDE_BTN_W_PCT / 100, SIDE_BTN_W_MIN);
-        int top_gap = SCALE(6);
-        int right_x = wc_base_x - top_gap;
-
-        top_btn_settings = lv_button_create(title_bar);
-        right_x -= side_w;
-        lv_obj_set_size(top_btn_settings, side_w, wc_btn_h);
-        lv_obj_set_pos(top_btn_settings, right_x, top_y);
-        lv_obj_set_style_bg_color(top_btn_settings, c->btn_secondary, 0);
-        lv_obj_set_style_bg_opa(top_btn_settings, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(top_btn_settings, SCALE(g_colors->radius_sm), 0);
-        lv_obj_set_style_border_width(top_btn_settings, 1, 0);
-        lv_obj_set_style_border_color(top_btn_settings, c->border, 0);
-        lv_obj_clear_flag(top_btn_settings, LV_OBJ_FLAG_CLICK_FOCUSABLE);
-        lv_obj_clear_flag(top_btn_settings, LV_OBJ_FLAG_EVENT_BUBBLE);
-        lv_obj_add_event_cb(top_btn_settings, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
-        lv_obj_add_event_cb(top_btn_settings, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_CLICKED, nullptr);
-        lv_obj_add_event_cb(top_btn_settings, [](lv_event_t* e) {
-            (void)e;
-            if (ui_settings_is_open()) return;
-            ui_settings_open();
-        }, LV_EVENT_CLICKED, nullptr);
-        lv_obj_t* lbl_set = lv_label_create(top_btn_settings);
-        lv_label_set_text(lbl_set, "\xE2\x9A\x99");
-        lv_obj_set_style_text_color(lbl_set, c->text, 0);
-        lv_obj_set_style_text_font(lbl_set, FONT_ICON, 0);
-        lv_obj_center(lbl_set);
-
-        mode_bar = lv_obj_create(title_bar);
-        right_x -= (mode_w + top_gap);
-        lv_obj_set_size(mode_bar, mode_w, wc_btn_h);
-        lv_obj_set_pos(mode_bar, right_x, top_y);
-        lv_obj_set_style_bg_color(mode_bar, c->surface, 0);
-        lv_obj_set_style_bg_opa(mode_bar, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_color(mode_bar, c->border, 0);
-        lv_obj_set_style_border_width(mode_bar, 1, 0);
-        lv_obj_set_style_radius(mode_bar, SCALE(g_colors->radius_sm), 0);
-        lv_obj_set_style_pad_all(mode_bar, SCALE(2), 0);
-        lv_obj_set_style_pad_gap(mode_bar, SCALE(2), 0);
-        lv_obj_set_flex_flow(mode_bar, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(mode_bar, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_clear_flag(mode_bar, LV_OBJ_FLAG_SCROLLABLE);
-
-        int mode_btn_w = (mode_w - SCALE(6)) / 2;
-        top_mode_chat = lv_button_create(mode_bar);
-        lv_obj_set_size(top_mode_chat, mode_btn_w, wc_btn_h - SCALE(4));
-        lv_obj_set_style_radius(top_mode_chat, SCALE(g_colors->radius_sm), 0);
-        lv_obj_set_style_border_width(top_mode_chat, 0, 0);
-        lv_obj_set_style_text_font(top_mode_chat, FONT(FONT_SIZE_SMALL), 0);
-        lv_obj_add_event_cb(top_mode_chat, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
-        lv_obj_add_event_cb(top_mode_chat, mode_chat_cb, LV_EVENT_CLICKED, nullptr);
-        lv_obj_t* lbl_chat = lv_label_create(top_mode_chat);
-        lv_label_set_text(lbl_chat, tr(STR_CHAT));
-        lv_obj_center(lbl_chat);
-
-        top_mode_work = lv_button_create(mode_bar);
-        lv_obj_set_size(top_mode_work, mode_btn_w, wc_btn_h - SCALE(4));
-        lv_obj_set_style_radius(top_mode_work, SCALE(g_colors->radius_sm), 0);
-        lv_obj_set_style_border_width(top_mode_work, 0, 0);
-        lv_obj_set_style_text_font(top_mode_work, FONT(FONT_SIZE_SMALL), 0);
-        lv_obj_add_event_cb(top_mode_work, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
-        lv_obj_add_event_cb(top_mode_work, mode_work_cb, LV_EVENT_CLICKED, nullptr);
-        lv_obj_t* lbl_work = lv_label_create(top_mode_work);
-        lv_label_set_text(lbl_work, g_lang == Lang::CN ? "任务" : "Work");
-        lv_obj_center(lbl_work);
+        /* Design.md §12: Chat/Work toggle and Settings button NOT in title bar.
+         * Both have moved to left nav bottom. Title bar only has: Logo + Title + ✕ */
+        top_btn_settings = nullptr;
+        mode_bar         = nullptr;
+        top_mode_chat    = nullptr;
+        top_mode_work    = nullptr;
 
         printf("[UI] Window controls at x=%d, y=%d (title bar)\n", wc_base_x, wc_btn_y);
     }

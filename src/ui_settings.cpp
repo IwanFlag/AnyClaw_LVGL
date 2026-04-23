@@ -3801,30 +3801,88 @@ void ui_settings_open() {
     lv_obj_move_foreground(settings_panel);
     settings_visible = true;
 
-    if (gen_status_label) {
-        OpenClawInfo info = app_detect_openclaw();
-        ClawStatus status = app_check_status(info);
-        static char status_buf[256];
-        const char* sts = "";
-        switch (status) {
-            case ClawStatus::Ready:    sts = "Ready"; break;
-            case ClawStatus::Busy:     sts = "Busy"; break;
-            case ClawStatus::Checking: sts = "Checking"; break;
-            case ClawStatus::Detected: sts = "Detected"; break;
-            case ClawStatus::Error:    sts = "Error"; break;
-            default: sts = "Not Installed"; break;
-        }
-        snprintf(status_buf, sizeof(status_buf), "%s", sts);
-        lv_label_set_text(gen_status_label, status_buf);
-    }
-    if (gen_path_label) {
-        OpenClawInfo info = app_detect_openclaw();
-        lv_label_set_text(gen_path_label, info.executable[0] ? info.executable : "--");
-    }
-    refresh_security_status_ui();
+    /* Show placeholder text immediately — all slow ops (exec_cmd / http_get) run async below */
+    if (gen_status_label)  lv_label_set_text(gen_status_label,  "Checking...");
+    if (gen_path_label)    lv_label_set_text(gen_path_label,    "...");
 
-    /* Sync model from OpenClaw config (handles manual edits) */
-    ui_settings_sync_model();
+    /* Async refresh: runs detect + check + model query off the UI thread */
+    struct SRR {  /* SettingsRefreshResult */
+        ClawStatus claw_status;
+        char       path[512];
+        char       model[256];
+        int        gateway_port;
+        bool       api_ok;
+        bool       cfg_ok;
+        char       provider[64];
+    };
+    std::thread([] {
+        SRR* r = new SRR{};
+        OpenClawInfo info  = app_detect_openclaw();
+        r->claw_status     = app_check_status(info);
+        r->gateway_port    = info.gateway_port;
+        strncpy(r->path, info.executable[0] ? info.executable : "--", sizeof(r->path) - 1);
+        app_get_current_model(r->model, sizeof(r->model));
+        const char* prov = infer_provider_from_model(r->model);
+        strncpy(r->provider, prov ? prov : "", sizeof(r->provider) - 1);
+        char key[256] = {0};
+        r->api_ok = app_get_provider_api_key(r->provider, key, sizeof(key)) && key[0];
+        r->cfg_ok = is_config_dir_writable();
+
+        lv_async_call([](void* d) {
+            SRR* r = static_cast<SRR*>(d);
+            if (!settings_panel || !settings_visible) { delete r; return; }
+
+            /* Status label */
+            if (gen_status_label && lv_obj_is_valid(gen_status_label)) {
+                const char* sts = "";
+                switch (r->claw_status) {
+                    case ClawStatus::Ready:    sts = "Ready"; break;
+                    case ClawStatus::Busy:     sts = "Busy"; break;
+                    case ClawStatus::Checking: sts = "Checking"; break;
+                    case ClawStatus::Detected: sts = "Detected"; break;
+                    case ClawStatus::Error:    sts = "Error"; break;
+                    default: sts = "Not Installed"; break;
+                }
+                lv_label_set_text(gen_status_label, sts);
+            }
+            /* Path label */
+            if (gen_path_label && lv_obj_is_valid(gen_path_label))
+                lv_label_set_text(gen_path_label, r->path);
+
+            /* Model label (ui_settings_sync_model logic) */
+            if (model_current_label && lv_obj_is_valid(model_current_label)) {
+                if (r->model[0]) {
+                    snprintf(gw_model_buf, sizeof(gw_model_buf), "%s", r->model);
+                    snprintf(g_selected_model, sizeof(g_selected_model), "%s", r->model);
+                    lv_label_set_text(model_current_label, r->model);
+                    lv_obj_set_style_text_color(model_current_label, g_colors->success, 0);
+                } else {
+                    lv_label_set_text(model_current_label, tr("\u672a\u914d\u7f6e", "Not configured"));
+                }
+            }
+            /* Security status (refresh_security_status_ui logic) */
+            if (gen_security_label && gen_security_detail_label && gen_security_led
+                    && lv_obj_is_valid(gen_security_label)) {
+                bool port_ok   = (r->gateway_port > 0 && r->gateway_port < 65536);
+                const char* sec_text = "Risk";
+                lv_color_t sec_color = g_colors->danger;
+                if (r->api_ok && r->cfg_ok && port_ok) {
+                    sec_text = "Good";  sec_color = g_colors->success;
+                } else if ((r->api_ok && r->cfg_ok) || (r->api_ok && port_ok) || (r->cfg_ok && port_ok)) {
+                    sec_text = "Warning"; sec_color = g_colors->warning;
+                }
+                lv_led_set_color(gen_security_led, sec_color);
+                lv_led_on(gen_security_led);
+                lv_label_set_text(gen_security_label, sec_text);
+                lv_obj_set_style_text_color(gen_security_label, sec_color, 0);
+                lv_label_set_text_fmt(gen_security_detail_label,
+                    "API Key: %s(%s) | Port: %d | Config: %s",
+                    r->api_ok ? "OK" : "Missing", r->provider,
+                    r->gateway_port, r->cfg_ok ? "Writable" : "ReadOnly");
+            }
+            delete r;
+        }, r);
+    }).detach();
 }
 
 void ui_settings_close() {

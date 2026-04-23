@@ -967,7 +967,7 @@ bool tray_init(HINSTANCE hInstance) {
     g_nid.uID = TRAY_ICON_UID;
     g_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
     g_nid.uCallbackMessage = WM_TRAYICON;
-    g_nid.hIcon = create_tray_icon(TrayState::White);
+    g_nid.hIcon = create_tray_icon(TrayState::White, GetSystemMetrics(SM_CXSMICON));
     wcscpy_s(g_nid.szTip, L"AnyClaw LVGL");
 
     if (!Shell_NotifyIconW(NIM_ADD, &g_nid)) {
@@ -1013,7 +1013,7 @@ static void tray_apply_pending_state() {
         case TrayState::White:   tip = (g_lang == Lang::CN) ? L"AnyClaw \x2014 \x7A7A\u95F2" : L"AnyClaw \x2014 Idle"; break;
     }
 
-    HICON hNewIcon = create_tray_icon(state);
+    HICON hNewIcon = create_tray_icon(state, GetSystemMetrics(SM_CXSMICON));
     if (g_nid.hIcon) DestroyIcon(g_nid.hIcon);
     g_nid.hIcon = hNewIcon;
     wcscpy_s(g_nid.szTip, tip);
@@ -1089,50 +1089,41 @@ void tray_set_window_icon() {
     }
     if (!hwnd) { LOG_W("ICON", "tray_set_window_icon: no HWND"); return; }
 
-    /* Load window icon: try embedded resource first, then file */
-    HICON hIcon96 = load_icon_from_resource(96);
-    HICON hIcon64 = load_icon_from_resource(64);
-    HICON hIcon32 = load_icon_from_resource(32);
-    if (!hIcon96 && !hIcon64) {
-        /* Fallback: load from file with multiple path attempts */
+    /* Prefer loading from PNG asset files — better quality than the embedded ICO.
+     * The ICO resource (garlic_icon.ico) is small and upscales poorly. */
+    HICON hIcon96 = nullptr, hIcon64 = nullptr, hIcon32 = nullptr;
+    {
         wchar_t exePath[MAX_PATH];
         GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-        LOG_I("ICON", "tray_set_window_icon: resource failed, trying file fallback, exePath=%ls", exePath);
         wchar_t iconPath[MAX_PATH];
         wcscpy_s(iconPath, exePath);
         wchar_t* p = wcsrchr(iconPath, L'\\');
 
-        /* Path 1: exe_dir/app_icon.png */
-        if (p) {
-            wcscpy_s(p + 1, MAX_PATH - (p - iconPath + 1), L"app_icon.png");
-            hIcon96 = load_png_icon(iconPath, 96);
-            hIcon64 = load_png_icon(iconPath, 64);
-            hIcon32 = load_png_icon(iconPath, 32);
-        }
-        /* Path 2: exe_dir/../assets/app_icon.png */
-        if (!hIcon96 && !hIcon64 && p) {
-            wcscpy_s(p + 1, MAX_PATH - (p - iconPath + 1), L"..\\assets\\app_icon.png");
-            hIcon96 = load_png_icon(iconPath, 96);
-            hIcon64 = load_png_icon(iconPath, 64);
-            hIcon32 = load_png_icon(iconPath, 32);
-        }
-        /* Path 3: exe_dir/../../assets/app_icon.png */
-        if (!hIcon96 && !hIcon64 && p) {
-            wcscpy_s(p + 1, MAX_PATH - (p - iconPath + 1), L"..\\..\\assets\\app_icon.png");
-            hIcon96 = load_png_icon(iconPath, 96);
-            hIcon64 = load_png_icon(iconPath, 64);
-            hIcon32 = load_png_icon(iconPath, 32);
-        }
-        /* Path 4: %APPDATA%/AnyClaw/app_icon.png */
-        if (!hIcon96 && !hIcon64) {
-            wchar_t appData[MAX_PATH];
-            if (SUCCEEDED(SHGetFolderPathW(nullptr, CSIDL_APPDATA, nullptr, 0, appData))) {
-                swprintf_s(iconPath, MAX_PATH, L"%ls\\AnyClaw\\app_icon.png", appData);
+        /* Try garlic_icon.png (highest quality app icon) first */
+        const wchar_t* tryNames[] = {
+            L"garlic_icon.png", L"app_icon.png",
+            L"..\\assets\\garlic_icon.png", L"..\\assets\\app_icon.png",
+            L"..\\..\\assets\\garlic_icon.png", L"..\\..\\assets\\app_icon.png"
+        };
+        for (const wchar_t* name : tryNames) {
+            if (!hIcon96 && p) {
+                wcscpy_s(p + 1, MAX_PATH - (p - iconPath + 1), name);
                 hIcon96 = load_png_icon(iconPath, 96);
-                hIcon64 = load_png_icon(iconPath, 64);
-                hIcon32 = load_png_icon(iconPath, 32);
+                if (hIcon96) {
+                    hIcon64 = load_png_icon(iconPath, 64);
+                    hIcon32 = load_png_icon(iconPath, 32);
+                    LOG_I("ICON", "tray_set_window_icon: PNG loaded from %ls", iconPath);
+                    break;
+                }
             }
         }
+    }
+    /* Fall back to embedded ICO resource only if PNG loading failed */
+    if (!hIcon96 && !hIcon64) {
+        hIcon96 = load_icon_from_resource(96);
+        hIcon64 = load_icon_from_resource(64);
+        hIcon32 = load_icon_from_resource(32);
+        LOG_I("ICON", "tray_set_window_icon: using ICO resource fallback");
     }
     if (hIcon96) {
         SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon96);
