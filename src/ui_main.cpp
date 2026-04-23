@@ -3752,9 +3752,14 @@ static void update_work_empty_state() {
 
 static void c2_refresh_dual_view_button() {
     if (!ctrl_btn_dual_view) return;
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
+    lv_obj_set_style_bg_color(ctrl_btn_dual_view, g_c2_dual_result ? c->btn_action : c->btn_secondary, 0);
+    lv_obj_set_style_bg_opa(ctrl_btn_dual_view, LV_OPA_COVER, 0);
+    if (g_c2_dual_result) apply_btn_gradient(ctrl_btn_dual_view);
     lv_obj_t* lbl = lv_obj_get_child(ctrl_btn_dual_view, 0);
     if (!lbl) return;
     lv_label_set_text(lbl, g_c2_dual_result ? tr({"Dual: ON", "双结果: 开"}) : tr({"Dual: OFF", "双结果: 关"}));
+    lv_obj_set_style_text_color(lbl, g_c2_dual_result ? c->text_inverse : c->text, 0);
 }
 
 static void c2_refresh_work_chat_toggle_button() {
@@ -3770,7 +3775,14 @@ static void c2_refresh_work_chat_toggle_button() {
 
 static void c2_set_work_state_label(const I18n& i18n_text) {
     if (!mode_lbl_work_chat_state) return;
-    lv_label_set_text(mode_lbl_work_chat_state, tr(i18n_text));
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
+    const char* txt = tr(i18n_text);
+    lv_color_t tc = c->text_dim;
+    if (strstr(txt, "executing") || strstr(txt, "正在执行")) tc = c->accent;
+    else if (strstr(txt, "ready") || strstr(txt, "就绪")) tc = c->text_hint;
+    else if (strstr(txt, "dual-result") || strstr(txt, "双结果")) tc = c->text;
+    lv_obj_set_style_text_color(mode_lbl_work_chat_state, tc, 0);
+    lv_label_set_text(mode_lbl_work_chat_state, txt);
 }
 
 static void c2_refresh_work_chat_state_label() {
@@ -13100,7 +13112,7 @@ void app_ui_init() {
     module_tasks_state = lv_label_create(module_tasks_panel);
     lv_label_set_text(module_tasks_state, tr(I18n{"State: ready", "状态：就绪"}));
     lv_obj_set_style_text_color(module_tasks_state, c->text_dim, 0);
-    lv_obj_set_style_text_font(module_tasks_state, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_font(module_tasks_state, g_theme_fonts.small ? g_theme_fonts.small : CJK_FONT_SMALL, 0);
     lv_obj_t* row_tasks_btn = lv_obj_create(module_tasks_panel);
     lv_obj_set_width(row_tasks_btn, LV_PCT(100));
     lv_obj_set_height(row_tasks_btn, LV_SIZE_CONTENT);
@@ -13121,7 +13133,7 @@ void app_ui_init() {
         (void)e;
         refresh_tasks_module_data(true);
     }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* btn_task_abort_all = aw_btn_create(row_tasks_btn, "Abort All", BTN_SECONDARY, SCALE(120), SCALE(34));
+    lv_obj_t* btn_task_abort_all = aw_btn_create(row_tasks_btn, "Abort All", BTN_DANGER, SCALE(120), SCALE(34));
     lv_obj_add_event_cb(btn_task_abort_all, [](lv_event_t* e) {
         (void)e;
         bool ok = session_mgr().abort_all();
@@ -13192,7 +13204,7 @@ void app_ui_init() {
     module_files_state = lv_label_create(module_files_panel);
     lv_label_set_text(module_files_state, tr(I18n{"State: ready", "状态：就绪"}));
     lv_obj_set_style_text_color(module_files_state, c->text_dim, 0);
-    lv_obj_set_style_text_font(module_files_state, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_font(module_files_state, g_theme_fonts.small ? g_theme_fonts.small : CJK_FONT_SMALL, 0);
     lv_obj_t* row_files_btn = lv_obj_create(module_files_panel);
     lv_obj_set_width(row_files_btn, LV_PCT(100));
     lv_obj_set_height(row_files_btn, LV_SIZE_CONTENT);
