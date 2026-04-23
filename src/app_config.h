@@ -52,7 +52,7 @@
 /* ── 左导航栏 (parent: 窗口) ── */
 #define NAV_W_PCT               6       /* 宽 = 窗口宽 × 6% */
 #define NAV_W_MIN               36      /* 最小宽 */
-#define NAV_ICON_BTN_PCT        100     /* 图标按钮 = 导航宽 × 100% */
+#define NAV_ICON_BTN_PCT        70      /* 图标按钮 = 导航宽 × 70% */
 #define NAV_ICON_GAP_PCT        8       /* 按钮间距 = 导航宽 × 8% */
 #define NAV_ICON_BTN_RADIUS     10      /* 圆角 (SCALE'd) */
 #define NAV_QUICK_H_PCT         25      /* 底部快捷区高 = 内容区高 × 25% */
