@@ -58,14 +58,17 @@ static const wchar_t* get_tray_theme_dir() {
 }
 
 /* ── Theme colors as GDI COLORREF from g_colors ── */
+/* LVGL9 LV_COLOR_DEPTH=32: lv_color_t = {blue, green, red, alpha} each 8-bit.
+ * Old 5-6-5 bit-expansion was WRONG for 8-bit components — use direct values. */
 static COLORREF to_colorref(lv_color_t c) {
-    return RGB(c.red << 3 | c.red >> 2, c.green << 2 | c.green >> 4, c.blue << 3 | c.blue >> 2);
+    return RGB(c.red, c.green, c.blue);
 }
 static COLORREF theme_bg()       { return to_colorref(g_colors->bg); }
 static COLORREF theme_panel()    { return to_colorref(g_colors->panel); }
 static COLORREF theme_text_gdi() { return to_colorref(g_colors->text); }
 static COLORREF theme_text_dim() { return to_colorref(g_colors->text_dim); }
-static COLORREF theme_hover()    { return to_colorref(g_colors->hover_overlay); }
+/* GDI menus need opaque colors — use overlay (opaque) not hover_overlay (semi-transparent) */
+static COLORREF theme_hover()    { return to_colorref(g_colors->overlay); }
 static COLORREF theme_sep()      { return to_colorref(g_colors->divider); }
 
 /* ── Static brushes ──────────────────────────────────────────────── */
@@ -75,6 +78,13 @@ static HBRUSH s_panelBrush = nullptr;
 static void ensure_brushes() {
     if (!s_bgBrush) s_bgBrush = CreateSolidBrush(theme_bg());
     if (!s_panelBrush) s_panelBrush = CreateSolidBrush(theme_panel());
+}
+
+/* Call when theme changes to rebuild GDI brushes with new colors */
+static void rebuild_brushes() {
+    if (s_bgBrush) { DeleteObject(s_bgBrush); s_bgBrush = nullptr; }
+    if (s_panelBrush) { DeleteObject(s_panelBrush); s_panelBrush = nullptr; }
+    ensure_brushes();
 }
 
 /* ── GDI+ initialization ─────────────────────────────────────────── */
@@ -1149,20 +1159,23 @@ void tray_process_messages() {
 
     auto t1 = GetTickCount();
 
-    /* Process tray window messages — limit per frame to avoid blocking UI.
-     * PeekMessage (not GetMessage) returns immediately if queue is empty. */
+    /* Process thread messages with a budget to keep UI responsive.
+     * Pumping only tray HWND can starve SDL/main window messages and trigger
+     * false "Not Responding" even when background threads are still active. */
     MSG msg;
     int processed = 0;
-    const int MAX_MSG_PER_FRAME = 8;
+    const int MAX_MSG_PER_FRAME = 256;
+    const DWORD MSG_BUDGET_MS = 8;
+    DWORD msg_start = GetTickCount();
     while (processed < MAX_MSG_PER_FRAME && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-        if (msg.message == WM_PAINT) {
-            if (msg.hwnd) ValidateRect(msg.hwnd, nullptr);
-            processed++;
-            continue;
+        if (msg.message == WM_QUIT) {
+            g_shouldQuit = true;
+            break;
         }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
         processed++;
+        if (GetTickCount() - msg_start >= MSG_BUDGET_MS) break;
     }
 
     auto t2 = GetTickCount();

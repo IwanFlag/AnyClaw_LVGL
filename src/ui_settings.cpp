@@ -2737,7 +2737,7 @@ static void log_tab_refresh_list() {
 
         lv_obj_t* btn = lv_list_add_btn(log_list_widget, NULL, line);
         lv_obj_set_style_text_font(btn, CJK_FONT, 0);
-        lv_obj_set_style_text_font(btn, FONT(10), 0);
+        lv_obj_set_style_text_font(btn, CJK_FONT_SMALL, 0);
         lv_obj_set_style_bg_color(btn, g_colors->panel, 0);
         /* Color by level */
         if (level >= 0 && level <= 3) {
@@ -3062,7 +3062,7 @@ static void build_log_tab(lv_obj_t* tab) {
         lv_obj_t* lbl = lv_label_create(row_legend);
         lv_label_set_text(lbl, level_names[i]);
         lv_obj_set_style_text_color(lbl, log_level_colors[i], 0);
-        lv_obj_set_style_text_font(lbl, FONT(10), 0);
+        lv_obj_set_style_text_font(lbl, CJK_FONT_SMALL, 0);
     }
 
     /* ── Log list (scrollable) ── */
@@ -3142,11 +3142,11 @@ static void build_feature_tab(lv_obj_t* tab) {
 
         lv_obj_t* name = lv_label_create(left);
         lv_label_set_text(name, f.name.c_str());
-        lv_obj_set_style_text_font(name, FONT(11), 0);
+        lv_obj_set_style_text_font(name, CJK_FONT_SMALL, 0);
         lv_obj_t* desc = lv_label_create(left);
         lv_label_set_text(desc, f.description.c_str());
         lv_obj_set_style_text_color(desc, g_colors->text_dim, 0);
-        lv_obj_set_style_text_font(desc, FONT(10), 0);
+        lv_obj_set_style_text_font(desc, CJK_FONT_SMALL, 0);
 
         lv_obj_t* sw = lv_switch_create(row);
         if (f.enabled) lv_obj_add_state(sw, LV_STATE_CHECKED);
@@ -3163,14 +3163,14 @@ static void build_feature_tab(lv_obj_t* tab) {
             lv_obj_t* note = lv_label_create(row);
             lv_label_set_text(note, tr("需重启", "Restart"));
             lv_obj_set_style_text_color(note, g_colors->warning, 0);
-            lv_obj_set_style_text_font(note, FONT(10), 0);
+            lv_obj_set_style_text_font(note, CJK_FONT_SMALL, 0);
         }
     }
 
     ff_status_label = lv_label_create(tab);
     lv_label_set_text(ff_status_label, tr("修改后已自动保存到 config.json", "Changes auto-saved to config.json"));
     lv_obj_set_style_text_color(ff_status_label, g_colors->text_dim, 0);
-    lv_obj_set_style_text_font(ff_status_label, FONT(11), 0);
+    lv_obj_set_style_text_font(ff_status_label, CJK_FONT_SMALL, 0);
 }
 
 static void build_tracing_tab(lv_obj_t* tab) {
@@ -3796,6 +3796,7 @@ void ui_settings_open() {
         ui_settings_init(root);
     }
     if (!settings_panel) return;
+    /* Always show panel regardless of settings_visible flag state (handles stuck-true edge case) */
     lv_obj_clear_flag(settings_panel, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(settings_panel);
     settings_visible = true;

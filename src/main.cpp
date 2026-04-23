@@ -529,6 +529,9 @@ int main(int argc, char* argv[]) {
         if (!dpi_set) LOG_W("DPI", "Warning: could not set DPI awareness");
     }
 
+    /* Avoid Windows ghost-window takeover under transient message stalls. */
+    DisableProcessWindowsGhosting();
+
     /* Init system tray */
     if (!tray_init(hInstance)) {
         LOG_E("MAIN", "tray_init failed!");
@@ -958,6 +961,13 @@ int main(int argc, char* argv[]) {
             return 1; /* keep in queue — let LVGL also process the click */
         }
 
+        /* Global UI hotkeys (nav, theme, settings, window) — before textarea shortcuts */
+        if (event->type == SDL_KEYDOWN) {
+            extern bool ui_handle_hotkey(SDL_Keycode sym, Uint16 mod);
+            if (ui_handle_hotkey(event->key.keysym.sym, event->key.keysym.mod))
+                return 0;  /* consumed by hotkey handler, don't pass to LVGL */
+        }
+
         /* Ctrl+C/V/X/A — LVGL SDL driver drops these, handle ourselves */
         if (event->type == SDL_KEYDOWN && (event->key.keysym.mod & KMOD_CTRL)) {
             /* Find focused textarea: group focus first, fallback to last clicked */
@@ -1117,6 +1127,15 @@ int main(int argc, char* argv[]) {
     auto last_log_time = std::chrono::steady_clock::now();
     while (!tray_should_quit()) {
         auto loop_start = std::chrono::steady_clock::now();
+
+        /* Pump tray/Win32 messages first to keep window responsiveness under load. */
+        auto before_tray_pre = std::chrono::steady_clock::now();
+        tray_process_messages();
+        auto after_tray_pre = std::chrono::steady_clock::now();
+
+        /* Explicitly pump SDL events so Win32 messages are not left pending. */
+        SDL_PumpEvents();
+
         lv_timer_handler();
         auto after_lvt = std::chrono::steady_clock::now();
         loop_count++;
@@ -1134,19 +1153,22 @@ int main(int argc, char* argv[]) {
         /* Log first iteration and every 100th to stderr (bypasses log buffer) */
         auto dt_lvt = std::chrono::duration_cast<std::chrono::milliseconds>(after_lvt - loop_start).count();
         auto dt_wheel = std::chrono::duration_cast<std::chrono::milliseconds>(after_wheel - before_wheel).count();
+        auto dt_tray_pre = std::chrono::duration_cast<std::chrono::milliseconds>(after_tray_pre - before_tray_pre).count();
         auto dt_tray = std::chrono::duration_cast<std::chrono::milliseconds>(after_tray - before_tray).count();
         auto dt_loop = std::chrono::duration_cast<std::chrono::milliseconds>(after_tray - loop_start).count();
 
         /* Stall watchdog: log only when a stage blocks abnormally long. */
-        if (dt_lvt > 1500 || dt_wheel > 1500 || dt_tray > 1500 || dt_loop > 2000) {
-            LOG_W("LOOP", "UI stall detected: loop=%lldms lvt=%lldms wheel=%lldms tray=%lldms count=%d",
-                  (long long)dt_loop, (long long)dt_lvt, (long long)dt_wheel, (long long)dt_tray, loop_count);
+        if (dt_lvt > 1500 || dt_wheel > 1500 || dt_tray > 1500 || dt_tray_pre > 1500 || dt_loop > 2000) {
+            LOG_W("LOOP", "UI stall detected: loop=%lldms lvt=%lldms wheel=%lldms tray_pre=%lldms tray=%lldms count=%d",
+                  (long long)dt_loop, (long long)dt_lvt, (long long)dt_wheel,
+                  (long long)dt_tray_pre, (long long)dt_tray, loop_count);
         }
 
         if (loop_count == 1 || loop_count % 100 == 0) {
-            fprintf(stderr, "[LOOP] #%d lvt=%lldms wheel=%lldms tray=%lldms\n",
+                fprintf(stderr, "[LOOP] #%d lvt=%lldms wheel=%lldms tray_pre=%lldms tray=%lldms\n",
                     loop_count, (long long)dt_lvt,
                     (long long)dt_wheel,
+                    (long long)dt_tray_pre,
                     (long long)dt_tray);
             fflush(stderr);
         }
@@ -1155,7 +1177,7 @@ int main(int argc, char* argv[]) {
             fflush(stderr);
         }
 
-        SDL_Delay(5);
+        SDL_Delay(1);
 
         /* Every 2s write a raw heartbeat to stderr (bypasses log buffer).
            Also log first iteration and every 10th so we can see timing. */

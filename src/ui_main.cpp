@@ -114,8 +114,8 @@ static void init_system_font() {
         if (!loaded) {
             /* Priority 3: Compiled bitmap font (fixed 16px, no DPI scaling) */
             g_cjk_font = (lv_font_t*)&lv_font_mshy_16;
-            g_cjk_font_small = (lv_font_t*)&lv_font_montserrat_12;
-            g_cjk_font_chat = (lv_font_t*)&lv_font_montserrat_12;  /* fallback: 12px */
+            g_cjk_font_small = (lv_font_t*)&lv_font_mshy_16;
+            g_cjk_font_chat = (lv_font_t*)&lv_font_mshy_16;
             LOG_W("Font", "Fallback to bitmap lv_font_mshy_16 (16px fixed)");
         }
     }
@@ -256,12 +256,18 @@ void init_theme_fonts(Theme theme) {
     lv_font_t* emb_small   = make_embedded_font(SZ_SMALL);
     lv_font_t* emb_caption = make_embedded_font(SZ_CAPTION);
 
-    /* Try loading theme-specific fonts; fall back to embedded CJK */
+    /* Try loading theme-specific fonts; CJK uses FreeType/system fallback first. */
+    lv_font_t* base_cjk_body = g_cjk_font ? g_cjk_font : emb_body;
+    lv_font_t* base_cjk_small = g_cjk_font_small ? g_cjk_font_small : emb_small;
     lv_font_t* body_font    = try_load_ttf(paths.body_regular, SZ_BODY, emb_body);
     lv_font_t* bold_font    = try_load_ttf(paths.body_bold, SZ_H1, emb_body);
     lv_font_t* semibold_font= try_load_ttf(paths.body_semibold, SZ_H3, emb_body);
-    lv_font_t* cjk_regular  = try_load_ttf(paths.cjk_regular, SZ_BODY, emb_body);
-    lv_font_t* cjk_bold     = try_load_ttf(paths.cjk_bold, SZ_H1, emb_body);
+    lv_font_t* cjk_regular  = try_load_freetype(paths.cjk_regular, SZ_BODY, LV_FREETYPE_FONT_STYLE_NORMAL);
+    if (!cjk_regular) cjk_regular = try_load_ttf(paths.cjk_regular, SZ_BODY, base_cjk_body);
+    lv_font_t* cjk_small    = try_load_freetype(paths.cjk_regular, SZ_SMALL, LV_FREETYPE_FONT_STYLE_NORMAL);
+    if (!cjk_small) cjk_small = try_load_ttf(paths.cjk_regular, SZ_SMALL, base_cjk_small);
+    lv_font_t* cjk_bold     = try_load_freetype(paths.cjk_bold, SZ_H1, LV_FREETYPE_FONT_STYLE_BOLD);
+    if (!cjk_bold) cjk_bold = try_load_ttf(paths.cjk_bold, SZ_H1, base_cjk_body);
     lv_font_t* code_font    = try_load_ttf(paths.code_font, SZ_CODE, emb_body);
 
     /* Build 9-level English/通用 font set */
@@ -292,6 +298,12 @@ void init_theme_fonts(Theme theme) {
         g_theme_fonts.h2->fallback = g_theme_fonts.cjk_title;
     if (g_theme_fonts.display && g_theme_fonts.cjk_title && g_theme_fonts.display != g_theme_fonts.cjk_title)
         g_theme_fonts.display->fallback = g_theme_fonts.cjk_title;
+    if (g_theme_fonts.small && g_theme_fonts.cjk_body && g_theme_fonts.small != g_theme_fonts.cjk_body)
+        g_theme_fonts.small->fallback = g_theme_fonts.cjk_body;
+    if (g_theme_fonts.caption && g_theme_fonts.cjk_body && g_theme_fonts.caption != g_theme_fonts.cjk_body)
+        g_theme_fonts.caption->fallback = g_theme_fonts.cjk_body;
+    if (g_theme_fonts.code && g_theme_fonts.cjk_body && g_theme_fonts.code != g_theme_fonts.cjk_body)
+        g_theme_fonts.code->fallback = g_theme_fonts.cjk_body;
 
     /* ══ FreeType vector fonts (5T-02.5) ══
      * Try loading high-DPI vector fonts via FreeType.
@@ -356,10 +368,16 @@ void init_theme_fonts(Theme theme) {
         g_theme_fonts.h2->fallback = g_theme_fonts.cjk_title;
     if (g_theme_fonts.display && g_theme_fonts.cjk_title && g_theme_fonts.display != g_theme_fonts.cjk_title)
         g_theme_fonts.display->fallback = g_theme_fonts.cjk_title;
+    if (g_theme_fonts.small && g_theme_fonts.cjk_body && g_theme_fonts.small != g_theme_fonts.cjk_body)
+        g_theme_fonts.small->fallback = g_theme_fonts.cjk_body;
+    if (g_theme_fonts.caption && g_theme_fonts.cjk_body && g_theme_fonts.caption != g_theme_fonts.cjk_body)
+        g_theme_fonts.caption->fallback = g_theme_fonts.cjk_body;
+    if (g_theme_fonts.code && g_theme_fonts.cjk_body && g_theme_fonts.code != g_theme_fonts.cjk_body)
+        g_theme_fonts.code->fallback = g_theme_fonts.cjk_body;
 
     /* Legacy globals: prioritize CJK fonts to avoid garbled Chinese text on some stacks */
     g_cjk_font = g_theme_fonts.cjk_body ? g_theme_fonts.cjk_body : g_theme_fonts.body;
-    g_cjk_font_small = g_theme_fonts.small ? g_theme_fonts.small : g_cjk_font;
+    g_cjk_font_small = cjk_small ? cjk_small : (g_theme_fonts.cjk_body ? g_theme_fonts.cjk_body : (g_theme_fonts.small ? g_theme_fonts.small : g_cjk_font));
     g_cjk_font_chat = g_theme_fonts.cjk_body ? g_theme_fonts.cjk_body : g_cjk_font;
 
     LOG_I("Font", "Theme fonts initialized for theme %d (FreeType %s)",
@@ -378,9 +396,9 @@ static void apply_btn_gradient(lv_obj_t* btn) {
     lv_obj_set_style_bg_grad_stop(btn, 255, 0);
 }
 
-#define CJK_FONT (g_theme_fonts.body ? g_theme_fonts.body : g_cjk_font)
-#define CJK_FONT_SMALL (g_theme_fonts.small ? g_theme_fonts.small : g_cjk_font_small)
-#define CJK_FONT_CHAT (g_theme_fonts.body ? g_theme_fonts.body : (g_cjk_font_chat ? g_cjk_font_chat : g_cjk_font))
+#define CJK_FONT (g_theme_fonts.cjk_body ? g_theme_fonts.cjk_body : (g_theme_fonts.body ? g_theme_fonts.body : g_cjk_font))
+#define CJK_FONT_SMALL (g_cjk_font_small ? g_cjk_font_small : (g_theme_fonts.small ? g_theme_fonts.small : CJK_FONT))
+#define CJK_FONT_CHAT (g_cjk_font_chat ? g_cjk_font_chat : CJK_FONT)
 
 /* ═══ Unified font size macros ═══ */
 /* All UI text uses these macros. Change once, apply everywhere. */
@@ -1620,8 +1638,8 @@ static const char* tr_title(const I18n& s) {
 
 /* ── I18n Strings ── */
 static const I18n STR_TITLE       = {"AnyClaw Desktop Manager", "AnyClaw 桌面管理器"};
-static const I18n STR_TITLE_BOT_CHAT = {"Bot · Chat", "Bot · 对话"};
-static const I18n STR_TITLE_BOT_WORK = {"Bot · Work", "Bot · 任务"};
+static const I18n STR_TITLE_BOT_CHAT = {"Bot - Chat", "Bot - 对话"};
+static const I18n STR_TITLE_BOT_WORK = {"Bot - Work", "Bot - 任务"};
 static const I18n STR_TITLE_TASKS = {"Tasks", "任务"};
 static const I18n STR_TITLE_FILES = {"Resources", "资源"};
 
@@ -4962,20 +4980,16 @@ static void apply_mode_switch_visuals() {
         lv_obj_t* lbl = lv_obj_get_child(btn, 0);
         if (lbl && lv_obj_check_type(lbl, &lv_label_class)) {
             lv_obj_set_style_text_color(lbl, selected ? c->text_inverse : c->text, 0);
-            lv_obj_set_style_text_font(lbl, g_theme_fonts.body_strong ? g_theme_fonts.body_strong : CJK_FONT_SMALL, 0);
-        }
-    };
-    paint_btn(mode_btn_chat, g_ui_mode == UI_MODE_CHAT);
+            lv_obj_set_style_text_font(lbl, FONT(FONT_SIZE_SMALL), 0);
     paint_btn(mode_btn_work, g_ui_mode == UI_MODE_WORK);
-    paint_btn(top_mode_chat, g_ui_mode == UI_MODE_CHAT);
-    paint_btn(top_mode_work, g_ui_mode == UI_MODE_WORK);
+    /* top_mode_chat / top_mode_work removed from title bar per Design.md */
 
-    /* Update nav_session toggle icon */
+    /* Update nav_session toggle icon: ASCII chars to avoid garble */
     if (nav_session) {
         const ThemeColors* nc = g_colors ? g_colors : &THEME_DARK;
         lv_obj_t* lbl = lv_obj_get_child(nav_session, 0);
         if (lbl && lv_obj_check_type(lbl, &lv_label_class)) {
-            lv_label_set_text(lbl, (g_ui_mode == UI_MODE_CHAT) ? "\xE2\x9E\xA1" : "\xE2\x96\xB6");
+            lv_label_set_text(lbl, (g_ui_mode == UI_MODE_CHAT) ? "C>W" : "W>C");
             lv_obj_set_style_text_color(lbl, (g_ui_mode == UI_MODE_WORK) ? nc->accent : nc->text_dim, 0);
         }
     }
@@ -5217,7 +5231,7 @@ static void apply_nav_module_visuals() {
         lv_obj_t* lbl = lv_obj_get_child(btn, 0);
         if (lbl && lv_obj_check_type(lbl, &lv_label_class)) {
             lv_obj_set_style_text_color(lbl, selected ? c->accent : c->text_dim, 0);
-            lv_obj_set_style_text_font(lbl, g_theme_fonts.body_strong ? g_theme_fonts.body_strong : CJK_FONT, 0);
+            lv_obj_set_style_text_font(lbl, FONT_ICON, 0);  /* Keep Montserrat for ASCII B/T/F icons */
         }
     };
 
@@ -5399,16 +5413,7 @@ void ui_relayout_all() {
         int top_gap = SCALE(6);
         int top_y = (TITLE_H - wc_btn_h) / 2;
         int right_x = wc_base_x - top_gap;
-        if (top_btn_settings) {
-            right_x -= side_w;
-            lv_obj_set_size(top_btn_settings, side_w, wc_btn_h);
-            lv_obj_set_pos(top_btn_settings, right_x, top_y);
-        }
-        if (mode_bar) {
-            right_x -= (mode_w + top_gap);
-            lv_obj_set_size(mode_bar, mode_w, wc_btn_h);
-            lv_obj_set_pos(mode_bar, right_x, top_y);
-        }
+        /* mode_bar / top_btn_settings removed from title bar per Design.md §12 */
     }
 
     /* Update panels (left, right, splitter, chat, input, buttons) */
@@ -6123,7 +6128,7 @@ static void chat_input_right_click_cb(lv_event_t* e) {
 
         lv_obj_t* lbl = lv_label_create(btn);
         lv_label_set_text(lbl, items[i].label);
-        lv_obj_set_style_text_font(lbl, FONT(12), 0);
+        lv_obj_set_style_text_font(lbl, CJK_FONT_SMALL, 0);
         lv_obj_center(lbl);
     }
 
@@ -6328,12 +6333,12 @@ static void chat_add_user_bubble(const char* text) {
     lv_obj_t* ts_lbl = lv_label_create(meta);
     lv_label_set_text(ts_lbl, ts);
     lv_obj_set_style_text_color(ts_lbl, c->text_hint, 0);
-    lv_obj_set_style_text_font(ts_lbl, FONT(10), 0);
+    lv_obj_set_style_text_font(ts_lbl, CJK_FONT_SMALL, 0);
 
     lv_obj_t* user_lbl = lv_label_create(meta);
     lv_label_set_text(user_lbl, profile_user_name());
     lv_obj_set_style_text_color(user_lbl, c->text_hint, 0);
-    lv_obj_set_style_text_font(user_lbl, FONT(10), 0);
+    lv_obj_set_style_text_font(user_lbl, CJK_FONT_SMALL, 0);
 
     lv_obj_t* avatar = lv_image_create(meta);
     lv_image_set_src(avatar, profile_user_avatar_src());
@@ -7152,7 +7157,7 @@ static void chat_start_stream(const char* user_message) {
     lv_obj_t* ts_lbl = lv_label_create(meta);
     lv_label_set_text(ts_lbl, meta_ts);
     lv_obj_set_style_text_color(ts_lbl, c->text_dim, 0);
-    lv_obj_set_style_text_font(ts_lbl, FONT(10), 0);
+    lv_obj_set_style_text_font(ts_lbl, CJK_FONT_SMALL, 0);
 
     /* Streaming text label */
     stream_buf_clear();
@@ -7262,7 +7267,7 @@ static void chat_add_ai_bubble(const char* text) {
     lv_obj_t* ai_lbl = lv_label_create(meta);
     lv_label_set_text(ai_lbl, profile_ai_name());
     lv_obj_set_style_text_color(ai_lbl, c->text_hint, 0);
-    lv_obj_set_style_text_font(ai_lbl, FONT(10), 0);
+    lv_obj_set_style_text_font(ai_lbl, CJK_FONT_SMALL, 0);
 
     /* Text label (短消息贴合文字, 长消息70%换行) */
     lv_obj_t* lbl = lv_label_create(inner);
@@ -8430,9 +8435,9 @@ static void update_task_list(ClawStatus status) {
                 for (size_t i = 0; i < active_sessions.size() && (int)i < MAX_TASK_WIDGETS - 3; i++) {
                     const auto& s = active_sessions[i];
 
-                    /* Format: "channel · agentId (age)" */
+                    /* Format: "channel - agentId (age)" */
                     char task_name[128];
-                    snprintf(task_name, sizeof(task_name), "%s · %s (%ds)",
+                    snprintf(task_name, sizeof(task_name), "%s - %s (%ds)",
                              s.display_channel(), s.display_name(), s.age_seconds());
 
                     /* Build session detail for hover */
@@ -9338,7 +9343,7 @@ void ui_show_about_dialog() {
 
     static const I18n S_ABOUT_TITLE = {"About", "关于"};
     static const I18n S_VERSION = {"Version v2.2.11", "版本 v2.2.11"};
-    static const I18n S_SLOGAN = {"Your OpenClaw Desktop Manager", "龙虾要吃蒜蓉的 🧄🦞"};
+    static const I18n S_SLOGAN = {"Your OpenClaw Desktop Manager", "龙虾要吃蒜蓉的"};
     static const I18n S_CLOSE = {"Close", "关闭"};
 
     lv_obj_t* box = create_dialog(lv_screen_active(), tr(S_ABOUT_TITLE), 0, 0, &g_about_dialog);
@@ -9384,7 +9389,7 @@ void ui_show_about_dialog() {
     lv_obj_t* lbl_links = lv_label_create(box);
     lv_label_set_text(lbl_links, "github.com/IwanFlag/AnyClaw_LVGL");
     lv_obj_set_style_text_color(lbl_links, c->accent_secondary, 0);
-    lv_obj_set_style_text_font(lbl_links, FONT(12), 0);
+    lv_obj_set_style_text_font(lbl_links, CJK_FONT_SMALL, 0);
 
     /* Close button */
     lv_obj_t* btn_close = lv_button_create(box);
@@ -9472,7 +9477,7 @@ void ui_show_license_dialog() {
     lv_obj_t* lbl_machine = lv_label_create(box);
     lv_label_set_text(lbl_machine, machine_info);
     lv_obj_set_style_text_color(lbl_machine, c->text_dim, 0);
-    lv_obj_set_style_text_font(lbl_machine, FONT(12), 0);
+    lv_obj_set_style_text_font(lbl_machine, CJK_FONT_SMALL, 0);
 
     /* Key input */
     g_license_input = lv_textarea_create(box);
@@ -9481,13 +9486,13 @@ void ui_show_license_dialog() {
     lv_obj_set_width(g_license_input, LV_PCT(100));
     lv_obj_set_style_bg_color(g_license_input, c->surface, 0);
     lv_obj_set_style_border_color(g_license_input, c->border, 0);
-    lv_obj_set_style_text_font(g_license_input, FONT(14), 0);
+    lv_obj_set_style_text_font(g_license_input, CJK_FONT, 0);
     lv_obj_set_style_radius(g_license_input, SCALE(g_colors->radius_md), 0);
 
     /* Status label */
     g_license_status = lv_label_create(box);
     lv_label_set_text(g_license_status, "");
-    lv_obj_set_style_text_font(g_license_status, FONT(12), 0);
+    lv_obj_set_style_text_font(g_license_status, CJK_FONT_SMALL, 0);
 
     /* Buttons row */
     lv_obj_t* btn_row = lv_obj_create(box);
@@ -9897,7 +9902,7 @@ static lv_obj_t* chat_add_attachment_card(const char* path, bool is_dir) {
     lv_label_set_long_mode(subtitle, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(subtitle, LV_PCT(100));
     lv_obj_set_style_text_color(subtitle, c->text_dim, 0);
-    lv_obj_set_style_text_font(subtitle, FONT(10), 0);
+    lv_obj_set_style_text_font(subtitle, CJK_FONT_SMALL, 0);
 
     if (image_file) {
         lv_obj_t* preview = lv_image_create(card);
@@ -10098,7 +10103,7 @@ static void create_title_bar(lv_obj_t* scr) {
     title_label = lv_label_create(title_bar);
     lv_label_set_text(title_label, tr_title(STR_TITLE));
     lv_obj_set_style_text_color(title_label, c->text, 0);
-    lv_obj_set_style_text_font(title_label, g_theme_fonts.h3 ? g_theme_fonts.h3 : CJK_FONT, 0);
+    lv_obj_set_style_text_font(title_label, FONT(FONT_SIZE_TITLE), 0);
     lv_obj_align(title_label, LV_ALIGN_LEFT_MID, SCALE(TITLE_ICON_PAD_L) + title_icon_size + SCALE(8), 0);
 
     /* EN language toggle button removed - default language is English */
@@ -10146,7 +10151,7 @@ static void create_title_bar(lv_obj_t* scr) {
                 lv_obj_t* title_model = lv_label_create(title_bar);
                 lv_label_set_text(title_model, short_name);
                 lv_obj_set_style_text_color(title_model, g_colors->text_dim, 0);
-                lv_obj_set_style_text_font(title_model, FONT(10), 0);
+                lv_obj_set_style_text_font(title_model, CJK_FONT_SMALL, 0);
                 int model_x = led_x - SCALE(6) - model_w;
                 lv_obj_set_pos(title_model, model_x, top_y + 4);
                 lv_obj_set_width(title_model, model_w - SCALE(8));
@@ -10241,7 +10246,7 @@ static void create_title_bar(lv_obj_t* scr) {
         lv_obj_t* lbl_set = lv_label_create(top_btn_settings);
         lv_label_set_text(lbl_set, "\xE2\x9A\x99");
         lv_obj_set_style_text_color(lbl_set, c->text, 0);
-        lv_obj_set_style_text_font(lbl_set, g_theme_fonts.body_strong ? g_theme_fonts.body_strong : CJK_FONT_SMALL, 0);
+        lv_obj_set_style_text_font(lbl_set, FONT_ICON, 0);
         lv_obj_center(lbl_set);
 
         mode_bar = lv_obj_create(title_bar);
@@ -10264,7 +10269,7 @@ static void create_title_bar(lv_obj_t* scr) {
         lv_obj_set_size(top_mode_chat, mode_btn_w, wc_btn_h - SCALE(4));
         lv_obj_set_style_radius(top_mode_chat, SCALE(g_colors->radius_sm), 0);
         lv_obj_set_style_border_width(top_mode_chat, 0, 0);
-        lv_obj_set_style_text_font(top_mode_chat, g_theme_fonts.body_strong ? g_theme_fonts.body_strong : CJK_FONT_SMALL, 0);
+        lv_obj_set_style_text_font(top_mode_chat, FONT(FONT_SIZE_SMALL), 0);
         lv_obj_add_event_cb(top_mode_chat, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
         lv_obj_add_event_cb(top_mode_chat, mode_chat_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_t* lbl_chat = lv_label_create(top_mode_chat);
@@ -10275,7 +10280,7 @@ static void create_title_bar(lv_obj_t* scr) {
         lv_obj_set_size(top_mode_work, mode_btn_w, wc_btn_h - SCALE(4));
         lv_obj_set_style_radius(top_mode_work, SCALE(g_colors->radius_sm), 0);
         lv_obj_set_style_border_width(top_mode_work, 0, 0);
-        lv_obj_set_style_text_font(top_mode_work, g_theme_fonts.body_strong ? g_theme_fonts.body_strong : CJK_FONT_SMALL, 0);
+        lv_obj_set_style_text_font(top_mode_work, FONT(FONT_SIZE_SMALL), 0);
         lv_obj_add_event_cb(top_mode_work, [](lv_event_t* e){ lv_event_stop_processing(e); }, LV_EVENT_PRESSED, nullptr);
         lv_obj_add_event_cb(top_mode_work, mode_work_cb, LV_EVENT_CLICKED, nullptr);
         lv_obj_t* lbl_work = lv_label_create(top_mode_work);
@@ -10461,10 +10466,10 @@ static void save_wizard_completed() {
 
 /* Step title strings */
 static const I18n wizard_step_titles[WIZARD_STEPS] = {
-    {"Phase A · Language", "阶段A · 语言"},                         /* Step 0 */
-    {"Phase A · OpenClaw Detection", "阶段A · OpenClaw 检测"},       /* Step 1 */
-    {"Phase A · Model & API Key", "阶段A · 模型 & API 密钥"},        /* Step 2 */
-    {"Phase A · Complete", "阶段A · 完成"}                          /* Step 3 */
+    {"Phase A - Language", "阶段A - 语言"},                         /* Step 0 */
+    {"Phase A - OpenClaw Detection", "阶段A - OpenClaw 检测"},       /* Step 1 */
+    {"Phase A - Model & API Key", "阶段A - 模型 & API 密钥"},        /* Step 2 */
+    {"Phase A - Complete", "阶段A - 完成"}                          /* Step 3 */
 };
 
 /* Wizard text strings — bilingual */
@@ -12126,7 +12131,7 @@ static void wizard_update_step() {
     /* Update step indicator */
     char step_text[48];
     const char* phase_txt = (g_lang == Lang::CN) ? "阶段A" : "Phase A";
-    snprintf(step_text, sizeof(step_text), "%s  ·  %d/%d", phase_txt, g_wizard_step + 1, WIZARD_STEPS);
+    snprintf(step_text, sizeof(step_text), "%s - %d/%d", phase_txt, g_wizard_step + 1, WIZARD_STEPS);
     lv_label_set_text(g_wizard_step_label, step_text);
 
     /* Update step indicator bar */
@@ -12375,29 +12380,31 @@ void ui_show_setup_wizard() {
     }
     lv_obj_t* scr = lv_screen_active();
 
-    /* Full-screen overlay */
+    /* Full-screen wizard root (same size as main UI) */
     g_wizard_modal = lv_obj_create(scr);
     lv_obj_set_size(g_wizard_modal, WIN_W, WIN_H);
     lv_obj_set_pos(g_wizard_modal, 0, 0);
     lv_obj_set_style_bg_color(g_wizard_modal, g_colors->bg, 0);
-    lv_obj_set_style_bg_opa(g_wizard_modal, LV_OPA_90, 0);
+    lv_obj_set_style_bg_opa(g_wizard_modal, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(g_wizard_modal, 0, 0);
     lv_obj_set_style_radius(g_wizard_modal, 0, 0);
     lv_obj_set_style_pad_all(g_wizard_modal, 0, 0);
+    lv_obj_set_style_text_font(g_wizard_modal, CJK_FONT, 0);
     lv_obj_clear_flag(g_wizard_modal, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Centered dialog box */
-    int box_w = SCALE(560);
-    int box_h = SCALE(480);
+    /* Wizard container: match main UI viewport */
+    int box_w = WIN_W;
+    int box_h = WIN_H;
     g_wizard_box = lv_obj_create(g_wizard_modal);
     lv_obj_set_size(g_wizard_box, box_w, box_h);
-    lv_obj_set_pos(g_wizard_box, (WIN_W - box_w) / 2, (WIN_H - box_h) / 2);
+    lv_obj_set_pos(g_wizard_box, 0, 0);
     lv_obj_set_style_bg_color(g_wizard_box, g_colors->panel, 0);
     lv_obj_set_style_bg_opa(g_wizard_box, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(g_wizard_box, 1, 0);
+    lv_obj_set_style_border_width(g_wizard_box, 0, 0);
     lv_obj_set_style_border_color(g_wizard_box, g_colors->border, 0);
-    lv_obj_set_style_radius(g_wizard_box, SCALE(g_colors->radius_lg), 0);
+    lv_obj_set_style_radius(g_wizard_box, 0, 0);
     lv_obj_set_style_pad_all(g_wizard_box, 0, 0);
+    lv_obj_set_style_text_font(g_wizard_box, CJK_FONT, 0);
     lv_obj_clear_flag(g_wizard_box, LV_OBJ_FLAG_SCROLLABLE);
 
     /* ── Header area ── */
@@ -12426,10 +12433,10 @@ void ui_show_setup_wizard() {
     /* Step counter (right of title) */
     g_wizard_step_label = lv_label_create(header);
     char step_text[48];
-    snprintf(step_text, sizeof(step_text), "%s  ·  %d/%d", g_lang == Lang::CN ? "阶段A" : "Phase A", 1, WIZARD_STEPS);
+    snprintf(step_text, sizeof(step_text), "%s - %d/%d", g_lang == Lang::CN ? "阶段A" : "Phase A", 1, WIZARD_STEPS);
     lv_label_set_text(g_wizard_step_label, step_text);
     lv_obj_set_style_text_color(g_wizard_step_label, g_colors->text_dim, 0);
-    lv_obj_set_style_text_font(g_wizard_step_label, FONT(11), 0);
+    lv_obj_set_style_text_font(g_wizard_step_label, CJK_FONT_SMALL, 0);
     lv_obj_align(g_wizard_step_label, LV_ALIGN_RIGHT_MID, -SCALE(110), 0);
 
     g_wizard_btn_close = lv_button_create(header);
@@ -12528,7 +12535,7 @@ void ui_show_setup_wizard() {
         /* Label under dot */
         g_wizard_step_labels[i] = lv_label_create(g_wizard_step_bar);
         lv_label_set_text(g_wizard_step_labels[i], tr(wizard_step_short_names[i]));
-        lv_obj_set_style_text_font(g_wizard_step_labels[i], FONT(10), 0);
+        lv_obj_set_style_text_font(g_wizard_step_labels[i], CJK_FONT_SMALL, 0);
         lv_obj_set_style_text_color(g_wizard_step_labels[i],
             (i == g_wizard_step) ? g_colors->accent : (i < g_wizard_step ? g_colors->text : g_colors->text_dim), 0);
         /* Position label centered under the dot */
@@ -12613,6 +12620,126 @@ static void start_wizard_gate_async_check() {
     }).detach();
 }
 
+/* ═══════════════════════════════════════════════════════════════
+ *  UI-KS: Global Keyboard Hotkey Handler
+ *  Called from SDL event watch in main.cpp before textarea shortcuts.
+ *  Returns true if the key was consumed (caller should NOT pass to LVGL).
+ * ═══════════════════════════════════════════════════════════════ */
+bool ui_handle_hotkey(SDL_Keycode sym, Uint16 mod) {
+    if (!g_ui_ready) return false;
+
+    bool ctrl  = (mod & KMOD_CTRL)  != 0;
+    bool shift = (mod & KMOD_SHIFT) != 0;
+
+    /* ── Ctrl+1 → Bot module ── */
+    if (ctrl && !shift && sym == SDLK_1) {
+        if (g_ui_nav_module != UI_NAV_BOT) {
+            g_ui_nav_module = UI_NAV_BOT;
+            apply_nav_module_visuals();
+        }
+        ui_log("[Hotkey] Ctrl+1: Nav→Bot");
+        return true;
+    }
+    /* ── Ctrl+2 → Tasks module ── */
+    if (ctrl && !shift && sym == SDLK_2) {
+        if (g_ui_nav_module != UI_NAV_TASKS) {
+            g_ui_nav_module = UI_NAV_TASKS;
+            apply_nav_module_visuals();
+        }
+        ui_log("[Hotkey] Ctrl+2: Nav→Tasks");
+        return true;
+    }
+    /* ── Ctrl+3 → Files module ── */
+    if (ctrl && !shift && sym == SDLK_3) {
+        if (g_ui_nav_module != UI_NAV_FILES) {
+            g_ui_nav_module = UI_NAV_FILES;
+            apply_nav_module_visuals();
+        }
+        ui_log("[Hotkey] Ctrl+3: Nav→Files");
+        return true;
+    }
+    /* ── Ctrl+Tab → cycle nav modules ── */
+    if (ctrl && !shift && sym == SDLK_TAB) {
+        int next = ((int)g_ui_nav_module + 1) % 3;
+        g_ui_nav_module = (UiNavModule)next;
+        apply_nav_module_visuals();
+        ui_log("[Hotkey] Ctrl+Tab: cycle nav→%d", next);
+        return true;
+    }
+    /* ── Ctrl+T → toggle Chat/Work mode (Bot module only) ── */
+    if (ctrl && !shift && sym == SDLK_t) {
+        if (g_ui_nav_module == UI_NAV_BOT) {
+            g_ui_mode = (g_ui_mode == UI_MODE_CHAT) ? UI_MODE_WORK : UI_MODE_CHAT;
+            apply_mode_switch_visuals();
+            relayout_panels();
+            ui_log("[Hotkey] Ctrl+T: mode→%s", (g_ui_mode == UI_MODE_CHAT) ? "Chat" : "Work");
+        }
+        return true;
+    }
+    /* ── Ctrl+, → open settings ── */
+    if (ctrl && !shift && sym == SDLK_COMMA) {
+        ui_settings_open();  /* idempotent: brings to foreground if already open */
+        ui_log("[Hotkey] Ctrl+,: open Settings");
+        return true;
+    }
+    /* ── Ctrl+Shift+T → cycle theme ── */
+    if (ctrl && shift && sym == SDLK_t) {
+        int next_theme = ((int)g_theme + 1) % 3;
+        g_theme = (Theme)next_theme;
+        switch (g_theme) {
+            case Theme::Matcha: g_colors = &THEME_DARK;   break;
+            case Theme::Peachy: g_colors = &THEME_PEACHY; break;
+            case Theme::Mochi:  g_colors = &THEME_MOCHI;  break;
+        }
+        save_theme_config();
+        init_theme_fonts(g_theme);
+        apply_theme_to_all();
+        static const char* names[] = {"Matcha", "Peachy", "Mochi"};
+        ui_log("[Hotkey] Ctrl+Shift+T: theme→%s", names[next_theme]);
+        ui_toast_success(g_lang == Lang::CN ? "主题已切换" : "Theme switched");
+        return true;
+    }
+    /* ── Ctrl+M → minimize window ── */
+    if (ctrl && !shift && sym == SDLK_m) {
+        extern SDL_Window* app_get_window();
+        SDL_Window* sdlWin = app_get_window();
+        if (sdlWin) {
+            SDL_SysWMinfo wmInfo;
+            SDL_VERSION(&wmInfo.version);
+            if (SDL_GetWindowWMInfo(sdlWin, &wmInfo))
+                ShowWindow(wmInfo.info.win.window, SW_MINIMIZE);
+        }
+        ui_log("[Hotkey] Ctrl+M: minimize");
+        return true;
+    }
+    /* ── F11 → maximize/restore ── */
+    if (!ctrl && !shift && sym == SDLK_F11) {
+        btn_maximize_cb(nullptr);
+        ui_log("[Hotkey] F11: maximize/restore");
+        return true;
+    }
+    /* ── Ctrl+W → hide to tray ── */
+    if (ctrl && !shift && sym == SDLK_w) {
+        extern void save_theme_config();
+        save_theme_config();
+        tray_show_window(false);
+        ui_log("[Hotkey] Ctrl+W: hide to tray");
+        return true;
+    }
+    /* ── Ctrl+N → new conversation (Bot·Chat only) ── */
+    if (ctrl && !shift && sym == SDLK_n) {
+        if (g_ui_nav_module == UI_NAV_BOT && g_ui_mode == UI_MODE_CHAT && chat_input) {
+            lv_textarea_set_text(chat_input, "");
+            lv_group_t* grp = lv_group_get_default();
+            if (grp) lv_group_focus_obj(chat_input);
+            ui_log("[Hotkey] Ctrl+N: new conversation");
+        }
+        return true;
+    }
+
+    return false;
+}
+
 void app_ui_init() {
     g_ui_thread_id = GetCurrentThreadId();
     g_ui_ready = false;
@@ -12637,6 +12764,22 @@ void app_ui_init() {
         SDL_Window* win = app_get_window();
         if (win) {
             SDL_GetWindowSize(win, &WIN_W, &WIN_H);
+
+            int display_idx = SDL_GetWindowDisplayIndex(win);
+            if (display_idx < 0) display_idx = 0;
+            SDL_Rect usable = {0, 0, 0, 0};
+            if (SDL_GetDisplayUsableBounds(display_idx, &usable) == 0 && usable.w > 0 && usable.h > 0) {
+                int clamped_w = std::min(WIN_W, usable.w);
+                int clamped_h = std::min(WIN_H, usable.h);
+                if (clamped_w != WIN_W || clamped_h != WIN_H) {
+                    WIN_W = clamped_w;
+                    WIN_H = clamped_h;
+                    SDL_SetWindowSize(win, WIN_W, WIN_H);
+                    SDL_SetWindowPosition(win,
+                        usable.x + std::max(0, (usable.w - WIN_W) / 2),
+                        usable.y + std::max(0, (usable.h - WIN_H) / 2));
+                }
+            }
         } else {
             WIN_W = (int)lv_display_get_horizontal_resolution(NULL);
             WIN_H = (int)lv_display_get_vertical_resolution(NULL);
@@ -12724,16 +12867,16 @@ void app_ui_init() {
         lv_obj_set_style_border_width(b, 0, 0);
         lv_obj_t* l = lv_label_create(b);
         lv_label_set_text(l, icon);
-        lv_obj_set_style_text_font(l, CJK_FONT, 0);
+        lv_obj_set_style_text_font(l, FONT_ICON, 0);
         lv_obj_set_style_text_color(l, active ? c->accent : c->text_dim, 0);
         lv_obj_center(l);
         (void)tip;
         return b;
     };
 
-    nav_btn_bot = create_nav_btn("\xF0\x9F\xA6\x9E", "Bot", true);       /* 🦞 Bot */
-    nav_btn_tasks = create_nav_btn("\xE2\x9A\xA1", "Tasks", false);       /* ⚡ Tasks */
-    nav_btn_files = create_nav_btn("\xF0\x9F\x93\x81", "Files", false);   /* 📁 Files */
+    nav_btn_bot = create_nav_btn("B", "Bot", true);
+    nav_btn_tasks = create_nav_btn("T", "Tasks", false);
+    nav_btn_files = create_nav_btn("F", "Files", false);
 
     lv_obj_add_event_cb(nav_btn_bot, [](lv_event_t* e) {
         (void)e;
@@ -12783,7 +12926,8 @@ void app_ui_init() {
         ui_log("[CTRL] Nav toggle -> %s", g_ui_mode == UI_MODE_CHAT ? "chat" : "work");
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* sl = lv_label_create(nav_session);
-    lv_label_set_text(sl, (g_ui_mode == UI_MODE_CHAT) ? "\xE2\x9E\xA1" : "\xE2\x96\xB6"); /* ⇢ or ◂ */
+    lv_label_set_text(sl, (g_ui_mode == UI_MODE_CHAT) ? ">" : "<");
+    lv_obj_set_style_text_font(sl, FONT_ICON, 0);
     lv_obj_set_style_text_color(sl, c->accent, 0);
     lv_obj_center(sl);
 
@@ -12795,11 +12939,12 @@ void app_ui_init() {
     lv_obj_set_style_border_width(nav_settings, 0, 0);
     lv_obj_add_event_cb(nav_settings, [](lv_event_t* e) {
         (void)e;
-        if (ui_settings_is_open()) return;
+        /* Always call open — ui_settings_open() is idempotent (brings to foreground if already open) */
         ui_settings_open();
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* sbl = lv_label_create(nav_settings);
-    lv_label_set_text(sbl, "\xE2\x9A\x99"); /* ⚙ */
+    lv_label_set_text(sbl, "S");
+    lv_obj_set_style_text_font(sbl, FONT_ICON, 0);
     lv_obj_set_style_text_color(sbl, c->text_dim, 0);
     lv_obj_center(sbl);
 
@@ -12845,7 +12990,7 @@ void app_ui_init() {
     status_label = lv_label_create(lp_status_row);
     lv_label_set_text(status_label, tr(STR_CHECKING));
     lv_obj_set_style_text_color(status_label, c->text_dim, 0);
-    lv_obj_set_style_text_font(status_label, FONT(10), 0);
+    lv_obj_set_style_text_font(status_label, CJK_FONT_SMALL, 0);
 
     /* Model name display — below status row */
     char gw_model_buf[256] = {0};
@@ -12856,7 +13001,7 @@ void app_ui_init() {
         snprintf(model_display, sizeof(model_display), "Model: %s", gw_model_buf);
         lv_label_set_text(model_label, model_display);
         lv_obj_set_style_text_color(model_label, c->text_dim, 0);
-        lv_obj_set_style_text_font(model_label, FONT(10), 0);
+        lv_obj_set_style_text_font(model_label, CJK_FONT_SMALL, 0);
         lv_obj_set_pos(model_label, GAP + 8, GAP + 30);
     }
 
@@ -12940,7 +13085,7 @@ void app_ui_init() {
     lp_hint = lv_label_create(pl);
     lv_label_set_text(lp_hint, tr(STR_AUTOREFRESH));
     lv_obj_set_style_text_color(lp_hint, c->text_dim, 0);
-    lv_obj_set_style_text_font(lp_hint, FONT(12), 0);
+    lv_obj_set_style_text_font(lp_hint, CJK_FONT_SMALL, 0);
     lv_obj_align(lp_hint, LV_ALIGN_BOTTOM_MID, 0, -8);
 
     /* Splitter removed in v2.2.11 — hidden, no drag */
@@ -12990,8 +13135,8 @@ void app_ui_init() {
     lv_obj_set_style_bg_color(ctrl_dd_agent, c->surface, 0);
     lv_obj_set_style_text_color(ctrl_dd_agent, c->text, 0);
     lv_obj_set_style_border_color(ctrl_dd_agent, c->border, 0);
-    lv_obj_set_style_text_font(ctrl_dd_agent, g_theme_fonts.body ? g_theme_fonts.body : CJK_FONT_SMALL, 0);
-    lv_obj_set_style_text_font(ctrl_dd_agent, FONT(12), LV_PART_INDICATOR);
+    lv_obj_set_style_text_font(ctrl_dd_agent, FONT(FONT_SIZE_SMALL), 0);
+    lv_obj_set_style_text_font(ctrl_dd_agent, FONT(FONT_SIZE_SMALL), LV_PART_INDICATOR);
     lv_obj_add_event_cb(ctrl_dd_agent, [](lv_event_t* e) {
         /* TODO: switch agent runtime and联动 model */
     }, LV_EVENT_VALUE_CHANGED, nullptr);
@@ -13009,7 +13154,7 @@ void app_ui_init() {
     lv_obj_t* lbl_report = lv_label_create(ctrl_btn_report);
     lv_label_set_text(lbl_report, "Report");
     lv_obj_set_style_text_color(lbl_report, c->text, 0);
-    lv_obj_set_style_text_font(lbl_report, g_theme_fonts.body_strong ? g_theme_fonts.body_strong : CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_font(lbl_report, FONT(FONT_SIZE_SMALL), 0);
     lv_obj_center(lbl_report);
     lv_obj_add_event_cb(ctrl_btn_report, work_boot_open_report_cb, LV_EVENT_CLICKED, nullptr);
 
@@ -13023,8 +13168,8 @@ void app_ui_init() {
     lv_obj_set_style_bg_color(mode_dd_chat_ai_mode, c->surface, 0);
     lv_obj_set_style_text_color(mode_dd_chat_ai_mode, c->text, 0);
     lv_obj_set_style_border_color(mode_dd_chat_ai_mode, c->border, 0);
-    lv_obj_set_style_text_font(mode_dd_chat_ai_mode, g_theme_fonts.body ? g_theme_fonts.body : CJK_FONT_SMALL, 0);
-    lv_obj_set_style_text_font(mode_dd_chat_ai_mode, FONT(12), LV_PART_INDICATOR);
+    lv_obj_set_style_text_font(mode_dd_chat_ai_mode, FONT(FONT_SIZE_SMALL), 0);
+    lv_obj_set_style_text_font(mode_dd_chat_ai_mode, FONT(FONT_SIZE_SMALL), LV_PART_INDICATOR);
     lv_obj_add_event_cb(mode_dd_chat_ai_mode, ai_mode_dropdown_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     dd_x += DD_W + DD_GAP;
@@ -13039,7 +13184,7 @@ void app_ui_init() {
     lv_obj_add_event_cb(ctrl_btn_dual_view, c2_dual_view_toggle_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_dual = lv_label_create(ctrl_btn_dual_view);
     lv_obj_set_style_text_color(lbl_dual, c->text, 0);
-    lv_obj_set_style_text_font(lbl_dual, g_theme_fonts.body_strong ? g_theme_fonts.body_strong : CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_font(lbl_dual, FONT(FONT_SIZE_SMALL), 0);
     lv_obj_center(lbl_dual);
     c2_refresh_dual_view_button();
 
@@ -13112,7 +13257,7 @@ void app_ui_init() {
     module_tasks_state = lv_label_create(module_tasks_panel);
     lv_label_set_text(module_tasks_state, tr(I18n{"State: ready", "状态：就绪"}));
     lv_obj_set_style_text_color(module_tasks_state, c->text_dim, 0);
-    lv_obj_set_style_text_font(module_tasks_state, g_theme_fonts.small ? g_theme_fonts.small : CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_font(module_tasks_state, FONT(FONT_SIZE_SMALL), 0);
     lv_obj_t* row_tasks_btn = lv_obj_create(module_tasks_panel);
     lv_obj_set_width(row_tasks_btn, LV_PCT(100));
     lv_obj_set_height(row_tasks_btn, LV_SIZE_CONTENT);
@@ -13204,7 +13349,7 @@ void app_ui_init() {
     module_files_state = lv_label_create(module_files_panel);
     lv_label_set_text(module_files_state, tr(I18n{"State: ready", "状态：就绪"}));
     lv_obj_set_style_text_color(module_files_state, c->text_dim, 0);
-    lv_obj_set_style_text_font(module_files_state, g_theme_fonts.small ? g_theme_fonts.small : CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_font(module_files_state, FONT(FONT_SIZE_SMALL), 0);
     lv_obj_t* row_files_btn = lv_obj_create(module_files_panel);
     lv_obj_set_width(row_files_btn, LV_PCT(100));
     lv_obj_set_height(row_files_btn, LV_SIZE_CONTENT);
@@ -13486,7 +13631,7 @@ void app_ui_init() {
         lv_obj_set_flex_align(mode_work_empty_card, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_clear_flag(mode_work_empty_card, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_t* we_icon = lv_label_create(mode_work_empty_card);
-        lv_label_set_text(we_icon, "⚡");
+        lv_label_set_text(we_icon, "T");
         lv_obj_set_style_text_font(we_icon, CJK_FONT, 0);
         lv_obj_t* we_text = lv_label_create(mode_work_empty_card);
         lv_label_set_text(we_text, "AI 工作台已就绪 - 在 Chat 中发送任务");
@@ -13981,10 +14126,10 @@ void app_ui_init() {
     lv_obj_set_flex_align(mode_chat_empty_card, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(mode_chat_empty_card, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t* ce_icon = lv_label_create(mode_chat_empty_card);
-    lv_label_set_text(ce_icon, "🧄🦞");
+    lv_label_set_text(ce_icon, "AnyClaw");
     lv_obj_set_style_text_font(ce_icon, CJK_FONT, 0);
     lv_obj_t* ce_text = lv_label_create(mode_chat_empty_card);
-    lv_label_set_text(ce_text, "龙虾要吃蒜蓉的 🧄🦞 — 你的AI助手已就位！");
+    lv_label_set_text(ce_text, "龙虾要吃蒜蓉的 - 你的AI助手已就位！");
     lv_obj_set_style_text_color(ce_text, c->text_dim, 0);
     lv_obj_set_style_text_font(ce_text, CJK_FONT_SMALL, 0);
     lv_obj_t* ce_suggest_row = lv_obj_create(mode_chat_empty_card);
@@ -14201,7 +14346,7 @@ void app_ui_init() {
     lv_group_add_obj(lv_group_get_default(), chat_input);
 
     mode_lbl_chat_status = lv_label_create(mode_panel_chat);
-    lv_obj_set_style_text_font(mode_lbl_chat_status, g_theme_fonts.small ? g_theme_fonts.small : CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_font(mode_lbl_chat_status, FONT(FONT_SIZE_SMALL), 0);
     lv_obj_set_style_text_color(mode_lbl_chat_status, c->text_hint, 0);
     lv_obj_set_pos(mode_lbl_chat_status, CHAT_GAP, input_y - SCALE(16));
     update_chat_status_label("Ready", false);

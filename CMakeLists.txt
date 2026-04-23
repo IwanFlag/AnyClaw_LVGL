@@ -6,8 +6,8 @@ set(CMAKE_CXX_STANDARD 17)
 
 # MSVC: force UTF-8 source encoding + disable min/max macro pollution + C11 standard
 if(MSVC)
-    string(APPEND CMAKE_CXX_FLAGS " /utf-8 /DNOMINMAX")
-    string(APPEND CMAKE_C_FLAGS " /utf-8 /DNOMINMAX /std:c11")
+    string(APPEND CMAKE_CXX_FLAGS " /utf-8 /DNOMINMAX /wd5287")
+    string(APPEND CMAKE_C_FLAGS " /utf-8 /DNOMINMAX /std:c11 /wd5287")
 else()
     string(APPEND CMAKE_CXX_FLAGS " /utf-8 /DNOMINMAX")
     string(APPEND CMAKE_C_FLAGS " /utf-8 /DNOMINMAX")
