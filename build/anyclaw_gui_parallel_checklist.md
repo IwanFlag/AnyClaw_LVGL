@@ -387,3 +387,9 @@
 - 行为：点击后自动生成任务提示并立即触发 Work 执行，同时自动切换到 Work 视图查看执行过程。
 - 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
 
+### Delta 2026-04-23 #32
+
+- 已完成 Resources 分组筛选能力：新增 All / Fonts / Icons / Sounds 四个筛选按钮。
+- 快照视图已扩展为“分组统计 + 按筛选列出条目”，支持快速定位资源目录内容。
+- 影响代码: [src/ui_main.cpp](../src/ui_main.cpp)
+
