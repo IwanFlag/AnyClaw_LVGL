@@ -1006,6 +1006,10 @@ static void work_cron_delete_cb(lv_event_t* e);
 static lv_obj_t* create_dialog(lv_obj_t* parent, const char* title, int w, int h, lv_obj_t** out_overlay);
 static void work_add_step_card(const char* action, const char* detail, bool done, bool write_op);
 static void work_append_md_block(const char* title, const char* text);
+static bool diff_has_valid_lines(const char* diff_text);
+static void work_add_diff_card(const char* file_path, const char* diff_text, bool done, bool failed);
+static bool is_plan_format(const char* text);
+static void work_add_plan_card(const char* plan_json);
 
 /* Forward declarations for globals used by config persistence before their definitions. */
 static bool g_work_chat_collapsed = false;
@@ -13907,6 +13911,12 @@ void app_ui_init() {
         lv_obj_set_flex_align(mode_boot_progress_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
         lv_obj_clear_flag(mode_boot_progress_panel, LV_OBJ_FLAG_SCROLLABLE);
 
+        /* UI-44: Boot Check header title */
+        lv_obj_t* lbl_bc_header = lv_label_create(mode_boot_progress_panel);
+        lv_label_set_text(lbl_bc_header, "Boot Check 环境体检");
+        lv_obj_set_style_text_color(lbl_bc_header, c->accent, 0);
+        lv_obj_set_style_text_font(lbl_bc_header, CJK_FONT_SMALL, 0);
+
         mode_boot_progress_task = lv_label_create(mode_boot_progress_panel);
         lv_label_set_text(mode_boot_progress_task, "Task: Boot Check");
         lv_obj_set_style_text_color(mode_boot_progress_task, c->text, 0);
@@ -14064,9 +14074,24 @@ void app_ui_init() {
         lv_obj_set_style_border_color(mode_ta_work_prompt, c->border, 0);
         lv_obj_set_style_border_color(mode_ta_work_prompt, c->accent, LV_STATE_FOCUSED);
         lv_obj_set_style_border_width(mode_ta_work_prompt, 2, LV_STATE_FOCUSED);
-        lv_obj_t* btn_work_send = aw_btn_create(mode_sec_work_console, tr(I18n{"Run In Work", "在 Work 中执行"}), BTN_PRIMARY, SCALE(160), SCALE(40));
-        lv_obj_set_style_radius(btn_work_send, SCALE(g_colors->radius_lg), 0);
-        lv_obj_add_event_cb(btn_work_send, work_send_cb, LV_EVENT_CLICKED, nullptr);
+        /* UI-30: button row — Boot Check + Run In Work in the same row */
+        lv_obj_t* row_buttons = lv_obj_create(mode_sec_work_console);
+        lv_obj_set_width(row_buttons, LV_PCT(100));
+        lv_obj_set_height(row_buttons, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(row_buttons, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(row_buttons, 0, 0);
+        lv_obj_set_style_pad_all(row_buttons, 0, 0);
+        lv_obj_set_style_pad_gap(row_buttons, SCALE(8), 0);
+        lv_obj_set_flex_flow(row_buttons, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(row_buttons, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(row_buttons, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* btn_boot_check_row = aw_btn_create(row_buttons, "Boot Check", BTN_SECONDARY, SCALE(200), SCALE(38));
+        lv_obj_add_event_cb(btn_boot_check_row, work_boot_check_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* btn_work_send_row = aw_btn_create(row_buttons, "Run In Work", BTN_PRIMARY, SCALE(160), SCALE(38));
+        lv_obj_set_style_radius(btn_work_send_row, SCALE(g_colors->radius_lg), 0);
+        lv_obj_add_event_cb(btn_work_send_row, work_send_cb, LV_EVENT_CLICKED, nullptr);
+
         lv_obj_t* work_prompt_hint = lv_label_create(mode_sec_work_console);
         lv_label_set_text(work_prompt_hint, tr(I18n{"Tip: the more specific the task, the more accurate the step breakdown.", "提示：任务越具体，步骤拆解越准确。"}));
         lv_obj_set_style_text_color(work_prompt_hint, c->text_dim, 0);
