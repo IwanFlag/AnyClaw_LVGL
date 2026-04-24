@@ -3991,6 +3991,18 @@ static void work_add_step_card(const char* action, const char* detail, bool done
     }
 
     if (write_op) {
+        /* Detect unified diff format: if detail contains valid +/- lines, render as UI-28 DiffCard */
+        if (detail && detail[0] && diff_has_valid_lines(detail)) {
+            /* Extract file path from action string (e.g. "修改 main.cpp") */
+            const char* fp = act;
+            while (*fp && *fp == ' ') fp++;
+            if (strncmp(fp, "修改 ", 4) == 0) fp += 4;
+            else if (strncmp(fp, "write ", 6) == 0) fp += 6;
+            /* Delete the card already created above — diff_card creates its own */
+            lv_obj_del(card);
+            work_add_diff_card(fp, detail, done, failed);
+            return;
+        }
         lv_obj_t* row = lv_obj_create(card);
         lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
         lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
@@ -4033,6 +4045,169 @@ static void work_add_step_card(const char* action, const char* detail, bool done
         lv_obj_add_event_cb(btn, step_btn_clicked_cb, LV_EVENT_CLICKED, payload);
         lv_obj_add_event_cb(btn, step_btn_delete_cb, LV_EVENT_DELETE, payload);
     }
+    lv_obj_scroll_to_y(mode_work_step_stream, lv_obj_get_scroll_bottom(mode_work_step_stream), LV_ANIM_ON);
+    update_work_empty_state();
+}
+
+/* ── UI-28: DiffCard ────────────────────────────────────────────────────── */
+
+static bool diff_has_valid_lines(const char* diff_text) {
+    if (!diff_text) return false;
+    int plus_count = 0, minus_count = 0;
+    const char* p = diff_text;
+    while (*p) {
+        if (p[0] == '+' && p[1] != '+' && p[1] != '0' && p[1] != '1') { plus_count++; }
+        else if (p[0] == '-' && p[1] != '-' && p[1] != '0' && p[1] != '1') { minus_count++; }
+        p++;
+    }
+    return plus_count > 0 || minus_count > 0;
+}
+
+/* Returns number of diff lines rendered into out_lines[] (max max_lines). */
+static int diff_parse_lines(const char* diff_text, char out_lines[][256], int max_lines) {
+    if (!diff_text || !out_lines) return 0;
+    int count = 0;
+    const char* start = diff_text;
+    while (*start && count < max_lines - 1) {
+        const char* end = start;
+        while (*end && *end != '\n' && *end != '\r') end++;
+        int len = (int)(end - start);
+        if (len > 0 && len < 255) {
+            memcpy(out_lines[count], start, len);
+            out_lines[count][len] = '\0';
+            count++;
+        }
+        start = (*end) ? end + 1 : end;
+        while (*start == '\n' || *start == '\r') start++;
+    }
+    out_lines[count][0] = '\0';
+    return count;
+}
+
+static bool diff_line_kind(const char* line, bool* is_minus, bool* is_plus) {
+    *is_minus = false;
+    *is_plus = false;
+    if (!line || !line[0]) return false;
+    /* Unified diff: --- file / +++ file / @@ offset @@ / +content / -content */
+    if (strncmp(line, "--- ", 4) == 0 || strncmp(line, "+++ ", 4) == 0) return true;
+    if (strncmp(line, "@@", 2) == 0) return true;
+    if (line[0] == '-' && line[1] != '-') { *is_minus = true; return true; }
+    if (line[0] == '+' && line[1] != '+') { *is_plus = true; return true; }
+    return false;
+}
+
+static void work_add_diff_card(const char* file_path, const char* diff_text, bool done, bool failed) {
+    if (!mode_work_step_stream) return;
+    const ThemeColors* cc = g_colors ? g_colors : &THEME_DARK;
+
+    /* Card shell */
+    lv_obj_t* card = lv_obj_create(mode_work_step_stream);
+    lv_obj_set_width(card, LV_PCT(100));
+    lv_obj_set_height(card, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card, cc->surface, 0);
+    lv_obj_set_style_border_color(card, cc->warning, 0);
+    lv_obj_set_style_border_width(card, 1, 0);
+    lv_obj_set_style_radius(card, SCALE(g_colors->radius_lg), 0);
+    lv_obj_set_style_pad_all(card, 10, 0);
+    lv_obj_set_style_pad_gap(card, 6, 0);
+    lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Title row */
+    const char* icon = failed ? "✗" : (done ? "✓" : "●");
+    lv_color_t title_color = failed ? cc->btn_close : (done ? cc->accent : cc->btn_add);
+    lv_obj_t* title_row = lv_obj_create(card);
+    lv_obj_set_width(title_row, LV_PCT(100));
+    lv_obj_set_height(title_row, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(title_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(title_row, 0, 0);
+    lv_obj_set_style_pad_all(title_row, 0, 0);
+    lv_obj_clear_flag(title_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(title_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(title_row, 6, 0);
+
+    lv_obj_t* icon_lbl = lv_label_create(title_row);
+    lv_label_set_text(icon_lbl, icon);
+    lv_obj_set_style_text_color(icon_lbl, title_color, 0);
+    lv_obj_set_style_text_font(icon_lbl, CJK_FONT_SMALL, 0);
+
+    lv_obj_t* path_lbl = lv_label_create(title_row);
+    lv_label_set_text(path_lbl, file_path && file_path[0] ? file_path : "modified file");
+    lv_obj_set_style_text_color(path_lbl, cc->text, 0);
+    lv_obj_set_style_text_font(path_lbl, CJK_FONT_SMALL, 0);
+
+    /* Diff code block */
+    char diff_lines[64][256];
+    int diff_line_count = diff_parse_lines(diff_text, diff_lines, 64);
+
+    lv_obj_t* code_bg = lv_obj_create(card);
+    lv_obj_set_width(code_bg, LV_PCT(100));
+    int code_h = std::min(diff_line_count, 16) * SCALE(18) + SCALE(8);
+    lv_obj_set_height(code_bg, code_h);
+    lv_obj_set_style_bg_color(code_bg, cc->panel, 0);
+    lv_obj_set_style_border_width(code_bg, 0, 0);
+    lv_obj_set_style_radius(code_bg, SCALE(g_colors->radius_md), 0);
+    lv_obj_set_style_pad_all(code_bg, SCALE(4), 0);
+    lv_obj_set_flex_flow(code_bg, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(code_bg, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_clear_flag(code_bg, LV_OBJ_FLAG_SCROLLABLE);
+
+    int max_show = std::min(diff_line_count, 16);
+    for (int i = 0; i < max_show; i++) {
+        bool is_minus = false, is_plus = false;
+        diff_line_kind(diff_lines[i], &is_minus, &is_plus);
+        lv_obj_t* line_lbl = lv_label_create(code_bg);
+        lv_label_set_text(line_lbl, diff_lines[i]);
+        lv_obj_set_style_text_font(line_lbl, CJK_FONT_SMALL, 0);
+        lv_label_set_long_mode(line_lbl, LV_LABEL_LONG_CLIP);
+        lv_obj_set_width(line_lbl, LV_PCT(100));
+        if (is_minus) {
+            lv_obj_set_style_text_color(line_lbl, lv_color_hex(0xFF6B6B), 0); /* red for removed */
+            lv_obj_set_style_bg_color(line_lbl, lv_color_hex(0x2A0000), 0);
+            lv_obj_set_style_bg_opa(line_lbl, LV_OPA_30, 0);
+        } else if (is_plus) {
+            lv_obj_set_style_text_color(line_lbl, lv_color_hex(0x3DD68C), 0); /* green for added */
+            lv_obj_set_style_bg_color(line_lbl, lv_color_hex(0x002A10), 0);
+            lv_obj_set_style_bg_opa(line_lbl, LV_OPA_30, 0);
+        } else {
+            lv_obj_set_style_text_color(line_lbl, cc->text_dim, 0);
+        }
+    }
+    if (diff_line_count > 16) {
+        lv_obj_t* more_lbl = lv_label_create(code_bg);
+        lv_label_set_text_fmt(more_lbl, "... %d more lines", diff_line_count - 16);
+        lv_obj_set_style_text_color(more_lbl, cc->text_dim, 0);
+        lv_obj_set_style_text_font(more_lbl, CJK_FONT_SMALL, 0);
+    }
+
+    /* Action buttons */
+    lv_obj_t* btn_row = lv_obj_create(card);
+    lv_obj_set_width(btn_row, LV_PCT(100));
+    lv_obj_set_height(btn_row, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(btn_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(btn_row, 0, 0);
+    lv_obj_set_style_pad_all(btn_row, 0, 0);
+    lv_obj_set_style_pad_gap(btn_row, 6, 0);
+    lv_obj_set_flex_flow(btn_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(btn_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(btn_row, LV_OBJ_FLAG_SCROLLABLE);
+
+    auto bind_diff_btn = [&](const char* txt, AwBtnStyle bs, const char* decision) {
+        lv_obj_t* btn = aw_btn_create(btn_row, txt, bs, SCALE(90), SCALE(30));
+        StepBtnPayload* payload = new StepBtnPayload{};
+        snprintf(payload->log_line, sizeof(payload->log_line), "[Work] Diff %s: %s", decision, file_path ? file_path : "");
+        snprintf(payload->action, sizeof(payload->action), "修改 %s", file_path ? file_path : "file");
+        snprintf(payload->detail, sizeof(payload->detail), "%s", diff_text ? diff_text : "");
+        snprintf(payload->decision, sizeof(payload->decision), "%s", decision);
+        lv_obj_add_event_cb(btn, step_btn_clicked_cb, LV_EVENT_CLICKED, payload);
+        lv_obj_add_event_cb(btn, step_btn_delete_cb, LV_EVENT_DELETE, payload);
+    };
+    bind_diff_btn("接受", BTN_PRIMARY, "accept");
+    bind_diff_btn("拒绝", BTN_DANGER, "reject");
+    bind_diff_btn("回退", BTN_SECONDARY, "rollback");
+
     lv_obj_scroll_to_y(mode_work_step_stream, lv_obj_get_scroll_bottom(mode_work_step_stream), LV_ANIM_ON);
     update_work_empty_state();
 }
@@ -4968,7 +5143,8 @@ static void apply_mode_switch_visuals() {
     } else {
         lv_obj_add_flag(mode_panel_chat, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(mode_panel_work, LV_OBJ_FLAG_HIDDEN);
-        if (ctrl_bar) lv_obj_add_flag(ctrl_bar, LV_OBJ_FLAG_HIDDEN);
+        /* ctrl_bar (Agent/Report/AI行为) stays visible in Work mode per design */
+        if (ctrl_bar) lv_obj_clear_flag(ctrl_bar, LV_OBJ_FLAG_HIDDEN);
     }
 
     auto paint_btn = [](lv_obj_t* btn, bool selected) {
@@ -5243,12 +5419,31 @@ static void apply_nav_module_visuals() {
     paint_nav_btn(nav_btn_files, g_ui_nav_module == UI_NAV_FILES);
 
     if (g_ui_nav_module == UI_NAV_BOT) {
-        if (left_panel) lv_obj_clear_flag(left_panel, LV_OBJ_FLAG_HIDDEN);
+        if (left_panel) {
+            lv_obj_clear_flag(left_panel, LV_OBJ_FLAG_HIDDEN);
+            /* Show all Bot mode children, hide module_placeholder */
+            uint32_t n = lv_obj_get_child_count(left_panel);
+            for (uint32_t i = 0; i < n; i++) {
+                lv_obj_t* ch = lv_obj_get_child(left_panel, i);
+                if (ch == module_placeholder) lv_obj_add_flag(ch, LV_OBJ_FLAG_HIDDEN);
+                else lv_obj_clear_flag(ch, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
         if (right_panel) lv_obj_clear_flag(right_panel, LV_OBJ_FLAG_HIDDEN);
-        if (module_placeholder) lv_obj_add_flag(module_placeholder, LV_OBJ_FLAG_HIDDEN);
     } else {
-        if (left_panel) lv_obj_add_flag(left_panel, LV_OBJ_FLAG_HIDDEN);
-        if (right_panel) lv_obj_clear_flag(right_panel, LV_OBJ_FLAG_HIDDEN);
+        /* Task/Files module: left_panel stays visible (shows module_placeholder),
+         * right_panel is hidden to give full focus to the task/files content.
+         * Hide all Bot-mode children; only module_placeholder is visible. */
+        if (left_panel) {
+            lv_obj_clear_flag(left_panel, LV_OBJ_FLAG_HIDDEN);
+            uint32_t n = lv_obj_get_child_count(left_panel);
+            for (uint32_t i = 0; i < n; i++) {
+                lv_obj_t* ch = lv_obj_get_child(left_panel, i);
+                if (ch == module_placeholder) lv_obj_clear_flag(ch, LV_OBJ_FLAG_HIDDEN);
+                else lv_obj_add_flag(ch, LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+        if (right_panel) lv_obj_add_flag(right_panel, LV_OBJ_FLAG_HIDDEN);
         if (module_placeholder) {
             const char* title = (g_ui_nav_module == UI_NAV_TASKS)
                 ? tr(I18n{"Tasks Center", "任务中心"})
@@ -5266,7 +5461,6 @@ static void apply_nav_module_visuals() {
                 if (g_ui_nav_module == UI_NAV_FILES) lv_obj_clear_flag(module_files_panel, LV_OBJ_FLAG_HIDDEN);
                 else lv_obj_add_flag(module_files_panel, LV_OBJ_FLAG_HIDDEN);
             }
-            lv_obj_clear_flag(module_placeholder, LV_OBJ_FLAG_HIDDEN);
         }
     }
 
@@ -5466,8 +5660,9 @@ static void relayout_panels() {
             LEFT_PANEL_W = avail_w - RIGHT_PANEL_W - PANEL_GAP;
         }
     } else {
-        LEFT_PANEL_W = 0;
-        RIGHT_PANEL_W = std::max(SCALE(RIGHT_PANEL_MIN_W), avail_w - SCALE(8));
+        /* Tasks/Files module: left_panel fills full available width, right_panel hidden */
+        LEFT_PANEL_W = avail_w - SCALE(8);
+        RIGHT_PANEL_W = 0;
     }
 
     /* Move & resize left nav */
@@ -5476,15 +5671,13 @@ static void relayout_panels() {
         lv_obj_set_pos(left_nav, 0, PANEL_TOP);
     }
 
-    /* Move & resize left panel */
+    /* Move & resize left panel — always position it, visible in both Bot and Task/Files modes */
     int panel_x = nav_w + SCALE(8);
-    if (bot_module) {
-        lv_obj_set_size(left_panel, LEFT_PANEL_W, PANEL_H);
-        lv_obj_set_pos(left_panel, panel_x, PANEL_TOP);
-    }
+    lv_obj_set_size(left_panel, LEFT_PANEL_W, PANEL_H);
+    lv_obj_set_pos(left_panel, panel_x, PANEL_TOP);
 
-    /* Move & resize right panel (no splitter — removed in v2.2.11) */
-    int right_x = bot_module ? (panel_x + LEFT_PANEL_W + PANEL_GAP) : panel_x;
+    /* Move & resize right panel — always to the right of left_panel */
+    int right_x = panel_x + LEFT_PANEL_W + PANEL_GAP;
     lv_obj_set_size(right_panel, RIGHT_PANEL_W, PANEL_H);
     lv_obj_set_pos(right_panel, right_x, PANEL_TOP);
 
@@ -5510,13 +5703,14 @@ static void relayout_panels() {
         lv_obj_set_pos(mode_panel_work, CHAT_GAP, content_y);
     }
     if (module_placeholder) {
-        lv_obj_set_size(module_placeholder, content_w, content_h);
-        lv_obj_set_pos(module_placeholder, CHAT_GAP, content_y);
-        int module_card_w = std::min(content_w - SCALE(40), SCALE(760));
-        if (module_placeholder_desc) lv_obj_set_width(module_placeholder_desc, std::max(SCALE(260), module_card_w));
-        if (module_tasks_panel) lv_obj_set_width(module_tasks_panel, std::max(SCALE(260), module_card_w));
-        if (module_files_panel) lv_obj_set_width(module_files_panel, std::max(SCALE(260), module_card_w));
-        int module_view_w = std::max(SCALE(220), module_card_w - SCALE(40));
+        /* module_placeholder is a child of left_panel — fill it completely */
+        lv_obj_set_size(module_placeholder, LEFT_PANEL_W, PANEL_H);
+        lv_obj_set_pos(module_placeholder, 0, 0);
+        int module_card_w = LEFT_PANEL_W - SCALE(16);
+        if (module_placeholder_desc) lv_obj_set_width(module_placeholder_desc, std::max(SCALE(160), module_card_w - SCALE(8)));
+        if (module_tasks_panel) lv_obj_set_width(module_tasks_panel, module_card_w);
+        if (module_files_panel) lv_obj_set_width(module_files_panel, module_card_w);
+        int module_view_w = std::max(SCALE(140), module_card_w - SCALE(16));
         if (module_tasks_view) lv_obj_set_width(module_tasks_view, module_view_w);
         if (module_files_view) lv_obj_set_width(module_files_view, module_view_w);
     }
@@ -12558,7 +12752,7 @@ bool ui_handle_hotkey(SDL_Keycode sym, Uint16 mod) {
     bool ctrl  = (mod & KMOD_CTRL)  != 0;
     bool shift = (mod & KMOD_SHIFT) != 0;
 
-    /* ── Ctrl+1 → Bot module ── */
+    /* Debug: log every key received */
     if (ctrl && !shift && sym == SDLK_1) {
         if (g_ui_nav_module != UI_NAV_BOT) {
             g_ui_nav_module = UI_NAV_BOT;
@@ -12760,6 +12954,22 @@ void app_ui_init() {
     int nav_btn_sz = nav_scaled * NAV_ICON_BTN_PCT / 100;
     int nav_gap = nav_scaled * NAV_ICON_GAP_PCT / 100;
     int nav_quick_h = PANEL_H * NAV_QUICK_AREA_H_PCT / 100;
+
+    /* Log nav coords for external tooling (PostMessage click testing) */
+    {
+        int btn_cx = nav_scaled / 2;
+        int btn_cy_b = PANEL_TOP + nav_btn_sz / 2;
+        int btn_cy_t = btn_cy_b + nav_btn_sz + nav_gap;
+        int btn_cy_f = btn_cy_t + nav_btn_sz + nav_gap;
+        int nav_bot_y = PANEL_TOP + PANEL_H - nav_quick_h;
+        int total_h = nav_btn_sz * 2 + nav_gap;
+        int free_h = nav_quick_h - total_h;
+        int nav_session_cy = nav_bot_y + free_h + nav_btn_sz / 2;
+        int nav_settings_cy = nav_bot_y + free_h + nav_btn_sz + nav_gap + nav_btn_sz / 2;
+        LOG_I("NAV", "Coords: cx=%d B=%d T=%d F=%d Session=%d Settings=%d (nav_bot_y=%d quick_h=%d btn=%d gap=%d)",
+              btn_cx, btn_cy_b, btn_cy_t, btn_cy_f, nav_session_cy, nav_settings_cy,
+              nav_bot_y, nav_quick_h, nav_btn_sz, nav_gap);
+    }
 
     left_nav = lv_obj_create(scr);
     lv_obj_set_size(left_nav, nav_scaled, PANEL_H);
@@ -13056,7 +13266,11 @@ void app_ui_init() {
 
     ctrl_dd_agent = lv_dropdown_create(ctrl_bar);
     lv_dropdown_set_options(ctrl_dd_agent, "OpenClaw\nHermes\nClaude");
-    lv_dropdown_set_selected(ctrl_dd_agent, 0);
+    /* Initialize to current active runtime */
+    {
+        Runtime cur = app_get_active_runtime();
+        lv_dropdown_set_selected(ctrl_dd_agent, (uint16_t)((int)cur));
+    }
     lv_obj_set_size(ctrl_dd_agent, DD_W, DD_H);
     lv_obj_set_pos(ctrl_dd_agent, dd_x, (SCALE(CTRL_BAR_H) - DD_H) / 2);
     lv_obj_set_style_bg_color(ctrl_dd_agent, c->surface, 0);
@@ -13065,7 +13279,39 @@ void app_ui_init() {
     lv_obj_set_style_text_font(ctrl_dd_agent, FONT(FONT_SIZE_SMALL), 0);
     lv_obj_set_style_text_font(ctrl_dd_agent, FONT(FONT_SIZE_SMALL), LV_PART_INDICATOR);
     lv_obj_add_event_cb(ctrl_dd_agent, [](lv_event_t* e) {
-        /* TODO: switch agent runtime and联动 model */
+        uint16_t sel = lv_dropdown_get_selected((lv_obj_t*)lv_event_get_target(e));
+        if (sel <= 2) {
+            Runtime rt = (Runtime)sel;
+            app_set_active_runtime(rt);
+            /* Verify installation before switching chat endpoint */
+            const char* name = (rt == Runtime::Hermes) ? "Hermes"
+                              : (rt == Runtime::Claude) ? "Claude Code"
+                              : "OpenClaw";
+            if (rt == Runtime::Hermes) {
+                char ver[64] = {0};
+                if (!app_detect_hermes(ver, sizeof(ver))) {
+                    ui_toast_error(g_lang == Lang::CN
+                        ? "Hermes 未安装，请在设置→Agent中安装"
+                        : "Hermes not installed. Install in Settings→Agent.");
+                    lv_dropdown_set_selected((lv_obj_t*)lv_event_get_target(e), 0); /* revert */
+                    app_set_active_runtime(Runtime::OpenClaw);
+                    return;
+                }
+            } else if (rt == Runtime::Claude) {
+                if (!app_check_claude_cli_exists()) {
+                    ui_toast_error(g_lang == Lang::CN
+                        ? "Claude Code 未安装，请在设置→Agent中配置"
+                        : "Claude Code not found. Configure in Settings→Agent.");
+                    lv_dropdown_set_selected((lv_obj_t*)lv_event_get_target(e), 0); /* revert */
+                    app_set_active_runtime(Runtime::OpenClaw);
+                    return;
+                }
+            }
+            char msg[64];
+            snprintf(msg, sizeof(msg), g_lang == Lang::CN ? "已切换到 %s" : "Switched to %s", name);
+            ui_toast_info(msg);
+            LOG_I("Agent", "ctrl_dd_agent: switched to %s", name);
+        }
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 
     /* Report button: opens last BootCheck report */
@@ -13142,30 +13388,37 @@ void app_ui_init() {
     lv_obj_set_style_pad_gap(mode_panel_work, 8, 0);
     lv_obj_set_scroll_dir(mode_panel_work, LV_DIR_VER);
 
-    module_placeholder = lv_obj_create(pr);
-    lv_obj_set_size(module_placeholder, content_w, content_h);
-    lv_obj_set_pos(module_placeholder, CHAT_GAP, CHAT_GAP + SCALE(CTRL_BAR_H));
-    lv_obj_set_style_bg_opa(module_placeholder, LV_OPA_TRANSP, 0);
+    /* module_placeholder is a child of left_panel so Task/Files content stays
+     * in the left-panel area (not covering the full screen). Hidden by default;
+     * shown when Task/Files nav is active. */
+    module_placeholder = lv_obj_create(left_panel);
+    lv_obj_set_size(module_placeholder, LEFT_PANEL_W, PANEL_H);
+    lv_obj_set_pos(module_placeholder, 0, 0);
+    lv_obj_set_style_bg_color(module_placeholder, c->panel, 0);
+    lv_obj_set_style_bg_opa(module_placeholder, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(module_placeholder, 0, 0);
-    lv_obj_set_style_pad_all(module_placeholder, SCALE(24), 0);
-    lv_obj_clear_flag(module_placeholder, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_pad_hor(module_placeholder, SCALE(8), 0);
+    lv_obj_set_style_pad_ver(module_placeholder, SCALE(12), 0);
+    lv_obj_set_scroll_dir(module_placeholder, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(module_placeholder, LV_SCROLLBAR_MODE_AUTO);
     lv_obj_set_flex_flow(module_placeholder, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(module_placeholder, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_flex_align(module_placeholder, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_style_pad_gap(module_placeholder, SCALE(10), 0);
     module_placeholder_title = lv_label_create(module_placeholder);
     lv_obj_set_style_text_font(module_placeholder_title, CJK_FONT, 0);
     lv_obj_set_style_text_color(module_placeholder_title, c->text, 0);
+    lv_obj_set_width(module_placeholder_title, LV_PCT(100));
     lv_label_set_text(module_placeholder_title, tr(I18n{"Tasks Center", "任务中心"}));
     module_placeholder_desc = lv_label_create(module_placeholder);
     lv_label_set_long_mode(module_placeholder_desc, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(module_placeholder_desc, SCALE(420));
-    lv_obj_set_style_text_align(module_placeholder_desc, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(module_placeholder_desc, LV_PCT(100));
+    lv_obj_set_style_text_align(module_placeholder_desc, LV_TEXT_ALIGN_LEFT, 0);
     lv_obj_set_style_text_font(module_placeholder_desc, CJK_FONT_SMALL, 0);
     lv_obj_set_style_text_color(module_placeholder_desc, c->text_dim, 0);
     lv_label_set_text(module_placeholder_desc, tr(I18n{"Task scheduling, queue and execution shortcuts.", "任务调度、队列与执行快捷入口。"}));
 
     module_tasks_panel = lv_obj_create(module_placeholder);
-    lv_obj_set_width(module_tasks_panel, std::min(content_w - SCALE(40), SCALE(760)));
+    lv_obj_set_width(module_tasks_panel, LV_PCT(100));
     lv_obj_set_height(module_tasks_panel, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(module_tasks_panel, c->surface, 0);
     lv_obj_set_style_bg_opa(module_tasks_panel, LV_OPA_COVER, 0);
@@ -13252,12 +13505,12 @@ void app_ui_init() {
             "扫描 assets 下字体/图标/声音资源，输出缺失项、重复项和命名建议，最终给出修复优先级。不要直接删除文件。");
     }, LV_EVENT_CLICKED, nullptr);
 
-    module_tasks_view = aw_textarea_create(module_tasks_panel, "Task queue snapshot...", false, std::min(content_w - SCALE(80), SCALE(700)), SCALE(180));
+    module_tasks_view = aw_textarea_create(module_tasks_panel, "Task queue snapshot...", false, LV_PCT(100), SCALE(180));
     lv_textarea_set_text_selection(module_tasks_view, true);
     refresh_tasks_module_data(false);
 
     module_files_panel = lv_obj_create(module_placeholder);
-    lv_obj_set_width(module_files_panel, std::min(content_w - SCALE(40), SCALE(760)));
+    lv_obj_set_width(module_files_panel, LV_PCT(100));
     lv_obj_set_height(module_files_panel, LV_SIZE_CONTENT);
     lv_obj_set_style_bg_color(module_files_panel, c->surface, 0);
     lv_obj_set_style_bg_opa(module_files_panel, LV_OPA_COVER, 0);
@@ -13402,7 +13655,7 @@ void app_ui_init() {
         refresh_files_module_data(false);
     }, LV_EVENT_CLICKED, nullptr);
 
-    module_files_view = aw_textarea_create(module_files_panel, "Resource snapshot...", false, std::min(content_w - SCALE(80), SCALE(700)), SCALE(180));
+    module_files_view = aw_textarea_create(module_files_panel, "Resource snapshot...", false, LV_PCT(100), SCALE(180));
     lv_textarea_set_text_selection(module_files_view, true);
     refresh_files_module_data(false);
 
@@ -14449,6 +14702,33 @@ void app_ui_init() {
 
     /* ═══ Test mode (disabled: using direct injection above) ═══ */
     /* lv_timer_create(test_inject_messages_cb, 500, nullptr); */
+
+    /* ─── File-based nav IPC (for navshot.ps1 and test tooling) ─── */
+    lv_timer_create([](lv_timer_t*) {
+        const char* cmd_file = "C:\\Temp\\anyclaw_nav_cmd.txt";
+        DWORD attr = GetFileAttributesA(cmd_file);
+        if (attr == INVALID_FILE_ATTRIBUTES) return;
+        char buf[32] = {};
+        FILE* f = fopen(cmd_file, "r");
+        if (!f) return;
+        fgets(buf, sizeof(buf), f);
+        fclose(f);
+        DeleteFileA(cmd_file);
+        /* Trim whitespace */
+        char* s = buf;
+        while (*s == ' ' || *s == '\r' || *s == '\n') s++;
+        char* e = s + strlen(s);
+        while (e > s && (*(e-1) == ' ' || *(e-1) == '\r' || *(e-1) == '\n')) *--e = '\0';
+        LOG_D("IPC", "Nav cmd: '%s'", s);
+        UiNavModule mod = g_ui_nav_module;
+        if (strcmp(s, "bot") == 0) mod = UI_NAV_BOT;
+        else if (strcmp(s, "tasks") == 0) mod = UI_NAV_TASKS;
+        else if (strcmp(s, "files") == 0) mod = UI_NAV_FILES;
+        if (mod != g_ui_nav_module) {
+            g_ui_nav_module = mod;
+            apply_nav_module_visuals();
+        }
+    }, 300, nullptr);
+
     g_ui_ready = true;
 }
-
