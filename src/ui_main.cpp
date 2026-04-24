@@ -5596,7 +5596,7 @@ static void apply_nav_module_visuals() {
         lv_obj_t* lbl = lv_obj_get_child(btn, 0);
         if (lbl && lv_obj_check_type(lbl, &lv_label_class)) {
             lv_obj_set_style_text_color(lbl, selected ? c->accent : c->text_dim, 0);
-            lv_obj_set_style_text_font(lbl, FONT_ICON, 0);  /* Keep Montserrat for ASCII B/T/F icons */
+            lv_obj_set_style_text_font(lbl, CJK_FONT_SMALL, 0);  /* Keep CJK font for full Bot/Task/File labels */
         }
     };
 
@@ -13190,16 +13190,16 @@ void app_ui_init() {
         lv_obj_set_style_border_width(b, 0, 0);
         lv_obj_t* l = lv_label_create(b);
         lv_label_set_text(l, icon);
-        lv_obj_set_style_text_font(l, FONT_ICON, 0);
+        lv_obj_set_style_text_font(l, CJK_FONT_SMALL, 0);
         lv_obj_set_style_text_color(l, active ? c->accent : c->text_dim, 0);
         lv_obj_center(l);
         (void)tip;
         return b;
     };
 
-    nav_btn_bot = create_nav_btn("B", "Bot", true);
-    nav_btn_tasks = create_nav_btn("T", "Tasks", false);
-    nav_btn_files = create_nav_btn("F", "Files", false);
+    nav_btn_bot = create_nav_btn("Bot", "Bot", true);
+    nav_btn_tasks = create_nav_btn("Task", "Task", false);
+    nav_btn_files = create_nav_btn("File", "File", false);
 
     lv_obj_add_event_cb(nav_btn_bot, [](lv_event_t* e) {
         (void)e;
