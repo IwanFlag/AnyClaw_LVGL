@@ -4212,6 +4212,188 @@ static void work_add_diff_card(const char* file_path, const char* diff_text, boo
     update_work_empty_state();
 }
 
+/* ── UI-29: Plan Card ─────────────────────────────────────────────────── */
+
+static void work_add_plan_card(const char* plan_text, bool done, bool failed) {
+    if (!mode_work_step_stream) return;
+    const ThemeColors* cc = g_colors ? g_colors : &THEME_DARK;
+
+    /* Card shell */
+    lv_obj_t* card = lv_obj_create(mode_work_step_stream);
+    lv_obj_set_width(card, LV_PCT(100));
+    lv_obj_set_height(card, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(card, cc->surface, 0);
+    lv_obj_set_style_border_color(card, cc->accent_secondary, 0);
+    lv_obj_set_style_border_width(card, 1, 0);
+    lv_obj_set_style_radius(card, SCALE(g_colors->radius_lg), 0);
+    lv_obj_set_style_pad_all(card, 12, 0);
+    lv_obj_set_style_pad_gap(card, 8, 0);
+    lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+
+    /* Title row */
+    const char* icon = failed ? "✗" : (done ? "✓" : "📋");
+    lv_color_t title_color = failed ? cc->btn_close : (done ? cc->accent : cc->accent_secondary);
+    lv_obj_t* title_row = lv_obj_create(card);
+    lv_obj_set_width(title_row, LV_PCT(100));
+    lv_obj_set_height(title_row, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(title_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(title_row, 0, 0);
+    lv_obj_set_style_pad_all(title_row, 0, 0);
+    lv_obj_clear_flag(title_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(title_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(title_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(title_row, 6, 0);
+
+    lv_obj_t* icon_lbl = lv_label_create(title_row);
+    lv_label_set_text(icon_lbl, icon);
+    lv_obj_set_style_text_color(icon_lbl, title_color, 0);
+    lv_obj_set_style_text_font(icon_lbl, CJK_FONT_SMALL, 0);
+
+    lv_obj_t* plan_lbl = lv_label_create(title_row);
+    lv_label_set_text(plan_lbl, "执行方案");
+    lv_obj_set_style_text_color(plan_lbl, cc->text, 0);
+    lv_obj_set_style_text_font(plan_lbl, CJK_FONT_SMALL, 0);
+
+    /* Parse plan JSON to extract steps/risk/est_time */
+    std::string steps_text, risk_text, est_text;
+    const char* p = plan_text;
+    if (!p) p = "";
+
+    /* Extract steps array */
+    const char* steps_pos = strstr(p, "\"steps\"");
+    if (steps_pos) {
+        const char* arr_start = strchr(steps_pos, '[');
+        const char* arr_end = arr_start ? strchr(arr_start, ']') : nullptr;
+        if (arr_start && arr_end) {
+            std::string arr(arr_start, arr_end - arr_start + 1);
+            /* Extract individual step strings */
+            const char* sp = arr.c_str();
+            int step_num = 1;
+            while (*sp && step_num <= 6) {
+                const char* qp = strchr(sp, '"');
+                if (!qp) break;
+                qp++;
+                std::string token;
+                while (*qp && *qp != '"' && token.size() < 80) token.push_back(*qp++);
+                bool is_meta = token == "steps" || token == "type" || token == "plan" ||
+                               token == "risk" || token == "est_time" || token == "action" ||
+                               token == "title" || token == "name" || token.empty();
+                if (!is_meta && token.find("://") == std::string::npos) {
+                    /* Skip URL-like tokens */
+                    if (token != "read" && token != "write" && token != "edit" &&
+                        token != "run" && token != "execute" && token != "search" &&
+                        token != "create" && token != "delete" && token != "update") {
+                        steps_text += std::to_string(step_num++) + ". " + token + "\n";
+                    }
+                }
+                sp = qp;
+            }
+        }
+    }
+
+    /* Extract risk */
+    const char* risk_pos = strstr(p, "\"risk\"");
+    if (risk_pos) {
+        const char* colon = strchr(risk_pos, ':');
+        if (colon) {
+            colon++;
+            while (*colon == ' ' || *colon == '"') colon++;
+            const char* end = colon;
+            while (*end && *end != '"' && *end != ',' && *end != '\n' && *end != '}') end++;
+            risk_text = std::string(colon, end - colon);
+        }
+    }
+
+    /* Extract est_time */
+    const char* est_pos = strstr(p, "\"est_time\"");
+    if (est_pos) {
+        const char* colon = strchr(est_pos, ':');
+        if (colon) {
+            colon++;
+            while (*colon == ' ' || *colon == '"') colon++;
+            const char* end = colon;
+            while (*end && *end != '"' && *end != ',' && *end != '\n' && *end != '}') end++;
+            est_text = std::string(colon, end - colon);
+        }
+    }
+
+    /* Steps info */
+    if (!steps_text.empty()) {
+        lv_obj_t* steps_lbl = lv_label_create(card);
+        lv_label_set_text(steps_lbl, ("步骤: " + steps_text).c_str());
+        lv_obj_set_style_text_color(steps_lbl, cc->text, 0);
+        lv_obj_set_style_text_font(steps_lbl, CJK_FONT_SMALL, 0);
+        lv_label_set_long_mode(steps_lbl, LV_LABEL_LONG_WRAP);
+        lv_obj_set_width(steps_lbl, LV_PCT(100));
+    }
+
+    /* Meta row: risk + est_time */
+    if (!risk_text.empty() || !est_text.empty()) {
+        lv_obj_t* meta_row = lv_obj_create(card);
+        lv_obj_set_width(meta_row, LV_PCT(100));
+        lv_obj_set_height(meta_row, LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(meta_row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(meta_row, 0, 0);
+        lv_obj_set_style_pad_all(meta_row, 0, 0);
+        lv_obj_clear_flag(meta_row, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_flex_flow(meta_row, LV_FLEX_FLOW_ROW_WRAP);
+        lv_obj_set_flex_align(meta_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_gap(meta_row, 8, 0);
+
+        if (!risk_text.empty()) {
+            lv_obj_t* risk_lbl = lv_label_create(meta_row);
+            lv_label_set_text_fmt(risk_lbl, "风险: %s", risk_text.c_str());
+            lv_obj_set_style_text_color(risk_lbl, cc->text_dim, 0);
+            lv_obj_set_style_text_font(risk_lbl, CJK_FONT_SMALL, 0);
+        }
+        if (!est_text.empty()) {
+            lv_obj_t* est_lbl = lv_label_create(meta_row);
+            lv_label_set_text_fmt(est_lbl, "预计耗时: %s", est_text.c_str());
+            lv_obj_set_style_text_color(est_lbl, cc->text_dim, 0);
+            lv_obj_set_style_text_font(est_lbl, CJK_FONT_SMALL, 0);
+        }
+    }
+
+    /* Action buttons */
+    lv_obj_t* btn_row = lv_obj_create(card);
+    lv_obj_set_width(btn_row, LV_PCT(100));
+    lv_obj_set_height(btn_row, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(btn_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(btn_row, 0, 0);
+    lv_obj_set_style_pad_all(btn_row, 0, 0);
+    lv_obj_set_style_pad_gap(btn_row, 6, 0);
+    lv_obj_set_flex_flow(btn_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(btn_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(btn_row, LV_OBJ_FLAG_SCROLLABLE);
+
+    auto bind_plan_btn = [&](const char* txt, AwBtnStyle bs, const char* decision) {
+        lv_obj_t* btn = aw_btn_create(btn_row, txt, bs, SCALE(110), SCALE(34));
+        StepBtnPayload* payload = new StepBtnPayload{};
+        snprintf(payload->log_line, sizeof(payload->log_line), "[Work] Plan %s by user", decision);
+        snprintf(payload->action, sizeof(payload->action), "确认执行方案");
+        snprintf(payload->detail, sizeof(payload->detail), "%s", plan_text ? plan_text : "");
+        snprintf(payload->decision, sizeof(payload->decision), "%s", decision);
+        lv_obj_add_event_cb(btn, step_btn_clicked_cb, LV_EVENT_CLICKED, payload);
+        lv_obj_add_event_cb(btn, step_btn_delete_cb, LV_EVENT_DELETE, payload);
+    };
+    bind_plan_btn("确认执行 ✓", BTN_PRIMARY, "approve_plan");
+    bind_plan_btn("修改方案 ✏", BTN_SECONDARY, "modify_plan");
+
+    lv_obj_t* cancel_btn = aw_btn_create(btn_row, "取消 ✗", BTN_DANGER, SCALE(110), SCALE(34));
+    StepBtnPayload* cancel_payload = new StepBtnPayload{};
+    snprintf(cancel_payload->log_line, sizeof(cancel_payload->log_line), "[Work] Plan cancelled by user");
+    snprintf(cancel_payload->action, sizeof(cancel_payload->action), "取消执行方案");
+    snprintf(cancel_payload->detail, sizeof(cancel_payload->detail), "%s", plan_text ? plan_text : "");
+    snprintf(cancel_payload->decision, sizeof(cancel_payload->decision), "%s", "cancel_plan");
+    lv_obj_add_event_cb(cancel_btn, step_btn_clicked_cb, LV_EVENT_CLICKED, cancel_payload);
+    lv_obj_add_event_cb(cancel_btn, step_btn_delete_cb, LV_EVENT_DELETE, cancel_payload);
+
+    lv_obj_scroll_to_y(mode_work_step_stream, lv_obj_get_scroll_bottom(mode_work_step_stream), LV_ANIM_ON);
+    update_work_empty_state();
+}
+
 static void work_append_md_block(const char* title, const char* text) {
     if (!title || !text || !text[0]) return;
     const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
@@ -4248,7 +4430,11 @@ static void work_append_md_block(const char* title, const char* text) {
         lv_obj_set_style_text_color(mode_lbl_work_renderer, rc, 0);
     }
     const bool write_op = strstr(title, "write") || strstr(title, "Write") || strstr(text, "write_file");
-    work_add_step_card(is_plan ? "计划输出" : title, plan_preview.empty() ? text : plan_preview.c_str(), true, write_op);
+    if (is_plan) {
+        work_add_plan_card(text, true, false);
+    } else {
+        work_add_step_card(is_plan ? "计划输出" : title, plan_preview.empty() ? text : plan_preview.c_str(), true, write_op);
+    }
     render_work_md_doc();
 }
 
