@@ -705,6 +705,10 @@ int main(int argc, char* argv[]) {
         }
         SDL_RaiseWindow(g_window);
 
+        int ww = win_w;
+        int wh = win_h;
+        SDL_GetWindowSize(g_window, &ww, &wh);
+
         /* Apply rounded corners to main window (radius_xl = 16px, scaled by DPI) */
         HWND hwnd = getNativeWindowHandle(g_window);
         if (hwnd) {
@@ -725,8 +729,6 @@ int main(int argc, char* argv[]) {
             DwmExtendFrameIntoClientArea(hwnd2, &margins);
         }
 
-        int ww, wh;
-        SDL_GetWindowSize(g_window, &ww, &wh);
         LOG_I("SDL", "Window: %dx%d (screen: %dx%d)", ww, wh, screen_w, screen_h);
     }
 

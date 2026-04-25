@@ -10,7 +10,7 @@
 
 /* ── App Identity ───────────────────────────────────────────── */
 #define APP_NAME                "AnyClaw_LVGL"
-#define APP_MUTEX_NAME          "Global\\AnyClaw_LVGL_v2_SingleInstance"
+#define APP_MUTEX_NAME          "AnyClaw_LVGL_SingleInstance_Mutex_v2.0"
 #define APP_HTTP_AGENT          "AnyClaw_LVGL/1.0"
 #define REG_AUTOSTART_VALUE     L"AnyClaw_LVGL"
 

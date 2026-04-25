@@ -45,10 +45,38 @@ static bool is_node_running() {
     return found;
 }
 
-/* Check HTTP health endpoint */
+/* Check HTTP health endpoint — dynamically resolves port from user config */
 static bool check_http_health() {
+    char url[128] = {0};
+    /* Try to read user gateway port from ~/.openclaw/openclaw.json */
+    int port = 0;
+    {
+        const char* userprofile = std::getenv("USERPROFILE");
+        if (userprofile) {
+            std::string path = std::string(userprofile) + "\\.openclaw\\openclaw.json";
+            FILE* fp = fopen(path.c_str(), "r");
+            if (fp) {
+                char buf[4096] = {0};
+                fread(buf, 1, sizeof(buf)-1, fp);
+                fclose(fp);
+                /* Look for "localhost:PORT" or "127.0.0.1:PORT" patterns */
+                static const char* pats[] = { "localhost:", "127.0.0.1:", nullptr };
+                for (int i = 0; pats[i] && !port; i++) {
+                    const char* p = strstr(buf, pats[i]);
+                    if (!p) continue;
+                    p += strlen(pats[i]);
+                    while (*p >= '0' && *p <= '9') {
+                        port = port * 10 + (*p++ - '0');
+                    }
+                    if (port <= 1024 || port >= 65536) port = 0;
+                }
+            }
+        }
+    }
+    if (port <= 0) port = GATEWAY_PORT;  /* fallback */
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/health", port);
     char response[256] = {0};
-    int code = http_get(GATEWAY_HEALTH_URL, response, sizeof(response), HEALTH_HTTP_TIMEOUT);
+    int code = http_get(url, response, sizeof(response), HEALTH_HTTP_TIMEOUT);
     return (code == 200);
 }
 
@@ -169,8 +197,12 @@ static unsigned __stdcall health_thread(void* arg) {
     (void)arg;
     LOG_I("HEALTH", "Monitoring thread started (interval=%dms)", g_refresh_interval_ms);
 
+    bool first_iteration = true;
     while (g_running) {
-        if (!sleep_interruptible(g_refresh_interval_ms)) break;
+        /* Quick initial check (2s) then normal interval */
+        int sleep_ms = first_iteration ? 2000 : g_refresh_interval_ms;
+        first_iteration = false;
+        if (!sleep_interruptible(sleep_ms)) break;
 
         TraceSpan span("health_check_cycle");
         DWORD tick_start = GetTickCount();
@@ -221,14 +253,12 @@ static unsigned __stdcall health_thread(void* arg) {
             /* Gateway process + HTTP both OK → check sessions for busy/idle */
             g_httpFailCount = 0;
             g_autoRestarted = false;
+            g_firstPoll = false;
 
             /* Count active sessions for task display */
             g_active_session_count = count_active_sessions();
 
-            if (g_firstPoll) {
-                newStatus = ClawStatus::Checking;
-                g_firstPoll = false;
-            } else if (g_active_session_count > 0) {
+            if (g_active_session_count > 0) {
                 newStatus = ClawStatus::Busy;
             } else {
                 newStatus = ClawStatus::Ready;

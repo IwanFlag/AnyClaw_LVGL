@@ -222,15 +222,6 @@ bool selfcheck_fix(SelfCheckResult& result) {
     if (!result.nodejs.ok) {
         ui_log("[SelfCheck] Node.js missing - cannot auto-fix, user must install");
         LOG_W("SELF", "Node.js missing - cannot auto-fix, user must install");
-        /* Store error for LVGL popup (shown after UI init) */
-        {
-            std::lock_guard<std::mutex> lk(g_startup_error_mtx);
-            g_startup_error_title = "AnyClaw - Node.js Required";
-            g_startup_error = "Node.js is not installed or not in PATH.\n\n"
-                              "Install from: https://github.com/IwanFlag/AnyClaw_Tools/releases\n"
-                              "Or: https://nodejs.org/\n"
-                              "Then restart AnyClaw.";
-        }
         fixed = false;
     }
 
@@ -304,6 +295,36 @@ bool selfcheck_fix(SelfCheckResult& result) {
 
     result.all_ok = result.nodejs.ok && result.npm.ok &&
                     result.network.ok && result.config_dir.ok;
+
+    if (!result.all_ok) {
+        std::lock_guard<std::mutex> lk(g_startup_error_mtx);
+        g_startup_error_title = "检测到问题";
+
+        std::string msg;
+        auto append_issue = [&msg](const char* item, const char* reason) {
+            msg += "● ";
+            msg += item;
+            msg += "\n    原因: ";
+            msg += reason;
+            msg += "\n\n";
+        };
+
+        if (!result.nodejs.ok) {
+            append_issue("Node.js: 未检测到", result.nodejs.message);
+        }
+        if (!result.npm.ok) {
+            append_issue("npm: 不可用", result.npm.message);
+        }
+        if (!result.network.ok) {
+            append_issue("网络: 无法连接", result.network.message);
+        }
+        if (!result.config_dir.ok) {
+            append_issue("配置目录: 不可写", result.config_dir.message);
+        }
+
+        msg += "请修复上述问题后重新启动应用。";
+        g_startup_error = msg;
+    }
 
     return fixed;
 }
