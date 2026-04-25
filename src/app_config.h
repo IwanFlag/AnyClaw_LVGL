@@ -108,7 +108,6 @@
 /* ── 标题栏元素 (parent: 标题栏) ── */
 #define TITLE_ICON_PCT         80       /* 品牌图标 = 标题栏高 × 80% */
 #define TITLE_LED_PCT          18       /* LED = 标题栏高 × 18% */
-#define TITLE_MODEL_W_PCT      10       /* 模型名宽 = 窗口宽 × 10% */
 #define TITLE_ICON_PAD_L       8        /* 图标左内边距 (SCALE'd) */
 
 /* ── 窗口控制按钮 (parent: 标题栏) ── */
@@ -220,8 +219,8 @@
 #define SESSION_ACTIVE_AGE_MS   300000
 
 /* ── Gateway ── */
-#define GATEWAY_PORT            10086
-#define GATEWAY_HEALTH_URL      "http://127.0.0.1:10086/health"
+#define GATEWAY_PORT            18789
+#define GATEWAY_HEALTH_URL      "http://127.0.0.1:18789/health"
 #define HERMES_PORT             18790
 #define HERMES_HEALTH_URL       "http://127.0.0.1:18790/health"
 

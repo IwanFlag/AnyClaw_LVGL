@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <algorithm>
 #include <unordered_set>
+#include <unordered_map>
 #include <sstream>
 #include <cctype>
 #include <windows.h>
@@ -2294,7 +2295,9 @@ static lv_obj_t* module_placeholder = nullptr;
 static lv_obj_t* module_placeholder_title = nullptr;
 static lv_obj_t* module_placeholder_desc = nullptr;
 static lv_obj_t* module_files_panel = nullptr;
-static lv_obj_t* module_files_state = nullptr;
+static lv_obj_t* module_files_workspace_label = nullptr;
+static lv_obj_t* module_files_tree_toggle_btn = nullptr;
+static lv_obj_t* module_files_status_label = nullptr;
 static lv_obj_t* module_files_view = nullptr;
 static lv_obj_t* module_files_filter_all = nullptr;
 static lv_obj_t* module_files_filter_fonts = nullptr;
@@ -2306,6 +2309,31 @@ enum ModuleFileFilter { MODULE_FILE_ALL = 0, MODULE_FILE_FONTS = 1, MODULE_FILE_
 static ModuleFileFilter g_module_file_filter = MODULE_FILE_ALL;
 static int g_module_file_ext_filter = 0;  /* 0=all */
 static char g_module_files_search[128] = "";
+static std::vector<std::string> g_module_files_cache;
+static std::vector<std::string> g_module_dirs_cache;
+static std::string g_module_files_cache_root;
+static int g_module_files_cache_dirs = 0;
+static bool g_module_files_cache_ready = false;
+static bool g_module_files_tree_expand_all = true;
+struct FileTreeRowAction {
+    std::string abs_path;
+    std::string rel_path;
+    bool is_dir = false;
+};
+static std::unordered_map<lv_obj_t*, FileTreeRowAction> g_module_files_row_actions;
+static std::unordered_set<std::string> g_module_files_expanded_dirs;
+static std::unordered_set<std::string> g_module_files_collapsed_dirs;
+static lv_obj_t* g_module_files_selected_row = nullptr;
+static std::string g_module_files_selected_abs_path;
+static std::string g_module_files_selected_rel_path;
+static bool g_module_files_selected_is_dir = false;
+static std::string g_module_files_last_click_rel_path;
+static bool g_module_files_last_click_is_dir = false;
+static DWORD g_module_files_last_click_tick = 0;
+static lv_obj_t* g_module_files_ctx_overlay = nullptr;
+static lv_obj_t* g_module_files_rename_overlay = nullptr;
+static lv_obj_t* g_module_files_rename_input = nullptr;
+static lv_obj_t* g_module_files_delete_overlay = nullptr;
 static lv_obj_t* mode_bar = nullptr;
 static lv_obj_t* mode_btn_chat = nullptr;
 static lv_obj_t* mode_btn_voice = nullptr;
@@ -2332,6 +2360,19 @@ static lv_obj_t* mode_lbl_work_output_title = nullptr;
 static lv_obj_t* mode_work_step_stream = nullptr;
 static lv_obj_t* mode_chat_empty_card = nullptr;
 static lv_obj_t* mode_work_empty_card = nullptr;
+static lv_obj_t* bot_sidebar_wrap = nullptr;
+static lv_obj_t* bot_sidebar_title = nullptr;
+static lv_obj_t* bot_sidebar_session_card = nullptr;
+static lv_obj_t* bot_sidebar_session_title = nullptr;
+static lv_obj_t* bot_sidebar_session_count = nullptr;
+static lv_obj_t* bot_sidebar_session_list = nullptr;
+static lv_obj_t* bot_sidebar_cron_card = nullptr;
+static lv_obj_t* bot_sidebar_cron_title = nullptr;
+static lv_obj_t* bot_sidebar_cron_count = nullptr;
+static lv_obj_t* bot_sidebar_cron_list = nullptr;
+static lv_obj_t* bot_sidebar_hint = nullptr;
+static lv_timer_t* g_bot_sidebar_timer = nullptr;
+static std::atomic<bool> g_bot_sidebar_refresh_running(false);
 static lv_obj_t* mode_sec_step_stream = nullptr;
 static lv_obj_t* mode_sec_work_console = nullptr;
 static lv_obj_t* mode_work_output_wrap = nullptr;
@@ -2430,6 +2471,7 @@ static char g_pending_feedback_payload[512] = {0};
 static bool g_streaming = false;
 static char g_ai_next_step[256] = "Idle";
 static char g_ai_script_log[8192] = "";
+static long long g_bot_sidebar_last_refresh_ms = 0;
 static char g_work_md_doc[32768] = "";
 static char g_work_last_prompt[2048] = "";
 static bool g_work_waiting_ai = false;
@@ -3116,10 +3158,89 @@ void ui_relayout_all();
 static int mode_content_h() { return std::max(120, PANEL_H - CHAT_GAP * 2); }
 static int mode_content_w() { return std::max(200, RIGHT_PANEL_W - CHAT_GAP * 2); }
 static int chat_trace_panel_h(int content_w) { return (content_w < SCALE(900)) ? SCALE(128) : SCALE(96); }
+static bool chat_trace_has_content() {
+    return ((g_ai_next_step[0] && strcmp(g_ai_next_step, "Idle") != 0) || g_ai_script_log[0]);
+}
+
+static void refresh_chat_trace_visibility() {
+    if (!mode_trace_chat_panel) return;
+    if (chat_trace_has_content()) lv_obj_clear_flag(mode_trace_chat_panel, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(mode_trace_chat_panel, LV_OBJ_FLAG_HIDDEN);
+}
+
 static int chat_top_y_with_trace(int content_w) {
-    if (!mode_trace_chat_panel) return CHAT_GAP;
+    if (!mode_trace_chat_panel || lv_obj_has_flag(mode_trace_chat_panel, LV_OBJ_FLAG_HIDDEN) || !chat_trace_has_content()) return CHAT_GAP;
     return CHAT_GAP + chat_trace_panel_h(content_w) + CHAT_GAP;
 }
+
+static std::string bot_sidebar_build_lines(bool want_cron) {
+    SessionManager& sm = session_mgr();
+    auto active_sessions = sm.active_sessions();
+    std::string lines;
+    int matched = 0;
+    for (const auto& s : active_sessions) {
+        if (s.isCron != want_cron) continue;
+        char line[256];
+        snprintf(line, sizeof(line), "%s  [%s]  %ds",
+                 s.display_name(), s.display_channel(), std::max(1, s.age_seconds()));
+        if (!lines.empty()) lines += "\n";
+        lines += line;
+        matched++;
+    }
+    if (matched == 0) {
+        lines = want_cron
+            ? (g_lang == Lang::CN ? "暂无活动 Cron" : "No active cron")
+            : (g_lang == Lang::CN ? "暂无活动 Session" : "No active sessions");
+    }
+    return lines;
+}
+
+static void refresh_bot_sidebar_view() {
+    if (!bot_sidebar_wrap) return;
+
+    static const I18n S_SIDEBAR = {"Session / Cron", "会话 / Cron"};
+    static const I18n S_SESSION = {"Sessions", "会话"};
+    static const I18n S_CRON = {"Cron", "Cron"};
+    static const I18n S_HINT = {"Auto-refresh: 2s", "自动刷新: 2秒"};
+
+    SessionManager& sm = session_mgr();
+    auto active_sessions = sm.active_sessions();
+    int session_count = 0;
+    int cron_count = 0;
+    for (const auto& s : active_sessions) {
+        if (s.isCron) cron_count++;
+        else session_count++;
+    }
+
+    if (bot_sidebar_title) lv_label_set_text(bot_sidebar_title, tr(S_SIDEBAR));
+    if (bot_sidebar_session_title) lv_label_set_text(bot_sidebar_session_title, tr(S_SESSION));
+    if (bot_sidebar_cron_title) lv_label_set_text(bot_sidebar_cron_title, tr(S_CRON));
+    if (bot_sidebar_hint) lv_label_set_text(bot_sidebar_hint, tr(S_HINT));
+    if (bot_sidebar_session_count) lv_label_set_text_fmt(bot_sidebar_session_count, "(%d)", session_count);
+    if (bot_sidebar_cron_count) lv_label_set_text_fmt(bot_sidebar_cron_count, "(%d)", cron_count);
+    if (bot_sidebar_session_list) lv_textarea_set_text(bot_sidebar_session_list, bot_sidebar_build_lines(false).c_str());
+    if (bot_sidebar_cron_list) lv_textarea_set_text(bot_sidebar_cron_list, bot_sidebar_build_lines(true).c_str());
+}
+
+static void trigger_bot_sidebar_refresh() {
+    if (g_bot_sidebar_refresh_running.exchange(true)) return;
+    std::thread([]() {
+        SessionManager& sm = session_mgr();
+        sm.refresh();
+        g_bot_sidebar_last_refresh_ms = GetTickCount64();
+        g_bot_sidebar_refresh_running.store(false);
+    }).detach();
+}
+
+static void bot_sidebar_timer_cb(lv_timer_t* timer) {
+    (void)timer;
+    if (g_ui_nav_module != UI_NAV_BOT) return;
+    if (GetTickCount64() - g_bot_sidebar_last_refresh_ms >= 1800) {
+        trigger_bot_sidebar_refresh();
+    }
+    refresh_bot_sidebar_view();
+}
+
 extern void save_theme_config();
 static const char* profile_user_name() { return g_profile_user_name[0] ? g_profile_user_name : "User"; }
 static const char* profile_ai_name() { return g_profile_ai_name[0] ? g_profile_ai_name : "AI"; }
@@ -3851,6 +3972,8 @@ static void update_agent_trace_views() {
     if (mode_ta_chat_script) lv_textarea_set_text(mode_ta_chat_script, g_ai_script_log);
     if (mode_lbl_work_next_step) lv_label_set_text_fmt(mode_lbl_work_next_step, "Next Step: %s", g_ai_next_step);
     if (mode_ta_work_script) lv_textarea_set_text(mode_ta_work_script, g_ai_script_log);
+    refresh_chat_trace_visibility();
+    if (right_panel) ui_relayout_all();
 }
 
 static void set_ai_next_step(const char* step) {
@@ -5672,12 +5795,634 @@ static void update_main_title() {
     lv_label_set_text(title_label, tr(*s));
 }
 
+static void refresh_files_tree_toggle_btn_text() {
+    if (!module_files_tree_toggle_btn) return;
+    lv_obj_t* lbl = lv_obj_get_child(module_files_tree_toggle_btn, 0);
+    if (!lbl || !lv_obj_check_type(lbl, &lv_label_class)) return;
+    lv_label_set_text(lbl, g_module_files_tree_expand_all
+        ? tr(I18n{"Collapse", "折叠"})
+        : tr(I18n{"Expand", "展开"}));
+}
+
+static bool file_tree_dir_is_expanded(const std::string& rel_dir) {
+    if (rel_dir.empty()) return true;
+    if (g_module_files_tree_expand_all) {
+        return g_module_files_collapsed_dirs.find(rel_dir) == g_module_files_collapsed_dirs.end();
+    }
+    return g_module_files_expanded_dirs.find(rel_dir) != g_module_files_expanded_dirs.end();
+}
+
+static bool file_tree_parent_chain_visible(const std::string& rel_path) {
+    size_t pos = rel_path.find('/');
+    while (pos != std::string::npos) {
+        std::string parent = rel_path.substr(0, pos);
+        if (!file_tree_dir_is_expanded(parent)) return false;
+        pos = rel_path.find('/', pos + 1);
+    }
+    return true;
+}
+
+static void file_tree_add_info_row(const std::string& text) {
+    if (!module_files_view) return;
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
+    lv_obj_t* lbl = lv_label_create(module_files_view);
+    lv_obj_set_width(lbl, LV_PCT(100));
+    lv_label_set_long_mode(lbl, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_font(lbl, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_color(lbl, c->text_dim, 0);
+    lv_label_set_text(lbl, text.c_str());
+}
+
+static void file_tree_apply_selected_visual(lv_obj_t* row, bool selected) {
+    if (!row) return;
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
+    lv_obj_set_style_bg_color(row, c->accent_subtle, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(row, selected ? LV_OPA_70 : LV_OPA_TRANSP, LV_PART_MAIN);
+}
+
+static void file_tree_set_selected_row(lv_obj_t* row) {
+    if (g_module_files_selected_row && g_module_files_selected_row != row) {
+        file_tree_apply_selected_visual(g_module_files_selected_row, false);
+    }
+    g_module_files_selected_row = row;
+    if (g_module_files_selected_row) {
+        file_tree_apply_selected_visual(g_module_files_selected_row, true);
+    }
+}
+
+static void refresh_files_status_label_text(int scanned_files, int scanned_dirs, int matched_total, bool searching) {
+    if (!module_files_status_label) return;
+
+    char buf[768] = {0};
+    if (g_lang == Lang::CN) {
+        if (searching) {
+            snprintf(buf, sizeof(buf), "目录 %d · 文件 %d · 匹配 %d", scanned_dirs, scanned_files, matched_total);
+        } else {
+            snprintf(buf, sizeof(buf), "目录 %d · 文件 %d", scanned_dirs, scanned_files);
+        }
+        if (!g_module_files_selected_rel_path.empty()) {
+            size_t used = strlen(buf);
+            snprintf(buf + used, sizeof(buf) - used, " · 已选：%s%s",
+                g_module_files_selected_rel_path.c_str(),
+                g_module_files_selected_is_dir ? "/" : "");
+        }
+    } else {
+        if (searching) {
+            snprintf(buf, sizeof(buf), "%d dirs · %d files · %d matched", scanned_dirs, scanned_files, matched_total);
+        } else {
+            snprintf(buf, sizeof(buf), "%d dirs · %d files", scanned_dirs, scanned_files);
+        }
+        if (!g_module_files_selected_rel_path.empty()) {
+            size_t used = strlen(buf);
+            snprintf(buf + used, sizeof(buf) - used, " · selected: %s%s",
+                g_module_files_selected_rel_path.c_str(),
+                g_module_files_selected_is_dir ? "/" : "");
+        }
+    }
+    lv_label_set_text(module_files_status_label, buf);
+}
+
+static bool open_path_with_shell(const std::string& path) {
+    if (path.empty()) return false;
+    HINSTANCE r = ShellExecuteA(nullptr, "open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    return (INT_PTR)r > 32;
+}
+
+static bool reveal_path_in_explorer(const std::string& path) {
+    if (path.empty()) return false;
+    std::string args = "/select,\"" + path + "\"";
+    HINSTANCE r = ShellExecuteA(nullptr, "open", "explorer.exe", args.c_str(), nullptr, SW_SHOWNORMAL);
+    return (INT_PTR)r > 32;
+}
+
+static void close_files_overlay(lv_obj_t** overlay) {
+    if (!overlay || !*overlay) return;
+    lv_obj_del(*overlay);
+    *overlay = nullptr;
+}
+
+static std::string trim_copy(const std::string& s) {
+    size_t b = 0;
+    while (b < s.size() && (s[b] == ' ' || s[b] == '\t' || s[b] == '\r' || s[b] == '\n')) b++;
+    size_t e = s.size();
+    while (e > b && (s[e - 1] == ' ' || s[e - 1] == '\t' || s[e - 1] == '\r' || s[e - 1] == '\n')) e--;
+    return s.substr(b, e - b);
+}
+
+static void sync_selected_rel_from_abs_path() {
+    if (g_module_files_selected_abs_path.empty()) {
+        g_module_files_selected_rel_path.clear();
+        return;
+    }
+    namespace fs = std::filesystem;
+    std::string ws_root = permissions().workspace_root();
+    if (ws_root.empty()) ws_root = workspace_get_root();
+    if (ws_root.empty()) {
+        g_module_files_selected_rel_path.clear();
+        return;
+    }
+    std::error_code rel_ec;
+    fs::path rel = fs::relative(fs::path(g_module_files_selected_abs_path), fs::path(ws_root), rel_ec);
+    if (rel_ec) {
+        g_module_files_selected_rel_path.clear();
+        return;
+    }
+    g_module_files_selected_rel_path = rel.lexically_normal().generic_string();
+}
+
+static void files_open_context_menu_for_selection();
+
+static void files_rename_cancel_cb(lv_event_t* e) {
+    (void)e;
+    g_module_files_rename_input = nullptr;
+    close_files_overlay(&g_module_files_rename_overlay);
+}
+
+static void files_rename_apply_cb(lv_event_t* e) {
+    (void)e;
+    if (!g_module_files_rename_input || g_module_files_selected_abs_path.empty()) {
+        files_rename_cancel_cb(nullptr);
+        return;
+    }
+
+    namespace fs = std::filesystem;
+    std::string new_name = trim_copy(lv_textarea_get_text(g_module_files_rename_input));
+    if (new_name.empty()) {
+        ui_toast_error(tr(I18n{"Name cannot be empty", "名称不能为空"}));
+        return;
+    }
+
+    fs::path src(g_module_files_selected_abs_path);
+    fs::path dst = src.parent_path() / fs::path(new_name);
+    if (dst == src) {
+        files_rename_cancel_cb(nullptr);
+        return;
+    }
+
+    std::error_code ec;
+    if (fs::exists(dst, ec) && !ec) {
+        ui_toast_error(tr(I18n{"Target already exists", "目标已存在"}));
+        return;
+    }
+
+    ec.clear();
+    fs::rename(src, dst, ec);
+    if (ec) {
+        ui_toast_error(tr(I18n{"Rename failed", "重命名失败"}));
+        ui_log("[File] Rename failed: %s -> %s (%s)", src.string().c_str(), dst.string().c_str(), ec.message().c_str());
+        return;
+    }
+
+    g_module_files_selected_abs_path = dst.lexically_normal().string();
+    sync_selected_rel_from_abs_path();
+    ui_toast_success(tr(I18n{"Renamed", "已重命名"}));
+    ui_log("[File] Renamed: %s -> %s", src.string().c_str(), dst.string().c_str());
+    files_rename_cancel_cb(nullptr);
+    refresh_files_module_data(true);
+}
+
+static void files_open_rename_dialog_for_selection() {
+    if (g_module_files_selected_abs_path.empty()) {
+        ui_toast_error(tr(I18n{"No item selected", "未选择项目"}));
+        return;
+    }
+
+    close_files_overlay(&g_module_files_rename_overlay);
+    lv_obj_t* box = create_dialog(lv_screen_active(), tr(I18n{"Rename", "重命名"}), 0, 0, &g_module_files_rename_overlay);
+    if (!box) return;
+
+    lv_obj_t* hint = lv_label_create(box);
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(hint, LV_PCT(100));
+    lv_obj_set_style_text_color(hint, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(hint, CJK_FONT_SMALL, 0);
+    lv_label_set_text(hint, tr(I18n{"Enter a new name for selected item", "请输入所选项目的新名称"}));
+
+    g_module_files_rename_input = lv_textarea_create(box);
+    lv_textarea_set_one_line(g_module_files_rename_input, true);
+    lv_obj_set_width(g_module_files_rename_input, LV_PCT(100));
+    lv_obj_set_height(g_module_files_rename_input, SCALE(38));
+    lv_obj_set_style_bg_color(g_module_files_rename_input, g_colors->surface, 0);
+    lv_obj_set_style_text_color(g_module_files_rename_input, g_colors->text, 0);
+    std::string name = std::filesystem::path(g_module_files_selected_abs_path).filename().string();
+    lv_textarea_set_text(g_module_files_rename_input, name.c_str());
+
+    lv_obj_t* row = lv_obj_create(box);
+    lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_set_style_pad_gap(row, SCALE(8), 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* btn_cancel = aw_btn_create(row, tr(I18n{"Cancel", "取消"}), BTN_SECONDARY, SCALE(92), SCALE(32));
+    lv_obj_add_event_cb(btn_cancel, files_rename_cancel_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* btn_apply = aw_btn_create(row, tr(I18n{"Apply", "应用"}), BTN_PRIMARY, SCALE(92), SCALE(32));
+    lv_obj_add_event_cb(btn_apply, files_rename_apply_cb, LV_EVENT_CLICKED, nullptr);
+}
+
+static void files_delete_cancel_cb(lv_event_t* e) {
+    (void)e;
+    close_files_overlay(&g_module_files_delete_overlay);
+}
+
+static void files_delete_apply_cb(lv_event_t* e) {
+    (void)e;
+    if (g_module_files_selected_abs_path.empty()) {
+        files_delete_cancel_cb(nullptr);
+        return;
+    }
+
+    namespace fs = std::filesystem;
+    fs::path target(g_module_files_selected_abs_path);
+    std::error_code ec;
+    bool ok = false;
+    if (g_module_files_selected_is_dir) {
+        fs::remove_all(target, ec);
+        ok = !ec;
+    } else {
+        ok = fs::remove(target, ec);
+        if (ec) ok = false;
+    }
+
+    if (!ok) {
+        ui_toast_error(tr(I18n{"Delete failed", "删除失败"}));
+        ui_log("[File] Delete failed: %s (%s)", target.string().c_str(), ec.message().c_str());
+        return;
+    }
+
+    g_module_files_selected_row = nullptr;
+    g_module_files_selected_abs_path.clear();
+    g_module_files_selected_rel_path.clear();
+    g_module_files_selected_is_dir = false;
+    ui_toast_success(tr(I18n{"Deleted", "已删除"}));
+    ui_log("[File] Deleted: %s", target.string().c_str());
+    files_delete_cancel_cb(nullptr);
+    refresh_files_module_data(true);
+}
+
+static void files_open_delete_dialog_for_selection() {
+    if (g_module_files_selected_abs_path.empty()) {
+        ui_toast_error(tr(I18n{"No item selected", "未选择项目"}));
+        return;
+    }
+
+    close_files_overlay(&g_module_files_delete_overlay);
+    lv_obj_t* box = create_dialog(lv_screen_active(), tr(I18n{"Delete", "删除"}), 0, 0, &g_module_files_delete_overlay);
+    if (!box) return;
+
+    lv_obj_t* hint = lv_label_create(box);
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(hint, LV_PCT(100));
+    lv_obj_set_style_text_color(hint, g_colors->danger, 0);
+    lv_obj_set_style_text_font(hint, CJK_FONT_SMALL, 0);
+    lv_label_set_text(hint, tr(I18n{"Delete selected item permanently?", "确认永久删除所选项目？"}));
+
+    lv_obj_t* row = lv_obj_create(box);
+    lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_set_style_pad_gap(row, SCALE(8), 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* btn_cancel = aw_btn_create(row, tr(I18n{"Cancel", "取消"}), BTN_SECONDARY, SCALE(92), SCALE(32));
+    lv_obj_add_event_cb(btn_cancel, files_delete_cancel_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* btn_delete = aw_btn_create(row, tr(I18n{"Delete", "删除"}), BTN_DANGER, SCALE(92), SCALE(32));
+    lv_obj_add_event_cb(btn_delete, files_delete_apply_cb, LV_EVENT_CLICKED, nullptr);
+}
+
+static void files_context_close_cb(lv_event_t* e) {
+    (void)e;
+    close_files_overlay(&g_module_files_ctx_overlay);
+}
+
+static void files_context_new_folder_cb(lv_event_t* e) {
+    (void)e;
+    close_files_overlay(&g_module_files_ctx_overlay);
+
+    namespace fs = std::filesystem;
+    fs::path base(g_module_files_selected_abs_path);
+    if (!g_module_files_selected_is_dir) base = base.parent_path();
+    if (base.empty()) {
+        ui_toast_error(tr(I18n{"Invalid target folder", "目标目录无效"}));
+        return;
+    }
+
+    std::error_code ec;
+    fs::path candidate = base / fs::path("New Folder");
+    for (int i = 2; fs::exists(candidate, ec) && !ec && i < 200; ++i) {
+        candidate = base / fs::path(std::string("New Folder (") + std::to_string(i) + ")");
+    }
+    ec.clear();
+    if (!fs::create_directory(candidate, ec) || ec) {
+        ui_toast_error(tr(I18n{"Create folder failed", "新建文件夹失败"}));
+        ui_log("[File] Create folder failed: %s (%s)", candidate.string().c_str(), ec.message().c_str());
+        return;
+    }
+
+    g_module_files_selected_abs_path = candidate.lexically_normal().string();
+    g_module_files_selected_is_dir = true;
+    sync_selected_rel_from_abs_path();
+    ui_toast_success(tr(I18n{"Folder created", "文件夹已创建"}));
+    ui_log("[File] Folder created: %s", candidate.string().c_str());
+    refresh_files_module_data(true);
+}
+
+static void files_context_rename_cb(lv_event_t* e) {
+    (void)e;
+    close_files_overlay(&g_module_files_ctx_overlay);
+    files_open_rename_dialog_for_selection();
+}
+
+static void files_context_delete_cb(lv_event_t* e) {
+    (void)e;
+    close_files_overlay(&g_module_files_ctx_overlay);
+    files_open_delete_dialog_for_selection();
+}
+
+static void files_open_context_menu_for_selection() {
+    if (g_module_files_selected_abs_path.empty()) {
+        ui_toast_error(tr(I18n{"No item selected", "未选择项目"}));
+        return;
+    }
+
+    close_files_overlay(&g_module_files_ctx_overlay);
+    lv_obj_t* box = create_dialog(lv_screen_active(), tr(I18n{"File Menu", "文件菜单"}), 0, 0, &g_module_files_ctx_overlay);
+    if (!box) return;
+
+    lv_obj_t* hint = lv_label_create(box);
+    lv_label_set_long_mode(hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(hint, LV_PCT(100));
+    lv_obj_set_style_text_color(hint, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(hint, CJK_FONT_SMALL, 0);
+    lv_label_set_text_fmt(hint, "%s%s",
+        tr(I18n{"Selected: ", "已选择："}),
+        g_module_files_selected_rel_path.empty() ? g_module_files_selected_abs_path.c_str() : g_module_files_selected_rel_path.c_str());
+
+    lv_obj_t* row = lv_obj_create(box);
+    lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_all(row, 0, 0);
+    lv_obj_set_style_pad_gap(row, SCALE(8), 0);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* btn_new_folder = aw_btn_create(row, tr(I18n{"New Folder", "新建文件夹"}), BTN_SECONDARY, SCALE(118), SCALE(32));
+    lv_obj_add_event_cb(btn_new_folder, files_context_new_folder_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* btn_rename = aw_btn_create(row, tr(I18n{"Rename", "重命名"}), BTN_SECONDARY, SCALE(96), SCALE(32));
+    lv_obj_add_event_cb(btn_rename, files_context_rename_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* btn_delete = aw_btn_create(row, tr(I18n{"Delete", "删除"}), BTN_DANGER, SCALE(92), SCALE(32));
+    lv_obj_add_event_cb(btn_delete, files_context_delete_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* btn_close = aw_btn_create(row, tr(I18n{"Close", "关闭"}), BTN_SECONDARY, SCALE(88), SCALE(32));
+    lv_obj_add_event_cb(btn_close, files_context_close_cb, LV_EVENT_CLICKED, nullptr);
+}
+
+static void files_tree_row_context_cb(lv_event_t* e) {
+    lv_obj_t* row = (lv_obj_t*)lv_event_get_target(e);
+    auto it = g_module_files_row_actions.find(row);
+    if (it == g_module_files_row_actions.end()) return;
+
+    const FileTreeRowAction action = it->second;
+    g_module_files_selected_abs_path = action.abs_path;
+    g_module_files_selected_rel_path = action.rel_path;
+    g_module_files_selected_is_dir = action.is_dir;
+    file_tree_set_selected_row(row);
+    files_open_context_menu_for_selection();
+}
+
+void ui_files_tree_handle_right_click(int x, int y) {
+    if (g_ui_nav_module != UI_NAV_FILES) return;
+    if (!module_files_view || !lv_obj_is_valid(module_files_view)) return;
+
+    uint32_t cnt = lv_obj_get_child_count(module_files_view);
+    for (int32_t i = (int32_t)cnt - 1; i >= 0; --i) {
+        lv_obj_t* ch = lv_obj_get_child(module_files_view, i);
+        if (!ch || lv_obj_has_flag(ch, LV_OBJ_FLAG_HIDDEN)) continue;
+
+        lv_area_t a;
+        lv_obj_get_coords(ch, &a);
+        if (x < a.x1 || x > a.x2 || y < a.y1 || y > a.y2) continue;
+
+        auto it = g_module_files_row_actions.find(ch);
+        if (it == g_module_files_row_actions.end()) return;
+
+        const FileTreeRowAction& action = it->second;
+        g_module_files_selected_abs_path = action.abs_path;
+        g_module_files_selected_rel_path = action.rel_path;
+        g_module_files_selected_is_dir = action.is_dir;
+        file_tree_set_selected_row(ch);
+        files_open_context_menu_for_selection();
+        return;
+    }
+
+    if (!g_module_files_selected_abs_path.empty()) {
+        files_open_context_menu_for_selection();
+    }
+}
+
+static void files_tree_row_click_cb(lv_event_t* e) {
+    lv_obj_t* row = (lv_obj_t*)lv_event_get_target(e);
+    auto it = g_module_files_row_actions.find(row);
+    if (it == g_module_files_row_actions.end()) return;
+
+    const FileTreeRowAction action = it->second;
+    g_module_files_selected_abs_path = action.abs_path;
+    g_module_files_selected_rel_path = action.rel_path;
+    g_module_files_selected_is_dir = action.is_dir;
+    file_tree_set_selected_row(row);
+
+    if (action.is_dir) {
+        bool expanded = file_tree_dir_is_expanded(action.rel_path);
+        if (g_module_files_tree_expand_all) {
+            if (expanded) g_module_files_collapsed_dirs.insert(action.rel_path);
+            else g_module_files_collapsed_dirs.erase(action.rel_path);
+        } else {
+            if (expanded) g_module_files_expanded_dirs.erase(action.rel_path);
+            else g_module_files_expanded_dirs.insert(action.rel_path);
+        }
+        refresh_files_module_data(false);
+        return;
+    }
+
+    DWORD now = GetTickCount();
+    bool is_double_click = (!g_module_files_last_click_is_dir)
+        && (g_module_files_last_click_rel_path == action.rel_path)
+        && ((now - g_module_files_last_click_tick) <= 420);
+    g_module_files_last_click_rel_path = action.rel_path;
+    g_module_files_last_click_is_dir = false;
+    g_module_files_last_click_tick = now;
+
+    if (is_double_click) {
+        if (!open_path_with_shell(action.abs_path)) {
+            ui_toast_error(tr(I18n{"Open file failed", "打开文件失败"}));
+            ui_log("[File] Open failed: %s", action.abs_path.c_str());
+            return;
+        }
+        ui_log("[File] Open file (double-click): %s", action.abs_path.c_str());
+    }
+}
+
+static void file_tree_add_item_row(const std::string& text,
+                                   int depth,
+                                   const std::string& abs_path,
+                                   const std::string& rel_path,
+                                   bool is_dir) {
+    if (!module_files_view) return;
+
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
+    lv_obj_t* row = lv_obj_create(module_files_view);
+    lv_obj_set_width(row, LV_PCT(100));
+    lv_obj_set_height(row, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row, 0, 0);
+    lv_obj_set_style_pad_left(row, SCALE(6) + depth * SCALE(14), 0);
+    lv_obj_set_style_pad_right(row, SCALE(6), 0);
+    lv_obj_set_style_pad_top(row, SCALE(4), 0);
+    lv_obj_set_style_pad_bottom(row, SCALE(4), 0);
+    lv_obj_set_style_radius(row, SCALE(6), 0);
+    lv_obj_set_style_bg_color(row, c->hover_overlay, LV_STATE_HOVERED);
+    lv_obj_set_style_bg_opa(row, LV_OPA_40, LV_STATE_HOVERED);
+    lv_obj_set_style_bg_color(row, c->active_overlay, LV_STATE_PRESSED);
+    lv_obj_set_style_bg_opa(row, LV_OPA_60, LV_STATE_PRESSED);
+    lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(row, LV_OBJ_FLAG_CLICKABLE);
+
+    lv_obj_t* lbl = lv_label_create(row);
+    lv_label_set_long_mode(lbl, LV_LABEL_LONG_DOT);
+    lv_obj_set_width(lbl, LV_PCT(100));
+    lv_obj_set_style_text_font(lbl, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_color(lbl, is_dir ? c->text : c->text_dim, 0);
+    lv_label_set_text(lbl, text.c_str());
+
+    g_module_files_row_actions[row] = FileTreeRowAction{abs_path, rel_path, is_dir};
+    lv_obj_add_event_cb(row, files_tree_row_click_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(row, files_tree_row_context_cb, LV_EVENT_LONG_PRESSED, nullptr);
+
+    if (!g_module_files_selected_rel_path.empty()
+        && (g_module_files_selected_rel_path == rel_path)
+        && (g_module_files_selected_is_dir == is_dir)) {
+        file_tree_set_selected_row(row);
+    }
+}
+
+struct FileWorkspaceRootInfo {
+    std::string root;
+    const char* source;
+};
+
+static std::string pick_workspace_dir_dialog(const char* title) {
+    wchar_t title_w[128] = {0};
+    if (title && title[0]) {
+        MultiByteToWideChar(CP_ACP, 0, title, -1, title_w, (int)(sizeof(title_w) / sizeof(title_w[0])));
+    }
+
+    BROWSEINFOW bi = {};
+    bi.lpszTitle = title_w[0] ? title_w : L"Select Workspace Directory";
+    bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+
+    PIDLIST_ABSOLUTE pidl = SHBrowseForFolderW(&bi);
+    if (!pidl) return "";
+
+    wchar_t path_w[MAX_PATH] = {0};
+    std::string out;
+    if (SHGetPathFromIDListW(pidl, path_w)) {
+        char path_a[MAX_PATH * 3] = {0};
+        int n = WideCharToMultiByte(CP_ACP, 0, path_w, -1, path_a, (int)sizeof(path_a), nullptr, nullptr);
+        if (n > 0) out = path_a;
+    }
+    CoTaskMemFree(pidl);
+    return out;
+}
+
+static bool apply_file_workspace_root(const std::string& root_in) {
+    if (root_in.empty()) return false;
+
+    std::error_code ec;
+    std::filesystem::path p = std::filesystem::absolute(std::filesystem::path(root_in), ec);
+    std::string root = (ec ? std::filesystem::path(root_in) : p).lexically_normal().string();
+    if (root.empty()) return false;
+
+    if (!workspace_set_root(root.c_str())) {
+        ui_toast_error(tr(I18n{"Workspace switch failed", "工作区切换失败"}));
+        return false;
+    }
+
+    permissions().set_workspace_root(root.c_str());
+    workspace_init(root.c_str());
+    g_module_files_cache_ready = false;
+    g_module_files_cache_root.clear();
+    g_module_files_cache.clear();
+    g_module_files_cache_dirs = 0;
+    g_module_files_expanded_dirs.clear();
+    g_module_files_collapsed_dirs.clear();
+    g_module_files_selected_row = nullptr;
+    g_module_files_selected_abs_path.clear();
+    g_module_files_selected_rel_path.clear();
+    g_module_files_selected_is_dir = false;
+    refresh_files_module_data(true);
+    ui_log("[File] Workspace switched: %s", root.c_str());
+    ui_toast_success(tr(I18n{"Workspace switched", "工作区已切换"}));
+    return true;
+}
+
+static FileWorkspaceRootInfo resolve_file_workspace_root() {
+    FileWorkspaceRootInfo out{"", "none"};
+
+    std::string runtime_root = permissions().workspace_root();
+    if (!runtime_root.empty()) {
+        out.root = runtime_root;
+        out.source = "permissions";
+    } else {
+        std::string config_root = workspace_get_root();
+        if (!config_root.empty()) {
+            out.root = config_root;
+            out.source = "config";
+        }
+    }
+
+    if (out.root.empty()) {
+        char cwd[MAX_PATH] = {0};
+        DWORD n = GetCurrentDirectoryA((DWORD)sizeof(cwd), cwd);
+        if (n > 0 && n < sizeof(cwd)) {
+            out.root = cwd;
+            out.source = "cwd";
+        }
+    }
+
+    if (!out.root.empty()) {
+        std::error_code ec;
+        std::filesystem::path abs = std::filesystem::absolute(std::filesystem::path(out.root), ec);
+        if (!ec) out.root = abs.lexically_normal().string();
+    }
+
+    return out;
+}
+
 static void refresh_files_module_data(bool scan_workspace) {
     if (!module_files_view) return;
     namespace fs = std::filesystem;
-    std::string ws_root = workspace_get_root();
-    int ws_files = 0;
-    int ws_dirs = 0;
+    FileWorkspaceRootInfo ws = resolve_file_workspace_root();
+    std::string ws_root = ws.root;
+    std::string scan_dir = ws_root;
+
+    if (module_files_workspace_label) {
+        char ws_text[1024] = {0};
+        snprintf(ws_text, sizeof(ws_text), "%s%s",
+                 tr(I18n{"Workspace: ", "工作区："}),
+                 scan_dir.empty() ? tr(I18n{"(not configured)", "（未配置）"}) : scan_dir.c_str());
+        lv_label_set_text(module_files_workspace_label, ws_text);
+    }
+    int scanned_files = 0;
+    int scanned_dirs = 0;
     int matched_total = 0;
     std::vector<std::string> filtered_entries;
     filtered_entries.reserve(32);
@@ -5686,51 +6431,192 @@ static void refresh_files_module_data(bool scan_workspace) {
     std::transform(search.begin(), search.end(), search.begin(), ::tolower);
 
     std::error_code ec;
-    if (scan_workspace && !ws_root.empty() && fs::exists(ws_root, ec)) {
-        for (fs::recursive_directory_iterator it(ws_root, fs::directory_options::skip_permission_denied, ec), end;
-             it != end && ws_files < 2000; it.increment(ec)) {
-            if (ec) break;
-            if (it->is_regular_file(ec)) ws_files++;
-            else if (it->is_directory(ec)) ws_dirs++;
-        }
+    bool root_changed = (g_module_files_cache_root != scan_dir);
+    bool need_scan = scan_workspace || !g_module_files_cache_ready || root_changed;
+    bool scan_ok = false;
+
+    if (root_changed) {
+        g_module_files_expanded_dirs.clear();
+        g_module_files_collapsed_dirs.clear();
+        g_module_files_selected_row = nullptr;
+        g_module_files_selected_abs_path.clear();
+        g_module_files_selected_rel_path.clear();
+        g_module_files_selected_is_dir = false;
     }
 
-    std::string scan_dir = ws_root.empty() ? "." : ws_root;
-    if (fs::exists(scan_dir, ec)) {
-        for (fs::recursive_directory_iterator it(scan_dir, fs::directory_options::skip_permission_denied, ec), end;
-             it != end && ws_files < 2000; it.increment(ec)) {
-            if (ec) break;
-            if (it->is_regular_file(ec)) {
-                std::string p = it->path().generic_string();
-                std::string lower = p;
-                std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-                std::string fname_lower = it->path().filename().string();
-                std::transform(fname_lower.begin(), fname_lower.end(), fname_lower.begin(), ::tolower);
-                bool pass = search.empty() || lower.find(search) != std::string::npos
-                    || fname_lower.find(search) != std::string::npos;
-                if (pass) {
-                    matched_total++;
-                    if (filtered_entries.size() < 50) filtered_entries.push_back(p);
+    if (need_scan) {
+        ui_log("[File] Scan start (root='%s', source=%s, reason=%s%s%s)",
+            scan_dir.empty() ? "" : scan_dir.c_str(),
+            ws.source,
+            scan_workspace ? "manual" : "auto",
+            (!g_module_files_cache_ready) ? "+cold" : "",
+            root_changed ? "+root_changed" : "");
+        LOG_I("FILE", "Scan start root='%s' source=%s reason=%s%s%s",
+            scan_dir.empty() ? "" : scan_dir.c_str(),
+            ws.source,
+            scan_workspace ? "manual" : "auto",
+            (!g_module_files_cache_ready) ? "+cold" : "",
+            root_changed ? "+root_changed" : "");
+        g_module_files_cache.clear();
+        g_module_dirs_cache.clear();
+        g_module_files_cache.reserve(512);
+        g_module_dirs_cache.reserve(256);
+        g_module_files_cache_dirs = 0;
+
+        if (!scan_dir.empty() && fs::exists(scan_dir, ec)) {
+            scan_ok = true;
+            for (fs::recursive_directory_iterator it(scan_dir, fs::directory_options::skip_permission_denied, ec), end;
+                 it != end && g_module_files_cache.size() < 4000; it.increment(ec)) {
+                if (ec) break;
+                if (it->is_regular_file(ec)) {
+                    std::error_code abs_ec;
+                    fs::path ap = fs::absolute(it->path(), abs_ec);
+                    g_module_files_cache.push_back((abs_ec ? it->path() : ap).lexically_normal().generic_string());
+                } else if (it->is_directory(ec)) {
+                    std::error_code abs_ec;
+                    fs::path ap = fs::absolute(it->path(), abs_ec);
+                    g_module_dirs_cache.push_back((abs_ec ? it->path() : ap).lexically_normal().generic_string());
                 }
             }
         }
+
+        g_module_files_cache_dirs = (int)g_module_dirs_cache.size();
+
+        g_module_files_cache_root = scan_dir;
+        g_module_files_cache_ready = scan_ok;
+        ui_log("[File] Scan done (ok=%d, files=%zu, dirs=%d)",
+            scan_ok ? 1 : 0,
+            g_module_files_cache.size(),
+            g_module_files_cache_dirs);
+        LOG_I("FILE", "Scan done ok=%d files=%zu dirs=%d",
+            scan_ok ? 1 : 0,
+            g_module_files_cache.size(),
+            g_module_files_cache_dirs);
     }
 
-    char buf[2048] = {0};
-    if (filtered_entries.empty()) {
-        snprintf(buf, sizeof(buf), "%s",
-            search.empty()
-                ? tr(I18n{"(no files)", "（无文件）"})
-                : tr(I18n{"(no matching files)", "（无匹配文件）"}));
-    } else {
-        size_t pos = 0;
-        for (size_t i = 0; i < filtered_entries.size(); ++i) {
-            pos += snprintf(buf + pos, sizeof(buf) - pos, "%s\n", filtered_entries[i].c_str());
-            if (pos >= sizeof(buf) - 1) break;
+    scanned_files = (int)g_module_files_cache.size();
+    scanned_dirs = g_module_files_cache_dirs;
+
+    for (const std::string& p : g_module_files_cache) {
+        std::string lower = p;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+
+        std::string fname_lower = std::filesystem::path(p).filename().string();
+        std::transform(fname_lower.begin(), fname_lower.end(), fname_lower.begin(), ::tolower);
+
+        bool pass = search.empty() || lower.find(search) != std::string::npos
+            || fname_lower.find(search) != std::string::npos;
+        if (pass) {
+            matched_total++;
+            if (filtered_entries.size() < 50) filtered_entries.push_back(p);
         }
     }
-    lv_textarea_set_text(module_files_view, buf);
-    ui_log("[File] List refreshed (matched=%zu, search='%s')", filtered_entries.size(), search.c_str());
+
+    g_module_files_row_actions.clear();
+    g_module_files_selected_row = nullptr;
+    lv_obj_clean(module_files_view);
+
+    if (!g_module_files_cache_ready) {
+        file_tree_add_info_row(tr(I18n{"(workspace path not found)", "（工作区路径不存在）"}));
+        refresh_files_status_label_text(scanned_files, scanned_dirs, matched_total, !search.empty());
+        ui_log("[File] Tree refreshed (root missing, search='%s')", search.c_str());
+        return;
+    }
+
+    std::string root_name = fs::path(scan_dir).filename().generic_string();
+    if (root_name.empty()) root_name = scan_dir;
+    file_tree_add_info_row(std::string("[ROOT] ") + root_name + "/");
+    file_tree_add_info_row(tr(I18n{"(click folder to expand/collapse; click file to open)", "（点击目录展开/收起；点击文件打开）"}));
+
+    if (search.empty()) {
+        struct TreeNode {
+            std::string rel;
+            std::string abs;
+            bool is_dir;
+        };
+
+        std::vector<TreeNode> nodes;
+        nodes.reserve(g_module_dirs_cache.size() + g_module_files_cache.size());
+
+        for (const std::string& p : g_module_dirs_cache) {
+            std::error_code rel_ec;
+            fs::path rel = fs::relative(fs::path(p), fs::path(scan_dir), rel_ec);
+            if (rel_ec) continue;
+            std::string rel_s = rel.lexically_normal().generic_string();
+            if (rel_s.empty() || rel_s == ".") continue;
+            nodes.push_back({rel_s, p, true});
+        }
+        for (const std::string& p : g_module_files_cache) {
+            std::error_code rel_ec;
+            fs::path rel = fs::relative(fs::path(p), fs::path(scan_dir), rel_ec);
+            if (rel_ec) continue;
+            std::string rel_s = rel.lexically_normal().generic_string();
+            if (rel_s.empty() || rel_s == ".") continue;
+            nodes.push_back({rel_s, p, false});
+        }
+
+        std::sort(nodes.begin(), nodes.end(), [](const TreeNode& a, const TreeNode& b) {
+            if (a.rel == b.rel) return a.is_dir && !b.is_dir;
+            if (a.is_dir != b.is_dir) {
+                fs::path ap(a.rel);
+                fs::path bp(b.rel);
+                if (ap.parent_path() == bp.parent_path()) return a.is_dir && !b.is_dir;
+            }
+            return a.rel < b.rel;
+        });
+
+        const size_t line_limit = 420;
+        size_t rendered = 0;
+
+        for (const auto& n : nodes) {
+            if (rendered >= line_limit) break;
+            if (!file_tree_parent_chain_visible(n.rel)) continue;
+
+            int depth = 0;
+            for (char ch : n.rel) if (ch == '/') depth++;
+
+            std::string name = fs::path(n.rel).filename().generic_string();
+            if (name.empty()) name = n.rel;
+
+            std::string row_text;
+            if (n.is_dir) {
+                bool expanded = file_tree_dir_is_expanded(n.rel);
+                row_text = std::string(expanded ? "v [D] " : "> [D] ") + name;
+            } else {
+                row_text = std::string("  [F] ") + name;
+            }
+
+            file_tree_add_item_row(row_text, depth + 1, n.abs, n.rel, n.is_dir);
+            rendered++;
+        }
+
+        if (nodes.empty()) {
+            file_tree_add_info_row(tr(I18n{"(no files)", "（无文件）"}));
+        } else if (rendered == 0) {
+            file_tree_add_info_row(tr(I18n{"(all nodes collapsed)", "（节点均已折叠）"}));
+        } else if (nodes.size() > line_limit) {
+            file_tree_add_info_row(tr(I18n{"(truncated)", "（列表已截断）"}));
+        }
+    } else if (filtered_entries.empty()) {
+        file_tree_add_info_row(tr(I18n{"(no matching files)", "（无匹配文件）"}));
+    } else {
+        for (const std::string& p : filtered_entries) {
+            std::error_code rel_ec;
+            fs::path rel = fs::relative(fs::path(p), fs::path(scan_dir), rel_ec);
+            std::string rel_s = rel_ec ? p : rel.lexically_normal().generic_string();
+
+            int depth = 0;
+            for (char ch : rel_s) if (ch == '/') depth++;
+
+            std::string text = std::string("[F] ") + rel_s;
+            file_tree_add_item_row(text, depth + 1, p, rel_s, false);
+        }
+    }
+
+    refresh_files_status_label_text(scanned_files, scanned_dirs, matched_total, !search.empty());
+
+    ui_log("[File] Tree refreshed (files=%d, dirs=%d, matched=%d, search='%s')",
+        scanned_files, scanned_dirs, matched_total, search.c_str());
 }
 
 static void apply_nav_module_visuals() {
@@ -5752,20 +6638,25 @@ static void apply_nav_module_visuals() {
     paint_nav_btn(nav_btn_files, g_ui_nav_module == UI_NAV_FILES);
 
     if (g_ui_nav_module == UI_NAV_BOT) {
+        ui_log("[NAV] Module -> Bot");
+        LOG_I("NAV", "Module -> Bot");
         if (left_panel) {
             lv_obj_clear_flag(left_panel, LV_OBJ_FLAG_HIDDEN);
             uint32_t n = lv_obj_get_child_count(left_panel);
             for (uint32_t i = 0; i < n; i++) {
                 lv_obj_t* ch = lv_obj_get_child(left_panel, i);
                 if (ch == module_placeholder) lv_obj_add_flag(ch, LV_OBJ_FLAG_HIDDEN);
-                else lv_obj_clear_flag(ch, LV_OBJ_FLAG_HIDDEN);
+                else if (ch == bot_sidebar_wrap) lv_obj_clear_flag(ch, LV_OBJ_FLAG_HIDDEN);
+                else lv_obj_add_flag(ch, LV_OBJ_FLAG_HIDDEN);
             }
         }
+        refresh_bot_sidebar_view();
         if (right_panel) lv_obj_clear_flag(right_panel, LV_OBJ_FLAG_HIDDEN);
     } else {
+        ui_log("[NAV] Module -> File");
+        LOG_I("NAV", "Module -> File");
         /* Files module: left_panel stays visible (shows module_placeholder),
-         * right_panel is hidden to give full focus to the files content.
-         * Hide all Bot-mode children; only module_placeholder is visible. */
+         * right_panel shows but Bot-mode children are hidden. */
         if (left_panel) {
             lv_obj_clear_flag(left_panel, LV_OBJ_FLAG_HIDDEN);
             uint32_t n = lv_obj_get_child_count(left_panel);
@@ -5775,13 +6666,26 @@ static void apply_nav_module_visuals() {
                 else lv_obj_add_flag(ch, LV_OBJ_FLAG_HIDDEN);
             }
         }
-        if (right_panel) lv_obj_add_flag(right_panel, LV_OBJ_FLAG_HIDDEN);
+        if (right_panel) {
+            lv_obj_clear_flag(right_panel, LV_OBJ_FLAG_HIDDEN);
+            /* Hide all Bot-mode children in right_panel (output/ctrl_bar/input). */
+            uint32_t n = lv_obj_get_child_count(right_panel);
+            LV_LOG_USER("File mode: right_panel child_count=%u", n);
+            for (uint32_t i = 0; i < n; i++) {
+                lv_obj_add_flag(lv_obj_get_child(right_panel, i), LV_OBJ_FLAG_HIDDEN);
+            }
+            LV_LOG_USER("File mode: right_panel flags=0x%X, w=%d, h=%d",
+                lv_obj_get_style_width(right_panel, 0),
+                (int)lv_obj_get_width(right_panel),
+                (int)lv_obj_get_height(right_panel));
+        }
         if (module_placeholder) {
             if (module_placeholder_title) lv_label_set_text(module_placeholder_title,
                 tr(I18n{"Files", "文件"}));
             if (module_placeholder_desc) lv_label_set_text(module_placeholder_desc,
                 tr(I18n{"Project file browser and asset management.", "项目文件浏览器与资源管理。"}));
             if (module_files_panel) lv_obj_clear_flag(module_files_panel, LV_OBJ_FLAG_HIDDEN);
+            refresh_files_module_data(true);
         }
     }
 
@@ -5973,17 +6877,11 @@ static void relayout_panels() {
     PANEL_GAP   = std::max(WIN_W * SAFE_PAD_PCT / 100, SCALE(GAP_BASE));
     SPLITTER_W  = std::max((int)(WIN_W * SPLITTER_W_PCT / 100), SCALE(SPLITTER_W_MIN));
 
-    if (bot_module) {
-        LEFT_PANEL_W  = std::max(avail_w * LEFT_PANEL_PCT / 100, SCALE(LEFT_PANEL_MIN_W));
-        RIGHT_PANEL_W = avail_w - LEFT_PANEL_W - PANEL_GAP;  /* no splitter — removed v2.2.11 */
-        if (RIGHT_PANEL_W < SCALE(RIGHT_PANEL_MIN_W)) {
-            RIGHT_PANEL_W = SCALE(RIGHT_PANEL_MIN_W);
-            LEFT_PANEL_W = avail_w - RIGHT_PANEL_W - PANEL_GAP;
-        }
-    } else {
-        /* Tasks/Files module: left_panel fills full available width, right_panel hidden */
-        LEFT_PANEL_W = avail_w - SCALE(8);
-        RIGHT_PANEL_W = 0;
+    LEFT_PANEL_W  = std::max(avail_w * LEFT_PANEL_PCT / 100, SCALE(LEFT_PANEL_MIN_W));
+    RIGHT_PANEL_W = avail_w - LEFT_PANEL_W - PANEL_GAP;
+    if (RIGHT_PANEL_W < SCALE(RIGHT_PANEL_MIN_W)) {
+        RIGHT_PANEL_W = SCALE(RIGHT_PANEL_MIN_W);
+        LEFT_PANEL_W = avail_w - RIGHT_PANEL_W - PANEL_GAP;
     }
 
     /* Move & resize left nav */
@@ -6028,10 +6926,45 @@ static void relayout_panels() {
         lv_obj_set_size(module_placeholder, LEFT_PANEL_W, PANEL_H);
         lv_obj_set_pos(module_placeholder, 0, 0);
         int module_card_w = LEFT_PANEL_W - SCALE(16);
+        int files_panel_h = std::max(SCALE(260), PANEL_H - SCALE(86));
         if (module_placeholder_desc) lv_obj_set_width(module_placeholder_desc, std::max(SCALE(160), module_card_w - SCALE(8)));
-        if (module_files_panel) lv_obj_set_width(module_files_panel, module_card_w);
+        if (module_files_panel) {
+            lv_obj_set_width(module_files_panel, module_card_w);
+            lv_obj_set_height(module_files_panel, files_panel_h);
+        }
         int module_view_w = std::max(SCALE(140), module_card_w - SCALE(16));
-        if (module_files_view) lv_obj_set_width(module_files_view, module_view_w);
+        if (module_files_view) {
+            lv_obj_set_width(module_files_view, module_view_w);
+            lv_obj_set_height(module_files_view, std::max(SCALE(120), files_panel_h - SCALE(220)));
+        }
+    }
+    if (bot_sidebar_wrap) {
+        int section_gap = SCALE(12);
+        int title_h = SCALE(24);
+        int hint_h = SCALE(20);
+        int card_y = GAP + title_h + SCALE(10);
+        int card_w = LEFT_PANEL_W - GAP * 2;
+        int avail_h = PANEL_H - card_y - hint_h - SCALE(20) - section_gap;
+        int card_h = std::max(SCALE(120), (avail_h - section_gap) / 2);
+        int list_w = std::max(SCALE(120), card_w - SCALE(20));
+        int list_h = std::max(SCALE(72), card_h - SCALE(42));
+
+        lv_obj_set_size(bot_sidebar_wrap, LEFT_PANEL_W, PANEL_H);
+        lv_obj_set_pos(bot_sidebar_wrap, 0, 0);
+        if (bot_sidebar_title) lv_obj_set_width(bot_sidebar_title, LEFT_PANEL_W - GAP * 2);
+        if (bot_sidebar_session_card) {
+            lv_obj_set_size(bot_sidebar_session_card, card_w, card_h);
+            lv_obj_set_pos(bot_sidebar_session_card, GAP, card_y);
+        }
+        if (bot_sidebar_session_title) lv_obj_set_width(bot_sidebar_session_title, list_w - SCALE(36));
+        if (bot_sidebar_session_list) lv_obj_set_size(bot_sidebar_session_list, list_w, list_h);
+        if (bot_sidebar_cron_card) {
+            lv_obj_set_size(bot_sidebar_cron_card, card_w, card_h);
+            lv_obj_set_pos(bot_sidebar_cron_card, GAP, card_y + card_h + section_gap);
+        }
+        if (bot_sidebar_cron_title) lv_obj_set_width(bot_sidebar_cron_title, list_w - SCALE(36));
+        if (bot_sidebar_cron_list) lv_obj_set_size(bot_sidebar_cron_list, list_w, list_h);
+        if (bot_sidebar_hint) lv_obj_align(bot_sidebar_hint, LV_ALIGN_BOTTOM_MID, 0, -SCALE(8));
     }
     if (mode_dd_control) lv_obj_set_width(mode_dd_control, std::min(content_w - 16, SCALE(360)));
     if (mode_dd_llm) lv_obj_set_width(mode_dd_llm, std::min(content_w - 16, SCALE(360)));
@@ -6089,9 +7022,14 @@ static void relayout_panels() {
     /* Re-layout chat mode children */
     int input_h = chat_input ? (int)lv_obj_get_height(chat_input) : 36;
     if (mode_trace_chat_panel) {
-        int trace_h = chat_trace_panel_h(content_w);
-        lv_obj_set_size(mode_trace_chat_panel, content_w - CHAT_GAP * 2, trace_h);
-        lv_obj_set_pos(mode_trace_chat_panel, CHAT_GAP, CHAT_GAP);
+        if (chat_trace_has_content()) {
+            int trace_h = chat_trace_panel_h(content_w);
+            lv_obj_set_size(mode_trace_chat_panel, content_w - CHAT_GAP * 2, trace_h);
+            lv_obj_set_pos(mode_trace_chat_panel, CHAT_GAP, CHAT_GAP);
+            lv_obj_clear_flag(mode_trace_chat_panel, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(mode_trace_chat_panel, LV_OBJ_FLAG_HIDDEN);
+        }
     }
     int chat_y = chat_top_y_with_trace(content_w);
     int chat_h = content_h - chat_y - input_h - CHAT_GAP;
@@ -9075,6 +10013,7 @@ void app_refresh_status() {
 
     /* P2: Update dynamic task list */
     update_task_list(status);
+    refresh_bot_sidebar_view();
 
     lv_obj_invalidate(lv_screen_active());
 }
@@ -9095,6 +10034,7 @@ void update_ui_language() {
     if (lp_task_title) lv_label_set_text(lp_task_title, tr(S_TASK_LIST));
     if (task_empty_label) lv_label_set_text(task_empty_label, tr(S_NO_TASKS));
     if (lp_hint) lv_label_set_text(lp_hint, tr(S_AUTOREF));
+    refresh_bot_sidebar_view();
 
     /* Send button */
     if (btn_send_widget) {
@@ -10731,30 +11671,6 @@ static void create_title_bar(lv_obj_t* scr) {
         }
 
         int top_y = wc_btn_y;
-
-        /* Model name (short) — positioned to left of window controls */
-        {
-            char gw_model_buf[128] = {0};
-            app_get_current_model(gw_model_buf, sizeof(gw_model_buf));
-            if (gw_model_buf[0]) {
-                const char* short_name = gw_model_buf;
-                const char* last_slash = strrchr(gw_model_buf, '/');
-                if (last_slash && strlen(last_slash + 1) > 3) short_name = last_slash + 1;
-                else {
-                    const char* last_dot = strrchr(gw_model_buf, '.');
-                    if (last_dot && strlen(last_dot + 1) > 3) short_name = last_dot + 1;
-                }
-                int model_w = WIN_W * TITLE_MODEL_W_PCT / 100;
-                lv_obj_t* title_model = lv_label_create(title_bar);
-                lv_label_set_text(title_model, short_name);
-                lv_obj_set_style_text_color(title_model, g_colors->text_dim, 0);
-                lv_obj_set_style_text_font(title_model, CJK_FONT_SMALL, 0);
-                int model_x = wc_base_x - SCALE(6) - model_w;
-                lv_obj_set_pos(title_model, model_x, top_y + 4);
-                lv_obj_set_width(title_model, model_w - SCALE(8));
-                lv_label_set_long_mode(title_model, LV_LABEL_LONG_MODE_DOTS);
-            }
-        }
 
         /* Minimize button - 灰色 */
         btn_minimize = lv_button_create(title_bar);
@@ -13901,6 +14817,91 @@ void app_ui_init() {
     lv_obj_set_style_text_font(lp_hint, CJK_FONT_SMALL, 0);
     lv_obj_align(lp_hint, LV_ALIGN_BOTTOM_MID, 0, -8);
 
+    /* Bot sidebar for U11/U12: Session + Cron */
+    bot_sidebar_wrap = lv_obj_create(pl);
+    lv_obj_set_size(bot_sidebar_wrap, LEFT_PANEL_W, PANEL_H);
+    lv_obj_set_pos(bot_sidebar_wrap, 0, 0);
+    lv_obj_set_style_bg_opa(bot_sidebar_wrap, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(bot_sidebar_wrap, 0, 0);
+    lv_obj_set_style_pad_all(bot_sidebar_wrap, 0, 0);
+    lv_obj_clear_flag(bot_sidebar_wrap, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(bot_sidebar_wrap, LV_OBJ_FLAG_HIDDEN);
+
+    bot_sidebar_title = lv_label_create(bot_sidebar_wrap);
+    lv_label_set_text(bot_sidebar_title, g_lang == Lang::CN ? "会话 / Cron" : "Session / Cron");
+    lv_obj_set_style_text_color(bot_sidebar_title, c->accent_secondary, 0);
+    lv_obj_set_style_text_font(bot_sidebar_title, CJK_FONT, 0);
+    lv_obj_set_pos(bot_sidebar_title, GAP, GAP);
+
+    auto make_sidebar_card = [&](lv_obj_t** card, lv_obj_t** title, lv_obj_t** count, lv_obj_t** list,
+                                 int y, const char* label_text) {
+        *card = lv_obj_create(bot_sidebar_wrap);
+        lv_obj_set_size(*card, LEFT_PANEL_W - GAP * 2, SCALE(170));
+        lv_obj_set_pos(*card, GAP, y);
+        lv_obj_set_style_bg_color(*card, c->surface, 0);
+        lv_obj_set_style_border_color(*card, c->border, 0);
+        lv_obj_set_style_border_width(*card, 1, 0);
+        lv_obj_set_style_radius(*card, SCALE(g_colors->radius_md), 0);
+        lv_obj_set_style_pad_all(*card, SCALE(10), 0);
+        lv_obj_set_style_pad_gap(*card, SCALE(6), 0);
+        lv_obj_set_flex_flow(*card, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(*card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_clear_flag(*card, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* row = lv_obj_create(*card);
+        lv_obj_set_width(row, LV_PCT(100));
+        lv_obj_set_height(row, SCALE(20));
+        lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(row, 0, 0);
+        lv_obj_set_style_pad_all(row, 0, 0);
+        lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+        *title = lv_label_create(row);
+        lv_label_set_text(*title, label_text);
+        lv_obj_set_style_text_color(*title, c->accent, 0);
+        lv_obj_set_style_text_font(*title, CJK_FONT_SMALL, 0);
+
+        *count = lv_label_create(row);
+        lv_label_set_text(*count, "(0)");
+        lv_obj_set_style_text_color(*count, c->text_dim, 0);
+        lv_obj_set_style_text_font(*count, CJK_FONT_SMALL, 0);
+
+        *list = lv_textarea_create(*card);
+        lv_obj_set_width(*list, LV_PCT(100));
+        lv_obj_set_height(*list, SCALE(120));
+        lv_textarea_set_one_line(*list, false);
+        lv_textarea_set_text(*list, "-");
+        lv_textarea_set_placeholder_text(*list, "-");
+        lv_obj_set_style_bg_color(*list, c->panel, 0);
+        lv_obj_set_style_text_color(*list, c->text, 0);
+        lv_obj_set_style_text_line_space(*list, SCALE(2), 0);
+        lv_obj_set_style_text_font(*list, CJK_FONT_SMALL, 0);
+        lv_obj_set_style_border_color(*list, c->border, 0);
+        lv_obj_set_style_border_width(*list, 1, 0);
+        lv_obj_set_style_radius(*list, SCALE(g_colors->radius_sm), 0);
+        lv_obj_set_style_pad_all(*list, SCALE(6), 0);
+        lv_obj_set_scrollbar_mode(*list, LV_SCROLLBAR_MODE_AUTO);
+        lv_obj_set_scroll_dir(*list, LV_DIR_VER);
+        lv_textarea_set_cursor_click_pos(*list, false);
+        lv_obj_set_style_text_color(*list, c->text, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_color(*list, c->text_dim, LV_PART_TEXTAREA_PLACEHOLDER);
+        lv_obj_clear_flag(*list, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+        lv_obj_clear_state(*list, LV_STATE_FOCUSED);
+    };
+
+    make_sidebar_card(&bot_sidebar_session_card, &bot_sidebar_session_title, &bot_sidebar_session_count,
+                      &bot_sidebar_session_list, GAP + SCALE(34), g_lang == Lang::CN ? "会话" : "Sessions");
+    make_sidebar_card(&bot_sidebar_cron_card, &bot_sidebar_cron_title, &bot_sidebar_cron_count,
+                      &bot_sidebar_cron_list, GAP + SCALE(34) + SCALE(182), "Cron");
+
+    bot_sidebar_hint = lv_label_create(bot_sidebar_wrap);
+    lv_label_set_text(bot_sidebar_hint, g_lang == Lang::CN ? "自动刷新: 2秒" : "Auto-refresh: 2s");
+    lv_obj_set_style_text_color(bot_sidebar_hint, c->text_dim, 0);
+    lv_obj_set_style_text_font(bot_sidebar_hint, CJK_FONT_SMALL, 0);
+    lv_obj_align(bot_sidebar_hint, LV_ALIGN_BOTTOM_MID, 0, -8);
+
     /* Splitter removed in v2.2.11 — hidden, no drag */
     splitter = lv_obj_create(scr);
     lv_obj_set_size(splitter, 0, 0);  /* zero size — invisible */
@@ -14104,7 +15105,7 @@ void app_ui_init() {
 
     module_files_panel = lv_obj_create(module_placeholder);
     lv_obj_set_width(module_files_panel, LV_PCT(100));
-    lv_obj_set_height(module_files_panel, LV_SIZE_CONTENT);
+    lv_obj_set_height(module_files_panel, std::max(SCALE(260), PANEL_H - SCALE(86)));
     lv_obj_set_style_bg_color(module_files_panel, c->surface, 0);
     lv_obj_set_style_bg_opa(module_files_panel, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(module_files_panel, 1, 0);
@@ -14116,6 +15117,118 @@ void app_ui_init() {
     lv_obj_set_flex_align(module_files_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_clear_flag(module_files_panel, LV_OBJ_FLAG_SCROLLABLE);
 
+    lv_obj_t* module_files_ws_row = lv_obj_create(module_files_panel);
+    lv_obj_set_width(module_files_ws_row, LV_PCT(100));
+    lv_obj_set_height(module_files_ws_row, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(module_files_ws_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(module_files_ws_row, 0, 0);
+    lv_obj_set_style_pad_all(module_files_ws_row, 0, 0);
+    lv_obj_set_style_pad_gap(module_files_ws_row, SCALE(8), 0);
+    lv_obj_set_flex_flow(module_files_ws_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(module_files_ws_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(module_files_ws_row, LV_OBJ_FLAG_SCROLLABLE);
+
+    module_files_workspace_label = lv_label_create(module_files_ws_row);
+    lv_obj_set_width(module_files_workspace_label, std::max(SCALE(110), LEFT_PANEL_W - SCALE(180)));
+    lv_label_set_long_mode(module_files_workspace_label, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_style_text_color(module_files_workspace_label, c->text_dim, 0);
+    lv_obj_set_style_text_font(module_files_workspace_label, CJK_FONT_SMALL, 0);
+    lv_label_set_text(module_files_workspace_label, "-");
+
+    lv_obj_t* btn_files_switch_ws = aw_btn_create(module_files_ws_row, tr(I18n{"Switch...", "切换..."}), BTN_SECONDARY, SCALE(94), SCALE(30));
+    lv_obj_add_event_cb(btn_files_switch_ws, [](lv_event_t* e) {
+        (void)e;
+        std::string picked = pick_workspace_dir_dialog(tr(I18n{"Select Workspace Directory", "选择工作区目录"}));
+        if (picked.empty()) return;
+        apply_file_workspace_root(picked);
+    }, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* module_files_action_row = lv_obj_create(module_files_panel);
+    lv_obj_set_width(module_files_action_row, LV_PCT(100));
+    lv_obj_set_height(module_files_action_row, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(module_files_action_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(module_files_action_row, 0, 0);
+    lv_obj_set_style_pad_all(module_files_action_row, 0, 0);
+    lv_obj_set_style_pad_gap(module_files_action_row, SCALE(8), 0);
+    lv_obj_set_flex_flow(module_files_action_row, LV_FLEX_FLOW_ROW_WRAP);
+    lv_obj_set_flex_align(module_files_action_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(module_files_action_row, LV_OBJ_FLAG_SCROLLABLE);
+
+    module_files_tree_toggle_btn = aw_btn_create(module_files_action_row, tr(I18n{"Collapse", "折叠"}), BTN_SECONDARY, SCALE(94), SCALE(30));
+    lv_obj_add_event_cb(module_files_tree_toggle_btn, [](lv_event_t* e) {
+        (void)e;
+        g_module_files_tree_expand_all = !g_module_files_tree_expand_all;
+        g_module_files_expanded_dirs.clear();
+        g_module_files_collapsed_dirs.clear();
+        refresh_files_tree_toggle_btn_text();
+        refresh_files_module_data(false);
+    }, LV_EVENT_CLICKED, nullptr);
+    refresh_files_tree_toggle_btn_text();
+
+    lv_obj_t* module_files_refresh_btn = aw_btn_create(module_files_action_row, tr(I18n{"Refresh", "刷新"}), BTN_SECONDARY, SCALE(86), SCALE(30));
+    lv_obj_add_event_cb(module_files_refresh_btn, [](lv_event_t* e) {
+        (void)e;
+        refresh_files_module_data(true);
+    }, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* module_files_open_ws_btn = aw_btn_create(module_files_action_row, tr(I18n{"Open", "打开"}), BTN_SECONDARY, SCALE(86), SCALE(30));
+    lv_obj_add_event_cb(module_files_open_ws_btn, [](lv_event_t* e) {
+        (void)e;
+        FileWorkspaceRootInfo ws = resolve_file_workspace_root();
+        if (ws.root.empty()) {
+            ui_toast_error(tr(I18n{"Workspace not configured", "工作区未配置"}));
+            return;
+        }
+        HINSTANCE r = ShellExecuteA(nullptr, "open", ws.root.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        if ((INT_PTR)r <= 32) {
+            ui_toast_error(tr(I18n{"Open folder failed", "打开目录失败"}));
+            return;
+        }
+        ui_log("[File] Open workspace folder: %s", ws.root.c_str());
+    }, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* module_files_open_item_btn = aw_btn_create(module_files_action_row, tr(I18n{"Open Item", "打开项"}), BTN_SECONDARY, SCALE(96), SCALE(30));
+    lv_obj_add_event_cb(module_files_open_item_btn, [](lv_event_t* e) {
+        (void)e;
+        if (g_module_files_selected_abs_path.empty()) {
+            ui_toast_error(tr(I18n{"No item selected", "未选择项目"}));
+            return;
+        }
+        if (!open_path_with_shell(g_module_files_selected_abs_path)) {
+            ui_toast_error(tr(I18n{"Open selected item failed", "打开所选项目失败"}));
+            return;
+        }
+        ui_log("[File] Open selected item: %s", g_module_files_selected_abs_path.c_str());
+    }, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* module_files_reveal_item_btn = aw_btn_create(module_files_action_row, tr(I18n{"Reveal", "定位"}), BTN_SECONDARY, SCALE(86), SCALE(30));
+    lv_obj_add_event_cb(module_files_reveal_item_btn, [](lv_event_t* e) {
+        (void)e;
+        if (g_module_files_selected_abs_path.empty()) {
+            ui_toast_error(tr(I18n{"No item selected", "未选择项目"}));
+            return;
+        }
+        std::string reveal_target = g_module_files_selected_abs_path;
+        if (g_module_files_selected_is_dir) {
+            if (!open_path_with_shell(reveal_target)) {
+                ui_toast_error(tr(I18n{"Open folder failed", "打开目录失败"}));
+                return;
+            }
+        } else {
+            if (!reveal_path_in_explorer(reveal_target)) {
+                ui_toast_error(tr(I18n{"Reveal file failed", "定位文件失败"}));
+                return;
+            }
+        }
+        ui_log("[File] Reveal selected item: %s", reveal_target.c_str());
+    }, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* module_files_menu_btn = aw_btn_create(module_files_action_row, tr(I18n{"Menu", "菜单"}), BTN_SECONDARY, SCALE(86), SCALE(30));
+    lv_obj_add_event_cb(module_files_menu_btn, [](lv_event_t* e) {
+        (void)e;
+        files_open_context_menu_for_selection();
+    }, LV_EVENT_CLICKED, nullptr);
+
     module_files_search_input = aw_textarea_create(module_files_panel, tr(I18n{"Search workspace files...", "搜索工作区文件..."}), false, LV_PCT(100), SCALE(48));
     lv_textarea_set_one_line(module_files_search_input, true);
     lv_obj_add_event_cb(module_files_search_input, [](lv_event_t* e) {
@@ -14125,8 +15238,27 @@ void app_ui_init() {
         refresh_files_module_data(false);
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 
-    module_files_view = aw_textarea_create(module_files_panel, "", false, LV_PCT(100), SCALE(280));
-    lv_textarea_set_text_selection(module_files_view, true);
+    module_files_status_label = lv_label_create(module_files_panel);
+    lv_obj_set_width(module_files_status_label, LV_PCT(100));
+    lv_label_set_long_mode(module_files_status_label, LV_LABEL_LONG_SCROLL_CIRCULAR);
+    lv_obj_set_style_text_font(module_files_status_label, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_color(module_files_status_label, c->text_dim, 0);
+    lv_label_set_text(module_files_status_label, "-");
+
+    module_files_view = lv_obj_create(module_files_panel);
+    lv_obj_set_width(module_files_view, LV_PCT(100));
+    lv_obj_set_height(module_files_view, SCALE(280));
+    lv_obj_set_style_bg_color(module_files_view, c->panel, 0);
+    lv_obj_set_style_bg_opa(module_files_view, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(module_files_view, 1, 0);
+    lv_obj_set_style_border_color(module_files_view, c->border, 0);
+    lv_obj_set_style_radius(module_files_view, SCALE(g_colors->radius_md), 0);
+    lv_obj_set_style_pad_all(module_files_view, SCALE(6), 0);
+    lv_obj_set_style_pad_row(module_files_view, SCALE(2), 0);
+    lv_obj_set_flex_flow(module_files_view, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(module_files_view, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_scrollbar_mode(module_files_view, LV_SCROLLBAR_MODE_AUTO);
+    lv_obj_set_scroll_dir(module_files_view, LV_DIR_VER);
     refresh_files_module_data(false);
 
     lv_obj_add_flag(module_files_panel, LV_OBJ_FLAG_HIDDEN);
@@ -14729,6 +15861,7 @@ void app_ui_init() {
         lv_obj_set_style_border_color(mode_ta_chat_script, c->border, 0);
         lv_obj_set_style_border_width(mode_ta_chat_script, 1, 0);
         lv_obj_set_style_radius(mode_ta_chat_script, SCALE(g_colors->radius_sm), 0);
+        refresh_chat_trace_visibility();
     }
 
     /* Layout: chat fills space, input pinned to bottom; GAP spacing everywhere */
@@ -15080,17 +16213,6 @@ void app_ui_init() {
         update_send_button_state();
     }
 
-    /* ═══ FOOTER (minimal) ═══ */
-    {
-        char footer_text[128];
-        snprintf(footer_text, sizeof(footer_text), "AnyClaw v2.2.1 | LVGL 9.6 + SDL2");
-        lv_obj_t* footer = lv_label_create(scr);
-        lv_label_set_text(footer, footer_text);
-        lv_obj_set_style_text_color(footer, c->text_dim, 0);
-        lv_obj_set_style_text_font(footer, CJK_FONT_SMALL, 0);
-        lv_obj_align(footer, LV_ALIGN_BOTTOM_MID, 0, -8);
-    }
-
     /* Settings panel is lazily initialized on first open to avoid
        startup-time UI stalls caused by building all tabs up front. */
 
@@ -15098,6 +16220,7 @@ void app_ui_init() {
     run_proactive_startup_once();
     lv_timer_create([](lv_timer_t* t) {
         app_refresh_status();
+        refresh_bot_sidebar_view();
         lv_timer_del(t);
     }, 220, nullptr);
     sync_ai_mode_dropdowns();
@@ -15105,6 +16228,8 @@ void app_ui_init() {
 
     /* P2-27: Auto-refresh timer (configurable: 15s / 30s / 60s) */
     g_refresh_timer = lv_timer_create(auto_refresh_cb, g_refresh_interval_ms, nullptr);
+    if (!g_bot_sidebar_timer) g_bot_sidebar_timer = lv_timer_create(bot_sidebar_timer_cb, 2000, nullptr);
+    trigger_bot_sidebar_refresh();
     if (!g_ui_log_flush_timer) g_ui_log_flush_timer = lv_timer_create(ui_log_flush_timer_cb, 120, nullptr);
 
     ui_log("[Ready] AnyClaw LVGL v2.2.1 - Bilingual mode");
