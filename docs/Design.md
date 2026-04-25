@@ -2995,7 +2995,6 @@ icon-only，hover 300ms 显示 tooltip。
 | Icon | 模块 | 含义 |
 |------|------|------|
 | 🦞 | Bot | AI 对话入口（Chat + Work） |
-| ⚡ | Task | 任务调度中心（活跃/定时/历史） |
 | 📁 | File | 文件 + 知识库 + Skills |
 
 **底部（快捷入口）：**
