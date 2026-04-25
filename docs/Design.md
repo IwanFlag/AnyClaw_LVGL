@@ -3134,6 +3134,7 @@ File 的数据边界使用**当前工作区根目录**（workspace root），语
 | 元素 | 类型 | 父容器 | 尺寸 | 行为 |
 |------|------|--------|------|------|
 | module_files_panel | container | module_placeholder | left_panel 全宽 × auto | surface 背景，替换 Session/Cron 内容 |
+| 当前工作区行 | label + button | module_files_panel | 100% × auto | 显示当前工作区根目录，点击"切换..."选择新工作区目录 |
 | 文件搜索框 | lv_textarea | module_files_panel | 100% × 48px | placeholder: "搜索工作区文件..."，输入触发搜索 |
 | 文件列表 | lv_textarea | module_files_panel | 100% × 剩余高度 | 只读，滚动，显示当前工作区内文件绝对路径列表 |
 
@@ -3145,6 +3146,7 @@ File 的数据边界使用**当前工作区根目录**（workspace root），语
    right_panel 保持 ~75% 宽度，内容为空（空白）
    left_panel 显示 File 内容（搜索框 + 文件列表）
        │
+         ├─── 点击"切换..." ──→ 选择新工作区目录 ──→ 立即重载列表
        ├─── 输入搜索词 ──→ 实时过滤文件列表（模糊匹配路径/文件名）
        └─── 列表自动滚动到匹配项
 ```
