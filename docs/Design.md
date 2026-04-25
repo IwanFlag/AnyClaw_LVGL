@@ -5318,6 +5318,32 @@ AI托管 是独立于 AI行为 的第二维度，控制权归属：
 | Failover 开关 | auto | 下方 | 启用/禁用自动切换 |
 | 备用模型下拉 | auto | 开关下方 | 选择备用模型 |
 
+#### 分层文字描述（精确像素）
+
+**Tab 内容骨架：** 位于设置面板内部，继承 settings panel 的 content 区域
+
+**第一层：Tab 内容框架**
+
+| 区域 | 坐标 | 说明 |
+|------|------|------|
+| 当前模型行 | content_x+16, content_y+16, w-32, h=24 | "Current Model" + 模型名 + 状态灯 |
+| 分隔线 | content_x+16, content_y+48, w-32, h=1 | 灰色分隔线 |
+
+**第二层：表单区域**
+
+| 区域 | 坐标 | 说明 |
+|------|------|------|
+| Select Model 标签 | content_x+16, content_y+56, w-32, h=20 | "Select Model" |
+| 模型下拉框 | content_x+16, content_y+80, w=内容区宽×70%-16, h=36 | lv_dropdown |
+| 添加模型按钮 | dropdown右方+8, dropdown_y同行, w=32, h=36 | [+] 图标按钮 |
+| Provider 行 | content_x+16, content_y+124, w-32, h=20 | "Provider: OpenRouter" |
+| API Key 标签 | content_x+16, content_y+152, w-32, h=20 | "API Key" |
+| API Key 输入框 | content_x+16, content_y+176, w=内容区宽-100, h=36 | 密码样式 |
+| Save 按钮 | API Key框右方+8, API Key框同行, w=80, h=36 | [Save] accent按钮 |
+| 免费提示行 | content_x+16, content_y+220, w-32, h=20 | 💡 提示文字 |
+| Failover 开关 | content_x+16, content_y+256, w-32, h=24 | Switch 控件 |
+| 备用模型下拉 | content_x+16, content_y+288, w-32, h=36 | lv_dropdown |
+
 ---
 
 ### UI-07: 本地模型安装（向导 Step 4）
