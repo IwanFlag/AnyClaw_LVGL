@@ -1,181 +1,232 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1450 800" width="1450" height="800">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1190 646" width="1190" height="646">
   <defs>
     <linearGradient id="userBubble" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#2B5C3E"/>
       <stop offset="100%" stop-color="#1F4A30"/>
     </linearGradient>
+
     <linearGradient id="sendBtn" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#3DD68C"/>
       <stop offset="100%" stop-color="#2BB673"/>
     </linearGradient>
-    <linearGradient id="shimmer" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#3DD68C" stop-opacity="0.05"/>
-      <stop offset="50%" stop-color="#3DD68C" stop-opacity="0.15"/>
-      <stop offset="100%" stop-color="#3DD68C" stop-opacity="0.05"/>
+
+    <linearGradient id="thinkingGradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#FFBE3D" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#FFBE3D" stop-opacity="0.03"/>
     </linearGradient>
+
+    <filter id="bubbleShadow" x="-2%" y="-3%" width="104%" height="110%">
+      <feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="#000000" flood-opacity="0.25"/>
+    </filter>
+
+    <style>
+      @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-4px); }
+      }
+      @keyframes blink {
+        0%, 90%, 100% { transform: scaleY(1); }
+        95% { transform: scaleY(0.1); }
+      }
+      @keyframes bounce {
+        0%, 100% { transform: translateY(0) scale(1); }
+        30% { transform: translateY(-6px) scale(1.05); }
+        50% { transform: translateY(0) scale(0.97); }
+        70% { transform: translateY(-3px) scale(1.02); }
+      }
+      .ai-character { animation: bounce 3s ease-in-out infinite; }
+      .ai-eye-l { animation: blink 4s ease-in-out infinite; transform-origin: 119px 95px; }
+      .ai-eye-r { animation: blink 4s ease-in-out infinite 0.1s; transform-origin: 131px 95px; }
+    </style>
   </defs>
 
-  <!-- ===== Window Frame ===== -->
-  <rect width="1450" height="800" rx="0" fill="#0F1117"/>
+  <rect width="1190" height="646" fill="#0F1117"/>
 
-  <!-- ===== Title Bar (48px) ===== -->
-  <rect width="1450" height="48" fill="#0F1117"/>
-  <rect x="0" y="47" width="1450" height="1" fill="#3DD68C" opacity="0.04"/>
+  <!-- Title Bar -->
+  <rect width="1190" height="41" fill="#0F1117"/>
+  <line x1="0" y1="40" x2="1190" y2="40" stroke="#3DD68C" stroke-opacity="0.08" stroke-width="1"/>
 
-  <!-- Brand: garlic icon + AnyClaw -->
-  <circle cx="28" cy="24" r="14" fill="#3DD68C" opacity="0.15"/>
-  <text x="28" y="29" text-anchor="middle" font-size="16">🧄</text>
-  <text x="50" y="29" font-family="Plus Jakarta Sans, sans-serif" font-size="15" font-weight="700" fill="#E8ECF4">AnyClaw</text>
+  <circle cx="23" cy="20" r="14" fill="#3DD68C" opacity="0.12"/>
+  <text x="23" y="25" text-anchor="middle" font-size="15">🧄</text>
+  <text x="47" y="25" font-family="Plus Jakarta Sans, sans-serif" font-size="13" font-weight="700" fill="#E8ECF4">Bot · Chat</text>
 
-  <!-- Mode Switcher -->
-  <rect x="220" y="10" width="150" height="28" rx="14" fill="#1A1D27"/>
-  <rect x="224" y="12" width="70" height="24" rx="12" fill="#3DD68C"/>
-  <text x="259" y="28" text-anchor="middle" font-family="Plus Jakarta Sans, sans-serif" font-size="12" font-weight="600" fill="#0F1117">Chat</text>
-  <text x="339" y="28" text-anchor="middle" font-family="Plus Jakarta Sans, sans-serif" font-size="12" fill="#8B92A8">Work</text>
-
-  <!-- Window Controls -->
-  <g opacity="0.6">
-    <rect x="1350" y="0" width="46" height="48" fill="transparent"/>
-    <text x="1373" y="30" text-anchor="middle" font-size="14" fill="#8B92A8">⚙</text>
+  <g opacity="0.4">
+    <rect x="1144" y="8" width="24" height="24" rx="4" fill="transparent"/>
+    <text x="1156" y="25" text-anchor="middle" font-size="12" fill="#8B92A8">─</text>
   </g>
-  <g opacity="0.6">
-    <rect x="1396" y="0" width="46" height="48" fill="transparent"/>
-    <text x="1419" y="30" text-anchor="middle" font-size="14" fill="#8B92A8">—</text>
-  </g>
-  <g opacity="0.6">
-    <rect x="1442" y="0" width="46" height="48" fill="transparent"/>
-    <text x="1465" y="30" text-anchor="middle" font-size="14" fill="#8B92A8">□</text>
+  <g opacity="0.4">
+    <rect x="1168" y="8" width="24" height="24" rx="4" fill="transparent"/>
+    <text x="1180" y="25" text-anchor="middle" font-size="12" fill="#8B92A8">□</text>
   </g>
   <g>
-    <rect x="1396" y="0" width="54" height="48" rx="0" fill="transparent"/>
-    <text x="1423" y="30" text-anchor="middle" font-size="14" fill="#8B92A8">✕</text>
+    <rect x="1144" y="8" width="46" height="24" rx="4" fill="transparent"/>
+    <text x="1167" y="25" text-anchor="middle" font-size="12" fill="#8B92A8">✕</text>
   </g>
 
-  <!-- ===== Left Panel (240px) ===== -->
-  <rect x="0" y="48" width="240" height="752" fill="#13151E"/>
+  <!-- Left Navigation (w=75) - 无品牌logo -->
+  <rect x="0" y="41" width="75" height="605" fill="#13151E"/>
 
-  <!-- Gateway Status Card -->
-  <rect x="12" y="58" width="216" height="44" rx="8" fill="#1A1D27"/>
-  <circle cx="28" cy="80" r="5" fill="#3DD68C"/>
-  <rect x="26" y="78" width="4" height="4" rx="2" fill="#3DD68C">
-    <animate attributeName="opacity" values="1;0.4;1" dur="3s" repeatCount="indefinite"/>
-  </rect>
-  <text x="40" y="77" font-family="Plus Jakarta Sans, sans-serif" font-size="10" fill="#3DD68C" font-weight="600">READY</text>
-  <text x="40" y="90" font-family="HarmonyOS Sans SC, sans-serif" font-size="11" fill="#8B92A8">Gateway</text>
+  <!-- Bot (active) -->
+  <rect x="11" y="48" width="52" height="52" rx="9" fill="#3DD68C" fill-opacity="0.12"/>
+  <rect x="11" y="48" width="3" height="52" fill="#3DD68C"/>
+  <text x="37" y="78" text-anchor="middle" font-size="20">🤖</text>
 
-  <!-- Workspace Name -->
-  <rect x="12" y="110" width="216" height="32" rx="6" fill="#1A1D27"/>
-  <text x="24" y="131" font-family="HarmonyOS Sans SC, sans-serif" font-size="12" fill="#E8ECF4">📁 个人助手</text>
+  <!-- File -->
+  <rect x="11" y="116" width="52" height="52" rx="9" fill="transparent"/>
+  <text x="37" y="146" text-anchor="middle" font-size="20">📁</text>
 
-  <!-- Sessions Header -->
-  <text x="16" y="168" font-family="Plus Jakarta Sans, sans-serif" font-size="10" font-weight="600" fill="#6B7280" letter-spacing="1">SESSIONS</text>
-  <rect x="210" y="156" width="20" height="20" rx="10" fill="#1A1D27"/>
-  <text x="220" y="170" text-anchor="middle" font-size="12" fill="#8B92A8">+</text>
+  <!-- Chat/Work toggle -->
+  <rect x="11" y="526" width="52" height="52" rx="9" fill="#252A38"/>
+  <text x="37" y="557" text-anchor="middle" font-size="17">💬</text>
 
-  <!-- Session: Chat (active) -->
-  <rect x="12" y="178" width="216" height="32" rx="6" fill="#3DD68C" opacity="0.1"/>
-  <rect x="12" y="178" width="3" height="32" rx="1.5" fill="#3DD68C"/>
-  <text x="22" y="199" font-size="12" fill="#E8ECF4">🦞 Chat</text>
-  <circle cx="210" cy="194" r="4" fill="#3DD68C">
-    <animate attributeName="opacity" values="1;0.5;1" dur="2s" repeatCount="indefinite"/>
+  <!-- Settings -->
+  <rect x="11" y="594" width="52" height="52" rx="9" fill="transparent"/>
+  <text x="37" y="624" text-anchor="middle" font-size="20">⚙️</text>
+
+  <!-- Left Panel -->
+  <rect x="82" y="48" width="276" height="598" rx="10" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.03" stroke-width="1"/>
+
+  <!-- AI人物容器：Agent Status 上方 -->
+  <rect x="92" y="58" width="256" height="80" rx="10" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
+
+  <!-- AI人物：可爱动态，位于容器内 -->
+  <g class="ai-character">
+    <!-- 身体 -->
+    <ellipse cx="130" cy="138" rx="22" ry="8" fill="#000000" opacity="0.15"/>
+    <rect x="112" y="92" width="36" height="42" rx="11" fill="#3DD68C" opacity="0.9"/>
+    <!-- 头 -->
+    <circle cx="130" cy="84" r="24" fill="#3DD68C"/>
+    <!-- 眼睛 -->
+    <ellipse class="ai-eye-l" cx="121" cy="80" rx="4" ry="5" fill="#0F1117"/>
+    <ellipse class="ai-eye-r" cx="139" cy="80" rx="4" ry="5" fill="#0F1117"/>
+    <!-- 眼睛高光 -->
+    <circle cx="123" cy="78" r="1.5" fill="#FFFFFF"/>
+    <circle cx="141" cy="78" r="1.5" fill="#FFFFFF"/>
+    <!-- 腮红 -->
+    <ellipse cx="112" cy="86" rx="5" ry="2.5" fill="#FF9EB5" opacity="0.6"/>
+    <ellipse cx="148" cy="86" rx="5" ry="2.5" fill="#FF9EB5" opacity="0.6"/>
+    <!-- 嘴巴（微笑） -->
+    <path d="M 125 90 Q 130 95 135 90" stroke="#0F1117" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+    <!-- 触角 -->
+    <line x1="116" y1="62" x2="108" y2="54" stroke="#3DD68C" stroke-width="1.5" stroke-linecap="round"/>
+    <line x1="144" y1="62" x2="152" y2="54" stroke="#3DD68C" stroke-width="1.5" stroke-linecap="round"/>
+    <circle cx="108" cy="54" r="3" fill="#3DD68C" opacity="0.7"/>
+    <circle cx="152" cy="54" r="3" fill="#3DD68C" opacity="0.7"/>
+  </g>
+
+  <!-- AI人物名字 -->
+  <text x="168" y="84" font-family="HarmonyOS Sans SC, sans-serif" font-size="11" fill="#3DD68C" font-weight="600">AnyClaw</text>
+  <text x="168" y="100" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#6B7280">你的 AI 伙伴</text>
+
+  <!-- Agent Status -->
+  <rect x="92" y="148" width="256" height="28" rx="7" fill="#1A1D27"/>
+  <circle cx="106" cy="162" r="4" fill="#3DD68C">
+    <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/>
   </circle>
-  <text x="170" y="199" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#3DD68C" font-weight="500">ACTIVE</text>
+  <text x="119" y="167" font-family="HarmonyOS Sans SC, sans-serif" font-size="10" fill="#E8ECF4">Agent Status</text>
+  <text x="302" y="167" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#3DD68C">Running</text>
 
-  <!-- Session: Work (idle) -->
-  <rect x="12" y="216" width="216" height="32" rx="6" fill="transparent"/>
-  <text x="22" y="237" font-size="12" fill="#8B92A8">⚡ Work</text>
-  <circle cx="210" cy="232" r="4" fill="#6B7280" opacity="0.3"/>
+  <text x="92" y="190" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#8B92A8">Model: MiniMax-M2.7</text>
 
-  <!-- Cron Header -->
-  <rect x="12" y="264" width="216" height="1" fill="#3DD68C" opacity="0.04"/>
-  <text x="16" y="286" font-family="Plus Jakarta Sans, sans-serif" font-size="10" font-weight="600" fill="#6B7280" letter-spacing="1">CRON TASKS</text>
-  <rect x="210" y="274" width="20" height="20" rx="10" fill="#1A1D27"/>
-  <text x="220" y="288" text-anchor="middle" font-size="12" fill="#8B92A8">+</text>
+  <line x1="92" y1="204" x2="352" y2="204" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
 
-  <!-- ===== Splitter ===== -->
-  <rect x="240" y="48" width="6" height="752" fill="#13151E"/>
+  <text x="92" y="223" font-family="HarmonyOS Sans SC, sans-serif" font-size="10" fill="#E8ECF4">任务列表</text>
+  <text x="302" y="223" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#6B7280">(0)</text>
 
-  <!-- ===== Chat Content Area ===== -->
-  <rect x="246" y="48" width="1204" height="604" fill="#0F1117"/>
+  <rect x="92" y="236" width="256" height="138" rx="7" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.03" stroke-width="1"/>
+  <text x="103" y="256" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#E8ECF4">会话</text>
+  <text x="302" y="256" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#6B7280">(0)</text>
+  <line x1="103" y1="265" x2="352" y2="265" stroke="#3DD68C" stroke-opacity="0.05" stroke-width="1"/>
+  <text x="220" y="314" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="10" fill="#6B7280">暂无会话</text>
 
-  <!-- System Message -->
-  <g transform="translate(280, 70)">
-    <circle cx="14" cy="14" r="12" fill="#1E2230"/>
-    <text x="14" y="18" text-anchor="middle" font-size="12">🦞</text>
-    <rect x="34" y="0" width="380" height="52" rx="8" fill="#1E2230"/>
-    <rect x="34" y="4" width="2" height="44" rx="1" fill="#3DD68C"/>
-    <text x="44" y="18" font-family="HarmonyOS Sans SC, sans-serif" font-size="12" fill="#E8ECF4">龙虾要吃蒜蓉的 🧄🦞</text>
-    <text x="44" y="36" font-family="HarmonyOS Sans SC, sans-serif" font-size="11" fill="#8B92A8">你的AI助手已就位！</text>
-    <text x="380" y="44" text-anchor="end" font-family="Plus Jakarta Sans, sans-serif" font-size="10" fill="#6B7280">12:00</text>
+  <rect x="92" y="384" width="256" height="262" rx="7" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.03" stroke-width="1"/>
+  <text x="103" y="404" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#E8ECF4">Cron</text>
+  <text x="302" y="404" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#6B7280">(0)</text>
+  <line x1="103" y1="413" x2="352" y2="413" stroke="#3DD68C" stroke-opacity="0.05" stroke-width="1"/>
+  <text x="220" y="515" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="10" fill="#6B7280">暂无定时任务</text>
+
+  <!-- RIGHT PANEL -->
+  <rect x="365" y="41" width="818" height="605" fill="#0F1117"/>
+
+  <!-- Message 1: User（头像靠右边界，气泡左侧留空） -->
+  <g transform="translate(918, 52)">
+    <!-- 气泡在左，右侧留空给头像 -->
+    <rect x="0" y="0" width="230" height="45" rx="16" fill="url(#userBubble)" filter="url(#bubbleShadow)"/>
+    <text x="12" y="28" font-family="HarmonyOS Sans SC, sans-serif" font-size="11" fill="#FFFFFF">帮我查一下今天的天气</text>
+    <text x="188" y="12" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#FFFFFF" opacity="0.6">12:28</text>
+    <!-- 头像在气泡右侧，右边界对齐面板右边界(1183)，间隙21px -->
+    <circle cx="251" cy="22" r="14" fill="#252A38"/>
+    <text x="251" y="27" text-anchor="middle" font-size="12">👤</text>
   </g>
 
-  <!-- User Bubble 1 (right) -->
-  <g transform="translate(810, 140)">
-    <rect x="0" y="0" width="340" height="48" rx="16" fill="url(#userBubble)"/>
-    <text x="14" y="22" font-family="HarmonyOS Sans SC, sans-serif" font-size="13" fill="#FFFFFF">帮我查一下今天的天气和待办事项</text>
-    <text x="296" y="40" text-anchor="end" font-family="Plus Jakarta Sans, sans-serif" font-size="10" fill="#FFFFFF" opacity="0.5">12:01</text>
+  <!-- Message 2: AI 完整气泡 -->
+  <g transform="translate(365, 110)">
+    <circle cx="17" cy="17" r="14" fill="#1E2230"/>
+    <text x="17" y="22" text-anchor="middle" font-size="12">🦞</text>
+
+    <rect x="38" y="0" width="431" height="220" rx="12" fill="#1E2230" filter="url(#bubbleShadow)"/>
+    <rect x="38" y="3" width="3" height="214" rx="1" fill="#3DD68C"/>
+
+    <text x="52" y="15" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#6B7280">12:28</text>
+
+    <rect x="52" y="22" width="405" height="21" rx="5" fill="#252A38"/>
+    <circle cx="62" cy="33" r="3" fill="#FFBE3D"/>
+    <text x="71" y="37" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#FFBE3D">🤖 AI 正在思考...</text>
+
+    <rect x="52" y="50" width="405" height="46" rx="7" fill="url(#thinkingGradient)" stroke="#FFBE3D" stroke-opacity="0.2" stroke-width="1"/>
+    <text x="63" y="64" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#FFBE3D">🔍 思考过程</text>
+    <text x="444" y="64" text-anchor="end" font-family="HarmonyOS Sans SC, sans-serif" font-size="8" fill="#6B7280">点击折叠</text>
+    <text x="63" y="78" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">1. 分析：用户请求查询天气</text>
+    <text x="63" y="90" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">2. 调用天气 API...</text>
+
+    <rect x="52" y="104" width="405" height="36" rx="7" fill="#0A0C10" stroke="#3DD68C" stroke-opacity="0.15" stroke-width="1"/>
+    <rect x="52" y="104" width="3" height="36" rx="1" fill="#3DD68C"/>
+    <text x="62" y="119" font-family="Consolas, monospace" font-size="9" fill="#3DD68C">$ curl weather-api --location=beijing</text>
+    <text x="62" y="132" font-family="Consolas, monospace" font-size="9" fill="#6B7280">{"status":"ok","temp":26,"condition":"sunny"}</text>
+
+    <rect x="52" y="148" width="405" height="28" rx="6" fill="#0A0C10" stroke="#3DD68C" stroke-opacity="0.15" stroke-width="1"/>
+    <rect x="52" y="148" width="3" height="28" rx="1" fill="#3DD68C"/>
+    <text x="63" y="158" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">📄</text>
+    <text x="72" y="158" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#6C9FFF" text-decoration="underline">weekly_report_2026_04.pdf</text>
+    <text x="63" y="170" font-family="HarmonyOS Sans SC, sans-serif" font-size="8" fill="#6B7280">点击打开文件</text>
+
+    <text x="52" y="204" font-family="HarmonyOS Sans SC, sans-serif" font-size="11" fill="#E8ECF4">北京今天天气晴朗，气温 26°C。</text>
   </g>
 
-  <!-- AI Bubble 2 (left) -->
-  <g transform="translate(280, 210)">
-    <circle cx="14" cy="14" r="12" fill="#1E2230"/>
-    <text x="14" y="18" text-anchor="middle" font-size="12">🦞</text>
-    <rect x="34" y="0" width="420" height="100" rx="16" fill="#1E2230"/>
-    <rect x="34" y="4" width="2" height="92" rx="1" fill="#3DD68C"/>
-    <text x="46" y="22" font-family="HarmonyOS Sans SC, sans-serif" font-size="13" fill="#E8ECF4">北京今天晴，22°C，微风。</text>
-    <text x="46" y="44" font-family="HarmonyOS Sans SC, sans-serif" font-size="13" fill="#E8ECF4">待办事项：</text>
-    <text x="46" y="66" font-family="HarmonyOS Sans SC, sans-serif" font-size="12" fill="#8B92A8">· 14:00 团队周会</text>
-    <text x="46" y="84" font-family="HarmonyOS Sans SC, sans-serif" font-size="12" fill="#8B92A8">· 16:30 提交PRD文档</text>
-    <text x="386" y="92" text-anchor="end" font-family="Plus Jakarta Sans, sans-serif" font-size="10" fill="#6B7280">12:02</text>
-  </g>
+  <!-- Control Bar (ctrl_bar) -->
+  <rect x="365" y="553" width="818" height="31" rx="7" fill="#1A1D27"/>
 
-  <!-- User Bubble 3 (right) -->
-  <g transform="translate(850, 330)">
-    <rect x="0" y="0" width="300" height="48" rx="16" fill="url(#userBubble)"/>
-    <text x="14" y="22" font-family="HarmonyOS Sans SC, sans-serif" font-size="13" fill="#FFFFFF">帮我设置16:25的提前提醒</text>
-    <text x="256" y="40" text-anchor="end" font-family="Plus Jakarta Sans, sans-serif" font-size="10" fill="#FFFFFF" opacity="0.5">12:03</text>
-  </g>
+  <text x="1135" y="572" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#6B7280">0/2000</text>
 
-  <!-- AI Streaming Indicator -->
-  <g transform="translate(280, 400)">
-    <circle cx="14" cy="10" r="12" fill="#1E2230"/>
-    <text x="14" y="14" text-anchor="middle" font-size="12">🦞</text>
-    <rect x="34" y="-4" width="90" height="28" rx="14" fill="#1E2230"/>
-    <circle cx="52" cy="10" r="3" fill="#3DD68C">
-      <animate attributeName="opacity" values="1;0.3;1" dur="1.2s" repeatCount="indefinite"/>
-    </circle>
-    <circle cx="66" cy="10" r="3" fill="#3DD68C">
-      <animate attributeName="opacity" values="0.3;1;0.3" dur="1.2s" repeatCount="indefinite"/>
-    </circle>
-    <circle cx="80" cy="10" r="3" fill="#3DD68C">
-      <animate attributeName="opacity" values="0.3;0.3;1" dur="1.2s" repeatCount="indefinite" begin="0.4s"/>
-    </circle>
-  </g>
+  <rect x="372" y="558" width="69" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
+  <text x="406" y="572" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#3DD68C">Agent ▼</text>
 
-  <!-- ===== Input Area ===== -->
-  <rect x="246" y="652" width="1204" height="148" fill="#13151E"/>
-  <rect x="246" y="652" width="1204" height="1" fill="#3DD68C" opacity="0.04"/>
+  <rect x="446" y="558" width="69" height="22" rx="11" fill="#252A38"/>
+  <text x="480" y="572" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#E8ECF4">AI行为 ▼</text>
 
-  <!-- Input Box -->
-  <rect x="306" y="668" width="1024" height="96" rx="12" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.04" stroke-width="1"/>
-  <text x="324" y="720" font-family="HarmonyOS Sans SC, sans-serif" font-size="13" fill="#6B7280">输入消息... (Shift+Enter 换行)</text>
+  <rect x="520" y="558" width="69" height="22" rx="11" fill="#252A38"/>
+  <text x="554" y="572" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#E8ECF4">AI托管 ▼</text>
 
-  <!-- Attachment Icon -->
-  <rect x="316" y="776" width="24" height="24" rx="12" fill="transparent"/>
-  <text x="328" y="792" text-anchor="middle" font-size="14" fill="#8B92A8">📎</text>
+  <rect x="594" y="560" width="34" height="17" rx="9" fill="#373C55"/>
+  <circle cx="605" cy="569" r="7" fill="#8B92A8"/>
+  <text x="633" y="572" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">Voice</text>
 
-  <!-- Voice Icon -->
-  <rect x="350" y="776" width="24" height="24" rx="12" fill="transparent"/>
-  <text x="362" y="792" text-anchor="middle" font-size="14" fill="#8B92A8">🎤</text>
+  <!-- Input Area (chat_input) -->
+  <rect x="365" y="584" width="818" height="62" rx="7" fill="#1A1D27"/>
 
-  <!-- Char Count -->
-  <text x="1280" y="792" text-anchor="end" font-family="Plus Jakarta Sans, sans-serif" font-size="10" fill="#6B7280">0/4096</text>
+  <!-- 输入框内部：左侧输入区 + 右侧按钮组在右下角 -->
+  <rect x="372" y="589" width="698" height="47" rx="7" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
+  <text x="383" y="605" font-family="HarmonyOS Sans SC, sans-serif" font-size="10" fill="#6B7280">输入消息... (Shift+Enter 换行)</text>
+  <text x="383" y="621" font-family="HarmonyOS Sans SC, sans-serif" font-size="10" fill="#6B7280">第二行</text>
+  <text x="383" y="635" font-family="HarmonyOS Sans SC, sans-serif" font-size="10" fill="#6B7280">第三行</text>
 
-  <!-- Send Button (circle 40px, accent gradient) -->
-  <circle cx="1330" cy="788" r="20" fill="url(#sendBtn)"/>
-  <text x="1330" y="794" text-anchor="middle" font-size="16" fill="#0F1117">▶</text>
+  <!-- 发送按钮组：输入框右下角，上传按钮(左) + 发送按钮(右) -->
+  <rect x="1080" y="616" width="21" height="21" rx="5" fill="#252A38"/>
+  <text x="1090" y="631" text-anchor="middle" font-size="10">📎</text>
 
-  <!-- ===== Theme Label ===== -->
-  <text x="1430" y="795" text-anchor="end" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#6B7280" opacity="0.4">Matcha v1 · Chat Mode</text>
+  <circle cx="1130" cy="626" r="18" fill="url(#sendBtn)" filter="url(#bubbleShadow)"/>
+  <text x="1130" y="632" text-anchor="middle" font-size="14" fill="#0F1117" font-weight="bold">▶</text>
+
+  <text x="1172" y="656" text-anchor="end" font-family="Plus Jakarta Sans, sans-serif" font-size="8" fill="#6B7280" opacity="0.4">Matcha v1 · UI-11</text>
 </svg>
