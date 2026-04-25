@@ -3041,9 +3041,9 @@ SelfCheck（4项，快速）
 
 ### 12.2 左导航栏（6 图标版：Bot · File · KB · Skill + Chat/Work · Settings）
 
-> 父容器：窗口。坐标：x=0，y=TITLE_H=48px，w=NAV_W=87px，h=PANEL_H=702px。
+> 父容器：窗口。坐标：x=0，y=TITLE_H=48px，w=NAV_W_PCT=8%（1920px 屏≈154px，1600px 屏≈128px），h=PANEL_H=702px。
 > icon-only，hover 300ms 显示 tooltip。
-> **v2.2.12 更新：** 新增 KB（知识库）和 Skill 到顶部模块区，共 6 个图标，分两区排列。
+> **v2.2.12 更新：** 新增 KB（知识库）和 Skill 到顶部模块区，共 6 个图标，分两区排列（nav_top 4个 + nav_mid spacer + nav_bot 2个）。
 
 #### 布局框图
 
@@ -3051,7 +3051,7 @@ SelfCheck（4项，快速）
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        窗口 (1380×750)                               │
 │  ┌────┬────────────────────────────────────────────────────────────┐│
-│  │    │  标题栏 (48px, y=0)                                        ││
+│  │ 8% │    │  标题栏 (48px, y=0)                                  ││
 │  │    ├────┬─────────────────────────────────────────────────────┤│
 │  │ 87 │    │  内容区 (y=48, h=702)                                  ││
 │  │ px │    │  ┌─────────────────────┬──────────────────────────┐ ││
@@ -3061,33 +3061,54 @@ SelfCheck（4项，快速）
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-左导航栏内部结构（x=0, y=48, w=75，左侧与 left_nav 左侧对齐，右侧在 left_nav 内居中）：
+左导航栏内部结构（x=0, y=48, w=8%，自适应；左面板宽度 25% 约 345px，导航栏在其中居中）：
+
+**分层结构：**
+
+- **left_nav 容器**（x=0, y=48, w=NAV_W_PCT=8%, h=PANEL_H=702px）：导航栏根容器，flex COLUMN 布局，内边距 0，背景 panel 色。
+- **nav_top 子容器**（flex_grow=0, h 由内容撑起 = 4×44 + 3×gap=12×3 = 212px）：flex COLUMN + START 排列，包含 Bot / File / KB / Skill 四个模块图标按钮，之间各隔 gap=12px。
+- **nav_spacer 透明填充**（flex_grow=1）：占据 nav_top 底部到 nav_bot 顶部之间所有剩余空间，使 nav_top 贴顶、nav_bot 贴底。
+- **nav_bot 子容器**（flex_grow=0, h 由内容撑起 = 2×44 + 1×gap=12 = 100px）：flex COLUMN + END 排列，包含 Chat/Work 切换按钮和 Settings 图标，之间隔 gap=12px，容器底部与 left_nav 底部对齐。
+
+**按钮尺寸：** 44×44px，圆角 8px。x 在 nav_top/nav_bot 宽度内居中（flex CROSS_AXIS=CENTER）。
 
 ```
-┌───────┐
-│  ┌──┐ │  ← Bot 图标，44×44px，圆角8px，x=居中，y=48（与左面板顶部对齐）
-│  │🤖│ │
-│  └──┘ │
-│  ┌──┐ │  ← File 图标，44×44px，圆角8px，x=居中，y=104（gap=12px）
-│  │📁│ │
-│  └──┘ │
-│  ┌──┐ │  ← KB 图标，44×44px，圆角8px，x=居中，y=160（gap=12px）
-│  │📚│ │
-│  └──┘ │
-│  ┌──┐ │  ← Skill 图标，44×44px，圆角8px，x=居中，y=216（gap=12px）
-│  │🧩│ │
-│  └──┘ │
-│       │  ← nav_mid，flex_grow=1，y=260~614，h=354px（仅填充，无内容）
-│       │
-│ (nav) │  ← nav_bot，h=100px，y=650~750，底部与左面板底部对齐
-│  ┌──┐ │  ← Chat/Work 切换，44×44px，圆角8px，x=居中，y=678（容器内居中）
-│  │💬│ │
-│  └──┘ │
-│  ┌──┐ │  ← Settings 图标，44×44px，圆角8px，x=居中，y=734（gap=12px，底部对齐左面板）
-│  │⚙️│ │
-│  └──┘ │
-└───────┘
+┌─────────────┐
+│  ┌───────┐  │  ← Bot 图标，44×44，圆角8，y=0（nav_top 顶部）
+│  │  🤖   │  │
+│  └───────┘  │
+│  ┌───────┐  │  ← File 图标，44×44，圆角8，y=56（gap=12）
+│  │  📁   │  │
+│  └───────┘  │
+│  ┌───────┐  │  ← KB 图标，44×44，圆角8，y=112（gap=12）
+│  │  📚   │  │
+│  └───────┘  │
+│  ┌───────┐  │  ← Skill 图标，44×44，圆角8，y=168（gap=12）
+│  │  🧩   │  │
+│  └───────┘  │
+│             │  ← nav_spacer，flex_grow=1，填充剩余全部空间
+│             │
+│  ┌───────┐  │  ← Chat/Work，44×44，圆角8，y 靠 nav_bot 底部（gap=12）
+│  │  💬   │  │
+│  └───────┘  │
+│  ┌───────┐  │  ← Settings 图标，44×44，圆角8，y 贴底（gap=12）
+│  │  ⚙️   │  │
+│  └───────┘  │
+└─────────────┘
 ```
+
+**行为规范：**
+
+| 模块 | 图标 | 高亮条件 | 点击后右侧内容 |
+|------|------|----------|----------------|
+| Bot | 🤖 | `g_ui_nav_module == UI_NAV_BOT` | Bot 主界面（Chat/Work 两个模式） |
+| File | 📁 | `g_ui_nav_module == UI_NAV_FILES` | 文件浏览器 module_placeholder |
+| KB | 📚 | `g_ui_nav_module == UI_NAV_KB` | 知识库 module_placeholder（标题"知识库"，描述"已索引的文档和参考资料。"） |
+| Skill | 🧩 | `g_ui_nav_module == UI_NAV_SKILL` | Skill 管理 module_placeholder（标题"Skill 管理"，描述"浏览和管理已安装的 Skills。"） |
+| Chat/Work | 💬 | `g_ui_mode == UI_MODE_CHAT/WORK`（仅 Bot 模块内生效） | 切换 Chat ↔ Work 模式 |
+| Settings | ⚙️ | Settings 面板打开时 | 打开 Settings 面板 |
+
+**枚举值：** `UI_NAV_BOT=0`, `UI_NAV_FILES=1`, `UI_NAV_KB=2`, `UI_NAV_SKILL=3`
 
 #### 操作流程图
 
@@ -3129,42 +3150,43 @@ SelfCheck（4项，快速）
 
 **第一层：左导航栏骨架**
 
+> ⚠️ 实际代码使用百分比/flex 布局，以下为典型值（1920px 屏）。精确值随窗口大小自动缩放。
+
 | 控件 | 宽 | 高 | x | y | 计算公式 |
-|------|---:|---:|---:|---:|---------|
-| left_nav | 87 | 702 | 0 | 48 | `NAV_W = WIN_W×6%`，`PANEL_H = WIN_H-TITLE_H` |
+|------|---:|---:|---:|---:|---------
+| left_nav | ~154px | 702 | 0 | 48 | `NAV_W_PCT=8`，`PANEL_H = WIN_H-TITLE_H` |
+| nav_top | ~154px | 212 | 0 | 48 | 内容撑起：4×44 + 3×12 |
+| nav_spacer | ~154px | flex_grow=1 | 0 | 260 | 占据所有剩余空间 |
+| nav_bot | ~154px | 100 | 0 | ~602 | 内容撑起：2×44 + 1×12，底部与 left_nav 对齐 |
 
 **第二层：顶部品牌 Logo**
 
 | 控件 | 尺寸 | x | y | 说明 |
 |------|------|---:|---:|------|
-| 品牌 Logo | 32×32 | 居中(27.5) | 8 | ICON_LARGE，固定显示，不受导航图标影响 |
+| 品牌 Logo | 32×32 | 居中(~61) | 8 | ICON_LARGE，固定显示，不受导航图标影响 |
 
 **第三层：顶部模块按钮区（nav_top，h=212px，y=48）**
 
 | 控件 | 尺寸 | x | y | 说明 |
 |------|------|---:|---:|------|
-| Bot 按钮 | 44×44 | 居中 | 48 | 顶部与左面板顶部对齐 |
+| Bot 按钮 | 44×44 | 居中 | 48 | nav_top 顶部 |
 | File 按钮 | 44×44 | 居中 | 104 | `y = 48 + 44 + 12 = 104` |
 | KB 按钮 | 44×44 | 居中 | 160 | `y = 104 + 44 + 12 = 160` |
 | Skill 按钮 | 44×44 | 居中 | 216 | `y = 160 + 44 + 12 = 216` |
 | nav_top 底部边界 | — | — | 260 | `y = 216 + 44 = 260` |
 
-**第四层：中间填充区（nav_mid，flex_grow=1）**
+**第四层：中间填充区（nav_spacer，flex_grow=1）**
 
 | 控件 | 尺寸 | x | y | 说明 |
 |------|------|---:|---:|------|
-| nav_mid 容器 | 75×354 | 0 | 260 | `h = 614 - 260 = 354`，flex_grow=1，仅填充 |
-| nav_mid 底部边界 | — | — | 614 | nav_bot 顶部 = 650，中间差 36px（margin-top 效果） |
+| nav_spacer 容器 | ~154×(702-212-100) | 0 | 260 | flex_grow=1，高度随窗口自动伸缩 |
 
-**第五层：底部快捷区（nav_bot，h=100px，y=650）**
+**第五层：底部快捷区（nav_bot）**
 
 | 控件 | 尺寸 | x | y | 说明 |
 |------|------|---:|---:|------|
-| nav_bot 容器 | 75×100 | 0 | 650 | 底部与左面板底部(y=750)对齐 |
-| Chat/Work 切换 | 44×44 | 居中 | 678 | `y = 650 + (100-44)/2 = 678` |
-| Settings 按钮 | 44×44 | 居中 | 734 | `y = 678 + 44 + 12 = 734`，底部=778（轻微越界，实际按 750 截断） |
-
-> **注：** Settings 底部 778 > 750，轻微越界 28px。建议 nav_bot h 改为 108px（y=642），使 Settings.y=726，底部=770，仍越界 20px。最终需代码侧实测调整。**或者** Settings 尺寸改为 40×40 可完全对齐：Settings.y=750-40=710，Chat/Work.y=710-40-12=658，nav_bot.h=108，y=642。
+| Chat/Work 切换 | 44×44 | 居中 | nav_bot顶部+margin | nav_bot 内居中，flex COLUMN + END |
+| Settings 图标 | 44×44 | 居中 | nav_bot底部-44 | nav_bot 底部贴 left_nav 底部 |
 
 **状态样式：**
 
@@ -3179,10 +3201,9 @@ SelfCheck（4项，快速）
 - Bot → File：y=48+44+12=104px
 - File → KB：y=104+44+12=160px
 - KB → Skill：y=160+44+12=216px
-- nav_top → nav_mid：y=260，flex_grow 填充，354px 纯填充
-- nav_mid → nav_bot：nav_bot y=650，间距 36px（视觉缓冲）
-- Chat/Work → Settings：y=678+44+12=734px
-- Settings 底部 vs 左面板底部：Settings.y+44=778 > 750，越界 28px（需代码侧调整）
+- nav_top → nav_spacer：nav_top 底部 y=260，flex_grow 填充剩余全部空间
+- nav_spacer → nav_bot：nav_bot 贴 left_nav 底部（flex COLUMN + END 排列）
+- Chat/Work → Settings：Settings 底部与 left_nav 底部对齐（flex COLUMN + END）
 
 **图标圆角调整说明（v2.2.11 → v2.2.12）：**
 - 图标从 52×52 → 44×44（缩小 15%）
@@ -5419,7 +5440,9 @@ AI托管 是独立于 AI行为 的第二维度，控制权归属：
 |--------|------|------|
 | `Ctrl+1` | 切换到 Bot 模块 | 左导航选中 Bot |
 | `Ctrl+2` | 切换到 Files 模块 | 左导航选中 Files |
-| `Ctrl+Tab` | 循环切换导航模块 | Bot→Files→Bot |
+| `Ctrl+3` | 切换到 KB 模块 | 左导航选中知识库 |
+| `Ctrl+4` | 切换到 Skill 模块 | 左导航选中 Skill 管理 |
+| `Ctrl+Tab` | 循环切换导航模块 | Bot→Files→KB→Skill→Bot |
 | `Ctrl+T` | 切换 Chat/Work 模式 | 仅 Bot 模块有效 |
 
 #### 界面快捷键
@@ -5456,9 +5479,9 @@ AI托管 是独立于 AI行为 的第二维度，控制权归属：
        ▼
     检测键盘按键
        │
-|       ├─── Ctrl+1/2 ──→ 切换左导航模块（Bot/Files）
+|       ├─── Ctrl+1/2/3/4 ──→ 切换左导航模块（Bot/Files/KB/Skill）
        │
-       ├─── Ctrl+Tab ──→ 循环切换模块（Bot→Files→Bot）
+|       ├─── Ctrl+Tab ──→ 循环切换模块（Bot→Files→KB→Skill→Bot） |
        │
        ├─── Ctrl+T ──→ 切换 Chat/Work 模式
        │
