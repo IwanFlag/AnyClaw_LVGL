@@ -492,8 +492,17 @@ ClawStatus app_check_status(const OpenClawInfo& info) {
     if (info.executable[0] == '\0' && !running)
         return ClawStatus::NotInstalled;
 
+    /* Always try to get port from user config — overrides default 10086 */
+    int port = info.gateway_port;
+    {
+        int user_port = read_user_gateway_port();
+        if (user_port > 0) port = user_port;
+    }
+    /* If still default (10086), fall back to well-known openclaw port */
+    if (port == GATEWAY_PORT) port = 18789;
+
     char url[256];
-    snprintf(url, sizeof(url), "http://127.0.0.1:%d/health", info.gateway_port);
+    snprintf(url, sizeof(url), "http://127.0.0.1:%d/health", port);
     char response[4096] = {0};
     int status = http_get(url, response, sizeof(response), 3);
 
@@ -1865,12 +1874,47 @@ EnvCheckResult app_check_environment() {
         result.claude_healthy = app_check_claude_cli_health();
     }
 
-    LOG_I("Env", "Node=%s(%s) npm=%s OpenClaw=%s Hermes=%s Claude=%s",
+    /* Disk Space — check free space on system drive (C:\), require >= 1GB */
+    {
+        ULARGE_INTEGER free_bytes = {0};
+        if (GetDiskFreeSpaceExA("C:\\", nullptr, nullptr, &free_bytes)) {
+            /* 1GB = 1,073,741,824 bytes */
+            result.disk_space_ok = (free_bytes.QuadPart >= 1024ULL * 1024 * 1024);
+        } else {
+            result.disk_space_ok = true; /* unknown — don't block */
+        }
+    }
+
+    /* Port 18789 — check if the port is bound and accepting connections */
+    {
+        struct sockaddr_in addr = {};
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(18789);
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+        SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
+        if (s != INVALID_SOCKET) {
+            int orig_timeout = 0;
+            DWORD orig_timeout_len = sizeof(orig_timeout);
+            /* Set a short timeout for connect */
+            DWORD short_timeout = 500;
+            setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, (const char*)&short_timeout, sizeof(short_timeout));
+            setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&short_timeout, sizeof(short_timeout));
+            int r = connect(s, (struct sockaddr*)&addr, sizeof(addr));
+            if (r == 0) {
+                result.port_18789_ok = true;
+            }
+            closesocket(s);
+        }
+    }
+
+    LOG_I("Env", "Node=%s(%s) npm=%s OpenClaw=%s Hermes=%s Claude=%s disk=%s port=%s",
            result.node_ok ? "OK" : "MISSING", result.node_ver,
            result.npm_ok ? result.npm_ver : "MISSING",
            result.openclaw_ok ? result.openclaw_ver : "MISSING",
            result.hermes_ok ? result.hermes_ver : "MISSING",
-           result.claude_ok ? result.claude_ver : "MISSING");
+           result.claude_ok ? result.claude_ver : "MISSING",
+           result.disk_space_ok ? "OK" : "LOW",
+           result.port_18789_ok ? "OK" : "NOT_BOUND");
 
     return result;
 }

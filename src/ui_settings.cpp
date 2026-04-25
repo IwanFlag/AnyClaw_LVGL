@@ -1374,7 +1374,7 @@ static void build_permissions_tab(lv_obj_t* tab) {
     g_perm_bindings.clear();
 
     lv_obj_t* title = lv_label_create(tab);
-    lv_label_set_text(title, tr("权限策略", "Permissions Policy"));
+    lv_label_set_text(title, tr("权限策略 (19 项)", "Permissions Policy (19 items)"));
     apply_section_label(title);
 
     lv_obj_t* hint = lv_label_create(tab);
@@ -1422,7 +1422,7 @@ static void build_permissions_tab(lv_obj_t* tab) {
         lv_obj_set_style_text_font(lbl, CJK_FONT, 0);
 
         lv_obj_t* dd = lv_dropdown_create(row);
-        lv_dropdown_set_options(dd, "allow\ndeny\nask\nread_only");
+        lv_dropdown_set_options(dd, "allow\nask\ndeny");
         lv_obj_set_width(dd, SCALE(170));
         apply_input_style(dd);
         lv_dropdown_set_selected(dd, perm_to_sel(permissions().get(it.key)));

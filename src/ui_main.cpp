@@ -1006,6 +1006,9 @@ static void work_cron_delete_cb(lv_event_t* e);
 static lv_obj_t* create_dialog(lv_obj_t* parent, const char* title, int w, int h, lv_obj_t** out_overlay);
 static void work_add_step_card(const char* action, const char* detail, bool done, bool write_op);
 static void work_append_md_block(const char* title, const char* text);
+static bool diff_has_valid_lines(const char* diff_text);
+static void work_add_diff_card(const char* file_path, const char* diff_text, bool done, bool failed);
+static void work_add_plan_card(const char* plan_text, bool done, bool failed);
 
 /* Forward declarations for globals used by config persistence before their definitions. */
 static bool g_work_chat_collapsed = false;
@@ -1694,6 +1697,21 @@ static lv_obj_t* g_loading_bar = nullptr;
 static lv_obj_t* g_loading_stage_list = nullptr;
 static lv_obj_t* g_loading_hide_btn = nullptr;
 static lv_obj_t* g_loading_toggle_btn = nullptr;
+static lv_obj_t* g_loading_action_row = nullptr;
+static lv_obj_t* g_loading_btn_enter_wizard = nullptr;
+static lv_obj_t* g_loading_center_wrap = nullptr;
+static lv_obj_t* g_loading_rows_panel = nullptr;
+static lv_obj_t* g_loading_row_node = nullptr;
+static lv_obj_t* g_loading_row_npm = nullptr;
+static lv_obj_t* g_loading_row_net = nullptr;
+static lv_obj_t* g_loading_row_oc = nullptr;
+static lv_obj_t* g_loading_row_gw = nullptr;
+static lv_obj_t* g_loading_row_hermes = nullptr;
+static lv_obj_t* g_loading_row_claude = nullptr;
+static lv_obj_t* g_loading_row_disk = nullptr;
+static lv_obj_t* g_loading_row_port = nullptr;
+static lv_obj_t* g_loading_header_label = nullptr;
+static lv_obj_t* g_loading_btn_enter_main = nullptr;
 static lv_timer_t* g_loading_timer = nullptr;
 static DWORD g_loading_start_tick = 0;
 static float g_loading_angle = 0.0f;
@@ -1705,6 +1723,25 @@ static bool g_loading_hidden_by_user = false;
 static bool g_loading_details_collapsed = false;
 static bool g_loading_fade_active = false;
 static int g_loading_fade_opa = 220;
+static bool g_loading_result_applied = false;
+static DWORD g_loading_result_tick = 0;
+static bool g_loading_has_fail = false;
+static bool g_loading_has_unknown = false;
+static bool g_loading_decision_logged = false;
+static int g_loading_route_state = 0; /* 0=checking, 1=all-ok-wait-route, 2=fail-locked, 3=unknown-no-fail-route-main */
+
+/* Startup wizard gate state (used by Boot Check page) */
+static std::atomic<bool> g_wizard_gate_running(false);
+static std::atomic<bool> g_wizard_gate_ready(false);
+static std::mutex g_wizard_gate_mtx;
+static EnvCheckResult g_wizard_gate_env{};
+static bool g_wizard_gate_net_ok = false;
+
+/* Forward declarations */
+static void start_wizard_gate_async_check();
+static void btn_minimize_cb(lv_event_t* e);
+static void btn_maximize_cb(lv_event_t* e);
+static void btn_close_cb(lv_event_t* e);
 
 /* Hide loading overlay */
 static void loading_hide() {
@@ -1712,266 +1749,540 @@ static void loading_hide() {
     if (g_loading_overlay) { lv_obj_add_flag(g_loading_overlay, LV_OBJ_FLAG_HIDDEN); }
 }
 
-static void loading_manual_hide_cb(lv_event_t* e) {
+static const char* loading_status_text(bool pass, bool fail, bool unknown) {
+    if (pass) return "OK";
+    if (fail) return "Err";
+    return "N/A";
+}
+
+static void loading_enter_main_cb(lv_event_t* e) {
     (void)e;
-    g_loading_hidden_by_user = true;
+    g_loading_route_state = 0;
+    if (!g_loading_has_fail && !is_wizard_completed()) {
+        loading_hide();
+        ui_show_setup_wizard();
+        return;
+    }
     loading_hide();
 }
 
-static void loading_apply_layout_mode() {
-    if (!g_loading_overlay) return;
-    if (g_loading_stage_list) {
-        if (g_loading_details_collapsed) lv_obj_add_flag(g_loading_stage_list, LV_OBJ_FLAG_HIDDEN);
-        else lv_obj_clear_flag(g_loading_stage_list, LV_OBJ_FLAG_HIDDEN);
-    }
-    lv_obj_set_height(g_loading_overlay, g_loading_details_collapsed ? SCALE(210) : SCALE(300));
-    if (g_loading_toggle_btn) {
-        lv_obj_t* lbl = lv_obj_get_child(g_loading_toggle_btn, 0);
-        if (lbl) lv_label_set_text(lbl, g_loading_details_collapsed ? "▸" : "▾");
-    }
-}
-
-static void loading_toggle_details_cb(lv_event_t* e) {
+static void loading_enter_wizard_cb(lv_event_t* e) {
     (void)e;
-    g_loading_details_collapsed = !g_loading_details_collapsed;
-    loading_apply_layout_mode();
-}
-
-static void loading_start_fade() {
-    if (!g_loading_overlay || g_loading_fade_active) return;
-    g_loading_fade_active = true;
+    g_loading_route_state = 0;
+    loading_hide();
+    ui_show_setup_wizard();
 }
 
 static const char* loading_stage_reset_text() {
     return (g_lang == Lang::CN)
-        ? "○ 网关\n○ 许可证\n○ 工作区\n○ 功能开关\n○ 收尾完成"
-        : "○ Gateway\n○ License\n○ Workspace\n○ Feature flags\n○ Finalize";
+    ? "Checking..."
+    : "Checking...";
 }
 
-/* Loading timer: rotate icon + check status */
+/* Boot Check page timer: poll async check + update UI */
 static void loading_timer_cb(lv_timer_t* t) {
     (void)t;
     if (!g_loading_overlay) return;
-    if (g_loading_fade_active) {
-        g_loading_fade_opa -= 12;
-        if (g_loading_fade_opa < 0) g_loading_fade_opa = 0;
-        lv_obj_set_style_opa(g_loading_overlay, (lv_opa_t)g_loading_fade_opa, 0);
-        if (g_loading_fade_opa <= 0) {
-            g_loading_fade_active = false;
-            loading_hide();
-        }
+
+    if (!g_wizard_gate_ready.load()) {
+        DWORD elapsed = GetTickCount() - g_loading_start_tick;
+        int dots = (int)((elapsed / 400) % 4);
+        char msg[128];
+        snprintf(msg, sizeof(msg), "%s%.*s",
+                 (g_lang == Lang::CN) ? "Boot Check 检测中" : "Boot Check running",
+                 dots, "...");
+        if (g_loading_label) lv_label_set_text(g_loading_label, msg);
         return;
     }
 
     DWORD now = GetTickCount();
+    if (!g_loading_result_applied) {
+        EnvCheckResult env{};
+        bool net_ok = false;
+        {
+            std::lock_guard<std::mutex> lk(g_wizard_gate_mtx);
+            env = g_wizard_gate_env;
+            net_ok = g_wizard_gate_net_ok;
+        }
 
-    /* Rotate garlic icon */
-    g_loading_angle += 6.0f;  /* 6° per tick = full rotation in ~3s at 50ms interval */
-    if (g_loading_angle >= 360.0f) g_loading_angle -= 360.0f;
-    if (g_loading_icon) {
-        lv_image_set_rotation(g_loading_icon, (int32_t)(g_loading_angle * 10));
+        bool node_pass = env.node_ok && env.node_version_ok;
+        bool npm_pass = env.npm_ok;
+        bool net_pass = net_ok;
+        bool oc_pass = env.openclaw_ok;
+        bool gw_unknown = !env.openclaw_ok;
+        bool gw_pass = env.gateway_ok;
+        bool gw_fail = !gw_unknown && !gw_pass;
+
+        bool hermes_unknown = !env.hermes_ok;
+        bool hermes_pass = env.hermes_ok && env.hermes_healthy;
+        bool hermes_fail = env.hermes_ok && !env.hermes_healthy;
+
+        bool claude_unknown = !env.claude_ok;
+        bool claude_pass = env.claude_ok && env.claude_healthy;
+        bool claude_fail = env.claude_ok && !env.claude_healthy;
+
+        bool disk_pass = env.disk_space_ok;
+        bool disk_fail = !env.disk_space_ok;
+        bool port_pass = env.port_18789_ok;
+        bool port_fail = !env.port_18789_ok;
+
+        bool has_fail = !node_pass || !npm_pass || !net_pass || !oc_pass || gw_fail || hermes_fail || claude_fail || disk_fail || port_fail;
+        bool has_unknown = gw_unknown || hermes_unknown || claude_unknown;
+        g_loading_has_fail = has_fail;
+        g_loading_has_unknown = has_unknown;
+        if (has_fail) g_loading_route_state = 2;
+        else if (has_unknown) g_loading_route_state = 3;
+        else g_loading_route_state = 1;
+        LOG_I("BootCheck", "apply_result fail=%d unknown=%d wizard_completed=%d", has_fail ? 1 : 0, has_unknown ? 1 : 0, is_wizard_completed() ? 1 : 0);
+        ui_log("[BootCheck] apply_result fail=%d unknown=%d wizard_completed=%d", has_fail ? 1 : 0, has_unknown ? 1 : 0, is_wizard_completed() ? 1 : 0);
+
+        auto paint_row = [&](lv_obj_t* row, const char* name, const char* detail, bool pass, bool fail, bool unknown) {
+            if (!row) return;
+            /* Row children: 0=name_lbl, 1=ver_lbl, 2=badge, 3=badge_lbl */
+            (void)name; /* name is already set in mk_row, leave it */
+            lv_obj_t* ver_lbl = lv_obj_get_child(row, 1);
+            lv_obj_t* badge = lv_obj_get_child(row, 2);
+            lv_obj_t* badge_lbl = badge ? lv_obj_get_child(badge, 0) : nullptr;
+            if (ver_lbl) {
+                if (detail) lv_label_set_text(ver_lbl, detail);
+                lv_obj_set_style_text_color(ver_lbl, g_colors->text_dim, 0);
+            }
+            lv_color_t col = pass ? g_colors->success : (fail ? g_colors->danger : g_colors->text_dim);
+            if (badge_lbl) {
+                lv_label_set_text(badge_lbl, loading_status_text(pass, fail, unknown));
+                lv_obj_set_style_text_color(badge_lbl, col, 0);
+            }
+            /* Highlight name on fail */
+            lv_obj_t* name_lbl = lv_obj_get_child(row, 0);
+            if (name_lbl) {
+                lv_obj_set_style_text_color(name_lbl, fail ? g_colors->danger : g_colors->text, 0);
+            }
+        };
+
+        paint_row(g_loading_row_node,   "Node.js",          env.node_ver[0] ? env.node_ver : "-", node_pass, !node_pass, false);
+        paint_row(g_loading_row_npm,    "npm",              env.npm_ver[0] ? env.npm_ver : "-", npm_pass, !npm_pass, false);
+        paint_row(g_loading_row_net,    "Network",          net_pass ? "openrouter.ai" : "-", net_pass, !net_pass, false);
+        paint_row(g_loading_row_oc,     "OpenClaw",         env.openclaw_ver[0] ? env.openclaw_ver : "-", oc_pass, !oc_pass, false);
+        paint_row(g_loading_row_gw,     "Gateway",          gw_unknown ? "not applicable" : "127.0.0.1:18789", gw_pass, gw_fail, gw_unknown);
+        paint_row(g_loading_row_hermes, "Hermes",           env.hermes_ver[0] ? env.hermes_ver : "not installed", hermes_pass, hermes_fail, hermes_unknown);
+        paint_row(g_loading_row_claude, "Claude Code CLI",  env.claude_ver[0] ? env.claude_ver : "not installed", claude_pass, claude_fail, claude_unknown);
+        paint_row(g_loading_row_disk,   "Disk Space",       env.disk_space_ok ? ">= 1GB" : "< 1GB", disk_pass, disk_fail, false);
+        paint_row(g_loading_row_port,   "Port 18789",       env.port_18789_ok ? "OK" : "N/A", port_pass, port_fail, false);
+
+        if (g_loading_label) {
+            if (has_fail) {
+                lv_label_set_text(g_loading_label,
+                    (g_lang == Lang::CN)
+                        ? "检测到 Fail 项。请选择进入主界面（受限）或进入向导修复。"
+                        : "Fail items detected. Choose limited main UI or setup wizard.");
+            } else if (has_unknown) {
+                lv_label_set_text(g_loading_label,
+                    (g_lang == Lang::CN)
+                        ? "检测完成（含 Unknown 项），即将继续启动。"
+                        : "Boot check finished with Unknown items. Continuing startup.");
+            } else {
+                lv_label_set_text(g_loading_label,
+                    (g_lang == Lang::CN)
+                        ? "检测全部 Pass，即将继续启动。"
+                        : "All checks passed. Continuing startup.");
+            }
+        }
+
+        g_loading_result_applied = true;
+        g_loading_result_tick = now;
+
+        if (has_fail || has_unknown) return;
     }
 
-    /* Update loading text dots animation */
-    std::string live_step;
-    int live_pct = -1;
-    bool startup_done = g_loading_startup_done.load();
-    {
-        std::lock_guard<std::mutex> lk(g_loading_live_mtx);
-        live_step = g_loading_live_step;
-        live_pct = g_loading_live_pct;
-    }
-    if (startup_done && now - g_loading_start_tick > 700) {
-        loading_start_fade();
+    if (g_loading_route_state == 2) {
+        if (!g_loading_decision_logged) {
+            LOG_I("BootCheck", "stay locked on fail result page");
+            ui_log("[BootCheck] stay locked on fail result page");
+            g_loading_decision_logged = true;
+        }
         return;
     }
 
-    if (g_loading_label) {
-        DWORD elapsed = GetTickCount() - g_loading_start_tick;
-        char buf[192];
-        float elapsed_s = (elapsed <= 0) ? 0.0f : (elapsed / 1000.0f);
-        const char* eta_text = "ETA: calculating...";
-        const char* speed_text = "Speed: estimating...";
-        char eta_buf[48] = {0};
-        char speed_buf[48] = {0};
-        int eta_sec = -1;
-        float rate = 0.0f;
-        int pct_for_eta = (live_pct < 0) ? 0 : live_pct;
-        if (elapsed_s > 0.2f && pct_for_eta > 0) {
-            rate = (float)pct_for_eta / elapsed_s;
-            if (rate > 0.01f && pct_for_eta < 100) {
-                eta_sec = (int)((100.0f - (float)pct_for_eta) / rate);
-                if (eta_sec < 0) eta_sec = 0;
-                snprintf(eta_buf, sizeof(eta_buf), "ETA: %ds", eta_sec);
-                eta_text = eta_buf;
-            } else if (pct_for_eta >= 100) {
-                eta_text = "ETA: done";
-            }
-            snprintf(speed_buf, sizeof(speed_buf), "Speed: %.1f%%/s", rate);
-            speed_text = speed_buf;
-        }
-        if (!live_step.empty()) {
-            int pct = (live_pct < 0) ? 0 : live_pct;
-            snprintf(buf, sizeof(buf), "%s (%d%%)\n%s  |  %s", live_step.c_str(), pct, speed_text, eta_text);
-        } else {
-            int dots = (int)((elapsed / 500) % 4);
-            const char* phase = "Starting OpenClaw";
-            if (elapsed > 9000) phase = "Checking Gateway status";
-            else if (elapsed > 3000) phase = "Initializing runtime modules";
-            snprintf(buf, sizeof(buf), "%s%.*s\n%s  |  %s", phase, dots, "...", speed_text, eta_text);
-        }
-        lv_label_set_text(g_loading_label, buf);
-    }
-    if (g_loading_bar) {
-        int bar_pct = live_pct;
-        if (bar_pct < 0) {
-            DWORD elapsed = GetTickCount() - g_loading_start_tick;
-            bar_pct = (elapsed > 12000) ? 95 : (int)(elapsed / 140);
-        }
-        if (bar_pct < 0) bar_pct = 0;
-        if (bar_pct > 100) bar_pct = 100;
-        lv_bar_set_value(g_loading_bar, bar_pct, LV_ANIM_ON);
-    }
-    if (g_loading_stage_list) {
-        int p = (live_pct < 0) ? 0 : live_pct;
-        const char* gateway = (p >= 30) ? "✓" : (p >= 10 ? "•" : "○");
-        const char* license = (p >= 56) ? "✓" : (p >= 40 ? "•" : "○");
-        const char* workspace = (p >= 80) ? "✓" : (p >= 60 ? "•" : "○");
-        const char* features = (p >= 90) ? "✓" : (p >= 82 ? "•" : "○");
-        const char* finish = startup_done ? "✓" : (p >= 95 ? "•" : "○");
-        char stage_buf[320];
-        if (g_lang == Lang::CN) {
-            snprintf(stage_buf, sizeof(stage_buf),
-                     "%s 网关\n%s 许可证\n%s 工作区\n%s 功能开关\n%s 收尾完成",
-                     gateway, license, workspace, features, finish);
-        } else {
-            snprintf(stage_buf, sizeof(stage_buf),
-                     "%s Gateway\n%s License\n%s Workspace\n%s Feature flags\n%s Finalize",
-                     gateway, license, workspace, features, finish);
-        }
-        lv_label_set_text(g_loading_stage_list, stage_buf);
+    if (g_loading_route_state == 3) {
+        LOG_I("BootCheck", "route -> main ui (unknown without fail)");
+        ui_log("[BootCheck] route -> main ui (unknown without fail)");
+        loading_hide();
+        return;
     }
 
-    /* UI-thread friendly: avoid network probing here. Worker startup events drive hide timing. */
-    if (now - g_loading_start_tick > 12000) {
-        LOG_W("Loading", "Startup card timeout after 12s, hiding");
-        loading_start_fade();
+    if (g_loading_route_state != 1) return;
+
+    DWORD elapsed_after_result = now - g_loading_result_tick;
+    if (elapsed_after_result < 2500) return;
+
+    if (!g_loading_decision_logged) {
+        LOG_I("BootCheck", "post-delay elapsed=%lu has_fail=%d has_unknown=%d", (unsigned long)elapsed_after_result, g_loading_has_fail ? 1 : 0, g_loading_has_unknown ? 1 : 0);
+        ui_log("[BootCheck] post-delay elapsed=%lu has_fail=%d has_unknown=%d", (unsigned long)elapsed_after_result, g_loading_has_fail ? 1 : 0, g_loading_has_unknown ? 1 : 0);
+        g_loading_decision_logged = true;
     }
+
+    if (g_loading_has_fail) {
+        LOG_I("BootCheck", "stay on page due to fail items");
+        return;
+    }
+
+    if (!is_wizard_completed()) {
+        LOG_I("BootCheck", "route -> setup wizard");
+        ui_log("[BootCheck] route -> setup wizard");
+        loading_hide();
+        ui_show_setup_wizard();
+        return;
+    }
+
+    LOG_I("BootCheck", "route -> main ui");
+    ui_log("[BootCheck] route -> main ui");
+    loading_hide();
 }
 
 /* Show loading overlay */
 static void loading_show() {
+    LOG_I("BootCheck", "loading_show enter");
+    ui_log("[BootCheck] loading_show enter");
     if (!g_loading_overlay) {
         lv_obj_t* scr = lv_screen_active();
+        int vw = lv_obj_get_width(scr);
+        int vh = lv_obj_get_height(scr);
+        if (vw <= 0) vw = WIN_W;
+        if (vh <= 0) vh = WIN_H;
+
+        /* Overlay: full-screen floating, bg color */
         g_loading_overlay = lv_obj_create(scr);
-        int overlay_w = WIN_W * LOADING_OVERLAY_W_PCT / 100;
-        int overlay_h = WIN_H * LOADING_OVERLAY_H_PCT / 100;
-        lv_obj_set_size(g_loading_overlay, overlay_w, overlay_h);
-        lv_obj_align(g_loading_overlay, LV_ALIGN_TOP_RIGHT, -SCALE(16), TITLE_H + SCALE(8));
-        lv_obj_set_style_bg_color(g_loading_overlay, g_colors->raised, 0);
-        lv_obj_set_style_bg_opa(g_loading_overlay, g_colors->loading_opacity, 0);
-        lv_obj_set_style_border_width(g_loading_overlay, 1, 0);
-        lv_obj_set_style_border_color(g_loading_overlay, g_colors->border_strong, 0);
-        lv_obj_set_style_radius(g_loading_overlay, SCALE(g_colors->radius_lg), 0);
-        lv_obj_set_style_pad_all(g_loading_overlay, SCALE(14), 0);
-        lv_obj_set_style_pad_gap(g_loading_overlay, SCALE(8), 0);
+        lv_obj_set_size(g_loading_overlay, vw, vh);
+        lv_obj_set_pos(g_loading_overlay, 0, 0);
+        lv_obj_add_flag(g_loading_overlay, LV_OBJ_FLAG_FLOATING);
+        lv_obj_set_style_bg_color(g_loading_overlay, g_colors->bg, 0);
+        lv_obj_set_style_bg_opa(g_loading_overlay, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(g_loading_overlay, 0, 0);
+        lv_obj_set_style_radius(g_loading_overlay, 0, 0);
+        lv_obj_set_style_pad_all(g_loading_overlay, 0, 0);
+        lv_obj_set_style_pad_gap(g_loading_overlay, 0, 0);
         lv_obj_clear_flag(g_loading_overlay, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_set_flex_flow(g_loading_overlay, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_flex_align(g_loading_overlay, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
         lv_obj_move_foreground(g_loading_overlay);
 
-        lv_obj_t* top_row = lv_obj_create(g_loading_overlay);
-        lv_obj_set_size(top_row, LV_PCT(100), LV_SIZE_CONTENT);
-        lv_obj_set_style_bg_opa(top_row, LV_OPA_TRANSP, 0);
-        lv_obj_set_style_border_width(top_row, 0, 0);
-        lv_obj_set_style_pad_all(top_row, 0, 0);
-        lv_obj_set_style_pad_gap(top_row, SCALE(8), 0);
-        lv_obj_set_flex_flow(top_row, LV_FLEX_FLOW_ROW);
-        lv_obj_set_flex_align(top_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        lv_obj_clear_flag(top_row, LV_OBJ_FLAG_SCROLLABLE);
+        /* Header bar: 48px with window controls */
+        lv_obj_t* top_bar = lv_obj_create(g_loading_overlay);
+        int header_h = SCALE(48);
+        lv_obj_set_size(top_bar, LV_PCT(100), header_h);
+        lv_obj_set_style_bg_color(top_bar, g_colors->bg, 0);
+        lv_obj_set_style_bg_opa(top_bar, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(top_bar, 0, 0);
+        lv_obj_set_style_pad_hor(top_bar, SCALE(14), 0);
+        lv_obj_set_style_pad_ver(top_bar, 0, 0);
+        lv_obj_set_flex_flow(top_bar, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(top_bar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(top_bar, LV_OBJ_FLAG_SCROLLABLE);
 
-        lv_obj_t* top_title = lv_label_create(top_row);
-        lv_label_set_text(top_title, g_lang == Lang::CN ? "后台启动中" : "Background startup");
-        lv_obj_set_style_text_color(top_title, g_colors->text_dim, 0);
-        lv_obj_set_style_text_font(top_title, CJK_FONT_SMALL, 0);
+        /* Title: garlic icon + "AnyClaw Boot Check" */
+        lv_obj_t* title_icon = lv_image_create(top_bar);
+        lv_image_set_src(title_icon, "A:assets/garlic_48.png");
+        int title_icon_size = std::max(SCALE(28), header_h * 80 / 100);
+        int title_icon_scale = title_icon_size * 256 / 48;
+        if (title_icon_scale < 128) title_icon_scale = 128;
+        lv_image_set_scale(title_icon, (int16_t)title_icon_scale);
+        lv_obj_set_style_pad_right(title_icon, SCALE(8), 0);
+        lv_obj_add_flag(title_icon, LV_OBJ_FLAG_EVENT_BUBBLE);
 
-        g_loading_hide_btn = lv_button_create(top_row);
-        lv_obj_set_size(g_loading_hide_btn, SCALE(28), SCALE(22));
-        lv_obj_set_style_bg_color(g_loading_hide_btn, g_colors->btn_secondary, 0);
-        lv_obj_set_style_radius(g_loading_hide_btn, SCALE(g_colors->radius_sm), 0);
-        lv_obj_add_event_cb(g_loading_hide_btn, loading_manual_hide_cb, LV_EVENT_CLICKED, nullptr);
-        lv_obj_t* hide_lbl = lv_label_create(g_loading_hide_btn);
-        lv_label_set_text(hide_lbl, "×");
-        lv_obj_set_style_text_font(hide_lbl, CJK_FONT_SMALL, 0);
-        lv_obj_center(hide_lbl);
+        lv_obj_t* top_title = lv_label_create(top_bar);
+        lv_label_set_text(top_title, g_lang == Lang::CN ? "AnyClaw Boot Check" : "AnyClaw Boot Check");
+        lv_obj_set_style_text_color(top_title, g_colors->text, 0);
+        lv_obj_set_style_text_font(top_title, CJK_FONT, 0);
 
-        g_loading_toggle_btn = lv_button_create(top_row);
-        lv_obj_set_size(g_loading_toggle_btn, SCALE(28), SCALE(22));
-        lv_obj_set_style_bg_color(g_loading_toggle_btn, g_colors->btn_secondary, 0);
-        lv_obj_set_style_radius(g_loading_toggle_btn, SCALE(g_colors->radius_sm), 0);
-        lv_obj_add_event_cb(g_loading_toggle_btn, loading_toggle_details_cb, LV_EVENT_CLICKED, nullptr);
-        lv_obj_t* toggle_lbl = lv_label_create(g_loading_toggle_btn);
-        lv_label_set_text(toggle_lbl, "▾");
-        lv_obj_set_style_text_font(toggle_lbl, CJK_FONT_SMALL, 0);
-        lv_obj_center(toggle_lbl);
+        /* Window controls: minimize / maximize / close — pushed to right edge */
+        {
+            int wc_btn_size = SCALE(28);
+            int wc_btn_gap = SCALE(6);
+            /* Spacer flex-grow pushes controls to far right */
+            lv_obj_t* spacer = lv_obj_create(top_bar);
+            lv_obj_set_size(spacer, LV_PCT(100), 1);
+            lv_obj_set_style_bg_opa(spacer, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_width(spacer, 0, 0);
+            lv_obj_set_style_pad_all(spacer, 0, 0);
+            lv_obj_clear_flag(spacer, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_set_flex_grow(spacer, 1);
 
-        g_loading_icon = lv_image_create(g_loading_overlay);
-        lv_image_set_src(g_loading_icon, "A:assets/garlic_48.png");
-        int loading_icon_px = overlay_h * LOADING_ICON_PCT / 100;
-        lv_obj_set_size(g_loading_icon, loading_icon_px, loading_icon_px);
-        lv_image_set_scale(g_loading_icon, 256); /* 100% */
-        lv_obj_align(g_loading_icon, LV_ALIGN_TOP_MID, 0, 0);
+            /* Minimize */
+            lv_obj_t* btn_min = lv_button_create(top_bar);
+            lv_obj_set_size(btn_min, wc_btn_size, wc_btn_size);
+            lv_obj_set_style_bg_color(btn_min, g_colors->btn_secondary, 0);
+            lv_obj_set_style_bg_opa(btn_min, LV_OPA_COVER, 0);
+            lv_obj_set_style_radius(btn_min, SCALE(g_colors->radius_sm), 0);
+            lv_obj_set_style_border_width(btn_min, 1, 0);
+            lv_obj_set_style_border_color(btn_min, g_colors->border, 0);
+            lv_obj_clear_flag(btn_min, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+            lv_obj_clear_flag(btn_min, LV_OBJ_FLAG_EVENT_BUBBLE);
+            lv_obj_set_ext_click_area(btn_min, SCALE(6));
+            lv_obj_add_event_cb(btn_min, btn_minimize_cb, LV_EVENT_CLICKED, nullptr);
+            lv_obj_t* lbl_min = lv_label_create(btn_min);
+            lv_label_set_text(lbl_min, "-");
+            lv_obj_set_style_text_font(lbl_min, CJK_FONT, 0);
+            lv_obj_center(lbl_min);
 
-        /* Loading text */
-        g_loading_label = lv_label_create(g_loading_overlay);
+            /* Maximize */
+            lv_obj_t* btn_max = lv_button_create(top_bar);
+            lv_obj_set_size(btn_max, wc_btn_size, wc_btn_size);
+            lv_obj_set_style_bg_color(btn_max, g_colors->btn_secondary, 0);
+            lv_obj_set_style_bg_opa(btn_max, LV_OPA_COVER, 0);
+            lv_obj_set_style_radius(btn_max, SCALE(g_colors->radius_sm), 0);
+            lv_obj_set_style_border_width(btn_max, 1, 0);
+            lv_obj_set_style_border_color(btn_max, g_colors->border, 0);
+            lv_obj_clear_flag(btn_max, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+            lv_obj_clear_flag(btn_max, LV_OBJ_FLAG_EVENT_BUBBLE);
+            lv_obj_set_ext_click_area(btn_max, SCALE(6));
+            lv_obj_add_event_cb(btn_max, btn_maximize_cb, LV_EVENT_CLICKED, nullptr);
+            lv_obj_t* lbl_max = lv_label_create(btn_max);
+            lv_label_set_text(lbl_max, "[]");
+            lv_obj_set_style_text_font(lbl_max, CJK_FONT, 0);
+            lv_obj_center(lbl_max);
+
+            /* Close */
+            lv_obj_t* btn_cls = lv_button_create(top_bar);
+            lv_obj_set_size(btn_cls, wc_btn_size, wc_btn_size);
+            lv_obj_set_style_bg_color(btn_cls, g_colors->btn_close, 0);
+            lv_obj_set_style_bg_opa(btn_cls, LV_OPA_COVER, 0);
+            lv_obj_set_style_radius(btn_cls, SCALE(g_colors->radius_sm), 0);
+            lv_obj_set_style_border_width(btn_cls, 1, 0);
+            lv_obj_set_style_border_color(btn_cls, g_colors->border, 0);
+            lv_obj_clear_flag(btn_cls, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+            lv_obj_clear_flag(btn_cls, LV_OBJ_FLAG_EVENT_BUBBLE);
+            lv_obj_set_ext_click_area(btn_cls, SCALE(6));
+            lv_obj_add_event_cb(btn_cls, btn_close_cb, LV_EVENT_CLICKED, nullptr);
+            lv_obj_t* lbl_cls = lv_label_create(btn_cls);
+            lv_label_set_text(lbl_cls, "X");
+            lv_obj_set_style_text_font(lbl_cls, CJK_FONT, 0);
+            lv_obj_center(lbl_cls);
+        }
+
+        /* Body: centered content area */
+        int footer_h = SCALE(56); /* min 56px to fit 48px buttons with padding */
+        lv_obj_t* body = lv_obj_create(g_loading_overlay);
+        lv_obj_set_size(body, LV_PCT(100), vh - header_h - footer_h);
+        lv_obj_set_style_bg_color(body, g_colors->bg, 0);
+        lv_obj_set_style_bg_opa(body, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(body, 0, 0);
+        lv_obj_set_style_pad_all(body, 0, 0);
+        lv_obj_set_style_pad_gap(body, 0, 0);
+        lv_obj_set_flex_flow(body, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(body, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(body, LV_OBJ_FLAG_SCROLLABLE);
+
+        /* Center wrap: 86% width, vertical layout */
+        g_loading_center_wrap = lv_obj_create(body);
+        lv_obj_set_size(g_loading_center_wrap, LV_PCT(86), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(g_loading_center_wrap, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(g_loading_center_wrap, 0, 0);
+        lv_obj_set_style_pad_all(g_loading_center_wrap, 0, 0);
+        lv_obj_set_style_pad_gap(g_loading_center_wrap, SCALE(16), 0);
+        lv_obj_set_flex_flow(g_loading_center_wrap, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(g_loading_center_wrap, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(g_loading_center_wrap, LV_OBJ_FLAG_SCROLLABLE);
+
+        /* Header label: "检测项 9 项" */
+        g_loading_header_label = lv_label_create(g_loading_center_wrap);
+        lv_label_set_text(g_loading_header_label, g_lang == Lang::CN ? "检测项 9 项" : "9 Checks");
+        lv_obj_set_style_text_color(g_loading_header_label, g_colors->text, 0);
+        lv_obj_set_style_text_font(g_loading_header_label, CJK_FONT, 0);
+        lv_obj_set_style_text_align(g_loading_header_label, LV_TEXT_ALIGN_LEFT, 0);
+
+        /* Loading label: status text */
+        g_loading_label = lv_label_create(g_loading_center_wrap);
         lv_label_set_text(g_loading_label,
                           g_lang == Lang::CN
-                            ? "正在启动 OpenClaw...\n界面已可用，后台继续初始化。"
-                            : "Starting OpenClaw...\nUI is ready. Finishing background startup.");
-        lv_obj_set_style_text_color(g_loading_label, g_colors->text, 0);
+                            ? "正在执行启动检测..."
+                            : "Running startup checks...");
+        lv_obj_set_style_text_color(g_loading_label, g_colors->text_dim, 0);
         lv_obj_set_style_text_font(g_loading_label, CJK_FONT_SMALL, 0);
         lv_label_set_long_mode(g_loading_label, LV_LABEL_LONG_WRAP);
         lv_obj_set_width(g_loading_label, LV_PCT(100));
+        lv_obj_set_style_text_align(g_loading_label, LV_TEXT_ALIGN_LEFT, 0);
 
-        g_loading_bar = lv_bar_create(g_loading_overlay);
-        lv_obj_set_size(g_loading_bar, LV_PCT(100), SCALE(8));
-        lv_bar_set_range(g_loading_bar, 0, 100);
-        lv_bar_set_value(g_loading_bar, 2, LV_ANIM_OFF);
-        lv_obj_set_style_radius(g_loading_bar, 999, 0);
-        lv_obj_set_style_bg_color(g_loading_bar, g_colors->btn_secondary, LV_PART_MAIN);
-        lv_obj_set_style_bg_color(g_loading_bar, g_colors->accent, LV_PART_INDICATOR);
+        /* Rows panel: fixed 500px (spec 428px was too small for 9 rows at 40px + gaps + padding) */
+        g_loading_rows_panel = lv_obj_create(g_loading_center_wrap);
+        lv_obj_set_size(g_loading_rows_panel, LV_PCT(100), SCALE(500));
+        lv_obj_set_style_bg_color(g_loading_rows_panel, g_colors->surface, 0);
+        lv_obj_set_style_bg_opa(g_loading_rows_panel, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(g_loading_rows_panel, 1, 0);
+        lv_obj_set_style_border_color(g_loading_rows_panel, g_colors->border, 0);
+        lv_obj_set_style_radius(g_loading_rows_panel, SCALE(g_colors->radius_md), 0);
+        lv_obj_set_style_pad_all(g_loading_rows_panel, SCALE(24), 0);
+        lv_obj_set_style_pad_gap(g_loading_rows_panel, SCALE(4), 0);
+        lv_obj_set_flex_flow(g_loading_rows_panel, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(g_loading_rows_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_clear_flag(g_loading_rows_panel, LV_OBJ_FLAG_SCROLLABLE);
 
-        g_loading_stage_list = lv_label_create(g_loading_overlay);
-        lv_label_set_text(g_loading_stage_list, loading_stage_reset_text());
-        lv_obj_set_style_text_color(g_loading_stage_list, g_colors->text_dim, 0);
-        lv_obj_set_style_text_font(g_loading_stage_list, CJK_FONT_SMALL, 0);
-        lv_obj_set_width(g_loading_stage_list, LV_PCT(100));
+        /* Row height: fixed 40px per design spec */
+        int row_h = SCALE(40);
+        int col_name_w = SCALE(160);
+        int col_badge_w = SCALE(72);
+
+        /* mk_row: creates a 3-column row (name | version | badge) */
+        auto mk_row = [&](const char* name, const char* init_detail) -> std::tuple<lv_obj_t*, lv_obj_t*, lv_obj_t*> {
+            lv_obj_t* row = lv_obj_create(g_loading_rows_panel);
+            lv_obj_set_size(row, LV_PCT(100), row_h);
+            lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_width(row, 0, 0);
+            lv_obj_set_style_pad_all(row, 0, 0);
+            lv_obj_set_style_pad_gap(row, 0, 0);
+            lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
+            lv_obj_set_flex_align(row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+            lv_obj_clear_flag(row, LV_OBJ_FLAG_SCROLLABLE);
+
+            /* Col 1: name label (fixed 160px) */
+            lv_obj_t* lbl_name = lv_label_create(row);
+            lv_label_set_text(lbl_name, name);
+            lv_obj_set_size(lbl_name, col_name_w, LV_PCT(100));
+            lv_obj_set_style_text_color(lbl_name, g_colors->text, 0);
+            lv_obj_set_style_text_font(lbl_name, CJK_FONT_SMALL, 0);
+            lv_obj_set_style_text_align(lbl_name, LV_TEXT_ALIGN_LEFT, 0);
+
+            /* Col 2: version/detail (flex-grow) */
+            lv_obj_t* lbl_ver = lv_label_create(row);
+            lv_label_set_text(lbl_ver, init_detail ? init_detail : loading_stage_reset_text());
+            lv_obj_set_size(lbl_ver, LV_PCT(100), LV_PCT(100));
+            lv_obj_set_style_text_color(lbl_ver, g_colors->text_dim, 0);
+            lv_obj_set_style_text_font(lbl_ver, CJK_FONT_SMALL, 0);
+            lv_obj_set_style_text_align(lbl_ver, LV_TEXT_ALIGN_LEFT, 0);
+            lv_obj_set_flex_grow(lbl_ver, 1);
+
+            /* Col 3: status badge (fixed 72px) */
+            lv_obj_t* badge = lv_obj_create(row);
+            lv_obj_set_size(badge, col_badge_w, SCALE(22));
+            lv_obj_set_style_bg_opa(badge, LV_OPA_TRANSP, 0);
+            lv_obj_set_style_border_width(badge, 0, 0);
+            lv_obj_set_style_pad_all(badge, 0, 0);
+            lv_obj_set_style_pad_left(badge, SCALE(32), 0); /* 1cm offset for 2nd col */
+            lv_obj_set_style_radius(badge, SCALE(11), 0); /* pill shape */
+            lv_obj_set_flex_align(badge, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+            lv_obj_clear_flag(badge, LV_OBJ_FLAG_SCROLLABLE);
+
+            lv_obj_t* badge_lbl = lv_label_create(badge);
+            lv_label_set_text(badge_lbl, loading_stage_reset_text());
+            lv_obj_set_width(badge_lbl, col_badge_w);
+            lv_obj_set_style_text_color(badge_lbl, g_colors->text_dim, 0);
+            lv_obj_set_style_text_font(badge_lbl, CJK_FONT_SMALL, 0);
+            lv_obj_set_style_text_align(badge_lbl, LV_TEXT_ALIGN_CENTER, 0);
+
+            return {row, lbl_ver, badge_lbl};
+        };
+
+        g_loading_row_node = std::get<0>(mk_row("Node.js", nullptr));
+        g_loading_row_npm   = std::get<0>(mk_row("npm",             nullptr));
+        g_loading_row_net   = std::get<0>(mk_row("Network",         nullptr));
+        g_loading_row_oc    = std::get<0>(mk_row("OpenClaw",        nullptr));
+        g_loading_row_gw    = std::get<0>(mk_row("Gateway",         nullptr));
+        g_loading_row_hermes = std::get<0>(mk_row("Hermes",         nullptr));
+        g_loading_row_claude = std::get<0>(mk_row("Claude Code CLI", nullptr));
+        g_loading_row_disk  = std::get<0>(mk_row("Disk Space",      nullptr));
+        g_loading_row_port  = std::get<0>(mk_row("Port 18789",     nullptr));
+
+        /* Button height: 6% of logical height, clamped 40-56px */
+        int btn_h = std::max(SCALE(40), (int)(vh * 6 / 100));
+        btn_h = std::min(btn_h, SCALE(56));
+        /* Footer height: must fit button + vertical padding */
+        footer_h = std::max(SCALE(56), btn_h + SCALE(16));
+
+        /* Footer: left=向导 button, right=下一步 button */
+        lv_obj_t* footer = lv_obj_create(g_loading_overlay);
+        lv_obj_set_size(footer, LV_PCT(100), footer_h);
+        lv_obj_set_style_bg_color(footer, g_colors->bg, 0);
+        lv_obj_set_style_bg_opa(footer, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_width(footer, 0, 0);
+        lv_obj_set_style_pad_hor(footer, SCALE(20), 0);
+        lv_obj_set_style_pad_ver(footer, SCALE(8), 0);
+        lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(footer, LV_OBJ_FLAG_SCROLLABLE);
+
+        /* Left: 向导 button (secondary) */
+        g_loading_btn_enter_wizard = lv_button_create(footer);
+        lv_obj_set_size(g_loading_btn_enter_wizard, SCALE(100), btn_h);
+        lv_obj_set_style_bg_color(g_loading_btn_enter_wizard, g_colors->btn_secondary, 0);
+        lv_obj_set_style_radius(g_loading_btn_enter_wizard, SCALE(g_colors->radius_md), 0);
+        lv_obj_add_event_cb(g_loading_btn_enter_wizard, loading_enter_wizard_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* lbl_enter_wizard = lv_label_create(g_loading_btn_enter_wizard);
+        lv_label_set_text(lbl_enter_wizard, g_lang == Lang::CN ? "进入向导修复" : "Enter Wizard");
+        lv_obj_set_style_text_font(lbl_enter_wizard, CJK_FONT_SMALL, 0);
+        lv_obj_center(lbl_enter_wizard);
+
+        /* Right: 下一步 button (accent) */
+        g_loading_btn_enter_main = lv_button_create(footer);
+        lv_obj_set_size(g_loading_btn_enter_main, SCALE(120), btn_h);
+        lv_obj_set_style_bg_color(g_loading_btn_enter_main, g_colors->accent, 0);
+        lv_obj_set_style_radius(g_loading_btn_enter_main, SCALE(g_colors->radius_md), 0);
+        lv_obj_add_event_cb(g_loading_btn_enter_main, loading_enter_main_cb, LV_EVENT_CLICKED, nullptr);
+        lv_obj_t* lbl_enter_main = lv_label_create(g_loading_btn_enter_main);
+        lv_label_set_text(lbl_enter_main, g_lang == Lang::CN ? "进入主界面（受限）" : "Enter Limited Mode");
+        lv_obj_set_style_text_font(lbl_enter_main, CJK_FONT_SMALL, 0);
+        lv_obj_center(lbl_enter_main);
+
+        g_loading_action_row = footer;
+
+        lv_obj_update_layout(g_loading_overlay);
+        /* Debug: log footer position using OutputDebugString */
+        {
+            lv_obj_update_layout(footer);
+            int footer_y = lv_obj_get_y(footer);
+            int footer_h2 = lv_obj_get_height(footer);
+            int body_h = lv_obj_get_height(body);
+            char dbg[256];
+            snprintf(dbg, sizeof(dbg), "[BootCheck] footer y=%d h=%d body_h=%d vh=%d\r\n", footer_y, footer_h2, body_h, vh);
+            OutputDebugStringA(dbg);
+        }
     } else {
         lv_obj_clear_flag(g_loading_overlay, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_align(g_loading_overlay, LV_ALIGN_TOP_RIGHT, -SCALE(16), TITLE_H + SCALE(8));
+        lv_obj_set_pos(g_loading_overlay, 0, 0);
         lv_obj_move_foreground(g_loading_overlay);
     }
 
     g_loading_start_tick = GetTickCount();
-    g_loading_angle = 0.0f;
-    g_loading_hidden_by_user = false;
-    g_loading_details_collapsed = false;
-    g_loading_fade_active = false;
-    g_loading_fade_opa = 220;
-    g_loading_startup_done.store(false);
-    {
-        std::lock_guard<std::mutex> lk(g_loading_live_mtx);
-        g_loading_live_step.clear();
-        g_loading_live_pct = -1;
-    }
-    if (g_loading_bar) lv_bar_set_value(g_loading_bar, 2, LV_ANIM_OFF);
-    if (g_loading_stage_list) lv_label_set_text(g_loading_stage_list, loading_stage_reset_text());
-    lv_obj_set_style_opa(g_loading_overlay, (lv_opa_t)g_loading_fade_opa, 0);
-    loading_apply_layout_mode();
+    g_loading_result_applied = false;
+    g_loading_result_tick = 0;
+    g_loading_has_fail = false;
+    g_loading_has_unknown = false;
+    g_loading_decision_logged = false;
+    g_loading_route_state = 0;
+    if (g_loading_header_label) lv_label_set_text(g_loading_header_label,
+        g_lang == Lang::CN ? "检测项 9 项" : "9 Checks");
+    if (g_loading_label) lv_label_set_text(g_loading_label,
+        (g_lang == Lang::CN) ? "正在执行启动检测..." : "Running startup checks...");
 
-    /* Start rotation + status check timer (60fps) */
+    auto reset_row = [&](lv_obj_t* row) {
+        if (!row) return;
+        /* Each row has 3 children: name_lbl, ver_lbl, badge */
+        lv_obj_t* name_lbl = lv_obj_get_child(row, 0);
+        lv_obj_t* ver_lbl = lv_obj_get_child(row, 1);
+        lv_obj_t* badge = lv_obj_get_child(row, 2);
+        lv_obj_t* badge_lbl = badge ? lv_obj_get_child(badge, 0) : nullptr;
+        if (ver_lbl) lv_label_set_text(ver_lbl, loading_stage_reset_text());
+        if (badge_lbl) {
+            lv_label_set_text(badge_lbl, loading_stage_reset_text());
+            lv_obj_set_style_text_color(badge_lbl, g_colors->text_dim, 0);
+        }
+        if (name_lbl) lv_obj_set_style_text_color(name_lbl, g_colors->text, 0);
+    };
+    reset_row(g_loading_row_node);
+    reset_row(g_loading_row_npm);
+    reset_row(g_loading_row_net);
+    reset_row(g_loading_row_oc);
+    reset_row(g_loading_row_gw);
+    reset_row(g_loading_row_hermes);
+    reset_row(g_loading_row_claude);
+    reset_row(g_loading_row_disk);
+    reset_row(g_loading_row_port);
+
+    start_wizard_gate_async_check();
+    LOG_I("BootCheck", "loading_show ready timer start");
+    ui_log("[BootCheck] timer start");
+
+    /* Poll startup checks and perform flow gating */
     if (g_loading_timer) lv_timer_del(g_loading_timer);
-    g_loading_timer = lv_timer_create(loading_timer_cb, 50, nullptr);
+    g_loading_timer = lv_timer_create(loading_timer_cb, 120, nullptr);
 }
 
 /* Splitter / Resizable panels */
@@ -2185,10 +2496,6 @@ static std::vector<AttachmentQueueItem> g_attachment_failed_cache;
 static std::vector<SentAttachmentItem> g_sent_attachments;
 static std::vector<AppliedWriteBackup> g_step_write_backups;
 static std::atomic<bool> g_boot_check_running(false);
-static std::atomic<bool> g_wizard_gate_running(false);
-static std::atomic<bool> g_wizard_gate_ready(false);
-static std::mutex g_wizard_gate_mtx;
-static EnvCheckResult g_wizard_gate_env{};
 static std::mutex g_boot_detail_mtx;
 static std::string g_boot_detail_text;
 static std::atomic<bool> g_boot_detail_dirty(false);
@@ -4937,7 +5244,7 @@ static bool ask_mode_confirm_action(const char* reason, const char* suggestion, 
     }
 
     lv_obj_t* overlay = nullptr;
-    lv_obj_t* box = create_dialog(lv_screen_active(), "AnyClaw Ask Feedback", 0, 0, &overlay);
+    lv_obj_t* box = create_dialog(lv_screen_active(), "🤔 AI 需要你的决定", 0, 0, &overlay);
     if (!box || !overlay) return false;
     const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
 
@@ -5019,10 +5326,9 @@ static bool ask_mode_confirm_action(const char* reason, const char* suggestion, 
         }
     }
     if (added == 0) {
-        add_opt("继续执行");
-        add_opt("先给计划");
-        add_opt("改后执行");
-        snprintf(default_choice, sizeof(default_choice), "%s", "继续执行");
+        add_opt("✅ 同意切换");
+        add_opt("❌ 保持当前模型");
+        snprintf(default_choice, sizeof(default_choice), "%s", "✅ 同意切换");
     }
 
     lv_obj_t* lbl_custom = lv_label_create(box);
@@ -5963,6 +6269,13 @@ static void relayout_panels() {
     int chat_y = chat_top_y_with_trace(content_w);
     int chat_h = content_h - chat_y - input_h - CHAT_GAP;
     int input_y = content_h - input_h - CHAT_GAP;
+    /* Clamp input_y so input box never overflows right_panel (PANEL_H).
+     * PANEL_H may exceed the true available space; constrain to PANEL_H - input_h. */
+    int max_input_y = PANEL_H - input_h - CHAT_GAP;
+    if (input_y > max_input_y) input_y = max_input_y;
+    /* Recompute chat_h with clamped input_y */
+    chat_h = input_y - chat_y - CHAT_GAP;
+    if (chat_h < 0) chat_h = 0;
 
     /* Use global widget pointers for relayout */
     if (chat_cont) {
@@ -5979,6 +6292,9 @@ static void relayout_panels() {
         lv_obj_set_size(chat_input, content_w - CHAT_GAP * 2, input_h);
         lv_obj_set_pos(chat_input, CHAT_GAP, input_y);
     }
+    /* ctrl_bar bottom touches input top with 1 padding gap */
+    int ctrl_bar_y = input_y - CTRL_BAR_H;
+    if (ctrl_bar) lv_obj_set_pos(ctrl_bar, CHAT_GAP, ctrl_bar_y);
     /* Reposition action buttons: send / upload / voice */
     layout_chat_action_buttons(content_w, input_y, input_h);
     /* Reposition search button: left of upload button */
@@ -5992,10 +6308,7 @@ static void relayout_panels() {
         if (btn_work_widget) base_x -= (btn_size + btn_gap);
         lv_obj_set_pos(g_search_btn, base_x - btn_size - btn_gap, input_y + input_h - btn_size - btn_margin);
     }
-    /* mode_dd_chat_ai_mode is now in ctrl_bar, no need to reposition here */
-    if (mode_lbl_chat_status) {
-        lv_obj_set_pos(mode_lbl_chat_status, CHAT_GAP + SCALE(96), input_y - SCALE(16));
-    }
+    /* mode_dd_chat_ai_mode and mode_lbl_chat_status are now inside ctrl_bar, repositioned together */
 
     /* Update left panel children widths + x positions */
     if (lp_separator) { lv_obj_set_x(lp_separator, GAP); }
@@ -6563,7 +6876,7 @@ static void chat_input_resize_cb(lv_event_t* e) {
 
         int content_h = mode_content_h();
         int content_w = mode_content_w();
-        int new_input_y = content_h - new_h - GAP;
+        int new_input_y = content_h - new_h - CHAT_GAP;
         lv_obj_set_pos(chat_input, CHAT_GAP, new_input_y);
 
         layout_chat_action_buttons(content_w, new_input_y, new_h);
@@ -6763,7 +7076,11 @@ static void chat_add_user_bubble(const char* text) {
     lv_obj_set_style_text_font(lbl, CJK_FONT_CHAT, 0);
     lv_obj_set_style_pad_hor(lbl, 10, 0);
     lv_obj_set_style_pad_ver(lbl, 4, 0);
-    lv_obj_set_style_bg_color(lbl, c->btn_action, 0);
+    /* P2-14 Fix: Use bubble_user_bg with gradient (Design spec) */
+    lv_obj_set_style_bg_color(lbl, c->bubble_user_bg, 0);
+    lv_obj_set_style_bg_grad_color(lbl, c->bubble_user_bg_end, 0);
+    lv_obj_set_style_bg_grad_dir(lbl, LV_GRAD_DIR_HOR, 0);
+    lv_obj_set_style_bg_grad_stop(lbl, 255, 0);
     lv_obj_set_style_bg_opa(lbl, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(lbl, SCALE(g_colors->radius_xl), 0);
     lv_obj_set_style_border_width(lbl, 0, 0);
@@ -6804,6 +7121,9 @@ static void chat_add_ai_bubble(const char* text);
 
 static lv_obj_t* g_stream_bubble = nullptr;
 static lv_obj_t* g_stream_label = nullptr;
+static lv_obj_t* g_stream_dot[3] = {nullptr, nullptr, nullptr};
+static lv_timer_t* g_stream_dot_timer = nullptr;
+static int g_stream_dot_phase = 0;  /* 0..2, which dot is 'active' */
 static char g_stream_buffer[16384] = {0};  /* 16KB — doubled for long AI responses */
 static CRITICAL_SECTION g_stream_cs;
 static bool g_stream_cs_ready = false;
@@ -7316,6 +7636,21 @@ static unsigned __stdcall chat_api_thread(void* arg) {
     return 0;
 }
 
+/* P2-16 Fix: Streaming 3-dot pulse animation (Design spec: GAP*1.5 diameter, accent, sequential 1.2s) */
+static void stream_dot_timer_cb(lv_timer_t* timer) {
+    (void)timer;
+    if (!g_streaming) return;
+    /* Animate: previous dot dims, current dot glows */
+    const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
+    for (int i = 0; i < 3; i++) {
+        if (!g_stream_dot[i]) continue;
+        lv_opa_t opa = (i == g_stream_dot_phase) ? LV_OPA_COVER : LV_OPA_50;
+        lv_obj_set_style_bg_opa(g_stream_dot[i], opa, 0);
+        lv_obj_set_style_bg_color(g_stream_dot[i], c->accent, 0);
+    }
+    g_stream_dot_phase = (g_stream_dot_phase + 1) % 3;
+}
+
 /* Main-thread timer: render new data from background thread into LVGL label */
 static void stream_timer_cb(lv_timer_t* timer) {
     (void)timer;
@@ -7377,8 +7712,8 @@ static void stream_timer_cb(lv_timer_t* timer) {
 
     if (InterlockedCompareExchange(&g_stream_done, 0, 1)) {
         g_streaming = false;
-        lv_timer_del(g_stream_timer);
-        g_stream_timer = nullptr;
+        if (g_stream_timer) { lv_timer_del(g_stream_timer); g_stream_timer = nullptr; }
+        if (g_stream_dot_timer) { lv_timer_del(g_stream_dot_timer); g_stream_dot_timer = nullptr; }
         update_send_button_state();
         DWORD total_ms = GetTickCount() - g_stream_start_tick;
         char stream_snapshot[16384] = {0};
@@ -7433,10 +7768,8 @@ static void chat_start_stream(const char* user_message) {
         if (g_stream_done) {
             LOG_W("Chat", "Stale streaming state detected, forcing cleanup");
             g_streaming = false;
-            if (g_stream_timer) {
-                lv_timer_del(g_stream_timer);
-                g_stream_timer = nullptr;
-            }
+            if (g_stream_timer) { lv_timer_del(g_stream_timer); g_stream_timer = nullptr; }
+            if (g_stream_dot_timer) { lv_timer_del(g_stream_dot_timer); g_stream_dot_timer = nullptr; }
             if (g_stream_thread) {
                 /* Thread should have exited since g_stream_done=1 */
                 DWORD wait = WaitForSingleObject(g_stream_thread, 0);
@@ -7553,8 +7886,22 @@ static void chat_start_stream(const char* user_message) {
     lv_obj_set_style_pad_ver(g_stream_label, 6, 0);
     make_label_selectable(g_stream_label);  /* Enable mouse text selection + Ctrl+C */
 
-    /* Show "thinking" indicator */
-    lv_label_set_text(g_stream_label, "...");
+    /* P2-16 Fix: 3-dot streaming indicator (Design spec: accent color, sequential pulse 1.2s) */
+    const ThemeColors* c_dot = g_colors ? g_colors : &THEME_DARK;
+    for (int i = 0; i < 3; i++) {
+        g_stream_dot[i] = lv_obj_create(inner);
+        lv_obj_set_size(g_stream_dot[i], SCALE(6), SCALE(6)); /* GAP*1.5 ≈ 6px */
+        lv_obj_set_style_bg_color(g_stream_dot[i], c_dot->accent, 0);
+        lv_obj_set_style_bg_opa(g_stream_dot[i], i == 0 ? LV_OPA_COVER : LV_OPA_50, 0);
+        lv_obj_set_style_radius(g_stream_dot[i], LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_border_width(g_stream_dot[i], 0, 0);
+        lv_obj_set_style_pad_all(g_stream_dot[i], 0, 0);
+        lv_obj_set_flex_flow(g_stream_dot[i], LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(g_stream_dot[i], LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    }
+    /* Start dot animation: 1.2s cycle (400ms per dot) */
+    g_stream_dot_timer = lv_timer_create(stream_dot_timer_cb, 400, nullptr);
+    g_stream_dot_phase = 0;
     chat_force_scroll_bottom();
 
     g_streaming = true;
@@ -7573,10 +7920,8 @@ static void chat_start_stream(const char* user_message) {
     if (!g_stream_thread) {
         if (msg_copy) free(msg_copy);
         g_streaming = false;
-        if (g_stream_timer) {
-            lv_timer_del(g_stream_timer);
-            g_stream_timer = nullptr;
-        }
+        if (g_stream_timer) { lv_timer_del(g_stream_timer); g_stream_timer = nullptr; }
+        if (g_stream_dot_timer) { lv_timer_del(g_stream_dot_timer); g_stream_dot_timer = nullptr; }
         update_send_button_state();
         update_chat_status_label("Stream start failed", false);
         if (g_work_waiting_ai) {
@@ -7684,10 +8029,21 @@ static void chat_add_ai_bubble(const char* text) {
 
     lv_obj_set_style_pad_hor(lbl, 10, 0);
     lv_obj_set_style_pad_ver(lbl, 6, 0);
-    lv_obj_set_style_bg_color(lbl, c->panel, 0);
+    /* P2-15 Fix: Use bubble_ai_bg + left accent bar (Design spec) */
+    lv_obj_set_style_bg_color(lbl, c->bubble_ai_bg, 0);
     lv_obj_set_style_bg_opa(lbl, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(lbl, SCALE(g_colors->radius_xl), 0);
     lv_obj_set_style_border_width(lbl, 0, 0);
+    /* Left accent bar (Design spec: accent color, GAP*0.5 wide) */
+    lv_obj_t* accent_bar = lv_obj_create(inner);
+    lv_obj_set_width(accent_bar, SCALE(2));
+    lv_obj_set_height(accent_bar, LV_PCT(100));
+    lv_obj_set_style_bg_color(accent_bar, c->bubble_ai_accent_bar, 0);
+    lv_obj_set_style_bg_opa(accent_bar, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(accent_bar, 0, 0);
+    lv_obj_set_style_pad_all(accent_bar, 0, 0);
+    lv_obj_set_style_radius(accent_bar, 0, 0);
+    lv_obj_align(accent_bar, LV_ALIGN_LEFT, 0, 0);
     make_label_selectable(lbl);  /* Enable mouse text selection + Ctrl+C */
 
     char history_entry[2048];
@@ -9302,7 +9658,7 @@ int ui_permission_confirm(const char* perm_key, const char* target) {
     }
 
     lv_obj_t* overlay = nullptr;
-    lv_obj_t* box = create_dialog(scr, "AnyClaw 权限确认", 0, 0, &overlay);
+    lv_obj_t* box = create_dialog(scr, "🔐 AnyClaw 权限确认", 0, 0, &overlay);
     if (!box || !overlay) {
         in_dialog = false;
         return -1;
@@ -9535,13 +9891,9 @@ static lv_obj_t* g_startup_error_modal = nullptr;
 
 static void startup_error_ok_cb(lv_event_t* e) {
     (void)e;
-    /* If this is a non-fatal error (e.g. Node.js warning), just close the popup */
-    if (!g_startup_error_title.empty()) {
-        if (g_startup_error_modal) {
-            lv_obj_del(g_startup_error_modal);
-            g_startup_error_modal = nullptr;
-        }
-        return;
+    if (g_startup_error_modal) {
+        lv_obj_del(g_startup_error_modal);
+        g_startup_error_modal = nullptr;
     }
     PostQuitMessage(0);
 }
@@ -9569,59 +9921,70 @@ static void show_startup_error(lv_obj_t* parent) {
     lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
     g_startup_error_modal = modal;
 
-    /* Error box — 34% × 35% of window */
-    int err_w = WIN_W * 34 / 100;
-    int err_h = WIN_H * 35 / 100;
+    /* Error box: fixed width similar to UI-03 spec, height by content */
+    int err_w = SCALE(480);
+    if (err_w > WIN_W - 40) err_w = WIN_W - 40;
     lv_obj_t* box = lv_obj_create(modal);
-    lv_obj_set_size(box, err_w, err_h);
-    lv_obj_set_pos(box, (WIN_W - err_w) / 2, (WIN_H - err_h) / 2);
+    lv_obj_set_width(box, err_w);
+    lv_obj_set_height(box, LV_SIZE_CONTENT);
+    lv_obj_center(box);
     lv_obj_set_style_bg_color(box, c->panel, 0);
     lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(box, 1, 0);
     lv_obj_set_style_border_color(box, c->border_strong, 0);
     lv_obj_set_style_radius(box, SCALE(g_colors->radius_lg), 0);
-    lv_obj_set_style_pad_all(box, 20, 0);
+    lv_obj_set_style_pad_all(box, 24, 0);
     lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(box, 12, 0);
+    lv_obj_set_style_pad_gap(box, 16, 0);
     lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(box, dialog_drag_cb, LV_EVENT_PRESSED, nullptr);
     lv_obj_add_event_cb(box, dialog_drag_cb, LV_EVENT_PRESSING, nullptr);
     lv_obj_add_event_cb(box, dialog_drag_cb, LV_EVENT_RELEASED, nullptr);
 
-    /* Title - use custom title if set, yellow for warnings */
+    /* Title */
     lv_obj_t* lbl_title = lv_label_create(box);
-    bool is_warning = !local_title.empty();
-    const char* title_text = is_warning ? local_title.c_str() : "AnyClaw - Already Running";
+    const char* title_text = local_title.empty() ? "⚠ 检测到问题" : local_title.c_str();
     lv_label_set_text(lbl_title, title_text);
-    lv_obj_set_style_text_color(lbl_title,
-        is_warning ? c->warning : c->accent_secondary, 0);
+    lv_obj_set_style_text_color(lbl_title, c->warning, 0);
     lv_obj_set_style_text_font(lbl_title, CJK_FONT, 0);
 
-    /* Message */
-    lv_obj_t* lbl_msg = lv_label_create(box);
+    /* Failed items container */
+    lv_obj_t* list_box = lv_obj_create(box);
+    lv_obj_set_width(list_box, LV_PCT(100));
+    lv_obj_set_height(list_box, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(list_box, c->panel, 0);
+    lv_obj_set_style_bg_opa(list_box, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(list_box, 1, 0);
+    lv_obj_set_style_border_color(list_box, c->border, 0);
+    lv_obj_set_style_radius(list_box, SCALE(g_colors->radius_md), 0);
+    lv_obj_set_style_pad_all(list_box, 16, 0);
+    lv_obj_clear_flag(list_box, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* lbl_msg = lv_label_create(list_box);
     lv_label_set_text(lbl_msg, local_msg.c_str());
     lv_obj_set_style_text_color(lbl_msg, c->text, 0);
     lv_obj_set_style_text_font(lbl_msg, CJK_FONT, 0);
     lv_label_set_long_mode(lbl_msg, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(lbl_msg, LV_PCT(100));
 
-    /* Spacer to push button down */
-    lv_obj_t* spacer = lv_obj_create(box);
-    lv_obj_set_size(spacer, LV_PCT(100), 1);
-    lv_obj_set_style_bg_opa(spacer, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(spacer, 0, 0);
-    lv_obj_clear_flag(spacer, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* lbl_hint = lv_label_create(box);
+    lv_label_set_text(lbl_hint, "请修复上述问题后重新启动应用。");
+    lv_obj_set_style_text_color(lbl_hint, c->text_dim, 0);
+    lv_obj_set_style_text_font(lbl_hint, CJK_FONT, 0);
+    lv_label_set_long_mode(lbl_hint, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(lbl_hint, LV_PCT(100));
 
     /* OK button */
     lv_obj_t* btn_ok = lv_button_create(box);
-    lv_obj_set_width(btn_ok, LV_PCT(100));
+    lv_obj_set_width(btn_ok, 120);
     lv_obj_set_height(btn_ok, 40);
+    lv_obj_set_align(btn_ok, LV_ALIGN_CENTER);
     lv_obj_set_style_bg_color(btn_ok, c->accent, 0);
     lv_obj_set_style_bg_color(btn_ok, c->accent_hover, LV_STATE_PRESSED);
     lv_obj_set_style_radius(btn_ok, SCALE(g_colors->radius_md), 0);
     lv_obj_add_event_cb(btn_ok, startup_error_ok_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_ok = lv_label_create(btn_ok);
-    lv_label_set_text(lbl_ok, "OK");
+    lv_label_set_text(lbl_ok, "退出");
     lv_obj_set_style_text_font(lbl_ok, CJK_FONT, 0);
     lv_obj_center(lbl_ok);
 
@@ -9655,10 +10018,15 @@ void ui_show_exit_dialog() {
 
     static const I18n S_EXIT_TITLE = {"Exit Confirmation", "退出确认"};
     static const I18n S_EXIT_MSG = {
-        "Are you sure you want to exit AnyClaw?\n\nExiting will also stop the OpenClaw Gateway service.",
-        "确定要退出 AnyClaw 吗？\n\n退出后将同时停止 OpenClaw Gateway 服务。"
+        "Are you sure you want to exit AnyClaw?",
+        "确定要退出 AnyClaw 吗？"
     };
-    static const I18n S_EXIT_BTN = {"Exit", "退出"};
+    static const I18n S_EXIT_MSG2 = {
+        "Agent will continue running in the background.",
+        "Agent 将继续在后台运行。"
+    };
+    static const I18n S_MINIMIZE_TRAY = {"Minimize to Tray", "最小化到托盘"};
+    static const I18n S_EXIT_BTN = {"Exit", "退出程序"};
     static const I18n S_CANCEL = {"Cancel", "取消"};
 
     lv_obj_t* box = create_dialog(lv_screen_active(), tr(S_EXIT_TITLE), 0, 0, &g_exit_dialog_modal);
@@ -9670,6 +10038,13 @@ void ui_show_exit_dialog() {
     lv_label_set_long_mode(lbl_msg, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(lbl_msg, LV_PCT(100));
 
+    lv_obj_t* lbl_msg2 = lv_label_create(box);
+    lv_label_set_text(lbl_msg2, tr(S_EXIT_MSG2));
+    lv_obj_set_style_text_color(lbl_msg2, g_colors->text_secondary, 0);
+    lv_obj_set_style_text_font(lbl_msg2, CJK_FONT, 0);
+    lv_label_set_long_mode(lbl_msg2, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(lbl_msg2, LV_PCT(100));
+
     lv_obj_t* btn_row = lv_obj_create(box);
     lv_obj_set_size(btn_row, LV_PCT(100), LV_SIZE_CONTENT);
     lv_obj_set_style_bg_opa(btn_row, LV_OPA_TRANSP, 0);
@@ -9679,8 +10054,26 @@ void ui_show_exit_dialog() {
     lv_obj_set_flex_flow(btn_row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(btn_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
+    /* Minimize to Tray button */
+    lv_obj_t* btn_minimize = lv_button_create(btn_row);
+    lv_obj_set_size(btn_minimize, SCALE(120), SCALE(36));
+    lv_obj_set_style_bg_color(btn_minimize, g_colors->btn_secondary, 0);
+    lv_obj_set_style_radius(btn_minimize, SCALE(g_colors->radius_sm), 0);
+    lv_obj_add_event_cb(btn_minimize, [](lv_event_t* e) {
+        (void)e;
+        exit_dialog_destroy();
+        tray_show_window(false);
+        ui_log("[Exit] Minimized to tray");
+    }, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_minimize = lv_label_create(btn_minimize);
+    lv_label_set_text(lbl_minimize, tr(S_MINIMIZE_TRAY));
+    lv_obj_set_style_text_font(lbl_minimize, CJK_FONT, 0);
+    lv_obj_set_style_text_color(lbl_minimize, g_colors->text_inverse, 0);
+    lv_obj_center(lbl_minimize);
+
+    /* Exit button (danger) */
     lv_obj_t* btn_exit = lv_button_create(btn_row);
-    lv_obj_set_size(btn_exit, SCALE(80), SCALE(36));
+    lv_obj_set_size(btn_exit, SCALE(100), SCALE(36));
     lv_obj_set_style_bg_color(btn_exit, g_colors->btn_close, 0);
     lv_obj_set_style_radius(btn_exit, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_exit, exit_dialog_confirm_cb, LV_EVENT_CLICKED, nullptr);
@@ -9690,15 +10083,18 @@ void ui_show_exit_dialog() {
     lv_obj_set_style_text_color(lbl_exit, g_colors->text_inverse, 0);
     lv_obj_center(lbl_exit);
 
+    /* Cancel button */
     lv_obj_t* btn_cancel = lv_button_create(btn_row);
     lv_obj_set_size(btn_cancel, SCALE(80), SCALE(36));
-    lv_obj_set_style_bg_color(btn_cancel, g_colors->btn_secondary, 0);
+    lv_obj_set_style_bg_color(btn_cancel, g_colors->panel, 0);
+    lv_obj_set_style_border_color(btn_cancel, g_colors->border, 0);
+    lv_obj_set_style_border_width(btn_cancel, 1, 0);
     lv_obj_set_style_radius(btn_cancel, SCALE(g_colors->radius_sm), 0);
     lv_obj_add_event_cb(btn_cancel, exit_dialog_cancel_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* lbl_cancel = lv_label_create(btn_cancel);
     lv_label_set_text(lbl_cancel, tr(S_CANCEL));
     lv_obj_set_style_text_font(lbl_cancel, CJK_FONT, 0);
-    lv_obj_set_style_text_color(lbl_cancel, g_colors->text_inverse, 0);
+    lv_obj_set_style_text_color(lbl_cancel, g_colors->text, 0);
     lv_obj_center(lbl_cancel);
 
     ui_log("[Exit] Showing exit confirmation dialog");
@@ -10612,6 +11008,7 @@ static lv_obj_t* g_wizard_title = nullptr;
 static lv_obj_t* g_wizard_content = nullptr;
 static lv_obj_t* g_wizard_btn_prev = nullptr;
 static lv_obj_t* g_wizard_btn_next = nullptr;
+static lv_obj_t* g_wizard_btn_exit = nullptr;
 static lv_obj_t* g_wizard_btn_close = nullptr;
 static int g_wizard_step = 0;
 
@@ -10630,7 +11027,7 @@ static char g_wizard_api_key[256] = {0};
 static int g_wizard_model_sel = 0;
 static char g_wizard_model_name[128] = {0};  /* Stored model name string (survives dropdown deletion) */
 static char g_wizard_nickname[128] = {0};
-static int g_wizard_tz_sel = 4;          /* timezone index, default Asia/Shanghai */
+static int g_wizard_tz_sel = 21;          /* timezone index, default Asia/Shanghai */
 static bool g_wiz_im_tg_connected = false;
 static bool g_wiz_im_discord_connected = false;
 static bool g_wiz_im_whatsapp_connected = false;
@@ -10648,11 +11045,14 @@ static bool* g_wiz_im_active_connected = nullptr;
 /* Widget refs per step */
 static lv_obj_t* g_wiz_btn_cn = nullptr;
 static lv_obj_t* g_wiz_btn_en = nullptr;
+static lv_obj_t* g_wiz_lang_status = nullptr;
 static lv_obj_t* g_wiz_detect_lbl = nullptr;
 static lv_obj_t* g_wiz_api_ta = nullptr;
 static lv_obj_t* g_wiz_model_dd = nullptr;
 static lv_obj_t* g_wiz_leader_sw = nullptr;
 static lv_obj_t* g_wiz_runtime_dd = nullptr;
+static lv_obj_t* g_wiz_leader_opt_on_lbl = nullptr;
+static lv_obj_t* g_wiz_leader_opt_off_lbl = nullptr;
 static lv_obj_t* g_wiz_nick_ta = nullptr;
 static lv_obj_t* g_wiz_tz_dd = nullptr;
 static lv_obj_t* g_wiz_summary_lbl = nullptr;
@@ -10789,7 +11189,7 @@ static const I18n W_NOTFOUND     = {"Not Found", "未找到"};
 static const I18n W_VERSION      = {"Version:", "版本："};
 static const I18n W_GW_PORT      = {"Gateway Port:", "Gateway 端口："};
 static const I18n W_MODEL_HINT   = {"Select a model:", "选择一个模型："};
-static const I18n W_API_HINT     = {"Enter your API key (required):", "输入你的 API 密钥（必填）："};
+static const I18n W_API_HINT     = {"Enter your API key (optional):", "输入你的 API 密钥（可选）："};
 static const I18n W_API_GET_OR   = {"Get your key at openrouter.ai/settings/keys", "在 openrouter.ai/settings/keys 获取密钥"};
 static const I18n W_API_GET_XM   = {"Get your key at api.xiaomimimo.com", "在 api.xiaomimimo.com 获取密钥"};
 static const I18n W_PROVIDER_IS  = {"Provider:", "Provider:"};
@@ -10831,9 +11231,10 @@ static const I18n W_STATUS_LABEL = {"Status:", "状态："};
 static const I18n W_MODEL_LABEL  = {"Model:", "模型："};
 static const I18n W_NAME_LABEL   = {"Name:", "名称："};
 static const I18n W_STEP_FMT     = {"Step %d/%d", "第 %d/%d 步"};
-static const I18n W_GET_STARTED  = {"Get Started", "开始使用"};
+static const I18n W_GET_STARTED  = {"Get Started ->", "开始使用 ->"};
 static const I18n W_NEXT         = {"Next >", "下一步 >"};
 static const I18n W_BACK         = {"< Back", "< 上一步"};
+static const I18n W_EXIT         = {"Exit", "退出"};
 static const I18n W_CN           = {"中文", "中文"};
 static const I18n W_EN           = {"English", "English"};
 static const I18n W_ANONYMOUS    = {"(anonymous)", "（匿名）"};
@@ -10853,8 +11254,19 @@ static const I18n W_STAGEB_HINT  = {
 
 static void wizard_update_step();
 static void wizard_close_cb(lv_event_t* e);
+static void wizard_exit_request_cb(lv_event_t* e);
+static void wizard_minimize_cb(lv_event_t* e);
+static void wizard_update_lang_status();
+static void wizard_leader_on_cb(lv_event_t* e);
+static void wizard_leader_off_cb(lv_event_t* e);
+static void wizard_refresh_leader_options();
+static void wizard_open_local_model_cb(lv_event_t* e);
+static void wizard_open_im_cb(lv_event_t* e);
 static void wizard_set_next_enabled(bool enabled);
+static void wizard_gemma_save_cb(lv_event_t* e);
 static void wizard_gemma_skip_cb(lv_event_t* e);
+static void wizard_im_done_cb(lv_event_t* e);
+static void wizard_im_skip_cb(lv_event_t* e);
 static void wizard_leader_skip_cb(lv_event_t* e);
 static void wizard_install_hermes_cb(lv_event_t* e);
 static void wizard_install_claude_cb(lv_event_t* e);
@@ -10891,6 +11303,7 @@ static void wiz_lang_cn_cb(lv_event_t* e) {
     g_lang = Lang::CN;
     if (g_wiz_btn_cn) lv_obj_set_style_bg_color(g_wiz_btn_cn, g_colors->accent_secondary, 0);
     if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, g_colors->disabled_bg, 0);
+    wizard_update_lang_status();
 }
 static void wiz_lang_en_cb(lv_event_t* e) {
     (void)e;
@@ -10898,14 +11311,39 @@ static void wiz_lang_en_cb(lv_event_t* e) {
     g_lang = Lang::EN;
     if (g_wiz_btn_en) lv_obj_set_style_bg_color(g_wiz_btn_en, g_colors->accent_secondary, 0);
     if (g_wiz_btn_cn) lv_obj_set_style_bg_color(g_wiz_btn_cn, g_colors->disabled_bg, 0);
+    wizard_update_lang_status();
+}
+
+static void wizard_update_lang_status() {
+    if (!g_wiz_lang_status) return;
+
+    const bool has_sel = (g_wizard_lang_sel == 0 || g_wizard_lang_sel == 1);
+    if (!has_sel) {
+        lv_label_set_text(g_wiz_lang_status,
+            (g_lang == Lang::CN) ? "○ 请选择一项以继续" : "○ Please select one to continue");
+        lv_obj_set_style_text_color(g_wiz_lang_status, g_colors->text_dim, 0);
+        wizard_set_next_enabled(false);
+        return;
+    }
+
+    if (g_wizard_lang_sel == 0) {
+        lv_label_set_text(g_wiz_lang_status,
+            (g_lang == Lang::CN) ? "✓ 已选择: 中文" : "✓ Selected: Chinese");
+    } else {
+        lv_label_set_text(g_wiz_lang_status,
+            (g_lang == Lang::CN) ? "✓ 已选择: English" : "✓ Selected: English");
+    }
+    lv_obj_set_style_text_color(g_wiz_lang_status, g_colors->success, 0);
+    wizard_set_next_enabled(true);
 }
 
 static void wizard_build_step_lang() {
-    static const I18n S_HINT = {"Please select your language:", "请选择你的语言："};
     lv_obj_t* hint = lv_label_create(g_wizard_content);
-    lv_label_set_text(hint, tr(S_HINT));
+    lv_label_set_text(hint, "请选择你的语言\nPlease select your language");
     lv_obj_set_style_text_color(hint, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(hint, CJK_FONT, 0);
+    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(hint, LV_PCT(100));
 
     lv_obj_t* row = lv_obj_create(g_wizard_content);
     lv_obj_set_size(row, LV_PCT(100), LV_SIZE_CONTENT);
@@ -10936,6 +11374,12 @@ static void wizard_build_step_lang() {
     lv_label_set_text(lbl_en, "English");
     lv_obj_set_style_text_font(lbl_en, CJK_FONT, 0);
     lv_obj_center(lbl_en);
+
+    g_wiz_lang_status = lv_label_create(g_wizard_content);
+    lv_obj_set_style_text_font(g_wiz_lang_status, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_align(g_wiz_lang_status, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(g_wiz_lang_status, LV_PCT(100));
+    wizard_update_lang_status();
 }
 
 /* ── Step 1: OpenClaw Detection ── */
@@ -11791,10 +12235,17 @@ static void wizard_build_step_model_api() {
 static void wizard_build_step_gemma() {
     lv_obj_t* gemma_hint = lv_label_create(g_wizard_content);
     lv_label_set_text(gemma_hint, g_lang == Lang::CN
-        ? "可选：安装本地 Gemma 4 模型（需要较大磁盘空间）"
-        : "Optional: Install local Gemma 4 models (requires disk space)");
-    lv_obj_set_style_text_color(gemma_hint, g_colors->text_dim, 0);
+        ? "💾 本地模型配置"
+        : "💾 Local Model Setup");
+    lv_obj_set_style_text_color(gemma_hint, g_colors->text, 0);
     lv_obj_set_style_text_font(gemma_hint, CJK_FONT, 0);
+
+    lv_obj_t* gemma_subtitle = lv_label_create(g_wizard_content);
+    lv_label_set_text(gemma_subtitle, g_lang == Lang::CN
+        ? "使用 Gemma 实现离线推理（可选）"
+        : "Use Gemma for offline inference (optional)");
+    lv_obj_set_style_text_color(gemma_subtitle, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(gemma_subtitle, CJK_FONT_SMALL, 0);
 
     lv_obj_t* gemma_sw_row = lv_obj_create(g_wizard_content);
     lv_obj_set_size(gemma_sw_row, LV_PCT(100), LV_SIZE_CONTENT);
@@ -11806,7 +12257,7 @@ static void wizard_build_step_gemma() {
     lv_obj_set_flex_align(gemma_sw_row, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(gemma_sw_row, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t* gemma_sw_label = lv_label_create(gemma_sw_row);
-    lv_label_set_text(gemma_sw_label, g_lang == Lang::CN ? "启用 Gemma 本地安装" : "Enable Gemma local install");
+    lv_label_set_text(gemma_sw_label, g_lang == Lang::CN ? "启用本地模型（Gemma）" : "Enable local model (Gemma)");
     lv_obj_set_style_text_color(gemma_sw_label, g_colors->text, 0);
     lv_obj_set_style_text_font(gemma_sw_label, CJK_FONT_SMALL, 0);
 
@@ -11835,7 +12286,7 @@ static void wizard_build_step_gemma() {
     lv_obj_set_style_bg_color(btn_start_gemma, g_colors->success, 0);
     lv_obj_set_style_radius(btn_start_gemma, SCALE(g_colors->radius_md), 0);
     lv_obj_t* lbl_start = lv_label_create(btn_start_gemma);
-    lv_label_set_text(lbl_start, g_lang == Lang::CN ? "立即开始下载 Gemma" : "Start Gemma Download Now");
+    lv_label_set_text(lbl_start, g_lang == Lang::CN ? "开始下载所选模型" : "Download Selected Models");
     lv_obj_set_style_text_font(lbl_start, CJK_FONT_SMALL, 0);
     lv_obj_center(lbl_start);
     lv_obj_add_event_cb(btn_start_gemma, [](lv_event_t* e) {
@@ -11911,16 +12362,37 @@ static void wizard_build_step_gemma() {
     lv_obj_center(lbl_cancel_dl);
     lv_obj_add_state(g_wiz_install_progress_cancel_btn, LV_STATE_DISABLED);
 
+    lv_obj_t* btn_save_gemma = lv_button_create(g_wizard_content);
+    lv_obj_set_size(btn_save_gemma, LV_PCT(100), SCALE(36));
+    lv_obj_set_style_bg_color(btn_save_gemma, g_colors->accent, 0);
+    lv_obj_set_style_radius(btn_save_gemma, SCALE(g_colors->radius_md), 0);
+    lv_obj_t* lbl_save = lv_label_create(btn_save_gemma);
+    lv_label_set_text(lbl_save, g_lang == Lang::CN ? "保存配置" : "Save Settings");
+    lv_obj_set_style_text_font(lbl_save, CJK_FONT_SMALL, 0);
+    lv_obj_center(lbl_save);
+    lv_obj_add_event_cb(btn_save_gemma, wizard_gemma_save_cb, LV_EVENT_CLICKED, nullptr);
+
     /* Skip button — Gemma is optional, always allow Next */
     lv_obj_t* btn_skip_gemma = lv_button_create(g_wizard_content);
     lv_obj_set_size(btn_skip_gemma, LV_PCT(100), SCALE(36));
     lv_obj_set_style_bg_color(btn_skip_gemma, g_colors->accent_secondary, 0);
     lv_obj_set_style_radius(btn_skip_gemma, SCALE(g_colors->radius_md), 0);
     lv_obj_t* lbl_skip = lv_label_create(btn_skip_gemma);
-    lv_label_set_text(lbl_skip, g_lang == Lang::CN ? "跳过（继续）" : "Skip (continue)");
+    lv_label_set_text(lbl_skip, g_lang == Lang::CN ? "跳过此步骤" : "Skip This Step");
     lv_obj_set_style_text_font(lbl_skip, CJK_FONT_SMALL, 0);
     lv_obj_center(lbl_skip);
     lv_obj_add_event_cb(btn_skip_gemma, wizard_gemma_skip_cb, LV_EVENT_CLICKED, nullptr);
+}
+
+static void wizard_gemma_save_cb(lv_event_t* e) {
+    (void)e;
+    save_theme_config();
+    ui_log("[Wizard] Gemma config saved");
+    if (g_wizard_step >= WIZARD_STEPS - 1) {
+        wizard_go_step(WIZARD_STEPS - 1);
+    } else {
+        wizard_go_step(g_wizard_step + 1);
+    }
 }
 
 static void wizard_gemma_skip_cb(lv_event_t* e) {
@@ -11929,7 +12401,11 @@ static void wizard_gemma_skip_cb(lv_event_t* e) {
     g_gemma_model_mask = 0;
     update_gemma_recommend_visuals();
     ui_log("[Wizard] Gemma install skipped by user");
-    wizard_go_step(g_wizard_step + 1);
+    if (g_wizard_step >= WIZARD_STEPS - 1) {
+        wizard_go_step(WIZARD_STEPS - 1);
+    } else {
+        wizard_go_step(g_wizard_step + 1);
+    }
 }
 
 static void wizard_im_refresh_status_labels() {
@@ -12081,6 +12557,53 @@ static void wizard_build_step_im() {
         : "You can skip now and configure later in settings.");
     lv_obj_set_style_text_color(skip_hint, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(skip_hint, CJK_FONT_SMALL, 0);
+
+    lv_obj_t* btn_done_im = lv_button_create(g_wizard_content);
+    lv_obj_set_size(btn_done_im, LV_PCT(100), SCALE(36));
+    lv_obj_set_style_bg_color(btn_done_im, g_colors->accent, 0);
+    lv_obj_set_style_radius(btn_done_im, SCALE(g_colors->radius_md), 0);
+    lv_obj_t* lbl_done_im = lv_label_create(btn_done_im);
+    lv_label_set_text(lbl_done_im, g_lang == Lang::CN ? "保存配置" : "Save Settings");
+    lv_obj_set_style_text_font(lbl_done_im, CJK_FONT_SMALL, 0);
+    lv_obj_center(lbl_done_im);
+    lv_obj_add_event_cb(btn_done_im, wizard_im_done_cb, LV_EVENT_CLICKED, nullptr);
+
+    lv_obj_t* btn_skip_im = lv_button_create(g_wizard_content);
+    lv_obj_set_size(btn_skip_im, LV_PCT(100), SCALE(36));
+    lv_obj_set_style_bg_color(btn_skip_im, g_colors->accent_secondary, 0);
+    lv_obj_set_style_radius(btn_skip_im, SCALE(g_colors->radius_md), 0);
+    lv_obj_t* lbl_skip_im = lv_label_create(btn_skip_im);
+    lv_label_set_text(lbl_skip_im, g_lang == Lang::CN ? "跳过此步骤" : "Skip This Step");
+    lv_obj_set_style_text_font(lbl_skip_im, CJK_FONT_SMALL, 0);
+    lv_obj_center(lbl_skip_im);
+    lv_obj_add_event_cb(btn_skip_im, wizard_im_skip_cb, LV_EVENT_CLICKED, nullptr);
+}
+
+static void wizard_im_done_cb(lv_event_t* e) {
+    (void)e;
+    save_theme_config();
+    ui_log("[Wizard] IM config saved");
+    if (g_wizard_step >= WIZARD_STEPS - 1) {
+        wizard_go_step(WIZARD_STEPS - 1);
+    } else {
+        wizard_go_step(g_wizard_step + 1);
+    }
+}
+
+static void wizard_im_skip_cb(lv_event_t* e) {
+    (void)e;
+    g_wiz_im_tg_connected = false;
+    g_wiz_im_discord_connected = false;
+    g_wiz_im_whatsapp_connected = false;
+    g_wiz_im_tg_token[0] = '\0';
+    g_wiz_im_discord_token[0] = '\0';
+    save_theme_config();
+    ui_log("[Wizard] IM config skipped");
+    if (g_wizard_step >= WIZARD_STEPS - 1) {
+        wizard_go_step(WIZARD_STEPS - 1);
+    } else {
+        wizard_go_step(g_wizard_step + 1);
+    }
 }
 
 static void wizard_build_step_leader() {
@@ -12227,16 +12750,24 @@ static void wizard_build_summary_text(char* buf, int buf_size) {
 }
 
 static void wizard_build_step_profile() {
+    lv_obj_t* title = lv_label_create(g_wizard_content);
+    lv_label_set_text(title, (g_lang == Lang::CN) ? "🎉 恭喜！设置完成" : "🎉 Setup Complete");
+    lv_obj_set_style_text_font(title, CJK_FONT, 0);
+    lv_obj_set_style_text_color(title, g_colors->text, 0);
+    lv_obj_set_style_text_align(title, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_width(title, LV_PCT(100));
+
     lv_obj_t* final_hint = lv_label_create(g_wizard_content);
     lv_label_set_text(final_hint, tr(W_FINAL_HINT));
     lv_label_set_long_mode(final_hint, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(final_hint, LV_PCT(100));
-    lv_obj_set_style_text_color(final_hint, g_colors->accent_secondary, 0);
+    lv_obj_set_style_text_color(final_hint, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(final_hint, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_align(final_hint, LV_TEXT_ALIGN_CENTER, 0);
 
     /* ── Nickname ── */
     lv_obj_t* hint = lv_label_create(g_wizard_content);
-    lv_label_set_text(hint, tr(W_NICK_HINT));
+    lv_label_set_text(hint, (g_lang == Lang::CN) ? "昵称" : "Nickname");
     lv_obj_set_style_text_color(hint, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(hint, CJK_FONT, 0);
 
@@ -12260,7 +12791,7 @@ static void wizard_build_step_profile() {
 
     /* ── Timezone ── */
     lv_obj_t* tz_hint = lv_label_create(g_wizard_content);
-    lv_label_set_text(tz_hint, tr(W_TZ_HINT));
+    lv_label_set_text(tz_hint, (g_lang == Lang::CN) ? "时区" : "Timezone");
     lv_obj_set_style_text_color(tz_hint, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(tz_hint, CJK_FONT, 0);
 
@@ -12279,46 +12810,139 @@ static void wizard_build_step_profile() {
     lv_obj_set_style_text_color(g_wiz_tz_dd, g_colors->text, LV_PART_ITEMS);
     lv_obj_set_style_bg_color(g_wiz_tz_dd, g_colors->panel, LV_PART_ITEMS);
 
-    /* ── Divider ── */
-    lv_obj_t* div = lv_obj_create(g_wizard_content);
-    lv_obj_set_size(div, LV_PCT(100), 1);
-    lv_obj_set_style_bg_color(div, g_colors->divider, 0);
-    lv_obj_set_style_border_width(div, 0, 0);
-    lv_obj_clear_flag(div, LV_OBJ_FLAG_SCROLLABLE);
+    /* ── Leader mode (radio-like) ── */
+    lv_obj_t* leader_hint = lv_label_create(g_wizard_content);
+    lv_label_set_text(leader_hint, (g_lang == Lang::CN) ? "Leader 模式" : "Leader Mode");
+    lv_obj_set_style_text_color(leader_hint, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(leader_hint, CJK_FONT, 0);
 
-    /* ── Summary ── */
-    lv_obj_t* summary_hint = lv_label_create(g_wizard_content);
-    lv_label_set_text(summary_hint, tr(W_SUMMARY));
-    lv_obj_set_style_text_color(summary_hint, g_colors->accent_secondary, 0);
-    lv_obj_set_style_text_font(summary_hint, CJK_FONT, 0);
+    lv_obj_t* leader_box = lv_obj_create(g_wizard_content);
+    lv_obj_set_size(leader_box, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(leader_box, g_colors->surface, 0);
+    lv_obj_set_style_border_width(leader_box, 1, 0);
+    lv_obj_set_style_border_color(leader_box, g_colors->border, 0);
+    lv_obj_set_style_radius(leader_box, SCALE(g_colors->radius_md), 0);
+    lv_obj_set_style_pad_all(leader_box, 10, 0);
+    lv_obj_set_style_pad_gap(leader_box, 8, 0);
+    lv_obj_set_flex_flow(leader_box, LV_FLEX_FLOW_COLUMN);
+    lv_obj_clear_flag(leader_box, LV_OBJ_FLAG_SCROLLABLE);
 
-    lv_obj_t* box = lv_obj_create(g_wizard_content);
-    lv_obj_set_size(box, LV_PCT(100), LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(box, g_colors->surface, 0);
-    lv_obj_set_style_border_width(box, 1, 0);
-    lv_obj_set_style_border_color(box, g_colors->border, 0);
-    lv_obj_set_style_radius(box, SCALE(g_colors->radius_md), 0);
-    lv_obj_set_style_pad_all(box, 16, 0);
-    lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_gap(box, 8, 0);
-    lv_obj_clear_flag(box, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t* leader_on_btn = lv_button_create(leader_box);
+    lv_obj_set_size(leader_on_btn, LV_PCT(100), SCALE(36));
+    lv_obj_set_style_bg_color(leader_on_btn, g_colors->btn_secondary, 0);
+    lv_obj_set_style_radius(leader_on_btn, SCALE(g_colors->radius_md), 0);
+    lv_obj_add_event_cb(leader_on_btn, wizard_leader_on_cb, LV_EVENT_CLICKED, nullptr);
+    g_wiz_leader_opt_on_lbl = lv_label_create(leader_on_btn);
+    lv_obj_set_style_text_font(g_wiz_leader_opt_on_lbl, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_color(g_wiz_leader_opt_on_lbl, g_colors->text, 0);
+    lv_obj_align(g_wiz_leader_opt_on_lbl, LV_ALIGN_LEFT_MID, SCALE(10), 0);
 
-    static char summary_buf[1280];
-    wizard_build_summary_text(summary_buf, sizeof(summary_buf));
+    lv_obj_t* leader_off_btn = lv_button_create(leader_box);
+    lv_obj_set_size(leader_off_btn, LV_PCT(100), SCALE(36));
+    lv_obj_set_style_bg_color(leader_off_btn, g_colors->btn_secondary, 0);
+    lv_obj_set_style_radius(leader_off_btn, SCALE(g_colors->radius_md), 0);
+    lv_obj_add_event_cb(leader_off_btn, wizard_leader_off_cb, LV_EVENT_CLICKED, nullptr);
+    g_wiz_leader_opt_off_lbl = lv_label_create(leader_off_btn);
+    lv_obj_set_style_text_font(g_wiz_leader_opt_off_lbl, CJK_FONT_SMALL, 0);
+    lv_obj_set_style_text_color(g_wiz_leader_opt_off_lbl, g_colors->text, 0);
+    lv_obj_align(g_wiz_leader_opt_off_lbl, LV_ALIGN_LEFT_MID, SCALE(10), 0);
 
-    g_wiz_summary_lbl = lv_label_create(box);
-    lv_label_set_text(g_wiz_summary_lbl, summary_buf);
-    lv_obj_set_style_text_color(g_wiz_summary_lbl, g_colors->text, 0);
-    lv_obj_set_style_text_font(g_wiz_summary_lbl, CJK_FONT, 0);
-    lv_label_set_long_mode(g_wiz_summary_lbl, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(g_wiz_summary_lbl, LV_PCT(100));
+    wizard_refresh_leader_options();
+
+    lv_obj_t* leader_note = lv_label_create(g_wizard_content);
+    lv_label_set_text(leader_note, tr(W_LEADER_NOTE));
+    lv_label_set_long_mode(leader_note, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(leader_note, LV_PCT(100));
+    lv_obj_set_style_text_color(leader_note, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(leader_note, CJK_FONT_SMALL, 0);
 
     lv_obj_t* stageb = lv_label_create(g_wizard_content);
-    lv_label_set_text(stageb, tr(W_STAGEB_HINT));
+    lv_label_set_text(stageb,
+        (g_lang == Lang::CN) ? "进阶能力（非阻断，可后续在设置中配置）"
+                             : "Advanced options (non-blocking, configurable later)");
     lv_label_set_long_mode(stageb, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(stageb, LV_PCT(100));
     lv_obj_set_style_text_color(stageb, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(stageb, CJK_FONT_SMALL, 0);
+
+    lv_obj_t* stageb_row = lv_obj_create(g_wizard_content);
+    lv_obj_set_size(stageb_row, LV_PCT(100), LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(stageb_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(stageb_row, 0, 0);
+    lv_obj_set_style_pad_all(stageb_row, 0, 0);
+    lv_obj_set_style_pad_gap(stageb_row, 10, 0);
+    lv_obj_set_flex_flow(stageb_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(stageb_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(stageb_row, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* btn_local = lv_button_create(stageb_row);
+    lv_obj_set_size(btn_local, SCALE(150), SCALE(34));
+    lv_obj_set_style_bg_color(btn_local, g_colors->btn_secondary, 0);
+    lv_obj_set_style_radius(btn_local, SCALE(g_colors->radius_md), 0);
+    lv_obj_add_event_cb(btn_local, wizard_open_local_model_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_local = lv_label_create(btn_local);
+    lv_label_set_text(lbl_local, (g_lang == Lang::CN) ? "💾 本地模型" : "💾 Local Models");
+    lv_obj_set_style_text_font(lbl_local, CJK_FONT_SMALL, 0);
+    lv_obj_center(lbl_local);
+
+    lv_obj_t* btn_im = lv_button_create(stageb_row);
+    lv_obj_set_size(btn_im, SCALE(150), SCALE(34));
+    lv_obj_set_style_bg_color(btn_im, g_colors->btn_secondary, 0);
+    lv_obj_set_style_radius(btn_im, SCALE(g_colors->radius_md), 0);
+    lv_obj_add_event_cb(btn_im, wizard_open_im_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_im = lv_label_create(btn_im);
+    lv_label_set_text(lbl_im, (g_lang == Lang::CN) ? "💬 IM 连接" : "💬 IM Connect");
+    lv_obj_set_style_text_font(lbl_im, CJK_FONT_SMALL, 0);
+    lv_obj_center(lbl_im);
+}
+
+static void wizard_leader_on_cb(lv_event_t* e) {
+    (void)e;
+    g_wizard_leader_mode = true;
+    wizard_refresh_leader_options();
+}
+
+static void wizard_leader_off_cb(lv_event_t* e) {
+    (void)e;
+    g_wizard_leader_mode = false;
+    g_wizard_active_runtime = Runtime::OpenClaw;
+    wizard_refresh_leader_options();
+}
+
+static void wizard_refresh_leader_options() {
+    if (!g_wiz_leader_opt_on_lbl || !g_wiz_leader_opt_off_lbl) return;
+
+    if (g_lang == Lang::CN) {
+        lv_label_set_text(g_wiz_leader_opt_on_lbl,
+            g_wizard_leader_mode ? "● 启用 Leader 模式（多 Agent 并行，推荐）"
+                                 : "○ 启用 Leader 模式（多 Agent 并行，推荐）");
+        lv_label_set_text(g_wiz_leader_opt_off_lbl,
+            g_wizard_leader_mode ? "○ 跳过（单 Agent，仅 OpenClaw）"
+                                 : "● 跳过（单 Agent，仅 OpenClaw）");
+    } else {
+        lv_label_set_text(g_wiz_leader_opt_on_lbl,
+            g_wizard_leader_mode ? "● Enable Leader mode (recommended)"
+                                 : "○ Enable Leader mode (recommended)");
+        lv_label_set_text(g_wiz_leader_opt_off_lbl,
+            g_wizard_leader_mode ? "○ Skip (single-agent, OpenClaw only)"
+                                 : "● Skip (single-agent, OpenClaw only)");
+    }
+}
+
+static void wizard_open_local_model_cb(lv_event_t* e) {
+    (void)e;
+    if (!g_wizard_content) return;
+    lv_obj_clean(g_wizard_content);
+    wizard_build_step_gemma();
+    wizard_set_next_enabled(true);
+}
+
+static void wizard_open_im_cb(lv_event_t* e) {
+    (void)e;
+    if (!g_wizard_content) return;
+    lv_obj_clean(g_wizard_content);
+    wizard_build_step_im();
+    wizard_set_next_enabled(true);
 }
 
 /* Refresh summary text when returning to final step */
@@ -12406,13 +13030,6 @@ static void wizard_update_step() {
     if (g_wizard_step == 3 && g_wiz_tz_dd) {
         g_wizard_tz_sel = lv_dropdown_get_selected(g_wiz_tz_dd);
     }
-    if (g_wizard_step == 5 && g_wiz_leader_sw) {
-        g_wizard_leader_mode = lv_obj_has_state(g_wiz_leader_sw, LV_STATE_CHECKED);
-    }
-    if (g_wizard_step == 5 && g_wiz_runtime_dd) {
-        uint16_t sel = lv_dropdown_get_selected(g_wiz_runtime_dd);
-        if (sel <= 2) g_wizard_active_runtime = (Runtime)sel;
-    }
 
     /* Clear content area */
     lv_obj_clean(g_wizard_content);
@@ -12420,9 +13037,12 @@ static void wizard_update_step() {
     /* Reset step widget refs */
     g_wiz_btn_cn = nullptr;
     g_wiz_btn_en = nullptr;
+    g_wiz_lang_status = nullptr;
     g_wiz_detect_lbl = nullptr;
     g_wiz_api_ta = nullptr;
     g_wiz_model_dd = nullptr;
+    g_wiz_leader_opt_on_lbl = nullptr;
+    g_wiz_leader_opt_off_lbl = nullptr;
     g_wiz_nick_ta = nullptr;
     g_wiz_tz_dd = nullptr;
     g_wiz_summary_lbl = nullptr;
@@ -12469,7 +13089,7 @@ static void wizard_update_step() {
         /* Last step: "Get Started" button */
         lv_obj_t* lbl = lv_obj_get_child(g_wizard_btn_next, 0);
         if (lbl) lv_label_set_text(lbl, tr(W_GET_STARTED));
-        lv_obj_set_style_bg_color(g_wizard_btn_next, g_colors->success, 0); /* Green */
+        lv_obj_set_style_bg_color(g_wizard_btn_next, g_colors->accent_secondary, 0); /* Accent */
     } else {
         lv_obj_t* lbl = lv_obj_get_child(g_wizard_btn_next, 0);
         if (lbl) lv_label_set_text(lbl, tr(W_NEXT));
@@ -12505,13 +13125,6 @@ static void wizard_next_cb(lv_event_t* e) {
     }
     if (g_wizard_step == 3 && g_wiz_tz_dd) {
         g_wizard_tz_sel = lv_dropdown_get_selected(g_wiz_tz_dd);
-    }
-    if (g_wizard_step == 5 && g_wiz_leader_sw) {
-        g_wizard_leader_mode = lv_obj_has_state(g_wiz_leader_sw, LV_STATE_CHECKED);
-    }
-    if (g_wizard_step == 5 && g_wiz_runtime_dd) {
-        uint16_t sel = lv_dropdown_get_selected(g_wiz_runtime_dd);
-        if (sel <= 2) g_wizard_active_runtime = (Runtime)sel;
     }
 
     if (g_wizard_step < WIZARD_STEPS - 1) {
@@ -12553,11 +13166,12 @@ static void wizard_next_cb(lv_event_t* e) {
                 "Z:\\root\\.openclaw\\workspace\\USER.md",   /* test path */
                 nullptr
             };
+            const char* nick_saved = g_wizard_nickname[0] ? g_wizard_nickname : "anonymous";
             /* Build USER.md content */
             std::string md_content;
             md_content += "# USER.md - About Your Human\n\n";
-            md_content += std::string("- **Name:** ") + (g_wizard_nickname[0] ? g_wizard_nickname : "") + "\n";
-            md_content += std::string("- **What to call them:** ") + (g_wizard_nickname[0] ? g_wizard_nickname : "") + "\n";
+            md_content += std::string("- **Name:** ") + nick_saved + "\n";
+            md_content += std::string("- **What to call them:** ") + nick_saved + "\n";
             md_content += "- **Pronouns:**\n";
             md_content += std::string("- **Timezone:** ") + sel_tz + "\n";
             md_content += "- **Notes:**\n\n";
@@ -12668,6 +13282,26 @@ static void wizard_close_cb(lv_event_t* e) {
     }
 }
 
+static void wizard_exit_request_cb(lv_event_t* e) {
+    (void)e;
+    const char* title = (g_lang == Lang::CN) ? "退出向导" : "Exit Setup Wizard";
+    const char* msg = (g_lang == Lang::CN)
+        ? "确定退出向导吗？应用将关闭。"
+        : "Exit setup wizard? The app will close.";
+    int r = MessageBoxA(nullptr, msg, title, MB_ICONQUESTION | MB_YESNO | MB_TOPMOST | MB_SETFOREGROUND);
+    if (r == IDYES) {
+        tray_request_quit();
+    }
+}
+
+static void wizard_minimize_cb(lv_event_t* e) {
+    (void)e;
+    SDL_Window* win = app_get_window();
+    if (win) {
+        SDL_MinimizeWindow(win);
+    }
+}
+
 /* ── Main wizard UI ── */
 void ui_show_setup_wizard_forced(void) { ui_show_setup_wizard(); }
 void ui_show_setup_wizard() {
@@ -12744,18 +13378,32 @@ void ui_show_setup_wizard() {
     lv_label_set_text(g_wizard_step_label, step_text);
     lv_obj_set_style_text_color(g_wizard_step_label, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(g_wizard_step_label, CJK_FONT_SMALL, 0);
-    lv_obj_align(g_wizard_step_label, LV_ALIGN_RIGHT_MID, -SCALE(110), 0);
+    lv_obj_align(g_wizard_step_label, LV_ALIGN_RIGHT_MID, -SCALE(120), 0);
+
+    lv_obj_t* g_wizard_btn_min = lv_button_create(header);
+    lv_obj_set_size(g_wizard_btn_min, SCALE(34), SCALE(28));
+    lv_obj_set_style_bg_opa(g_wizard_btn_min, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(g_wizard_btn_min, 1, 0);
+    lv_obj_set_style_border_color(g_wizard_btn_min, g_colors->border, 0);
+    lv_obj_set_style_radius(g_wizard_btn_min, SCALE(g_colors->radius_md), 0);
+    lv_obj_align(g_wizard_btn_min, LV_ALIGN_RIGHT_MID, -SCALE(54), 0);
+    lv_obj_add_event_cb(g_wizard_btn_min, wizard_minimize_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* min_lbl = lv_label_create(g_wizard_btn_min);
+    lv_label_set_text(min_lbl, "—");
+    lv_obj_set_style_text_color(min_lbl, g_colors->text_dim, 0);
+    lv_obj_set_style_text_font(min_lbl, CJK_FONT_SMALL, 0);
+    lv_obj_center(min_lbl);
 
     g_wizard_btn_close = lv_button_create(header);
-    lv_obj_set_size(g_wizard_btn_close, SCALE(98), SCALE(32));
+    lv_obj_set_size(g_wizard_btn_close, SCALE(34), SCALE(28));
     lv_obj_set_style_bg_opa(g_wizard_btn_close, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(g_wizard_btn_close, 1, 0);
     lv_obj_set_style_border_color(g_wizard_btn_close, g_colors->border, 0);
     lv_obj_set_style_radius(g_wizard_btn_close, SCALE(g_colors->radius_md), 0);
     lv_obj_align(g_wizard_btn_close, LV_ALIGN_RIGHT_MID, -12, 0);
-    lv_obj_add_event_cb(g_wizard_btn_close, wizard_close_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_add_event_cb(g_wizard_btn_close, wizard_exit_request_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* close_lbl = lv_label_create(g_wizard_btn_close);
-    lv_label_set_text(close_lbl, "退出向导");
+    lv_label_set_text(close_lbl, "✕");
     lv_obj_set_style_text_color(close_lbl, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(close_lbl, CJK_FONT_SMALL, 0);
     lv_obj_center(close_lbl);
@@ -12872,18 +13520,38 @@ void ui_show_setup_wizard() {
 
     /* ── Bottom button bar ── */
     lv_obj_t* btn_bar = lv_obj_create(g_wizard_box);
-    lv_obj_set_size(btn_bar, box_w - 40, SCALE(44));
-    lv_obj_set_pos(btn_bar, 20, box_h - SCALE(56));
+    lv_obj_set_size(btn_bar, box_w, SCALE(56));
+    lv_obj_set_pos(btn_bar, 0, box_h - SCALE(56));
     lv_obj_set_style_bg_opa(btn_bar, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(btn_bar, 0, 0);
     lv_obj_set_style_pad_all(btn_bar, 0, 0);
     lv_obj_clear_flag(btn_bar, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_flex_flow(btn_bar, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_gap(btn_bar, 12, 0);
-    lv_obj_set_flex_align(btn_bar, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    g_wizard_btn_exit = lv_button_create(btn_bar);
+    lv_obj_set_size(g_wizard_btn_exit, SCALE(100), SCALE(40));
+    lv_obj_set_style_bg_color(g_wizard_btn_exit, g_colors->btn_secondary, 0);
+    lv_obj_set_style_bg_color(g_wizard_btn_exit, g_colors->disabled_bg, LV_STATE_PRESSED);
+    lv_obj_set_style_radius(g_wizard_btn_exit, SCALE(g_colors->radius_md), 0);
+    lv_obj_align(g_wizard_btn_exit, LV_ALIGN_LEFT_MID, SCALE(20), 0);
+    lv_obj_add_event_cb(g_wizard_btn_exit, wizard_exit_request_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* lbl_exit = lv_label_create(g_wizard_btn_exit);
+    lv_label_set_text(lbl_exit, tr(W_EXIT));
+    lv_obj_set_style_text_font(lbl_exit, CJK_FONT, 0);
+    lv_obj_center(lbl_exit);
+
+    lv_obj_t* nav_row = lv_obj_create(btn_bar);
+    lv_obj_set_size(nav_row, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(nav_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(nav_row, 0, 0);
+    lv_obj_set_style_pad_all(nav_row, 0, 0);
+    lv_obj_set_style_pad_gap(nav_row, 12, 0);
+    lv_obj_set_flex_flow(nav_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(nav_row, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(nav_row, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_align(nav_row, LV_ALIGN_RIGHT_MID, -SCALE(20), 0);
 
     /* Prev button */
-    g_wizard_btn_prev = lv_button_create(btn_bar);
+    g_wizard_btn_prev = lv_button_create(nav_row);
     lv_obj_set_size(g_wizard_btn_prev, SCALE(100), SCALE(40));
     lv_obj_set_style_bg_color(g_wizard_btn_prev, g_colors->disabled_bg, 0);
     lv_obj_set_style_bg_color(g_wizard_btn_prev, g_colors->btn_secondary, LV_STATE_PRESSED);
@@ -12895,7 +13563,7 @@ void ui_show_setup_wizard() {
     lv_obj_center(lbl_prev);
 
     /* Next button */
-    g_wizard_btn_next = lv_button_create(btn_bar);
+    g_wizard_btn_next = lv_button_create(nav_row);
     lv_obj_set_size(g_wizard_btn_next, SCALE(120), SCALE(40));
     lv_obj_set_style_bg_color(g_wizard_btn_next, g_colors->accent_secondary, 0);
     lv_obj_set_style_bg_color(g_wizard_btn_next, g_colors->accent_secondary, LV_STATE_PRESSED);
@@ -12918,9 +13586,20 @@ static void start_wizard_gate_async_check() {
     g_wizard_gate_ready.store(false);
     std::thread([]() {
         EnvCheckResult env = app_check_environment();
+        char net_resp[128] = {0};
+        int net_code = http_get("https://openrouter.ai/api/v1/models", net_resp, sizeof(net_resp), 2);
+        bool net_ok = (net_code > 0 && net_code < 500);
+        bool gw_ok = false;
+        if (env.openclaw_ok) {
+            char gw_resp[128] = {0};
+            int gw_code = http_get("http://127.0.0.1:18789/health", gw_resp, sizeof(gw_resp), 2);
+            gw_ok = (gw_code > 0 && gw_code < 500);
+        }
+        env.gateway_ok = gw_ok;
         {
             std::lock_guard<std::mutex> lk(g_wizard_gate_mtx);
             g_wizard_gate_env = env;
+            g_wizard_gate_net_ok = net_ok;
         }
         g_wizard_gate_ready.store(true);
         g_wizard_gate_running.store(false);
@@ -13547,6 +14226,15 @@ void app_ui_init() {
     lv_obj_center(lbl_dual);
     c2_refresh_dual_view_button();
 
+    /* Status label inside ctrl_bar, right-aligned */
+    mode_lbl_chat_status = lv_label_create(ctrl_bar);
+    lv_obj_set_style_text_font(mode_lbl_chat_status, FONT(FONT_SIZE_SMALL), 0);
+    lv_obj_set_style_text_color(mode_lbl_chat_status, c->text_hint, 0);
+    lv_label_set_long_mode(mode_lbl_chat_status, LV_LABEL_LONG_SCROLL);
+    int status_x = dd_x + DD_GAP;
+    lv_obj_set_pos(mode_lbl_chat_status, status_x, (SCALE(CTRL_BAR_H) - SCALE(FONT_SIZE_SMALL)) / 2);
+    update_chat_status_label("Ready", false);
+
     int content_w = mode_content_w();
     int content_h = mode_content_h();
 
@@ -13620,75 +14308,26 @@ void app_ui_init() {
     lv_label_set_text(t_title, tr(I18n{"Task Queue", "任务队列"}));
     lv_obj_set_style_text_color(t_title, c->text, 0);
     lv_obj_set_style_text_font(t_title, CJK_FONT, 0);
-    module_tasks_state = lv_label_create(module_tasks_panel);
+    /* State row + New Task button (per UI-04 spec) */
+    lv_obj_t* row_state_task = lv_obj_create(module_tasks_panel);
+    lv_obj_set_width(row_state_task, LV_PCT(100));
+    lv_obj_set_height(row_state_task, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_opa(row_state_task, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(row_state_task, 0, 0);
+    lv_obj_set_style_pad_all(row_state_task, 0, 0);
+    lv_obj_set_style_pad_gap(row_state_task, SCALE(8), 0);
+    lv_obj_set_flex_flow(row_state_task, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(row_state_task, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(row_state_task, LV_OBJ_FLAG_SCROLLABLE);
+    module_tasks_state = lv_label_create(row_state_task);
     lv_label_set_text(module_tasks_state, tr(I18n{"State: ready", "状态：就绪"}));
     lv_obj_set_style_text_color(module_tasks_state, c->text_dim, 0);
     lv_obj_set_style_text_font(module_tasks_state, FONT(FONT_SIZE_SMALL), 0);
-    lv_obj_t* row_tasks_btn = lv_obj_create(module_tasks_panel);
-    lv_obj_set_width(row_tasks_btn, LV_PCT(100));
-    lv_obj_set_height(row_tasks_btn, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_opa(row_tasks_btn, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(row_tasks_btn, 0, 0);
-    lv_obj_set_style_pad_all(row_tasks_btn, 0, 0);
-    lv_obj_set_style_pad_gap(row_tasks_btn, SCALE(8), 0);
-    lv_obj_set_flex_flow(row_tasks_btn, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row_tasks_btn, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(row_tasks_btn, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t* btn_task_refresh = aw_btn_create(row_tasks_btn, tr(I18n{"Refresh Queue", "刷新队列"}), BTN_SECONDARY, SCALE(150), SCALE(34));
-    lv_obj_add_event_cb(btn_task_refresh, [](lv_event_t* e) {
+    lv_obj_t* btn_new_task = aw_btn_create(row_state_task, tr(I18n{"New Task", "新建任务"}), BTN_PRIMARY, SCALE(140), SCALE(34));
+    lv_obj_add_event_cb(btn_new_task, [](lv_event_t* e) {
         (void)e;
-        refresh_tasks_module_data(false);
-    }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* btn_task_run = aw_btn_create(row_tasks_btn, tr(I18n{"Sync Sessions", "同步会话"}), BTN_PRIMARY, SCALE(140), SCALE(34));
-    lv_obj_add_event_cb(btn_task_run, [](lv_event_t* e) {
-        (void)e;
-        refresh_tasks_module_data(true);
-    }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* btn_task_abort_all = aw_btn_create(row_tasks_btn, tr(I18n{"Abort All", "全部终止"}), BTN_DANGER, SCALE(120), SCALE(34));
-    lv_obj_add_event_cb(btn_task_abort_all, [](lv_event_t* e) {
-        (void)e;
-        bool ok = session_mgr().abort_all();
-        if (ok) {
-            if (module_tasks_state) lv_label_set_text(module_tasks_state, tr(I18n{"State: all sessions aborted", "状态：所有会话已终止"}));
-            ui_toast_warn(g_lang == Lang::CN ? "已终止全部会话" : "All sessions aborted");
-        } else {
-            if (module_tasks_state) lv_label_set_text(module_tasks_state, tr(I18n{"State: abort all failed", "状态：全部终止失败"}));
-            ui_toast_error(g_lang == Lang::CN ? "终止会话失败" : "Abort sessions failed");
-        }
-        app_refresh_status();
-        refresh_tasks_module_data(false);
-    }, LV_EVENT_CLICKED, nullptr);
-
-    lv_obj_t* row_task_tpl = lv_obj_create(module_tasks_panel);
-    lv_obj_set_width(row_task_tpl, LV_PCT(100));
-    lv_obj_set_height(row_task_tpl, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_opa(row_task_tpl, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(row_task_tpl, 0, 0);
-    lv_obj_set_style_pad_all(row_task_tpl, 0, 0);
-    lv_obj_set_style_pad_gap(row_task_tpl, SCALE(8), 0);
-    lv_obj_set_flex_flow(row_task_tpl, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_flex_align(row_task_tpl, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(row_task_tpl, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_t* btn_tpl_health = aw_btn_create(row_task_tpl, tr(I18n{"Template: Health Check", "模板：健康检查"}), BTN_PRIMARY, SCALE(210), SCALE(34));
-    lv_obj_add_event_cb(btn_tpl_health, [](lv_event_t* e) {
-        (void)e;
-        run_tasks_template("Health Check",
-            "执行系统健康检查并输出摘要：网关状态、活动会话、运行时状态、最近错误日志。最后给出可执行修复建议。");
-    }, LV_EVENT_CLICKED, nullptr);
-
-    lv_obj_t* btn_tpl_workspace = aw_btn_create(row_task_tpl, tr(I18n{"Template: Workspace Sync", "模板：工作区同步"}), BTN_SECONDARY, SCALE(230), SCALE(34));
-    lv_obj_add_event_cb(btn_tpl_workspace, [](lv_event_t* e) {
-        (void)e;
-        run_tasks_template("Workspace Sync",
-            "检查并同步工作区托管文件（AGENTS/TOOLS/MEMORY），列出变更项并给出下一步建议。不要修改工作区外文件。");
-    }, LV_EVENT_CLICKED, nullptr);
-
-    lv_obj_t* btn_tpl_resource = aw_btn_create(row_task_tpl, tr(I18n{"Template: Resource Audit", "模板：资源审计"}), BTN_SECONDARY, SCALE(220), SCALE(34));
-    lv_obj_add_event_cb(btn_tpl_resource, [](lv_event_t* e) {
-        (void)e;
-        run_tasks_template("Resource Audit",
-            "扫描 assets 下字体/图标/声音资源，输出缺失项、重复项和命名建议，最终给出修复优先级。不要直接删除文件。");
+        /* TODO: popup task input dialog per UI-04 spec */
+        ui_toast_info(g_lang == Lang::CN ? "新建任务（待实现）" : "New Task (TODO)");
     }, LV_EVENT_CLICKED, nullptr);
 
     module_tasks_view = aw_textarea_create(module_tasks_panel, "Task queue snapshot...", false, LV_PCT(100), SCALE(180));
@@ -14711,11 +15350,7 @@ void app_ui_init() {
     lv_obj_add_event_cb(chat_input, chat_input_right_click_cb, LV_EVENT_LONG_PRESSED, nullptr);  /* Right-click menu */
     lv_group_add_obj(lv_group_get_default(), chat_input);
 
-    mode_lbl_chat_status = lv_label_create(mode_panel_chat);
-    lv_obj_set_style_text_font(mode_lbl_chat_status, FONT(FONT_SIZE_SMALL), 0);
-    lv_obj_set_style_text_color(mode_lbl_chat_status, c->text_hint, 0);
-    lv_obj_set_pos(mode_lbl_chat_status, CHAT_GAP, input_y - SCALE(16));
-    update_chat_status_label("Ready", false);
+    /* mode_lbl_chat_status is now a child of ctrl_bar (created there), not mode_panel_chat */
 
     /* ═══ Send button (CI-01-2: 内嵌发送按钮) ═══ */
     {
@@ -14835,40 +15470,20 @@ void app_ui_init() {
     update_main_title();
     apply_nav_module_visuals();
 
-    /* Show loading overlay while OpenClaw is starting */
-    loading_show();
+    if (g_startup_error.empty()) {
+        /* Show loading overlay while OpenClaw is starting */
+        loading_show();
 
-    /* Show legal disclaimer on first launch */
-    show_disclaimer(scr);
+        /* Show legal disclaimer on first launch */
+        show_disclaimer(scr);
+    } else {
+        ui_log("[Startup] SelfCheck blocked startup; skip BootCheck entry");
+    }
 
     /* Show startup error modal if any (e.g. "Already Running") */
     show_startup_error(scr);
 
-    /* ═══ Setup wizard gate: async env check to avoid startup blocking ═══ */
-    start_wizard_gate_async_check();
-    lv_timer_create([](lv_timer_t* t) {
-        if (!g_wizard_gate_ready.load()) return;
-        EnvCheckResult wiz_env{};
-        {
-            std::lock_guard<std::mutex> lk(g_wizard_gate_mtx);
-            wiz_env = g_wizard_gate_env;
-        }
-        bool wizard_needed = !is_wizard_completed()
-            || !wiz_env.node_ok
-            || !wiz_env.node_version_ok
-            || !wiz_env.npm_ok
-            || !wiz_env.openclaw_ok;
-        if (wizard_needed) {
-            ui_log("[Wizard] Auto-open setup wizard (node=%d node_ver=%d npm=%d oc=%d completed=%d)",
-                   wiz_env.node_ok ? 1 : 0,
-                   wiz_env.node_version_ok ? 1 : 0,
-                   wiz_env.npm_ok ? 1 : 0,
-                   wiz_env.openclaw_ok ? 1 : 0,
-                   is_wizard_completed() ? 1 : 0);
-            ui_show_setup_wizard();
-        }
-        lv_timer_del(t);
-    }, 200, nullptr);
+    /* Setup wizard gating is now handled by Boot Check page (UI-01). */
 
     /* Create user_data.txt marker for uninstaller */
     {

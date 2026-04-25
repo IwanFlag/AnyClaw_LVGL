@@ -99,6 +99,8 @@ struct EnvCheckResult {
     bool hermes_healthy;
     bool claude_ok;
     bool claude_healthy;
+    bool disk_space_ok;     /* >= 1GB free on system drive */
+    bool port_18789_ok;     /* port 18789 is bound and responsive */
     char node_ver[64];
     char npm_ver[32];
     char openclaw_ver[64];
