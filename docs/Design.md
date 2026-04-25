@@ -3076,7 +3076,6 @@ icon-only，hover 300ms 显示 tooltip。
 | 左导航 | 标题栏显示 | 额外控件 |
 |--------|-----------|---------|
 | 🦞 Bot | `Bot · Chat` / `Bot · Work` | — |
-| ⚡ Task | `Task` | [+] 新建任务 |
 | 📁 File | `File` | — |
 | ⚙ Settings | `Settings` | — |
 
@@ -3136,7 +3135,7 @@ File 的数据边界使用**当前工作区根目录**（workspace root），语
 | module_files_panel | container | module_placeholder | left_panel 全宽 × auto | surface 背景，替换 Session/Cron 内容 |
 | 当前工作区行 | label + button | module_files_panel | 100% × auto | 显示当前工作区根目录，点击"切换..."选择新工作区目录 |
 | 文件搜索框 | lv_textarea | module_files_panel | 100% × 48px | placeholder: "搜索工作区文件..."，输入触发搜索 |
-| 文件列表 | lv_textarea | module_files_panel | 100% × 剩余高度 | 只读，滚动，显示当前工作区内文件绝对路径列表 |
+| 文件列表 | lv_textarea | module_files_panel | 100% × 剩余高度 | 只读，滚动，按目录层级显示当前工作区内文件（类似 VS Code 资源管理器） |
 
 **操作流程（用户视角）：**
 ```
@@ -3147,7 +3146,8 @@ File 的数据边界使用**当前工作区根目录**（workspace root），语
    left_panel 显示 File 内容（搜索框 + 文件列表）
        │
          ├─── 点击"切换..." ──→ 选择新工作区目录 ──→ 立即重载列表
-       ├─── 输入搜索词 ──→ 实时过滤文件列表（模糊匹配路径/文件名）
+      ├─── 默认显示目录树 ──→ 按当前工作区目录层级展示
+      ├─── 输入搜索词 ──→ 实时过滤文件列表（模糊匹配路径/文件名）
        └─── 列表自动滚动到匹配项
 ```
 
