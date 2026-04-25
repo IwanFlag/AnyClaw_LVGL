@@ -968,9 +968,7 @@ static void apply_nav_module_visuals();
 static void mode_chat_cb(lv_event_t* e);
 static void mode_work_cb(lv_event_t* e);
 static void update_main_title();
-static void refresh_tasks_module_data(bool run_pending);
 static void refresh_files_module_data(bool scan_workspace);
-static void run_tasks_template(const char* template_name, const char* prompt);
 static void work_send_cb(lv_event_t* e);
 static void work_prompt_input_cb(lv_event_t* e);
 static void chat_send_cb(lv_event_t* e);
@@ -1643,7 +1641,6 @@ static const char* tr_title(const I18n& s) {
 static const I18n STR_TITLE       = {"AnyClaw Desktop Manager", "AnyClaw 桌面管理器"};
 static const I18n STR_TITLE_BOT_CHAT = {"Bot - Chat", "Bot - 对话"};
 static const I18n STR_TITLE_BOT_WORK = {"Bot - Work", "Bot - 任务"};
-static const I18n STR_TITLE_TASKS = {"Tasks", "任务"};
 static const I18n STR_TITLE_FILES = {"Resources", "资源"};
 
 static const I18n STR_LOG         = {"Log", "日志"};
@@ -2289,7 +2286,6 @@ static void loading_show() {
 static lv_obj_t* splitter = nullptr;
 static lv_obj_t* left_nav = nullptr;     /* icon-only module nav */
 static lv_obj_t* nav_btn_bot = nullptr;
-static lv_obj_t* nav_btn_tasks = nullptr;
 static lv_obj_t* nav_btn_files = nullptr;
 static lv_obj_t* nav_session = nullptr;   /* bottom nav: Chat/Work toggle */
 static lv_obj_t* left_panel = nullptr;
@@ -2297,11 +2293,8 @@ static lv_obj_t* right_panel = nullptr;
 static lv_obj_t* module_placeholder = nullptr;
 static lv_obj_t* module_placeholder_title = nullptr;
 static lv_obj_t* module_placeholder_desc = nullptr;
-static lv_obj_t* module_tasks_panel = nullptr;
 static lv_obj_t* module_files_panel = nullptr;
-static lv_obj_t* module_tasks_state = nullptr;
 static lv_obj_t* module_files_state = nullptr;
-static lv_obj_t* module_tasks_view = nullptr;
 static lv_obj_t* module_files_view = nullptr;
 static lv_obj_t* module_files_filter_all = nullptr;
 static lv_obj_t* module_files_filter_fonts = nullptr;
@@ -2457,7 +2450,7 @@ static const int CTRL_BAR_H = 40;
 static int MODE_BAR_H = 36;
 enum UiMainMode { UI_MODE_CHAT = 0, UI_MODE_WORK = 1 };
 static UiMainMode g_ui_mode = UI_MODE_CHAT;
-enum UiNavModule { UI_NAV_BOT = 0, UI_NAV_TASKS = 1, UI_NAV_FILES = 2 };
+enum UiNavModule { UI_NAV_BOT = 0, UI_NAV_FILES = 1 };
 static UiNavModule g_ui_nav_module = UI_NAV_BOT;
 /* chat_cont is declared above for early chat-history restore helpers */
 static lv_obj_t* btn_send_widget = nullptr; /* Send button */
@@ -5673,53 +5666,10 @@ static void update_main_title() {
     const I18n* s = &STR_TITLE;
     if (g_ui_nav_module == UI_NAV_BOT) {
         s = (g_ui_mode == UI_MODE_CHAT) ? &STR_TITLE_BOT_CHAT : &STR_TITLE_BOT_WORK;
-    } else if (g_ui_nav_module == UI_NAV_TASKS) {
-        s = &STR_TITLE_TASKS;
     } else if (g_ui_nav_module == UI_NAV_FILES) {
         s = &STR_TITLE_FILES;
     }
     lv_label_set_text(title_label, tr(*s));
-}
-
-static void refresh_tasks_module_data(bool run_pending) {
-    if (!module_tasks_state) return;
-    SessionManager& sm = session_mgr();
-    bool refreshed = sm.refresh();
-    auto sessions = sm.active_sessions();
-    int visible_tasks = g_task_count;
-    int active_sessions = (int)sessions.size();
-    int cron_sessions = 0;
-    for (const auto& s : sessions) if (s.isCron) cron_sessions++;
-
-    if (run_pending) {
-        lv_label_set_text_fmt(module_tasks_state,
-            "%s", tr(I18n{"State: session cache synced", "状态：会话缓存已同步"}));
-        app_refresh_status();
-        ui_log("[Tasks] Session sync requested (ok=%d, visible=%d, sessions=%d)", refreshed ? 1 : 0, visible_tasks, active_sessions);
-    } else {
-        lv_label_set_text_fmt(module_tasks_state,
-            "%s", tr(I18n{"State: queue refreshed", "状态：队列已刷新"}));
-        ui_log("[Tasks] Queue refreshed (ok=%d, visible=%d, sessions=%d)", refreshed ? 1 : 0, visible_tasks, active_sessions);
-    }
-
-    if (!module_tasks_view) return;
-    char buf[2048] = {0};
-    snprintf(buf, sizeof(buf),
-             "Visible task widgets: %d\n"
-             "Active sessions: %d\n"
-             "Cron sessions: %d\n\n",
-             visible_tasks, active_sessions, cron_sessions);
-    for (int i = 0; i < g_task_count && i < 8; i++) {
-        const char* name = g_tasks[i].name[0] ? g_tasks[i].name : "(unnamed)";
-        const char* status = g_tasks[i].status[0] ? g_tasks[i].status : "unknown";
-        char line[220] = {0};
-        snprintf(line, sizeof(line), "%d. %s [%s]\n", i + 1, name, status);
-        strncat_s(buf, sizeof(buf), line, _TRUNCATE);
-    }
-    if (g_task_count == 0) {
-        strncat_s(buf, sizeof(buf), tr(I18n{"No task widgets yet.", "当前无任务条目。"}), _TRUNCATE);
-    }
-    lv_textarea_set_text(module_tasks_view, buf);
 }
 
 static void refresh_files_module_data(bool scan_workspace) {
@@ -5862,35 +5812,6 @@ static void refresh_files_module_data(bool scan_workspace) {
            scan_workspace ? 1 : 0, ws_files, ws_dirs, asset_files);
 }
 
-static void run_tasks_template(const char* template_name, const char* prompt) {
-    if (!mode_ta_work_prompt || !prompt || !prompt[0]) {
-        if (module_tasks_state) lv_label_set_text(module_tasks_state, tr(I18n{"State: template unavailable", "状态：模板不可用"}));
-        return;
-    }
-    if (is_streaming_now()) {
-        if (module_tasks_state) lv_label_set_text(module_tasks_state, tr(I18n{"State: wait current response", "状态：请等待当前响应完成"}));
-        ui_toast_warn(g_lang == Lang::CN ? "请等待当前响应完成" : "Wait for current response");
-        return;
-    }
-
-    lv_textarea_set_text(mode_ta_work_prompt, prompt);
-    snprintf(g_work_last_prompt, sizeof(g_work_last_prompt), "%s", prompt);
-    work_send_cb(nullptr);
-
-    if (module_tasks_state) {
-        char state[256] = {0};
-        snprintf(state, sizeof(state), "%s: %s",
-                 tr(I18n{"State: template executed", "状态：模板已执行"}),
-                 template_name ? template_name : "task");
-        lv_label_set_text(module_tasks_state, state);
-    }
-    ui_log("[Tasks] Template executed: %s", template_name ? template_name : "task");
-
-    g_ui_nav_module = UI_NAV_BOT;
-    g_ui_mode = UI_MODE_WORK;
-    apply_nav_module_visuals();
-}
-
 static void apply_nav_module_visuals() {
     auto paint_nav_btn = [](lv_obj_t* btn, bool selected) {
         if (!btn) return;
@@ -5907,13 +5828,11 @@ static void apply_nav_module_visuals() {
     };
 
     paint_nav_btn(nav_btn_bot, g_ui_nav_module == UI_NAV_BOT);
-    paint_nav_btn(nav_btn_tasks, g_ui_nav_module == UI_NAV_TASKS);
     paint_nav_btn(nav_btn_files, g_ui_nav_module == UI_NAV_FILES);
 
     if (g_ui_nav_module == UI_NAV_BOT) {
         if (left_panel) {
             lv_obj_clear_flag(left_panel, LV_OBJ_FLAG_HIDDEN);
-            /* Show all Bot mode children, hide module_placeholder */
             uint32_t n = lv_obj_get_child_count(left_panel);
             for (uint32_t i = 0; i < n; i++) {
                 lv_obj_t* ch = lv_obj_get_child(left_panel, i);
@@ -5923,8 +5842,8 @@ static void apply_nav_module_visuals() {
         }
         if (right_panel) lv_obj_clear_flag(right_panel, LV_OBJ_FLAG_HIDDEN);
     } else {
-        /* Task/Files module: left_panel stays visible (shows module_placeholder),
-         * right_panel is hidden to give full focus to the task/files content.
+        /* Files module: left_panel stays visible (shows module_placeholder),
+         * right_panel is hidden to give full focus to the files content.
          * Hide all Bot-mode children; only module_placeholder is visible. */
         if (left_panel) {
             lv_obj_clear_flag(left_panel, LV_OBJ_FLAG_HIDDEN);
@@ -5937,22 +5856,11 @@ static void apply_nav_module_visuals() {
         }
         if (right_panel) lv_obj_add_flag(right_panel, LV_OBJ_FLAG_HIDDEN);
         if (module_placeholder) {
-            const char* title = (g_ui_nav_module == UI_NAV_TASKS)
-                ? tr(I18n{"Tasks Center", "任务中心"})
-                : tr(I18n{"Resources Center", "资源中心"});
-            const char* desc = (g_ui_nav_module == UI_NAV_TASKS)
-                ? tr(I18n{"Task scheduling, queue and execution shortcuts.", "任务调度、队列与执行快捷入口。"})
-                : tr(I18n{"Workspace, files and skill assets shortcuts.", "工作区、文件与技能资源快捷入口。"});
-            if (module_placeholder_title) lv_label_set_text(module_placeholder_title, title);
-            if (module_placeholder_desc) lv_label_set_text(module_placeholder_desc, desc);
-            if (module_tasks_panel) {
-                if (g_ui_nav_module == UI_NAV_TASKS) lv_obj_clear_flag(module_tasks_panel, LV_OBJ_FLAG_HIDDEN);
-                else lv_obj_add_flag(module_tasks_panel, LV_OBJ_FLAG_HIDDEN);
-            }
-            if (module_files_panel) {
-                if (g_ui_nav_module == UI_NAV_FILES) lv_obj_clear_flag(module_files_panel, LV_OBJ_FLAG_HIDDEN);
-                else lv_obj_add_flag(module_files_panel, LV_OBJ_FLAG_HIDDEN);
-            }
+            if (module_placeholder_title) lv_label_set_text(module_placeholder_title,
+                tr(I18n{"Files", "文件"}));
+            if (module_placeholder_desc) lv_label_set_text(module_placeholder_desc,
+                tr(I18n{"Project file browser and asset management.", "项目文件浏览器与资源管理。"}));
+            if (module_files_panel) lv_obj_clear_flag(module_files_panel, LV_OBJ_FLAG_HIDDEN);
         }
     }
 
@@ -6200,10 +6108,8 @@ static void relayout_panels() {
         lv_obj_set_pos(module_placeholder, 0, 0);
         int module_card_w = LEFT_PANEL_W - SCALE(16);
         if (module_placeholder_desc) lv_obj_set_width(module_placeholder_desc, std::max(SCALE(160), module_card_w - SCALE(8)));
-        if (module_tasks_panel) lv_obj_set_width(module_tasks_panel, module_card_w);
         if (module_files_panel) lv_obj_set_width(module_files_panel, module_card_w);
         int module_view_w = std::max(SCALE(140), module_card_w - SCALE(16));
-        if (module_tasks_view) lv_obj_set_width(module_tasks_view, module_view_w);
         if (module_files_view) lv_obj_set_width(module_files_view, module_view_w);
     }
     if (mode_dd_control) lv_obj_set_width(mode_dd_control, std::min(content_w - 16, SCALE(360)));
@@ -8043,7 +7949,7 @@ static void chat_add_ai_bubble(const char* text) {
     lv_obj_set_style_border_width(accent_bar, 0, 0);
     lv_obj_set_style_pad_all(accent_bar, 0, 0);
     lv_obj_set_style_radius(accent_bar, 0, 0);
-    lv_obj_align(accent_bar, LV_ALIGN_LEFT, 0, 0);
+    lv_obj_align(accent_bar, LV_ALIGN_LEFT_MID, 0, 0);
     make_label_selectable(lbl);  /* Enable mouse text selection + Ctrl+C */
 
     char history_entry[2048];
@@ -10040,7 +9946,7 @@ void ui_show_exit_dialog() {
 
     lv_obj_t* lbl_msg2 = lv_label_create(box);
     lv_label_set_text(lbl_msg2, tr(S_EXIT_MSG2));
-    lv_obj_set_style_text_color(lbl_msg2, g_colors->text_secondary, 0);
+    lv_obj_set_style_text_color(lbl_msg2, g_colors->text_dim, 0);
     lv_obj_set_style_text_font(lbl_msg2, CJK_FONT, 0);
     lv_label_set_long_mode(lbl_msg2, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(lbl_msg2, LV_PCT(100));
@@ -13626,27 +13532,18 @@ bool ui_handle_hotkey(SDL_Keycode sym, Uint16 mod) {
         ui_log("[Hotkey] Ctrl+1: Nav→Bot");
         return true;
     }
-    /* ── Ctrl+2 → Tasks module ── */
+    /* ── Ctrl+2 → Files module ── */
     if (ctrl && !shift && sym == SDLK_2) {
-        if (g_ui_nav_module != UI_NAV_TASKS) {
-            g_ui_nav_module = UI_NAV_TASKS;
-            apply_nav_module_visuals();
-        }
-        ui_log("[Hotkey] Ctrl+2: Nav→Tasks");
-        return true;
-    }
-    /* ── Ctrl+3 → Files module ── */
-    if (ctrl && !shift && sym == SDLK_3) {
         if (g_ui_nav_module != UI_NAV_FILES) {
             g_ui_nav_module = UI_NAV_FILES;
             apply_nav_module_visuals();
         }
-        ui_log("[Hotkey] Ctrl+3: Nav→Files");
+        ui_log("[Hotkey] Ctrl+2: Nav→Files");
         return true;
     }
     /* ── Ctrl+Tab → cycle nav modules ── */
     if (ctrl && !shift && sym == SDLK_TAB) {
-        int next = ((int)g_ui_nav_module + 1) % 3;
+        int next = ((int)g_ui_nav_module + 1) % 2;
         g_ui_nav_module = (UiNavModule)next;
         apply_nav_module_visuals();
         ui_log("[Hotkey] Ctrl+Tab: cycle nav→%d", next);
@@ -13876,20 +13773,13 @@ void app_ui_init() {
         return b;
     };
 
-    nav_btn_bot = create_nav_btn("Bot", "Bot", true);
-    nav_btn_tasks = create_nav_btn("Task", "Task", false);
-    nav_btn_files = create_nav_btn("File", "File", false);
+    nav_btn_bot = create_nav_btn("Bot", "Bot", g_ui_nav_module == UI_NAV_BOT);
+    nav_btn_files = create_nav_btn("File", "File", g_ui_nav_module == UI_NAV_FILES);
 
     lv_obj_add_event_cb(nav_btn_bot, [](lv_event_t* e) {
         (void)e;
         if (g_ui_nav_module == UI_NAV_BOT) return;
         g_ui_nav_module = UI_NAV_BOT;
-        apply_nav_module_visuals();
-    }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_add_event_cb(nav_btn_tasks, [](lv_event_t* e) {
-        (void)e;
-        if (g_ui_nav_module == UI_NAV_TASKS) return;
-        g_ui_nav_module = UI_NAV_TASKS;
         apply_nav_module_visuals();
     }, LV_EVENT_CLICKED, nullptr);
     lv_obj_add_event_cb(nav_btn_files, [](lv_event_t* e) {
@@ -14282,57 +14172,14 @@ void app_ui_init() {
     lv_obj_set_style_text_font(module_placeholder_title, CJK_FONT, 0);
     lv_obj_set_style_text_color(module_placeholder_title, c->text, 0);
     lv_obj_set_width(module_placeholder_title, LV_PCT(100));
-    lv_label_set_text(module_placeholder_title, tr(I18n{"Tasks Center", "任务中心"}));
+    lv_label_set_text(module_placeholder_title, tr(I18n{"Files", "文件"}));
     module_placeholder_desc = lv_label_create(module_placeholder);
     lv_label_set_long_mode(module_placeholder_desc, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(module_placeholder_desc, LV_PCT(100));
     lv_obj_set_style_text_align(module_placeholder_desc, LV_TEXT_ALIGN_LEFT, 0);
     lv_obj_set_style_text_font(module_placeholder_desc, CJK_FONT_SMALL, 0);
     lv_obj_set_style_text_color(module_placeholder_desc, c->text_dim, 0);
-    lv_label_set_text(module_placeholder_desc, tr(I18n{"Task scheduling, queue and execution shortcuts.", "任务调度、队列与执行快捷入口。"}));
-
-    module_tasks_panel = lv_obj_create(module_placeholder);
-    lv_obj_set_width(module_tasks_panel, LV_PCT(100));
-    lv_obj_set_height(module_tasks_panel, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_color(module_tasks_panel, c->surface, 0);
-    lv_obj_set_style_bg_opa(module_tasks_panel, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(module_tasks_panel, 1, 0);
-    lv_obj_set_style_border_color(module_tasks_panel, c->border, 0);
-    lv_obj_set_style_radius(module_tasks_panel, SCALE(g_colors->radius_lg), 0);
-    lv_obj_set_style_pad_all(module_tasks_panel, SCALE(14), 0);
-    lv_obj_set_style_pad_gap(module_tasks_panel, SCALE(8), 0);
-    lv_obj_set_flex_flow(module_tasks_panel, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_flex_align(module_tasks_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    lv_obj_clear_flag(module_tasks_panel, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t* t_title = lv_label_create(module_tasks_panel);
-    lv_label_set_text(t_title, tr(I18n{"Task Queue", "任务队列"}));
-    lv_obj_set_style_text_color(t_title, c->text, 0);
-    lv_obj_set_style_text_font(t_title, CJK_FONT, 0);
-    /* State row + New Task button (per UI-04 spec) */
-    lv_obj_t* row_state_task = lv_obj_create(module_tasks_panel);
-    lv_obj_set_width(row_state_task, LV_PCT(100));
-    lv_obj_set_height(row_state_task, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_opa(row_state_task, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(row_state_task, 0, 0);
-    lv_obj_set_style_pad_all(row_state_task, 0, 0);
-    lv_obj_set_style_pad_gap(row_state_task, SCALE(8), 0);
-    lv_obj_set_flex_flow(row_state_task, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row_state_task, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(row_state_task, LV_OBJ_FLAG_SCROLLABLE);
-    module_tasks_state = lv_label_create(row_state_task);
-    lv_label_set_text(module_tasks_state, tr(I18n{"State: ready", "状态：就绪"}));
-    lv_obj_set_style_text_color(module_tasks_state, c->text_dim, 0);
-    lv_obj_set_style_text_font(module_tasks_state, FONT(FONT_SIZE_SMALL), 0);
-    lv_obj_t* btn_new_task = aw_btn_create(row_state_task, tr(I18n{"New Task", "新建任务"}), BTN_PRIMARY, SCALE(140), SCALE(34));
-    lv_obj_add_event_cb(btn_new_task, [](lv_event_t* e) {
-        (void)e;
-        /* TODO: popup task input dialog per UI-04 spec */
-        ui_toast_info(g_lang == Lang::CN ? "新建任务（待实现）" : "New Task (TODO)");
-    }, LV_EVENT_CLICKED, nullptr);
-
-    module_tasks_view = aw_textarea_create(module_tasks_panel, "Task queue snapshot...", false, LV_PCT(100), SCALE(180));
-    lv_textarea_set_text_selection(module_tasks_view, true);
-    refresh_tasks_module_data(false);
+    lv_label_set_text(module_placeholder_desc, tr(I18n{"Project file browser and asset management.", "项目文件浏览器与资源管理。"}));
 
     module_files_panel = lv_obj_create(module_placeholder);
     lv_obj_set_width(module_files_panel, LV_PCT(100));
@@ -15523,7 +15370,6 @@ void app_ui_init() {
         LOG_D("IPC", "Nav cmd: '%s'", s);
         UiNavModule mod = g_ui_nav_module;
         if (strcmp(s, "bot") == 0) mod = UI_NAV_BOT;
-        else if (strcmp(s, "tasks") == 0) mod = UI_NAV_TASKS;
         else if (strcmp(s, "files") == 0) mod = UI_NAV_FILES;
         if (mod != g_ui_nav_module) {
             g_ui_nav_module = mod;
