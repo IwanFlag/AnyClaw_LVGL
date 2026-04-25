@@ -8509,11 +8509,33 @@ static void sse_chunk_cb(const char* chunk, void* ctx) {
             }
         }
 
+        /* Skip tool_calls block to avoid extracting content from tool parameters */
+        const char* tc_cp = data_start;
+        const char* tool_block_end = 0;
+        const char* tc_start = 0;
+        const char* tc_check = strstr(data_start, "\"tool_calls\"");
+        if (tc_check) {
+            tc_start = tc_check;
+            int depth = 0; bool in_str = false; bool esc = false;
+            const char* p2 = tc_start;
+            while (p2 < line_end) {
+                if (esc) { esc = false; p2++; continue; }
+                if (*p2 == 92) { esc = true; p2++; continue; }
+                if (*p2 == 34) { in_str = !in_str; p2++; continue; }
+                if (!in_str) {
+                    if (*p2 == 91 || *p2 == 123) { depth++; p2++; }
+                    else if (*p2 == 93 || *p2 == 125) { depth--; p2++; if (depth == 0) { tool_block_end = p2; break; } }
+                    else p2++;
+                } else p2++;
+            }
+        }
+
         /* Extract content from JSON: "content":"..." */
         const char* cp = data_start;
         while (cp < line_end) {
             const char* content_key = strstr(cp, "\"content\"");
             if (!content_key || content_key >= line_end) break;
+            if (tool_block_end && tc_start && content_key > tc_start && content_key < tool_block_end) { cp = content_key + 9; continue; }
             content_key += 9;
             while (content_key < line_end && (*content_key == ' ' || *content_key == ':' || *content_key == '"')) content_key++;
 
