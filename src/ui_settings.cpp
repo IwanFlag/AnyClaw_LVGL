@@ -80,6 +80,7 @@ static int SETTING_WIN_H = 740;
 static lv_obj_t* settings_panel = nullptr;
 static lv_obj_t* settings_tabs = nullptr;
 static bool settings_visible = false;
+static bool settings_init_in_progress = false; /* Re-entrancy guard: prevents double-init */
 
 /* ── General tab widgets ── */
 static lv_obj_t* gen_status_label = nullptr;
@@ -720,6 +721,7 @@ static void refresh_security_status_ui() {
 }
 
 static void build_general_tab(lv_obj_t* tab) {
+    ui_log("[Settings] build_general_tab ENTRY tab=%p", (void*)tab);
     apply_dark_style(tab);
     lv_obj_set_style_pad_all(tab, 16, 0);
     lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
@@ -1474,6 +1476,7 @@ static void build_permissions_tab(lv_obj_t* tab) {
 }
 
 static void build_agent_tab(lv_obj_t* tab) {
+    ui_log("[Settings] build_agent_tab ENTRY tab=%p", (void*)tab);
     apply_dark_style(tab);
     lv_obj_set_style_pad_all(tab, 16, 0);
     lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
@@ -1948,6 +1951,7 @@ static void apikey_save_cb(lv_event_t* e) {
 }
 
 static void build_model_tab(lv_obj_t* tab) {
+    ui_log("[Settings] build_model_tab ENTRY tab=%p", (void*)tab);
     apply_dark_style(tab);
     lv_obj_set_style_pad_all(tab, 16, 0);
     lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
@@ -2890,6 +2894,7 @@ static void log_clear_cb(lv_event_t* e) {
 }
 
 static void build_log_tab(lv_obj_t* tab) {
+    ui_log("[Settings] build_log_tab ENTRY tab=%p", (void*)tab);
     apply_dark_style(tab);
     lv_obj_set_style_pad_all(tab, 16, 0);
     lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
@@ -3102,6 +3107,7 @@ static void refresh_tracing_view() {
 }
 
 static void build_feature_tab(lv_obj_t* tab) {
+    ui_log("[Settings] build_feature_tab ENTRY tab=%p", (void*)tab);
     apply_dark_style(tab);
     lv_obj_set_style_pad_all(tab, 16, 0);
     lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
@@ -3174,6 +3180,7 @@ static void build_feature_tab(lv_obj_t* tab) {
 }
 
 static void build_tracing_tab(lv_obj_t* tab) {
+    ui_log("[Settings] build_tracing_tab ENTRY tab=%p", (void*)tab);
     apply_dark_style(tab);
     lv_obj_set_style_pad_all(tab, 16, 0);
     lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
@@ -3334,6 +3341,7 @@ static void build_kb_tab(lv_obj_t* tab) {
  *  ABOUT TAB (with garlic branding)
  * ═══════════════════════════════════════════════════════════════ */
 static void build_about_tab(lv_obj_t* tab) {
+    ui_log("[Settings] build_about_tab ENTRY tab=%p", (void*)tab);
     apply_dark_style(tab);
     lv_obj_set_style_pad_all(tab, 20, 0);
     lv_obj_set_flex_flow(tab, LV_FLEX_FLOW_COLUMN);
@@ -3790,12 +3798,24 @@ static void ui_settings_sync_model() {
 }
 
 void ui_settings_open() {
+    ui_log("[Settings] ui_settings_open() called, settings_panel=%p", (void*)settings_panel);
     if (!settings_panel) {
+        /* Re-entrancy guard: if init is already in progress, bail out */
+        if (settings_init_in_progress) {
+            ui_log("[Settings] ui_settings_open: init already in progress, bailing out");
+            return;
+        }
+        settings_init_in_progress = true;
         lv_obj_t* root = lv_screen_active();
-        if (!root) return;
+        ui_log("[Settings] root screen=%p", (void*)root);
+        if (!root) { settings_init_in_progress = false; return; }
         ui_settings_init(root);
+        settings_init_in_progress = false;
     }
-    if (!settings_panel) return;
+    if (!settings_panel) {
+        ui_log("[Settings] FATAL: settings_panel still null after init!");
+        return;
+    }
     /* Always show panel regardless of settings_visible flag state (handles stuck-true edge case) */
     lv_obj_clear_flag(settings_panel, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(settings_panel);
@@ -3998,6 +4018,7 @@ void ui_settings_apply_theme() {
  *  SETTINGS INIT - sized for 1200x800 window
  * ═══════════════════════════════════════════════════════════════ */
 void ui_settings_init(lv_obj_t* parent) {
+    ui_log("[Settings] >>> ui_settings_init entered");
     /* Get actual display dimensions from LVGL */
     SETTING_WIN_W = (int)lv_display_get_horizontal_resolution(NULL);
     SETTING_WIN_H = (int)lv_display_get_vertical_resolution(NULL);
@@ -4005,7 +4026,9 @@ void ui_settings_init(lv_obj_t* parent) {
     if (SETTING_WIN_H < 500) SETTING_WIN_H = 500;
 
     /* Modal overlay covering entire screen */
+    ui_log("[Settings] creating settings_panel...");
     settings_panel = lv_obj_create(parent);
+    ui_log("[Settings] settings_panel=%p", (void*)settings_panel);
     lv_obj_set_size(settings_panel, SETTING_WIN_W, SETTING_WIN_H);
     lv_obj_set_pos(settings_panel, 0, 0);
     lv_obj_set_style_bg_color(settings_panel, g_colors->bg, 0);
@@ -4027,11 +4050,13 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_clear_flag(title_bar, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_t* title = lv_label_create(title_bar);
+    ui_log("[Settings] title label created");
     lv_label_set_text(title, tr("设置", "Settings"));
     lv_obj_set_style_text_color(title, g_colors->accent, 0);
     lv_obj_set_style_text_font(title, CJK_FONT, 0);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 15, 0);
 
+    ui_log("[Settings] creating close button...");
     lv_obj_t* btn_close = lv_button_create(title_bar);
     lv_obj_set_size(btn_close, SCALE(84), SCALE(32));
     lv_obj_set_style_bg_color(btn_close, g_colors->btn_close, 0);
@@ -4044,8 +4069,10 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_set_style_text_font(lbl_close, CJK_FONT, 0);
     lv_obj_center(lbl_close);
 
+    ui_log("[Settings] creating tabview...");
     /* Tabview */
     settings_tabs = lv_tabview_create(settings_panel);
+    ui_log("[Settings] settings_tabs=%p", (void*)settings_tabs);
     int title_h = SCALE(48);
     lv_obj_set_size(settings_tabs, SETTING_WIN_W - 40, SETTING_WIN_H - title_h - 12);
     lv_obj_set_pos(settings_tabs, 20, title_h + 6);
@@ -4066,27 +4093,47 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_set_style_pad_ver(tab_btns, 8, LV_PART_ITEMS); /* Short divider, not full height */
 
     /* Create IA-aligned tabs (C1~C4) */
+    ui_log("[Settings] adding tabs...");
     lv_obj_t* tab_c1 = lv_tabview_add_tab(settings_tabs, tr("C1 开始使用", "C1 Getting Started"));
+    ui_log("[Settings] tab_c1 created");
     lv_obj_t* tab_c2 = lv_tabview_add_tab(settings_tabs, tr("C2 对话与任务", "C2 Chat & Task"));
+    ui_log("[Settings] tab_c2 created");
     lv_obj_t* tab_c3 = lv_tabview_add_tab(settings_tabs, tr("C3 Agent", "C3 Agent"));
+    ui_log("[Settings] tab_c3 created");
     lv_obj_t* tab_c4 = lv_tabview_add_tab(settings_tabs, tr("C4 系统诊断", "C4 Diagnostics"));
+    ui_log("[Settings] tab_c4 created");
 
     /* Build each center by combining existing pages */
+    ui_log("[Settings] building C1 (general+model)...");
     build_general_tab(tab_c1);
+    ui_log("[Settings] build_general_tab done");
     build_model_tab(tab_c1);
+    ui_log("[Settings] build_model_tab done");
 
+    ui_log("[Settings] building C2...");
     build_c2_tab(tab_c2);
+    ui_log("[Settings] build_c2_tab done");
 
+    ui_log("[Settings] building C3 (agent+perms+kb)...");
     build_agent_tab(tab_c3);
+    ui_log("[Settings] build_agent_tab done");
     build_permissions_tab(tab_c3);
+    ui_log("[Settings] build_permissions_tab done");
     build_kb_tab(tab_c3);
+    ui_log("[Settings] build_kb_tab done");
 
+    ui_log("[Settings] building C4 (log+feature+tracing+about)...");
     build_log_tab(tab_c4);
+    ui_log("[Settings] build_log_tab done");
     build_feature_tab(tab_c4);
+    ui_log("[Settings] build_feature_tab done");
     build_tracing_tab(tab_c4);
+    ui_log("[Settings] build_tracing_tab done");
     build_about_tab(tab_c4);
+    ui_log("[Settings] build_about_tab done");
 
     /* Initially hidden */
+    ui_log("[Settings] hiding panel and leaving init...");
     lv_obj_add_flag(settings_panel, LV_OBJ_FLAG_HIDDEN);
     settings_visible = false;
 
