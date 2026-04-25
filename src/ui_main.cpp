@@ -5673,19 +5673,17 @@ static void update_main_title() {
 }
 
 static void refresh_files_module_data(bool scan_workspace) {
-    if (!module_files_state || !module_files_view) return;
+    if (!module_files_view) return;
     namespace fs = std::filesystem;
     std::string ws_root = workspace_get_root();
-    WorkspaceHealth wh = workspace_check_health();
     int ws_files = 0;
     int ws_dirs = 0;
-    int asset_files = 0;
-    int asset_fonts = 0;
-    int asset_icons = 0;
-    int asset_sounds = 0;
     int matched_total = 0;
     std::vector<std::string> filtered_entries;
     filtered_entries.reserve(32);
+
+    std::string search = g_module_files_search;
+    std::transform(search.begin(), search.end(), search.begin(), ::tolower);
 
     std::error_code ec;
     if (scan_workspace && !ws_root.empty() && fs::exists(ws_root, ec)) {
@@ -5697,119 +5695,42 @@ static void refresh_files_module_data(bool scan_workspace) {
         }
     }
 
-    const std::string assets_dir = "assets";
-    std::string search = g_module_files_search;
-    std::transform(search.begin(), search.end(), search.begin(), ::tolower);
-
-    auto has_suffix = [](const std::string& text, const char* suffix) {
-        size_t n = strlen(suffix);
-        if (text.size() < n) return false;
-        return text.compare(text.size() - n, n, suffix) == 0;
-    };
-
-    auto pass_ext_filter = [&](const std::string& lower) {
-        switch (g_module_file_ext_filter) {
-            case 1: return has_suffix(lower, ".png");
-            case 2: return has_suffix(lower, ".svg");
-            case 3: return has_suffix(lower, ".ttf") || has_suffix(lower, ".otf");
-            case 4: return has_suffix(lower, ".wav") || has_suffix(lower, ".mp3") || has_suffix(lower, ".ogg");
-            case 5: return has_suffix(lower, ".json");
-            case 6: return has_suffix(lower, ".md");
-            default: return true;
-        }
-    };
-
-    if (fs::exists(assets_dir, ec)) {
-        for (fs::recursive_directory_iterator it(assets_dir, fs::directory_options::skip_permission_denied, ec), end;
-             it != end && asset_files < 1000; it.increment(ec)) {
+    std::string scan_dir = ws_root.empty() ? "." : ws_root;
+    if (fs::exists(scan_dir, ec)) {
+        for (fs::recursive_directory_iterator it(scan_dir, fs::directory_options::skip_permission_denied, ec), end;
+             it != end && ws_files < 2000; it.increment(ec)) {
             if (ec) break;
             if (it->is_regular_file(ec)) {
-                asset_files++;
                 std::string p = it->path().generic_string();
                 std::string lower = p;
                 std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-                bool is_font = lower.find("/fonts/") != std::string::npos;
-                bool is_icon = lower.find("/icons/") != std::string::npos;
-                bool is_sound = lower.find("/sounds/") != std::string::npos;
-                if (is_font) asset_fonts++;
-                if (is_icon) asset_icons++;
-                if (is_sound) asset_sounds++;
-
-                bool pass = (g_module_file_filter == MODULE_FILE_ALL)
-                    || (g_module_file_filter == MODULE_FILE_FONTS && is_font)
-                    || (g_module_file_filter == MODULE_FILE_ICONS && is_icon)
-                    || (g_module_file_filter == MODULE_FILE_SOUNDS && is_sound);
-                if (pass && !search.empty() && lower.find(search) == std::string::npos) pass = false;
-                if (pass && !pass_ext_filter(lower)) pass = false;
+                std::string fname_lower = it->path().filename().string();
+                std::transform(fname_lower.begin(), fname_lower.end(), fname_lower.begin(), ::tolower);
+                bool pass = search.empty() || lower.find(search) != std::string::npos
+                    || fname_lower.find(search) != std::string::npos;
                 if (pass) {
                     matched_total++;
-                    if (filtered_entries.size() < 20) filtered_entries.push_back(p);
+                    if (filtered_entries.size() < 50) filtered_entries.push_back(p);
                 }
             }
         }
     }
 
-    auto paint_filter_btn = [](lv_obj_t* btn, bool selected) {
-        if (!btn) return;
-        const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
-        lv_obj_set_style_bg_color(btn, selected ? c->btn_action : c->btn_secondary, 0);
-        lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
-    };
-    paint_filter_btn(module_files_filter_all, g_module_file_filter == MODULE_FILE_ALL);
-    paint_filter_btn(module_files_filter_fonts, g_module_file_filter == MODULE_FILE_FONTS);
-    paint_filter_btn(module_files_filter_icons, g_module_file_filter == MODULE_FILE_ICONS);
-    paint_filter_btn(module_files_filter_sounds, g_module_file_filter == MODULE_FILE_SOUNDS);
-
-    lv_label_set_text(module_files_state,
-        scan_workspace
-            ? tr(I18n{"State: workspace scanned", "状态：工作区已扫描"})
-            : tr(I18n{"State: quick asset summary", "状态：资源快速摘要"}));
-
     char buf[2048] = {0};
-    snprintf(buf, sizeof(buf),
-             "Workspace root:\n%s\n\n"
-             "Exists: %s\n"
-             "Writable: %s\n"
-             "Workspace files: %d\n"
-             "Workspace dirs: %d\n"
-             "Assets files: %d\n"
-             "  - fonts: %d\n"
-             "  - icons: %d\n"
-             "  - sounds: %d\n"
-             "Matched: %d\n\n",
-             ws_root.empty() ? "(empty)" : ws_root.c_str(),
-             wh.exists ? "yes" : "no",
-             wh.writable ? "yes" : "no",
-             ws_files, ws_dirs, asset_files, asset_fonts, asset_icons, asset_sounds, matched_total);
-
-    const char* filter_name = "all";
-    if (g_module_file_filter == MODULE_FILE_FONTS) filter_name = "fonts";
-    else if (g_module_file_filter == MODULE_FILE_ICONS) filter_name = "icons";
-    else if (g_module_file_filter == MODULE_FILE_SOUNDS) filter_name = "sounds";
-    const char* ext_name = "any";
-    if (g_module_file_ext_filter == 1) ext_name = ".png";
-    else if (g_module_file_ext_filter == 2) ext_name = ".svg";
-    else if (g_module_file_ext_filter == 3) ext_name = "font";
-    else if (g_module_file_ext_filter == 4) ext_name = "audio";
-    else if (g_module_file_ext_filter == 5) ext_name = ".json";
-    else if (g_module_file_ext_filter == 6) ext_name = ".md";
-    char head[160] = {0};
-    snprintf(head, sizeof(head), "Filter: %s | Ext: %s | Search: %s\n",
-             filter_name, ext_name,
-             search.empty() ? "(none)" : search.c_str());
-    strncat_s(buf, sizeof(buf), head, _TRUNCATE);
     if (filtered_entries.empty()) {
-        strncat_s(buf, sizeof(buf), tr(I18n{"(no entries)", "（无匹配条目）"}), _TRUNCATE);
+        snprintf(buf, sizeof(buf), "%s",
+            search.empty()
+                ? tr(I18n{"(no files)", "（无文件）"})
+                : tr(I18n{"(no matching files)", "（无匹配文件）"}));
     } else {
+        size_t pos = 0;
         for (size_t i = 0; i < filtered_entries.size(); ++i) {
-            char line[220] = {0};
-            snprintf(line, sizeof(line), "%zu. %s\n", i + 1, filtered_entries[i].c_str());
-            strncat_s(buf, sizeof(buf), line, _TRUNCATE);
+            pos += snprintf(buf + pos, sizeof(buf) - pos, "%s\n", filtered_entries[i].c_str());
+            if (pos >= sizeof(buf) - 1) break;
         }
     }
     lv_textarea_set_text(module_files_view, buf);
-    ui_log("[Resources] Summary refreshed (scan=%d, files=%d, dirs=%d, assets=%d)",
-           scan_workspace ? 1 : 0, ws_files, ws_dirs, asset_files);
+    ui_log("[File] List refreshed (matched=%zu, search='%s')", filtered_entries.size(), search.c_str());
 }
 
 static void apply_nav_module_visuals() {
@@ -14194,110 +14115,8 @@ void app_ui_init() {
     lv_obj_set_flex_flow(module_files_panel, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(module_files_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_clear_flag(module_files_panel, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t* f_title = lv_label_create(module_files_panel);
-    lv_label_set_text(f_title, tr(I18n{"Resource Hub", "资源中心"}));
-    lv_obj_set_style_text_color(f_title, c->text, 0);
-    lv_obj_set_style_text_font(f_title, CJK_FONT, 0);
-    module_files_state = lv_label_create(module_files_panel);
-    lv_label_set_text(module_files_state, tr(I18n{"State: ready", "状态：就绪"}));
-    lv_obj_set_style_text_color(module_files_state, c->text_dim, 0);
-    lv_obj_set_style_text_font(module_files_state, FONT(FONT_SIZE_SMALL), 0);
-    lv_obj_t* row_files_btn = lv_obj_create(module_files_panel);
-    lv_obj_set_width(row_files_btn, LV_PCT(100));
-    lv_obj_set_height(row_files_btn, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_opa(row_files_btn, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(row_files_btn, 0, 0);
-    lv_obj_set_style_pad_all(row_files_btn, 0, 0);
-    lv_obj_set_style_pad_gap(row_files_btn, SCALE(8), 0);
-    lv_obj_set_flex_flow(row_files_btn, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(row_files_btn, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(row_files_btn, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t* btn_files_scan = aw_btn_create(row_files_btn, tr(I18n{"Scan Workspace", "扫描工作区"}), BTN_SECONDARY, SCALE(160), SCALE(34));
-    lv_obj_add_event_cb(btn_files_scan, [](lv_event_t* e) {
-        (void)e;
-        refresh_files_module_data(true);
-    }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* btn_files_open = aw_btn_create(row_files_btn, tr(I18n{"Open Asset Dir", "打开资源目录"}), BTN_PRIMARY, SCALE(150), SCALE(34));
-    lv_obj_add_event_cb(btn_files_open, [](lv_event_t* e) {
-        (void)e;
-        const char* asset_dir = "assets";
-        ShellExecuteA(nullptr, "open", asset_dir, nullptr, nullptr, SW_SHOWNORMAL);
-        refresh_files_module_data(false);
-        if (module_files_state) lv_label_set_text(module_files_state, tr(I18n{"State: asset folder opened", "状态：资源目录已打开"}));
-        ui_log("[Resources] Open asset dir: %s", asset_dir);
-    }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* btn_files_sync = aw_btn_create(row_files_btn, tr(I18n{"Sync Managed", "同步托管段"}), BTN_SECONDARY, SCALE(140), SCALE(34));
-    lv_obj_add_event_cb(btn_files_sync, [](lv_event_t* e) {
-        (void)e;
-        bool ok = workspace_sync_managed_sections();
-        if (module_files_state) {
-            lv_label_set_text(module_files_state,
-                ok ? tr(I18n{"State: managed sections synced", "状态：托管段落已同步"})
-                   : tr(I18n{"State: managed sync failed", "状态：托管段落同步失败"}));
-        }
-        if (!ok) ui_toast_error(g_lang == Lang::CN ? "工作区同步失败" : "Workspace sync failed");
-        refresh_files_module_data(false);
-    }, LV_EVENT_CLICKED, nullptr);
-    lv_obj_t* btn_files_open_ws = aw_btn_create(row_files_btn, tr(I18n{"Open Workspace", "打开工作区"}), BTN_SECONDARY, SCALE(160), SCALE(34));
-    lv_obj_add_event_cb(btn_files_open_ws, [](lv_event_t* e) {
-        (void)e;
-        std::string ws = workspace_get_root();
-        if (!ws.empty()) {
-            ShellExecuteA(nullptr, "open", ws.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-            if (module_files_state) lv_label_set_text(module_files_state, tr(I18n{"State: workspace opened", "状态：工作区已打开"}));
-            ui_log("[Resources] Open workspace: %s", ws.c_str());
-        }
-        refresh_files_module_data(false);
-    }, LV_EVENT_CLICKED, nullptr);
 
-    lv_obj_t* row_files_filter = lv_obj_create(module_files_panel);
-    lv_obj_set_width(row_files_filter, LV_PCT(100));
-    lv_obj_set_height(row_files_filter, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_opa(row_files_filter, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(row_files_filter, 0, 0);
-    lv_obj_set_style_pad_all(row_files_filter, 0, 0);
-    lv_obj_set_style_pad_gap(row_files_filter, SCALE(8), 0);
-    lv_obj_set_flex_flow(row_files_filter, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_flex_align(row_files_filter, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(row_files_filter, LV_OBJ_FLAG_SCROLLABLE);
-
-    module_files_filter_all = aw_btn_create(row_files_filter, "All", BTN_SECONDARY, SCALE(72), SCALE(32));
-    lv_obj_add_event_cb(module_files_filter_all, [](lv_event_t* e) {
-        (void)e;
-        g_module_file_filter = MODULE_FILE_ALL;
-        refresh_files_module_data(false);
-    }, LV_EVENT_CLICKED, nullptr);
-    module_files_filter_fonts = aw_btn_create(row_files_filter, "Fonts", BTN_SECONDARY, SCALE(86), SCALE(32));
-    lv_obj_add_event_cb(module_files_filter_fonts, [](lv_event_t* e) {
-        (void)e;
-        g_module_file_filter = MODULE_FILE_FONTS;
-        refresh_files_module_data(false);
-    }, LV_EVENT_CLICKED, nullptr);
-    module_files_filter_icons = aw_btn_create(row_files_filter, "Icons", BTN_SECONDARY, SCALE(86), SCALE(32));
-    lv_obj_add_event_cb(module_files_filter_icons, [](lv_event_t* e) {
-        (void)e;
-        g_module_file_filter = MODULE_FILE_ICONS;
-        refresh_files_module_data(false);
-    }, LV_EVENT_CLICKED, nullptr);
-    module_files_filter_sounds = aw_btn_create(row_files_filter, "Sounds", BTN_SECONDARY, SCALE(96), SCALE(32));
-    lv_obj_add_event_cb(module_files_filter_sounds, [](lv_event_t* e) {
-        (void)e;
-        g_module_file_filter = MODULE_FILE_SOUNDS;
-        refresh_files_module_data(false);
-    }, LV_EVENT_CLICKED, nullptr);
-
-    lv_obj_t* row_files_query = lv_obj_create(module_files_panel);
-    lv_obj_set_width(row_files_query, LV_PCT(100));
-    lv_obj_set_height(row_files_query, LV_SIZE_CONTENT);
-    lv_obj_set_style_bg_opa(row_files_query, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(row_files_query, 0, 0);
-    lv_obj_set_style_pad_all(row_files_query, 0, 0);
-    lv_obj_set_style_pad_gap(row_files_query, SCALE(8), 0);
-    lv_obj_set_flex_flow(row_files_query, LV_FLEX_FLOW_ROW_WRAP);
-    lv_obj_set_flex_align(row_files_query, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_clear_flag(row_files_query, LV_OBJ_FLAG_SCROLLABLE);
-
-    module_files_search_input = aw_textarea_create(row_files_query, "Search path keyword...", false, SCALE(250), SCALE(34));
+    module_files_search_input = aw_textarea_create(module_files_panel, tr(I18n{"Search workspace files...", "搜索工作区文件..."}), false, LV_PCT(100), SCALE(48));
     lv_textarea_set_one_line(module_files_search_input, true);
     lv_obj_add_event_cb(module_files_search_input, [](lv_event_t* e) {
         (void)e;
@@ -14306,28 +14125,7 @@ void app_ui_init() {
         refresh_files_module_data(false);
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 
-    module_files_ext_dd = lv_dropdown_create(row_files_query);
-    lv_dropdown_set_options(module_files_ext_dd, "Ext: Any\n.png\n.svg\n.ttf/.otf\n.wav/.mp3/.ogg\n.json\n.md");
-    lv_dropdown_set_selected(module_files_ext_dd, (uint16_t)g_module_file_ext_filter);
-    lv_obj_set_size(module_files_ext_dd, SCALE(170), SCALE(34));
-    lv_obj_add_event_cb(module_files_ext_dd, [](lv_event_t* e) {
-        (void)e;
-        g_module_file_ext_filter = (int)lv_dropdown_get_selected(module_files_ext_dd);
-        refresh_files_module_data(false);
-    }, LV_EVENT_VALUE_CHANGED, nullptr);
-
-    lv_obj_t* btn_files_clear_filter = aw_btn_create(row_files_query, "Clear Filters", BTN_SECONDARY, SCALE(130), SCALE(34));
-    lv_obj_add_event_cb(btn_files_clear_filter, [](lv_event_t* e) {
-        (void)e;
-        g_module_file_filter = MODULE_FILE_ALL;
-        g_module_file_ext_filter = 0;
-        g_module_files_search[0] = '\0';
-        if (module_files_search_input) lv_textarea_set_text(module_files_search_input, "");
-        if (module_files_ext_dd) lv_dropdown_set_selected(module_files_ext_dd, 0);
-        refresh_files_module_data(false);
-    }, LV_EVENT_CLICKED, nullptr);
-
-    module_files_view = aw_textarea_create(module_files_panel, "Resource snapshot...", false, LV_PCT(100), SCALE(180));
+    module_files_view = aw_textarea_create(module_files_panel, "", false, LV_PCT(100), SCALE(280));
     lv_textarea_set_text_selection(module_files_view, true);
     refresh_files_module_data(false);
 
