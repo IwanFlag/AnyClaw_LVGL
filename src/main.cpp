@@ -10,6 +10,7 @@
 #include "tray.h"
 #include "async_task.h"
 #include "health.h"
+#include "selfcheck.h"
 #include "garlic_dock.h"
 #include "license.h"
 #include "workspace.h"
@@ -477,6 +478,7 @@ int main(int argc, char* argv[]) {
         const char* titles[] = {
             "AnyClaw LVGL v2.0 - Desktop Manager",
             "AnyClaw LVGL",
+            "AnyClaw",
             nullptr
         };
         HWND existing = nullptr;
@@ -492,6 +494,18 @@ int main(int argc, char* argv[]) {
         }
         LOG_W("MAIN", "Another instance is running but no main window was found; exit silently to avoid blocking popup");
         return 0;
+    }
+
+    bool startup_blocked = false;
+    {
+        SelfCheckResult selfcheck = selfcheck_run();
+        if (!selfcheck.all_ok) {
+            selfcheck_fix(selfcheck);
+        }
+        startup_blocked = !selfcheck.all_ok;
+        if (startup_blocked) {
+            LOG_W("MAIN", "Startup self-check failed; startup flow will be blocked by UI-03 modal");
+        }
     }
 
     /* Console hidden in release build (WIN32 subsystem) — use anyclaw_app.log for debug */
@@ -690,14 +704,27 @@ int main(int argc, char* argv[]) {
             SDL_SetWindowPosition(g_window, (screen_w - win_w) / 2, (screen_h - win_h) / 2);
         }
         SDL_RaiseWindow(g_window);
-        
-        /* Fix DWM extended frame covering custom title bar */
+
+        /* Apply rounded corners to main window (radius_xl = 16px, scaled by DPI) */
         HWND hwnd = getNativeWindowHandle(g_window);
         if (hwnd) {
-            MARGINS margins = {0, 0, 0, 0};  /* No extended frame */
-            DwmExtendFrameIntoClientArea(hwnd, &margins);
+            int r = SCALE(16);  /* radius_xl */
+            if (r > 0) {
+                HRGN hrgn = CreateRoundRectRgn(0, 0, ww, wh, r, r);
+                if (hrgn) {
+                    SetWindowRgn(hwnd, hrgn, TRUE);
+                    /* SetWindowRgn takes ownership of hrgn */
+                }
+            }
         }
-        
+
+        /* Fix DWM extended frame covering custom title bar */
+        HWND hwnd2 = getNativeWindowHandle(g_window);
+        if (hwnd2) {
+            MARGINS margins = {0, 0, 0, 0};  /* No extended frame */
+            DwmExtendFrameIntoClientArea(hwnd2, &margins);
+        }
+
         int ww, wh;
         SDL_GetWindowSize(g_window, &ww, &wh);
         LOG_I("SDL", "Window: %dx%d (screen: %dx%d)", ww, wh, screen_w, screen_h);
@@ -755,70 +782,79 @@ int main(int argc, char* argv[]) {
     }
 
     LOG_I("MAIN", "GUI initialized. System tray active.");
+    /* Log HWND for debugging external input */
+    {
+        HWND hwnd = getNativeWindowHandle(g_window);
+        LOG_I("MAIN", "SDL window HWND = %p (decimal %llu)", (void*)hwnd, (unsigned long long)(uintptr_t)hwnd);
+    }
 
     static std::atomic<bool> s_need_license_dialog(false);
 
-    /* Defer heavy startup work to worker thread so UI stays responsive. */
-    lv_timer_create([](lv_timer_t* t) {
-        std::thread([]() {
-            ui_progress_begin("Startup", "Initializing UI...", 5);
-            /* Gateway auto-start DISABLED for testing */
-            ui_progress_update("Startup", "GUI ready (gateway autostart disabled)", 30);
+    if (!startup_blocked) {
+        /* Defer heavy startup work to worker thread so UI stays responsive. */
+        lv_timer_create([](lv_timer_t* t) {
+            std::thread([]() {
+                ui_progress_begin("Startup", "Initializing UI...", 5);
+                /* Gateway auto-start DISABLED for testing */
+                ui_progress_update("Startup", "GUI ready (gateway autostart disabled)", 30);
 
-            health_start();
-            ui_progress_update("Startup", "Health monitor online", 50);tray_set_state(TrayState::Yellow);
-            tray_balloon("AnyClaw", "已启动，正在检测 OpenClaw 状态...", 3000);
+                health_start();
+                ui_progress_update("Startup", "Health monitor online", 50);tray_set_state(TrayState::Yellow);
+                tray_balloon("AnyClaw", "已启动，正在检测 OpenClaw 状态...", 3000);
 
-            ui_progress_update("Startup", "Loading license", 46);
-            license_init();
-            ui_progress_update("Startup", "License loaded", 56);
+                ui_progress_update("Startup", "Loading license", 46);
+                license_init();
+                ui_progress_update("Startup", "License loaded", 56);
 
-            {
-                std::string ws_root = workspace_get_root();
-                if (!ws_root.empty()) {
-                    ui_progress_update("Startup", "Workspace init", 66);
-                    workspace_init(ws_root.c_str());
-                    LOG_I("MAIN", "Workspace: %s", ws_root.c_str());
+                {
+                    std::string ws_root = workspace_get_root();
+                    if (!ws_root.empty()) {
+                        ui_progress_update("Startup", "Workspace init", 66);
+                        workspace_init(ws_root.c_str());
+                        LOG_I("MAIN", "Workspace: %s", ws_root.c_str());
 
-                    if (!workspace_lock_acquire()) {
-                        LOG_W("MAIN", "Workspace lock acquire failed, continuing in read-mostly mode");
+                        if (!workspace_lock_acquire()) {
+                            LOG_W("MAIN", "Workspace lock acquire failed, continuing in read-mostly mode");
+                        }
+
+                        permissions().set_workspace_root(ws_root.c_str());
+                        bool loaded = permissions().load();
+                        if (!loaded) {
+                            permissions().save();
+                        }
+                        ui_progress_update("Startup", "Permissions ready", 80);
+                        workspace_sync_managed_sections();
+                        workspace_sync_runtime_config_from_permissions();
+                        feature_flags_init();
+                        ui_progress_update("Startup", "Feature flags loaded", 90);
+                    } else {
+                        ui_progress_update("Startup", "Workspace not configured", 72);
                     }
-
-                    permissions().set_workspace_root(ws_root.c_str());
-                    bool loaded = permissions().load();
-                    if (!loaded) {
-                        permissions().save();
-                    }
-                    ui_progress_update("Startup", "Permissions ready", 80);
-                    workspace_sync_managed_sections();
-                    workspace_sync_runtime_config_from_permissions();
-                    feature_flags_init();
-                    ui_progress_update("Startup", "Feature flags loaded", 90);
-                } else {
-                    ui_progress_update("Startup", "Workspace not configured", 72);
                 }
-            }
 
-            if (!license_is_valid()) {
-                LOG_W("MAIN", "License expired, dialog will be shown on UI thread");
-                s_need_license_dialog.store(true);
-                ui_progress_finish("Startup", false, "Startup ready (license dialog required)");
-            } else {
-                char remain[64];
-                license_get_remaining_str(remain, sizeof(remain));
-                LOG_I("MAIN", "License valid: %s", remain);
-                ui_progress_finish("Startup", true, "Background startup ready");
-            }
-        }).detach();
-        lv_timer_del(t);
-    }, 50, nullptr);
+                if (!license_is_valid()) {
+                    LOG_W("MAIN", "License expired, dialog will be shown on UI thread");
+                    s_need_license_dialog.store(true);
+                    ui_progress_finish("Startup", false, "Startup ready (license dialog required)");
+                } else {
+                    char remain[64];
+                    license_get_remaining_str(remain, sizeof(remain));
+                    LOG_I("MAIN", "License valid: %s", remain);
+                    ui_progress_finish("Startup", true, "Background startup ready");
+                }
+            }).detach();
+            lv_timer_del(t);
+        }, 50, nullptr);
 
-    lv_timer_create([](lv_timer_t* t) {
-        (void)t;
-        if (!s_need_license_dialog.exchange(false)) return;
-        extern void ui_show_license_dialog();
-        ui_show_license_dialog();
-    }, 300, nullptr);
+        lv_timer_create([](lv_timer_t* t) {
+            (void)t;
+            if (!s_need_license_dialog.exchange(false)) return;
+            extern void ui_show_license_dialog();
+            ui_show_license_dialog();
+        }, 300, nullptr);
+    } else {
+        LOG_W("MAIN", "Startup is blocked by self-check errors; skip background startup workers");
+    }
 
     /* Register SDL event watch — fires BEFORE LVGL's sdl_event_handler consumes events */
     extern void ui_process_wheel_scroll();
@@ -865,9 +901,17 @@ int main(int argc, char* argv[]) {
             return 0;
         }
 
+        /* Mouse right click — open File tree context menu at cursor */
+        if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_RIGHT) {
+            extern void ui_files_tree_handle_right_click(int x, int y);
+            ui_files_tree_handle_right_click(event->button.x, event->button.y);
+            return 0;
+        }
+
         /* Mouse click — double-click title bar + track clicked textarea */
         if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT) {
             int mx = event->button.x, my = event->button.y;
+
 
             /* Manual double-click detection (SDL clicks unreliable in event watch) */
             static Uint32 g_last_click_ms = 0;

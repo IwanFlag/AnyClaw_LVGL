@@ -2362,6 +2362,11 @@ static lv_obj_t* mode_chat_empty_card = nullptr;
 static lv_obj_t* mode_work_empty_card = nullptr;
 static lv_obj_t* bot_sidebar_wrap = nullptr;
 static lv_obj_t* bot_sidebar_title = nullptr;
+static lv_obj_t* bot_sidebar_agent_row = nullptr;
+static lv_obj_t* bot_sidebar_agent_title = nullptr;
+static lv_obj_t* bot_sidebar_agent_led = nullptr;
+static lv_obj_t* bot_sidebar_agent_status = nullptr;
+static lv_obj_t* bot_sidebar_model_label = nullptr;
 static lv_obj_t* bot_sidebar_session_card = nullptr;
 static lv_obj_t* bot_sidebar_session_title = nullptr;
 static lv_obj_t* bot_sidebar_session_count = nullptr;
@@ -3173,6 +3178,9 @@ static int chat_top_y_with_trace(int content_w) {
     return CHAT_GAP + chat_trace_panel_h(content_w) + CHAT_GAP;
 }
 
+static const char* status_text(ClawStatus s);
+static lv_color_t status_color(ClawStatus s);
+
 static std::string bot_sidebar_build_lines(bool want_cron) {
     SessionManager& sm = session_mgr();
     auto active_sessions = sm.active_sessions();
@@ -3196,9 +3204,11 @@ static std::string bot_sidebar_build_lines(bool want_cron) {
 }
 
 static void refresh_bot_sidebar_view() {
-    if (!bot_sidebar_wrap) return;
+    if (!bot_sidebar_wrap || !lv_obj_is_valid(bot_sidebar_wrap)) return;
 
-    static const I18n S_SIDEBAR = {"Session / Cron", "会话 / Cron"};
+    static const I18n S_SIDEBAR = {"Agent / Session / Cron", "Agent / 会话 / Cron"};
+    static const I18n S_AGENT = {"Agent Status", "Agent 状态"};
+    static const I18n S_MODEL = {"Current Model", "当前模型"};
     static const I18n S_SESSION = {"Sessions", "会话"};
     static const I18n S_CRON = {"Cron", "Cron"};
     static const I18n S_HINT = {"Auto-refresh: 2s", "自动刷新: 2秒"};
@@ -3212,14 +3222,36 @@ static void refresh_bot_sidebar_view() {
         else session_count++;
     }
 
-    if (bot_sidebar_title) lv_label_set_text(bot_sidebar_title, tr(S_SIDEBAR));
-    if (bot_sidebar_session_title) lv_label_set_text(bot_sidebar_session_title, tr(S_SESSION));
-    if (bot_sidebar_cron_title) lv_label_set_text(bot_sidebar_cron_title, tr(S_CRON));
-    if (bot_sidebar_hint) lv_label_set_text(bot_sidebar_hint, tr(S_HINT));
-    if (bot_sidebar_session_count) lv_label_set_text_fmt(bot_sidebar_session_count, "(%d)", session_count);
-    if (bot_sidebar_cron_count) lv_label_set_text_fmt(bot_sidebar_cron_count, "(%d)", cron_count);
-    if (bot_sidebar_session_list) lv_textarea_set_text(bot_sidebar_session_list, bot_sidebar_build_lines(false).c_str());
-    if (bot_sidebar_cron_list) lv_textarea_set_text(bot_sidebar_cron_list, bot_sidebar_build_lines(true).c_str());
+    ClawStatus status = ClawStatus::Checking;
+    (void)health_try_get_last_status(&status);
+
+    char model_buf[256] = {0};
+    app_get_current_model(model_buf, sizeof(model_buf));
+    if (!model_buf[0]) {
+        snprintf(model_buf, sizeof(model_buf), "%s", "N/A");
+    }
+
+    if (bot_sidebar_title && lv_obj_is_valid(bot_sidebar_title)) lv_label_set_text(bot_sidebar_title, tr(S_SIDEBAR));
+    if (bot_sidebar_agent_title && lv_obj_is_valid(bot_sidebar_agent_title)) lv_label_set_text(bot_sidebar_agent_title, tr(S_AGENT));
+    if (bot_sidebar_agent_led && lv_obj_is_valid(bot_sidebar_agent_led)) {
+        lv_led_set_color(bot_sidebar_agent_led, status_color(status));
+        lv_led_on(bot_sidebar_agent_led);
+    }
+    if (bot_sidebar_agent_status && lv_obj_is_valid(bot_sidebar_agent_status)) {
+        lv_label_set_text(bot_sidebar_agent_status, status_text(status));
+    }
+    if (bot_sidebar_model_label && lv_obj_is_valid(bot_sidebar_model_label)) {
+        char model_line[320];
+        snprintf(model_line, sizeof(model_line), "%s: %s", tr(S_MODEL), model_buf);
+        lv_label_set_text(bot_sidebar_model_label, model_line);
+    }
+    if (bot_sidebar_session_title && lv_obj_is_valid(bot_sidebar_session_title)) lv_label_set_text(bot_sidebar_session_title, tr(S_SESSION));
+    if (bot_sidebar_cron_title && lv_obj_is_valid(bot_sidebar_cron_title)) lv_label_set_text(bot_sidebar_cron_title, tr(S_CRON));
+    if (bot_sidebar_hint && lv_obj_is_valid(bot_sidebar_hint)) lv_label_set_text(bot_sidebar_hint, tr(S_HINT));
+    if (bot_sidebar_session_count && lv_obj_is_valid(bot_sidebar_session_count)) lv_label_set_text_fmt(bot_sidebar_session_count, "(%d)", session_count);
+    if (bot_sidebar_cron_count && lv_obj_is_valid(bot_sidebar_cron_count)) lv_label_set_text_fmt(bot_sidebar_cron_count, "(%d)", cron_count);
+    if (bot_sidebar_session_list && lv_obj_is_valid(bot_sidebar_session_list)) lv_textarea_set_text(bot_sidebar_session_list, bot_sidebar_build_lines(false).c_str());
+    if (bot_sidebar_cron_list && lv_obj_is_valid(bot_sidebar_cron_list)) lv_textarea_set_text(bot_sidebar_cron_list, bot_sidebar_build_lines(true).c_str());
 }
 
 static void trigger_bot_sidebar_refresh() {
@@ -6685,7 +6717,7 @@ static void apply_nav_module_visuals() {
             if (module_placeholder_desc) lv_label_set_text(module_placeholder_desc,
                 tr(I18n{"Project file browser and asset management.", "项目文件浏览器与资源管理。"}));
             if (module_files_panel) lv_obj_clear_flag(module_files_panel, LV_OBJ_FLAG_HIDDEN);
-            refresh_files_module_data(true);
+            /* Defer workspace scan on module switch; users can trigger via Refresh button. */
         }
     }
 
@@ -6941,8 +6973,11 @@ static void relayout_panels() {
     if (bot_sidebar_wrap) {
         int section_gap = SCALE(12);
         int title_h = SCALE(24);
+        int agent_row_h = SCALE(24);
+        int model_h = SCALE(18);
+        int header_gap = SCALE(8);
         int hint_h = SCALE(20);
-        int card_y = GAP + title_h + SCALE(10);
+        int card_y = GAP + title_h + header_gap + agent_row_h + SCALE(6) + model_h + header_gap;
         int card_w = LEFT_PANEL_W - GAP * 2;
         int avail_h = PANEL_H - card_y - hint_h - SCALE(20) - section_gap;
         int card_h = std::max(SCALE(120), (avail_h - section_gap) / 2);
@@ -6952,6 +6987,14 @@ static void relayout_panels() {
         lv_obj_set_size(bot_sidebar_wrap, LEFT_PANEL_W, PANEL_H);
         lv_obj_set_pos(bot_sidebar_wrap, 0, 0);
         if (bot_sidebar_title) lv_obj_set_width(bot_sidebar_title, LEFT_PANEL_W - GAP * 2);
+        if (bot_sidebar_agent_row) {
+            lv_obj_set_size(bot_sidebar_agent_row, card_w, agent_row_h);
+            lv_obj_set_pos(bot_sidebar_agent_row, GAP, GAP + title_h + header_gap);
+        }
+        if (bot_sidebar_model_label) {
+            lv_obj_set_width(bot_sidebar_model_label, card_w);
+            lv_obj_set_pos(bot_sidebar_model_label, GAP, GAP + title_h + header_gap + agent_row_h + SCALE(6));
+        }
         if (bot_sidebar_session_card) {
             lv_obj_set_size(bot_sidebar_session_card, card_w, card_h);
             lv_obj_set_pos(bot_sidebar_session_card, GAP, card_y);
@@ -9757,7 +9800,7 @@ static void session_abort_cb(lv_event_t* e) {
 }
 
 static void task_add(const char* name, const char* status, const char* detail = nullptr) {
-    if (!left_panel || g_task_count >= MAX_TASK_WIDGETS) return;
+    if (!left_panel || !lv_obj_is_valid(left_panel) || g_task_count >= MAX_TASK_WIDGETS) return;
     const ThemeColors* c = g_colors ? g_colors : &THEME_DARK;
     if (task_empty_label) {
         lv_obj_add_flag(task_empty_label, LV_OBJ_FLAG_HIDDEN);
@@ -9828,6 +9871,7 @@ static void task_add_with_abort(const char* name, const char* status, const char
     if (g_task_count < 1) return;
 
     TaskItem& t = g_tasks[g_task_count - 1];
+    if (!t.widget || !lv_obj_is_valid(t.widget)) return;
     if (session_key && session_key[0]) {
         snprintf(t.session_key, sizeof(t.session_key), "%s", session_key);
 
@@ -9856,7 +9900,7 @@ static void task_add_with_abort(const char* name, const char* status, const char
 static void task_clear() {
     task_destroy_all_tooltips(); /* TASK-054: destroy tooltips before widgets */
     for (int i = 0; i < g_task_count; i++) {
-        if (g_tasks[i].widget) {
+        if (g_tasks[i].widget && lv_obj_is_valid(g_tasks[i].widget)) {
             lv_obj_del(g_tasks[i].widget);
             g_tasks[i].widget = nullptr;
             g_tasks[i].label = nullptr;
@@ -9873,6 +9917,8 @@ static void task_clear() {
 
 /* Update task list based on current status */
 static void update_task_list(ClawStatus status) {
+    if (!left_panel || !lv_obj_is_valid(left_panel)) return;
+
     static const I18n S_READY    = {"Ready", "就绪"};
     static const I18n S_RUNNING  = {"Running", "运行中"};
     static const I18n S_BUSY     = {"Busy", "处理中"};
@@ -10003,13 +10049,15 @@ void app_refresh_status() {
     (void)health_try_get_last_status(&status);
 
     /* Update status text (small dim, next to LED) */
-    if (status_label) {
+    if (status_label && lv_obj_is_valid(status_label)) {
         lv_label_set_text(status_label, status_text(status));
         lv_obj_set_style_text_color(status_label, g_colors->text_dim, 0);
     }
     /* Single LED: green=Ready, yellow=Busy, red=Error */
-    lv_led_set_color(led_ok, status_color(status));
-    lv_led_on(led_ok);
+    if (led_ok && lv_obj_is_valid(led_ok)) {
+        lv_led_set_color(led_ok, status_color(status));
+        lv_led_on(led_ok);
+    }
 
     /* P2: Update dynamic task list */
     update_task_list(status);
@@ -10580,7 +10628,7 @@ static void show_disclaimer(lv_obj_t* parent) {
     lv_obj_set_style_bg_color(modal, c->bg, 0);
     lv_obj_set_style_bg_opa(modal, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(modal, 0, 0);
-    lv_obj_set_style_radius(modal, 0, 0);
+    lv_obj_set_style_radius(modal, SCALE(c->radius_xl), 0);
     lv_obj_set_style_pad_all(modal, 0, 0);
     lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -10592,7 +10640,7 @@ static void show_disclaimer(lv_obj_t* parent) {
     lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(box, 1, 0);
     lv_obj_set_style_border_color(box, c->border_strong, 0);
-    lv_obj_set_style_radius(box, SCALE(g_colors->radius_lg), 0);
+    lv_obj_set_style_radius(box, SCALE(c->radius_lg), 0);
     lv_obj_set_style_pad_all(box, 20, 0);
     lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_gap(box, 12, 0);
@@ -10683,12 +10731,12 @@ static void show_startup_error(lv_obj_t* parent) {
     lv_obj_set_style_bg_color(modal, c->bg, 0);
     lv_obj_set_style_bg_opa(modal, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(modal, 0, 0);
-    lv_obj_set_style_radius(modal, 0, 0);
+    lv_obj_set_style_radius(modal, SCALE(c->radius_xl), 0);
     lv_obj_set_style_pad_all(modal, 0, 0);
     lv_obj_clear_flag(modal, LV_OBJ_FLAG_SCROLLABLE);
     g_startup_error_modal = modal;
 
-    /* Error box: fixed width similar to UI-03 spec, height by content */
+    /* Error box
     int err_w = SCALE(480);
     if (err_w > WIN_W - 40) err_w = WIN_W - 40;
     lv_obj_t* box = lv_obj_create(modal);
@@ -10699,7 +10747,7 @@ static void show_startup_error(lv_obj_t* parent) {
     lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(box, 1, 0);
     lv_obj_set_style_border_color(box, c->border_strong, 0);
-    lv_obj_set_style_radius(box, SCALE(g_colors->radius_lg), 0);
+    lv_obj_set_style_radius(box, SCALE(c->radius_lg), 0);
     lv_obj_set_style_pad_all(box, 24, 0);
     lv_obj_set_flex_flow(box, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_gap(box, 16, 0);
@@ -11123,6 +11171,33 @@ void apply_theme_to_all() {
     /* Status label colors */
     if (status_label) lv_obj_set_style_text_color(status_label, c->text_dim, 0);
     if (lp_panel_title) lv_obj_set_style_text_color(lp_panel_title, c->accent, 0);
+    if (bot_sidebar_title) lv_obj_set_style_text_color(bot_sidebar_title, c->accent_secondary, 0);
+    if (bot_sidebar_agent_title) lv_obj_set_style_text_color(bot_sidebar_agent_title, c->accent, 0);
+    if (bot_sidebar_agent_status) lv_obj_set_style_text_color(bot_sidebar_agent_status, c->text_dim, 0);
+    if (bot_sidebar_model_label) lv_obj_set_style_text_color(bot_sidebar_model_label, c->text_dim, 0);
+    if (bot_sidebar_session_title) lv_obj_set_style_text_color(bot_sidebar_session_title, c->accent, 0);
+    if (bot_sidebar_session_count) lv_obj_set_style_text_color(bot_sidebar_session_count, c->text_dim, 0);
+    if (bot_sidebar_cron_title) lv_obj_set_style_text_color(bot_sidebar_cron_title, c->accent, 0);
+    if (bot_sidebar_cron_count) lv_obj_set_style_text_color(bot_sidebar_cron_count, c->text_dim, 0);
+    if (bot_sidebar_hint) lv_obj_set_style_text_color(bot_sidebar_hint, c->text_dim, 0);
+    if (bot_sidebar_session_card) {
+        lv_obj_set_style_bg_color(bot_sidebar_session_card, c->surface, 0);
+        lv_obj_set_style_border_color(bot_sidebar_session_card, c->border, 0);
+    }
+    if (bot_sidebar_cron_card) {
+        lv_obj_set_style_bg_color(bot_sidebar_cron_card, c->surface, 0);
+        lv_obj_set_style_border_color(bot_sidebar_cron_card, c->border, 0);
+    }
+    if (bot_sidebar_session_list) {
+        lv_obj_set_style_bg_color(bot_sidebar_session_list, c->panel, 0);
+        lv_obj_set_style_text_color(bot_sidebar_session_list, c->text, 0);
+        lv_obj_set_style_border_color(bot_sidebar_session_list, c->border, 0);
+    }
+    if (bot_sidebar_cron_list) {
+        lv_obj_set_style_bg_color(bot_sidebar_cron_list, c->panel, 0);
+        lv_obj_set_style_text_color(bot_sidebar_cron_list, c->text, 0);
+        lv_obj_set_style_border_color(bot_sidebar_cron_list, c->border, 0);
+    }
     if (lp_progress_panel) {
         lv_obj_set_style_bg_color(lp_progress_panel, c->surface, 0);
         lv_obj_set_style_border_color(lp_progress_panel, c->border, 0);
@@ -14071,7 +14146,7 @@ void ui_show_setup_wizard() {
     lv_obj_set_style_bg_color(g_wizard_modal, g_colors->bg, 0);
     lv_obj_set_style_bg_opa(g_wizard_modal, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(g_wizard_modal, 0, 0);
-    lv_obj_set_style_radius(g_wizard_modal, 0, 0);
+    lv_obj_set_style_radius(g_wizard_modal, SCALE(g_colors->radius_xl), 0);
     lv_obj_set_style_pad_all(g_wizard_modal, 0, 0);
     lv_obj_set_style_text_font(g_wizard_modal, CJK_FONT, 0);
     lv_obj_clear_flag(g_wizard_modal, LV_OBJ_FLAG_SCROLLABLE);
@@ -14086,7 +14161,7 @@ void ui_show_setup_wizard() {
     lv_obj_set_style_bg_opa(g_wizard_box, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(g_wizard_box, 0, 0);
     lv_obj_set_style_border_color(g_wizard_box, g_colors->border, 0);
-    lv_obj_set_style_radius(g_wizard_box, 0, 0);
+    lv_obj_set_style_radius(g_wizard_box, SCALE(g_colors->radius_lg), 0);
     lv_obj_set_style_pad_all(g_wizard_box, 0, 0);
     lv_obj_set_style_text_font(g_wizard_box, CJK_FONT, 0);
     lv_obj_clear_flag(g_wizard_box, LV_OBJ_FLAG_SCROLLABLE);
@@ -14817,7 +14892,7 @@ void app_ui_init() {
     lv_obj_set_style_text_font(lp_hint, CJK_FONT_SMALL, 0);
     lv_obj_align(lp_hint, LV_ALIGN_BOTTOM_MID, 0, -8);
 
-    /* Bot sidebar for U11/U12: Session + Cron */
+    /* Bot sidebar for U11/U12: Agent status + model + Session + Cron */
     bot_sidebar_wrap = lv_obj_create(pl);
     lv_obj_set_size(bot_sidebar_wrap, LEFT_PANEL_W, PANEL_H);
     lv_obj_set_pos(bot_sidebar_wrap, 0, 0);
@@ -14828,10 +14903,42 @@ void app_ui_init() {
     lv_obj_add_flag(bot_sidebar_wrap, LV_OBJ_FLAG_HIDDEN);
 
     bot_sidebar_title = lv_label_create(bot_sidebar_wrap);
-    lv_label_set_text(bot_sidebar_title, g_lang == Lang::CN ? "会话 / Cron" : "Session / Cron");
+    lv_label_set_text(bot_sidebar_title, g_lang == Lang::CN ? "Agent / 会话 / Cron" : "Agent / Session / Cron");
     lv_obj_set_style_text_color(bot_sidebar_title, c->accent_secondary, 0);
     lv_obj_set_style_text_font(bot_sidebar_title, CJK_FONT, 0);
     lv_obj_set_pos(bot_sidebar_title, GAP, GAP);
+
+    bot_sidebar_agent_row = lv_obj_create(bot_sidebar_wrap);
+    lv_obj_set_size(bot_sidebar_agent_row, LEFT_PANEL_W - GAP * 2, SCALE(24));
+    lv_obj_set_pos(bot_sidebar_agent_row, GAP, GAP + SCALE(30));
+    lv_obj_set_style_bg_opa(bot_sidebar_agent_row, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(bot_sidebar_agent_row, 0, 0);
+    lv_obj_set_style_pad_all(bot_sidebar_agent_row, 0, 0);
+    lv_obj_set_flex_flow(bot_sidebar_agent_row, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(bot_sidebar_agent_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_gap(bot_sidebar_agent_row, SCALE(6), 0);
+    lv_obj_clear_flag(bot_sidebar_agent_row, LV_OBJ_FLAG_SCROLLABLE);
+
+    bot_sidebar_agent_title = lv_label_create(bot_sidebar_agent_row);
+    lv_label_set_text(bot_sidebar_agent_title, g_lang == Lang::CN ? "Agent 状态" : "Agent Status");
+    lv_obj_set_style_text_color(bot_sidebar_agent_title, c->accent, 0);
+    lv_obj_set_style_text_font(bot_sidebar_agent_title, CJK_FONT_SMALL, 0);
+
+    bot_sidebar_agent_led = lv_led_create(bot_sidebar_agent_row);
+    lv_obj_set_size(bot_sidebar_agent_led, 12, 12);
+    lv_led_set_color(bot_sidebar_agent_led, c->warning);
+    lv_led_on(bot_sidebar_agent_led);
+
+    bot_sidebar_agent_status = lv_label_create(bot_sidebar_agent_row);
+    lv_label_set_text(bot_sidebar_agent_status, tr(STR_CHECKING));
+    lv_obj_set_style_text_color(bot_sidebar_agent_status, c->text_dim, 0);
+    lv_obj_set_style_text_font(bot_sidebar_agent_status, CJK_FONT_SMALL, 0);
+
+    bot_sidebar_model_label = lv_label_create(bot_sidebar_wrap);
+    lv_label_set_text(bot_sidebar_model_label, g_lang == Lang::CN ? "当前模型: -" : "Current Model: -");
+    lv_obj_set_style_text_color(bot_sidebar_model_label, c->text_dim, 0);
+    lv_obj_set_style_text_font(bot_sidebar_model_label, CJK_FONT_SMALL, 0);
+    lv_obj_set_pos(bot_sidebar_model_label, GAP, GAP + SCALE(60));
 
     auto make_sidebar_card = [&](lv_obj_t** card, lv_obj_t** title, lv_obj_t** count, lv_obj_t** list,
                                  int y, const char* label_text) {
@@ -14892,9 +14999,9 @@ void app_ui_init() {
     };
 
     make_sidebar_card(&bot_sidebar_session_card, &bot_sidebar_session_title, &bot_sidebar_session_count,
-                      &bot_sidebar_session_list, GAP + SCALE(34), g_lang == Lang::CN ? "会话" : "Sessions");
+                      &bot_sidebar_session_list, GAP + SCALE(88), g_lang == Lang::CN ? "会话" : "Sessions");
     make_sidebar_card(&bot_sidebar_cron_card, &bot_sidebar_cron_title, &bot_sidebar_cron_count,
-                      &bot_sidebar_cron_list, GAP + SCALE(34) + SCALE(182), "Cron");
+                      &bot_sidebar_cron_list, GAP + SCALE(88) + SCALE(182), "Cron");
 
     bot_sidebar_hint = lv_label_create(bot_sidebar_wrap);
     lv_label_set_text(bot_sidebar_hint, g_lang == Lang::CN ? "自动刷新: 2秒" : "Auto-refresh: 2s");
@@ -15259,7 +15366,8 @@ void app_ui_init() {
     lv_obj_set_flex_align(module_files_view, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_scrollbar_mode(module_files_view, LV_SCROLLBAR_MODE_AUTO);
     lv_obj_set_scroll_dir(module_files_view, LV_DIR_VER);
-    refresh_files_module_data(false);
+     /* Defer initial workspace scan until File module is activated.
+         This avoids heavy tree construction during startup and keeps Bot startup stable. */
 
     lv_obj_add_flag(module_files_panel, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(module_placeholder, LV_OBJ_FLAG_HIDDEN);
