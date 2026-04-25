@@ -418,7 +418,11 @@ static HFONT get_cjk_font(int height = -16) {
     /* Use height as key to cache multiple sizes */
     static HFONT hFont16 = nullptr;
     static HFONT hFont20 = nullptr;
-    HFONT* cached = (height <= -20) ? &hFont20 : &hFont16;
+    static HFONT hFont24 = nullptr;
+    HFONT* cached;
+    if (height <= -24) cached = &hFont24;
+    else if (height <= -20) cached = &hFont20;
+    else cached = &hFont16;
     if (*cached) return *cached;
 
     /* List of fonts to try, ordered by preference */
@@ -516,15 +520,15 @@ static void on_measure_item(LPMEASUREITEMSTRUCT mis) {
     }
 
     HDC hdc = GetDC(nullptr);
-    HFONT oldFont = (HFONT)SelectObject(hdc, get_cjk_font(-12));
+    HFONT oldFont = (HFONT)SelectObject(hdc, get_cjk_font(-24));
     SIZE sz = {};
     int len = (int)data->text.size();
     GetTextExtentPoint32W(hdc, data->text.c_str(), len, &sz);
     SelectObject(hdc, oldFont);
     ReleaseDC(nullptr, hdc);
 
-    mis->itemWidth = (UINT)(sz.cx + 24);
-    mis->itemHeight = 24;
+    mis->itemWidth = (UINT)(sz.cx + 40);
+    mis->itemHeight = 48;
 }
 
 /* ── WM_DRAWITEM ─────────────────────────────────────────────────── */
@@ -562,8 +566,8 @@ static void on_draw_item(LPDRAWITEMSTRUCT dis) {
 
     /* Draw LED indicator for status items */
     if (data->ledColor) {
-        int lr = 4; /* LED radius */
-        int lcx = rc.left + 9;
+        int lr = 8; /* LED radius */
+        int lcx = rc.left + 18;
         int lcy = (rc.top + rc.bottom) / 2;
         HBRUSH hLedBorder = CreateSolidBrush(RGB(40, 40, 40));
         HPEN hOldPen = (HPEN)SelectObject(hdc, GetStockObject(NULL_PEN));
@@ -578,10 +582,10 @@ static void on_draw_item(LPDRAWITEMSTRUCT dis) {
         DeleteObject(hLedBorder);
     }
 
-    HFONT oldFont = (HFONT)SelectObject(hdc, get_cjk_font(-12));
+    HFONT oldFont = (HFONT)SelectObject(hdc, get_cjk_font(-24));
     RECT textRc = rc;
-    textRc.left += 20;
-    textRc.right -= 6;
+    textRc.left += 36;
+    textRc.right -= 12;
     int tlen = (int)data->text.size();
     DrawTextW(hdc, data->text.c_str(), tlen, &textRc,
               DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
