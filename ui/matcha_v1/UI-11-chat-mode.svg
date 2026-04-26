@@ -127,6 +127,14 @@
   <path d="M 149 120 Q 155 126 161 120" stroke="#0F1117" stroke-width="1.8" fill="none" stroke-linecap="round"/>
   <text x="200" y="102" font-family="sans-serif" font-size="12" fill="#3DD68C" font-weight="bold">AnyClaw</text>
   <text x="200" y="118" font-family="sans-serif" font-size="10" fill="#888">你的 AI 伙伴</text>
+  <!-- Voice 开关（ON 状态：喇叭绿+文字） -->
+  <rect x="270" y="88" width="72" height="24" rx="12" fill="#3DD68C" fill-opacity="0.15" stroke="#3DD68C" stroke-width="1"/>
+  <!-- 喇叭图标 -->
+  <path d="M 281 100 Q 278 100 278 97 L 278 95 Q 277 94 278 93 L 281 90 Q 283 89 284 90 L 285 91 Q 286 92 285 93 L 283 95 Q 282 95 282 97 L 282 99 Q 282 100 283 100 Q 284 101 285 100 L 285 99 Q 286 98 285 97 L 283 96 Q 282 96 282 97 L 282 103 Q 282 104 283 104 Q 284 105 285 104 L 285 103 Q 286 102 285 101 L 283 100 Q 282 101 282 103 L 282 105 Q 282 106 283 106 Q 284 107 285 106 L 285 105 Q 286 104 285 103 L 281 100 Z" fill="#3DD68C"/>
+  <text x="295" y="105" font-family="sans-serif" font-size="10" fill="#3DD68C" font-weight="bold">Voice</text>
+  <!-- Toggle thumb ON -->
+  <rect x="316" y="93" width="22" height="14" rx="7" fill="#3DD68C"/>
+  <circle cx="332" cy="100" r="4" fill="#0F1117"/>
   <circle cx="108" cy="240" r="5" fill="#3DD68C">
     <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
   </circle>
