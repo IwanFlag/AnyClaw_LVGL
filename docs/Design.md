@@ -2146,18 +2146,18 @@ active: bg=accent
 
 #### 10 项检查列表（BootCheck 模块）
 
-||| # | 检查项 | 检测方式 | 通过条件 | 失败说明 |
-|---|-----|--------|---------|---------|---------|
-|| 1 | Node.js | `node --version` | ≥ 22.14.0 | Node.js 版本过低或未安装 |
-|| 2 | npm | `npm --version` | 任意版本返回 | npm 不可用 |
-|| 3 | Network | HTTP GET google.com | 返回 200 | 网络不可达 |
-|| 4 | OpenClaw | `openclaw --version` | 任意版本返回 | OpenClaw 未安装 |
-|| 5 | Agent | HTTP GET 127.0.0.1:18789 | 返回 200 | Agent 未运行 |
-|| 6 | Hermes | Agent 健康检查 API | 返回 200 | Hermes Agent 不可用 |
-|| 7 | Claude Code CLI | `claude --version` | 任意版本返回 | Claude Code CLI 未安装 |
-|| 8 | Disk Space | `GetDiskFreeSpaceExW(C:\)` | 可用空间 > 1GB | 磁盘空间不足 |
-|| 9 | Port 18789 | `bind()` 测试 | 端口可用 | 端口 18789 被占用 |
-|| 10 | API 联通性 | HTTP GET api.minimaxi.com | 返回 200 | 模型 API 不可达 |
+|||| # | 检查项 | 检测方式 | 通过条件 | 失败说明 |
+|---|-----|--------|---------|---------|
+| 1 | Node.js | `node --version` | ≥ 22.14.0 | Node.js 版本过低或未安装 |
+| 2 | npm | `npm --version` | 任意版本返回 | npm 不可用 |
+| 3 | Network | HTTP GET google.com | 返回 200 | 网络不可达 |
+| 4 | OpenClaw | `openclaw --version` | 任意版本返回 | OpenClaw 未安装 |
+| 5 | Hermes | HTTP GET 127.0.0.1:18789 | 返回 200 | Hermes Agent 未运行 |
+| 6 | Claude Code CLI | `claude --version` | 任意版本返回 | Claude Code CLI 未安装 |
+| 7 | Disk Space | `GetDiskFreeSpaceExW(C:\)` | 可用空间 > 1GB | 磁盘空间不足 |
+| 8 | Port 18789 | `bind()` 测试 | 端口可用 | 端口 18789 被占用 |
+| 9 | SDL2.dll | 文件存在检测 | DLL 存在 | SDL2.dll 缺失 |
+| 10 | API 联通性 | HTTP GET api.minimaxi.com | 返回 200 | 模型 API 不可达 |
 
 > 第 10 项"API 联通性"检测当前默认配置模型的 API 端点连通性，未配置模型时显示 N/A。
 
@@ -2177,11 +2177,11 @@ active: bg=accent
 │  │  ● npm           v10.8.0              ● Pass         │   │  ← pad=24px, row_h=36, gap=4px
 │  │  ● Network       google.com            ● Pass         │   │  ← 列1=232px, 列2=268px, 列3=80px
 │  │  ● OpenClaw      v2.1.0                ● Pass         │   │  ← content h=432px, pad 24+24=480px total
-│  │  ● Agent         127.0.0.1:18789    ● Pass         │   │
 │  │  ● Hermes        running               ● Pass         │   │
 │  │  ● Claude Code CLI found              ● Pass         │   │
 │  │  ● Disk Space    85 GB free           ● Pass         │   │
 │  │  ● Port 18789    available             ● Pass         │   │
+│  │  ● SDL2.dll      found                 ● Pass         │   │
 │  │  ● API 联通性    MiniMax-M2.7         ● Pass         │   │
 │  └──────────────────────────────────────────────────────┘   │
 │                                                              │
@@ -2810,7 +2810,7 @@ SelfCheck（4项，快速）
 1. **标题区：** 内容区顶部居中放置标题「🔧 OpenClaw 检测与安装」（18px 粗体）和副标题「检测运行环境，一键安装 OpenClaw」（14px，text_secondary 颜色）。标题区下方有 24px 垂直间距。
 
 2. **双面板区：** 标题区下方左右并排两个矩形容器面板，中间有 16px 间距，两个面板总宽度占内容区宽度的 90%，在内容区内部水平居中。
-   - **左面板（检测结果）：** 宽度约为双面板总宽的 40%，内部从上到下排列 5 个检测项状态行。每行包含：状态图标（✅/⏳/⚠️/❌）+ 检测项名称 + 版本号或状态文字。检测项包括 Node.js、npm、网络连通性、Agent（端口18789）、OpenClaw。检测项之间垂直间距 12px。
+   - **左面板（检测结果）：** 宽度约为双面板总宽的 40%，内部从上到下排列 9 个检测项状态行。每行包含：状态图标（✅/⏳/⚠️/❌）+ 检测项名称 + 版本号或状态文字。检测项包括 Node.js、npm、网络连通性、OpenClaw、Hermes、Claude Code CLI、Disk Space、Port 18789、SDL2.dll。检测项之间垂直间距 12px。
    - **右面板（检测与安装日志）：** 宽度约为双面板总宽的 58%，内部为一个终端风格日志展示区（monospace 字体，surface 背景色），实时显示检测和安装过程的命令行输出。日志自动滚动到底部，支持选中复制。
 
 3. **安装选项按钮区（条件显示）：** 仅在 OpenClaw 未安装时出现。双面板区下方水平排列三个按钮：「从网络下载安装（推荐）」（accent 样式，主要按钮）、「使用本地离线包」（secondary 样式）、「稍后手动处理」（secondary 样式，文字较小）。三按钮在内容区内部水平居中，间距 16px。
