@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" width="1280" height="800">
+  <defs>
+    <linearGradient id="accentBtn" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF7F50"/>
+      <stop offset="100%" stop-color="#FF6B35"/>
+    </linearGradient>
+    <filter id="switchOn" x="-20%" y="-100%" width="140%" height="300%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#3DD68C" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- ===== Main Interface Background (dimmed) ===== -->
+  <rect width="1280" height="800" fill="#0F1117" opacity="0.5"/>
+
+  <!-- ===== Settings Panel (right side drawer, 520px wide) ===== -->
+  <!-- Panel background -->
+  <rect x="668" y="0" width="612" height="800" fill="#13151E"/>
+  <!-- Left border accent line -->
+  <rect x="668" y="0" width="2" height="800" fill="#3DD68C"/>
+
+  <!-- ===== Header (h=41) ===== -->
+  <rect x="668" y="0" width="612" height="41" fill="#0A0C10"/>
+  <!-- Settings title -->
+  <text x="692" y="26" font-family="sans-serif" font-size="13" fill="#E8ECF4">Settings</text>
+  <!-- Close button -->
+  <rect x="1242" y="10" width="30" height="21" rx="4" fill="#252A38"/>
+  <text x="1257" y="25" text-anchor="middle" font-size="10" fill="#6B7280">✕</text>
+
+  <!-- ===== Tab Bar (h=44, y=41) ===== -->
+  <rect x="668" y="41" width="612" height="44" fill="#0F1117"/>
+  <!-- Tab underline indicator -->
+  <rect x="668" y="83" width="100" height="2" fill="#3DD68C"/>
+
+  <!-- Tabs -->
+  <text x="718" y="67" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#3DD68C" font-weight="600">General</text>
+  <text x="838" y="67" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#6B7280">Permissions</text>
+  <text x="968" y="67" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#6B7280">Model</text>
+  <text x="1048" y="67" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#6B7280">Log</text>
+  <text x="1108" y="67" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#6B7280">About</text>
+
+  <!-- ===== Content Area (scrollable) ===== -->
+  <rect x="668" y="85" width="612" height="600" fill="#13151E"/>
+
+  <!-- === Row 1: Agent Status === -->
+  <text x="692" y="116" font-family="sans-serif" font-size="11" fill="#8B92A8">Agent Status</text>
+  <circle cx="900" cy="112" r="5" fill="#3DD68C"/>
+  <text x="912" y="116" font-family="sans-serif" font-size="11" fill="#3DD68C">Ready</text>
+
+  <!-- === Row 2: Install Path === -->
+  <text x="692" y="156" font-family="sans-serif" font-size="11" fill="#8B92A8">Install Path</text>
+  <text x="692" y="176" font-family="sans-serif" font-size="11" fill="#6B7280">C:\Users\xxx\AppData\Roaming\AnyClaw</text>
+
+  <!-- === Row 3: Workspace === -->
+  <text x="692" y="216" font-family="sans-serif" font-size="11" fill="#8B92A8">Workspace</text>
+  <text x="692" y="236" font-family="sans-serif" font-size="11" fill="#6B7280">D:\Projects\AnyClaw</text>
+
+  <!-- === Divider === -->
+  <rect x="692" y="254" width="564" height="1" fill="#252A38"/>
+
+  <!-- === Row 4: Boot Start === -->
+  <text x="692" y="284" font-family="sans-serif" font-size="11" fill="#8B92A8">Boot Start</text>
+  <!-- Switch ON -->
+  <rect x="1080" y="271" width="40" height="20" rx="10" fill="#3DD68C" filter="url(#switchOn)"/>
+  <circle cx="1110" cy="281" r="8" fill="#FFFFFF"/>
+  <text x="1000" y="284" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">Start on boot</text>
+
+  <!-- === Row 5: Auto Start === -->
+  <text x="692" y="324" font-family="sans-serif" font-size="11" fill="#8B92A8">Auto Start</text>
+  <!-- Switch OFF -->
+  <rect x="1080" y="311" width="40" height="20" rx="10" fill="#252A38" stroke="#3DD68C" stroke-opacity="0.2" stroke-width="1"/>
+  <circle cx="1090" cy="321" r="8" fill="#6B7280"/>
+  <text x="1000" y="324" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">Restart on crash</text>
+
+  <!-- === Divider === -->
+  <rect x="692" y="342" width="564" height="1" fill="#252A38"/>
+
+  <!-- === Row 6: Theme === -->
+  <text x="692" y="372" font-family="sans-serif" font-size="11" fill="#8B92A8">Theme</text>
+  <!-- Matcha (selected) -->
+  <rect x="900" y="358" width="80" height="26" rx="6" fill="#3DD68C" fill-opacity="0.15" stroke="#3DD68C" stroke-width="1"/>
+  <text x="940" y="375" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#3DD68C">Matcha</text>
+  <!-- Peachy -->
+  <rect x="988" y="358" width="80" height="26" rx="6" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.1" stroke-width="1"/>
+  <text x="1028" y="375" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#6B7280">Peachy</text>
+  <!-- Mochi -->
+  <rect x="1076" y="358" width="80" height="26" rx="6" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.1" stroke-width="1"/>
+  <text x="1116" y="375" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#6B7280">Mochi</text>
+
+  <!-- === Row 7: Language === -->
+  <text x="692" y="412" font-family="sans-serif" font-size="11" fill="#8B92A8">Language</text>
+  <!-- Dropdown -->
+  <rect x="1080" y="398" width="120" height="28" rx="6" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.15" stroke-width="1"/>
+  <text x="1095" y="416" font-family="sans-serif" font-size="11" fill="#E8ECF4">中文</text>
+  <text x="1180" y="416" text-anchor="middle" font-size="10" fill="#6B7280">▼</text>
+
+  <!-- === Row 8: Exit Confirm === -->
+  <text x="692" y="452" font-family="sans-serif" font-size="11" fill="#8B92A8">Exit Confirm</text>
+  <!-- Switch ON -->
+  <rect x="1080" y="439" width="40" height="20" rx="10" fill="#3DD68C" filter="url(#switchOn)"/>
+  <circle cx="1110" cy="449" r="8" fill="#FFFFFF"/>
+  <text x="1000" y="452" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">弹出退出确认</text>
+
+  <!-- === Row 9: Close on Exit === -->
+  <text x="692" y="492" font-family="sans-serif" font-size="11" fill="#8B92A8">Close on Exit</text>
+  <!-- Switch OFF -->
+  <rect x="1080" y="479" width="40" height="20" rx="10" fill="#252A38" stroke="#3DD68C" stroke-opacity="0.2" stroke-width="1"/>
+  <circle cx="1090" cy="489" r="8" fill="#6B7280"/>
+  <text x="1000" y="492" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">Close OpenClaw on exit</text>
+
+  <!-- === Divider === -->
+  <rect x="692" y="510" width="564" height="1" fill="#252A38"/>
+
+  <!-- === Row 10: Security Status === -->
+  <text x="692" y="540" font-family="sans-serif" font-size="11" fill="#8B92A8">Security Status</text>
+
+  <!-- API Key status -->
+  <circle cx="712" cy="566" r="4" fill="#3DD68C"/>
+  <text x="724" y="570" font-family="sans-serif" font-size="11" fill="#6B7280">API Key: 已配置</text>
+
+  <!-- Agent Port status -->
+  <circle cx="880" cy="566" r="4" fill="#3DD68C"/>
+  <text x="892" y="570" font-family="sans-serif" font-size="11" fill="#6B7280">Agent Port: 18789</text>
+
+  <!-- Config Dir status -->
+  <circle cx="1040" cy="566" r="4" fill="#3DD68C"/>
+  <text x="1052" y="570" font-family="sans-serif" font-size="11" fill="#6B7280">Config: 可写 ✓</text>
+
+  <!-- === Divider === -->
+  <rect x="692" y="590" width="564" height="1" fill="#252A38"/>
+
+  <!-- === Reconfigure Wizard Button === -->
+  <rect x="692" y="620" width="564" height="44" rx="10" fill="#FF7F50" fill-opacity="0.1" stroke="#FF7F50" stroke-width="1"/>
+  <text x="974" y="647" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#FF7F50">🔧 Reconfigure Wizard</text>
+
+  <!-- ===== Footer (y=700~800) ===== -->
+  <rect x="668" y="700" width="612" height="100" fill="#13151E"/>
+  <rect x="668" y="700" width="612" height="1" fill="#252A38"/>
+
+  <!-- Save button -->
+  <rect x="1140" y="720" width="100" height="36" rx="8" fill="url(#accentBtn)"/>
+  <text x="1190" y="743" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#0F1117" font-weight="600">Save</text>
+
+  <!-- Reset button -->
+  <rect x="1020" y="720" width="100" height="36" rx="8" fill="#1A1D27" stroke="#252A38" stroke-width="1"/>
+  <text x="1070" y="743" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#6B7280">Reset</text>
+</svg>
