@@ -26,11 +26,7 @@
 
   <!-- StepBar -->
   <rect x="0" y="41" width="1280" height="48" fill="#13151E"/>
-  <!-- Line segments -->
-  <rect x="286" y="67" width="228" height="2" fill="#3DD68C"/>
-  <rect x="526" y="67" width="228" height="2" fill="#3DD68C"/>
-  <rect x="766" y="67" width="228" height="2" fill="#3DD68C"/>
-  <!-- Step circles -->
+  <!-- Step circles (no connecting lines) -->
   <circle cx="280" cy="65" r="6" fill="#3DD68C"/>
   <circle cx="520" cy="65" r="6" fill="#3DD68C"/>
   <circle cx="760" cy="65" r="6" fill="#3DD68C"/>
@@ -51,6 +47,9 @@
   <!-- Title -->
   <text x="640" y="130" text-anchor="middle" font-family="sans-serif" font-size="20" font-weight="700" fill="#E8ECF4">🎉 恭喜！设置完成</text>
   <text x="640" y="155" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#8B92A8">最后一步：确认配置并进入 AnyClaw</text>
+
+  <!-- Divider line above nickname -->
+  <rect x="90" y="170" width="1100" height="1" fill="#252A38"/>
 
   <!-- Nickname -->
   <text x="114" y="206" font-family="sans-serif" font-size="11" fill="#8B92A8">昵称</text>
@@ -82,14 +81,8 @@
   <!-- Skip hint -->
   <text x="114" y="482" font-family="sans-serif" font-size="10" fill="#6B7280">Skip 将降级为单 Agent 模式（仅 OpenClaw）。</text>
 
-  <!-- Primary button (in content area, centered) -->
-  <rect x="488" y="508" width="304" height="50" rx="12" fill="#FF7F50" opacity="0.1" stroke="#FF7F50" stroke-width="1">
-  </rect>
-  <rect x="490" y="510" width="300" height="46" rx="10" fill="url(#bigPrimaryBtn)"/>
-  <text x="640" y="539" text-anchor="middle" font-family="sans-serif" font-size="15" fill="#0F1117" font-weight="700">开始使用 →</text>
-
   <!-- Advanced section label -->
-  <text x="640" y="580" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">进阶能力（非阻断，可后续在设置中配置）</text>
+  <text x="640" y="500" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">进阶能力（非阻断，可后续在设置中配置）</text>
 
   <!-- Advanced capability cards -->
   <rect x="114" y="601" width="300" height="50" rx="10" fill="url(#advCard)" stroke="#3DD68C" stroke-opacity="0.08" stroke-width="1"/>
