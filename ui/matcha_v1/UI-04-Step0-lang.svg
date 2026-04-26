@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1190" height="646" viewBox="0 0 1190 646">
+  <defs>
+    <style>
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+      }
+    </style>
+    <linearGradient id="accentBtn" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3DD68C"/>
+      <stop offset="100%" stop-color="#2BB872"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1190" height="646" fill="#0F1117"/>
+
+  <!-- ===== Header ===== -->
+  <rect x="0" y="0" width="1190" height="45" rx="0" fill="#0A0C10"/>
+  <!-- Logo green worm -->
+  <circle cx="18" cy="22" r="9" fill="#3DD68C"/>
+  <line x1="11" y1="14" x2="8" y2="9" stroke="#3DD68C" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="25" y1="14" x2="28" y2="9" stroke="#3DD68C" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="8" cy="9" r="2.5" fill="#3DD68C"/>
+  <circle cx="28" cy="9" r="2.5" fill="#3DD68C"/>
+  <ellipse cx="15" cy="20" rx="2.5" ry="3" fill="#0F1117"/>
+  <ellipse cx="21" cy="20" rx="2.5" ry="3" fill="#0F1117"/>
+  <circle cx="16" cy="19" r="1" fill="#FFFFFF"/>
+  <circle cx="22" cy="19" r="1" fill="#FFFFFF"/>
+  <ellipse cx="12" cy="24" rx="3" ry="1.5" fill="#FF9EB5" opacity="0.7"/>
+  <ellipse cx="24" cy="24" rx="3" ry="1.5" fill="#FF9EB5" opacity="0.7"/>
+  <path d="M 16 26 Q 18 29 21 26" stroke="#0F1117" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+  <text x="40" y="29" font-family="sans-serif" font-size="13" fill="#E8ECF4">AnyClaw Setup</text>
+  <!-- Window controls -->
+  <rect x="1075" y="10" width="30" height="25" rx="4" fill="transparent"/>
+  <text x="1090" y="27" text-anchor="middle" font-size="11" fill="#6B7280">─</text>
+  <rect x="1106" y="10" width="30" height="25" rx="4" fill="#252A38"/>
+  <text x="1121" y="27" text-anchor="middle" font-size="10" fill="#6B7280">□</text>
+  <rect x="1137" y="10" width="30" height="25" rx="4" fill="#3DD68C" fill-opacity="0.15"/>
+  <text x="1152" y="27" text-anchor="middle" font-size="11" fill="#3DD68C">✕</text>
+
+  <!-- ===== StepBar ===== -->
+  <rect x="0" y="45" width="1190" height="48" rx="0" fill="#0F1117"/>
+  <line x1="0" y1="93" x2="1190" y2="93" stroke="#252A38" stroke-width="1"/>
+  <!-- Step 0 (current) -->
+  <circle cx="415" cy="69" r="6" fill="#3DD68C"/>
+  <text cx="415" x="415" y="89" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#3DD68C">语言</text>
+  <!-- Step 0→1 line (active) -->
+  <line x1="421" y1="69" x2="529" y2="69" stroke="#3DD68C" stroke-width="1.5"/>
+  <!-- Step 1 (future) -->
+  <circle cx="535" cy="69" r="6" fill="transparent" stroke="#3DD68C" stroke-width="1.5"/>
+  <text cx="535" x="535" y="89" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#6B7280">环境</text>
+  <!-- Step 1→2 line (future) -->
+  <line x1="541" y1="69" x2="649" y2="69" stroke="#252A38" stroke-width="1.5"/>
+  <!-- Step 2 (future) -->
+  <circle cx="655" cy="69" r="6" fill="transparent" stroke="#3DD68C" stroke-width="1.5"/>
+  <text cx="655" x="655" y="89" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#6B7280">模型</text>
+  <!-- Step 2→3 line (future) -->
+  <line x1="661" y1="69" x2="769" y2="69" stroke="#252A38" stroke-width="1.5"/>
+  <!-- Step 3 (future) -->
+  <circle cx="775" cy="69" r="6" fill="transparent" stroke="#3DD68C" stroke-width="1.5"/>
+  <text cx="775" x="775" y="89" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#6B7280">完成</text>
+
+  <!-- ===== Content ===== -->
+  <rect x="0" y="93" width="1190" height="467" fill="#0F1117"/>
+
+  <!-- Title -->
+  <text x="595" y="148" text-anchor="middle" font-family="sans-serif" font-size="18" fill="#E8ECF4" font-weight="bold">请选择你的语言</text>
+  <text x="595" y="172" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#8B92A8">Please select your language</text>
+
+  <!-- Language Cards -->
+  <!-- 中文 Card (selected) -->
+  <rect x="315" y="200" width="200" height="140" rx="12" fill="#1A1D27" stroke="#3DD68C" stroke-width="2"/>
+  <!-- Selected check -->
+  <circle cx="490" cy="218" r="10" fill="#3DD68C"/>
+  <text x="490" y="223" text-anchor="middle" font-size="11" fill="#0F1117" font-weight="bold">✓</text>
+  <text x="415" y="270" text-anchor="middle" font-family="sans-serif" font-size="28">🇨🇳</text>
+  <text x="415" y="300" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#E8ECF4" font-weight="bold">中文</text>
+  <text x="415" y="320" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#8B92A8">简体中文</text>
+
+  <!-- English Card -->
+  <rect x="675" y="200" width="200" height="140" rx="12" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.15" stroke-width="1"/>
+  <text x="775" y="270" text-anchor="middle" font-family="sans-serif" font-size="28">🇺🇸</text>
+  <text x="775" y="300" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#E8ECF4" font-weight="bold">English</text>
+  <text x="775" y="320" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#8B92A8">English</text>
+
+  <!-- Hint -->
+  <circle cx="560" cy="366" r="5" fill="#3DD68C"/>
+  <text x="570" y="370" font-family="sans-serif" font-size="13" fill="#3DD68C">已选择: 中文</text>
+
+  <!-- ===== Footer ===== -->
+  <rect x="0" y="560" width="1190" height="86" rx="0" fill="#0A0C10"/>
+  <line x1="0" y1="560" x2="1190" y2="560" stroke="#3DD68C" stroke-opacity="0.15" stroke-width="1"/>
+  <!-- Exit -->
+  <rect x="83" y="584" width="90" height="40" rx="8" fill="#252A38"/>
+  <text x="128" y="607" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#E8ECF4">退出向导</text>
+  <!-- Prev (disabled in Step0) -->
+  <rect x="890" y="584" width="80" height="40" rx="8" fill="#252A38" fill-opacity="0.5"/>
+  <text x="930" y="607" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#4B5268">上一步</text>
+  <!-- Next (accent, enabled) -->
+  <rect x="980" y="584" width="110" height="40" rx="8" fill="#3DD68C"/>
+  <text x="1035" y="607" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#0F1117" font-weight="bold">下一步</text>
+</svg>
