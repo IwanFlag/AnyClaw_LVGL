@@ -51,94 +51,112 @@
   <circle cx="844" cy="65" r="6" fill="transparent" stroke="#3DD68C" stroke-width="1.5"/>
   <text x="844" y="85" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#6B7280">完成</text>
 
-  <!-- ===== Content (y=89, h=611) ===== -->
-  <rect x="0" y="89" width="1280" height="611" fill="#0F1117"/>
+  <!-- ===== Content (y=89~655, h=566) ===== -->
+  <rect x="0" y="89" width="1280" height="566" fill="#0F1117"/>
 
-  <!-- Title -->
-  <text x="640" y="140" text-anchor="middle" font-family="sans-serif" font-size="18" fill="#E8ECF4" font-weight="bold">🔧 检测与安装</text>
-  <text x="640" y="164" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#8B92A8">运行环境检测 / OpenClaw · Hermes · Claude Code 安装</text>
+  <!-- Title block: y=108~145 -->
+  <text x="640" y="118" text-anchor="middle" font-family="sans-serif" font-size="18" fill="#E8ECF4" font-weight="bold">🔧 检测与安装</text>
+  <text x="640" y="138" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#8B92A8">运行环境检测 / OpenClaw · Hermes · Claude 安装</text>
+  <!-- Divider line -->
+  <line x1="90" y1="148" x2="1190" y2="148" stroke="#3DD68C" stroke-opacity="0.1" stroke-width="1"/>
 
-  <!-- Left panel: detection results (x=95, y=185, w=560, h=340) -->
-  <rect x="95" y="185" width="560" height="340" rx="10" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.08" stroke-width="1"/>
-  <text x="115" y="210" font-family="sans-serif" font-size="12" fill="#8B92A8" font-weight="bold">检测结果</text>
-  <line x1="95" y1="218" x2="655" y2="218" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
+  <!-- Dual panel area: y=160~534 (h=374), within content 89~655 -->
+  <!-- Left panel: x=90, w=540, y=160, h=374 -->
+  <rect x="90" y="160" width="540" height="374" rx="10" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.08" stroke-width="1"/>
+  <text x="110" y="183" font-family="sans-serif" font-size="12" fill="#8B92A8" font-weight="bold">检测结果</text>
+  <line x1="90" y1="192" x2="630" y2="192" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
 
-  <!-- Item 1: Node.js ✅ -->
-  <circle cx="120" cy="243" r="5" fill="#3DD68C"/>
-  <text x="135" y="248" font-family="sans-serif" font-size="12" fill="#E8ECF4">Node.js</text>
-  <text x="560" y="248" font-family="Consolas,monospace" font-size="11" fill="#8B92A8">v22.14.0</text>
-  <text x="625" y="248" font-family="sans-serif" font-size="12" fill="#3DD68C">✓ Pass</text>
+  <!-- 8 detection items: y start=204, row_h=24, gap=30 -->
+  <!-- y positions: 204, 234, 264, 294, 324, 354, 384, 414 (last item bottom=438) -->
+  <!-- Item 1: Network -->
+  <circle cx="112" cy="218" r="5" fill="#3DD68C"/>
+  <text x="127" y="222" font-family="sans-serif" font-size="13" fill="#E8ECF4">Network</text>
+  <text x="370" y="222" font-family="Consolas,monospace" font-size="11" fill="#8B92A8">google.com OK</text>
+  <text x="580" y="222" text-anchor="end" font-family="sans-serif" font-size="12" fill="#3DD68C">✓ Pass</text>
 
-  <!-- Item 2: npm ✅ -->
-  <circle cx="120" cy="283" r="5" fill="#3DD68C"/>
-  <text x="135" y="288" font-family="sans-serif" font-size="12" fill="#E8ECF4">npm</text>
-  <text x="560" y="288" font-family="Consolas,monospace" font-size="11" fill="#8B92A8">v10.8.0</text>
-  <text x="625" y="288" font-family="sans-serif" font-size="12" fill="#3DD68C">✓ Pass</text>
+  <!-- Item 2: Node.js -->
+  <circle cx="112" cy="248" r="5" fill="#3DD68C"/>
+  <text x="127" y="252" font-family="sans-serif" font-size="13" fill="#E8ECF4">Node.js</text>
+  <text x="370" y="252" font-family="Consolas,monospace" font-size="11" fill="#8B92A8">v22.14.0</text>
+  <text x="580" y="252" text-anchor="end" font-family="sans-serif" font-size="12" fill="#3DD68C">✓ Pass</text>
 
-  <!-- Item 3: Network ✅ -->
-  <circle cx="120" cy="323" r="5" fill="#3DD68C"/>
-  <text x="135" y="328" font-family="sans-serif" font-size="12" fill="#E8ECF4">网络连通</text>
-  <text x="560" y="328" font-family="sans-serif" font-size="11" fill="#8B92A8">google.com</text>
-  <text x="625" y="328" font-family="sans-serif" font-size="12" fill="#3DD68C">✓ Pass</text>
+  <!-- Item 3: npm -->
+  <circle cx="112" cy="278" r="5" fill="#3DD68C"/>
+  <text x="127" y="282" font-family="sans-serif" font-size="13" fill="#E8ECF4">npm</text>
+  <text x="370" y="282" font-family="Consolas,monospace" font-size="11" fill="#8B92A8">v10.8.0</text>
+  <text x="580" y="282" text-anchor="end" font-family="sans-serif" font-size="12" fill="#3DD68C">✓ Pass</text>
 
-  <!-- Item 4: OpenClaw ✅ -->
-  <circle cx="120" cy="363" r="5" fill="#3DD68C"/>
-  <text x="135" y="368" font-family="sans-serif" font-size="12" fill="#E8ECF4">OpenClaw</text>
-  <text x="560" y="368" font-family="sans-serif" font-size="11" fill="#8B92A8">v1.2.0</text>
-  <text x="625" y="368" font-family="sans-serif" font-size="12" fill="#3DD68C">✓ Pass</text>
+  <!-- Item 4: OpenClaw -->
+  <circle cx="112" cy="308" r="5" fill="#3DD68C"/>
+  <text x="127" y="312" font-family="sans-serif" font-size="13" fill="#E8ECF4">OpenClaw</text>
+  <text x="370" y="312" font-family="Consolas,monospace" font-size="11" fill="#8B92A8">v1.2.0</text>
+  <text x="580" y="312" text-anchor="end" font-family="sans-serif" font-size="12" fill="#3DD68C">✓ Pass</text>
 
-  <!-- Item 5: Hermes ⚠️ -->
-  <circle cx="120" cy="403" r="5" fill="#F59E0B"/>
-  <text x="135" y="408" font-family="sans-serif" font-size="12" fill="#E8ECF4">Hermes CLI</text>
-  <text x="560" y="408" font-family="sans-serif" font-size="11" fill="#F59E0B">未安装</text>
-  <text x="625" y="408" font-family="sans-serif" font-size="12" fill="#F59E0B">⚠ Warn</text>
+  <!-- Item 5: Hermes (warn) -->
+  <circle cx="112" cy="338" r="5" fill="#F59E0B"/>
+  <text x="127" y="342" font-family="sans-serif" font-size="13" fill="#E8ECF4">Hermes</text>
+  <text x="370" y="342" font-family="sans-serif" font-size="11" fill="#F59E0B">未安装</text>
+  <text x="580" y="342" text-anchor="end" font-family="sans-serif" font-size="12" fill="#F59E0B">⚠ Warn</text>
 
-  <!-- Item 6: Claude Code ⚠️ -->
-  <circle cx="120" cy="443" r="5" fill="#F59E0B"/>
-  <text x="135" y="448" font-family="sans-serif" font-size="12" fill="#E8ECF4">Claude Code CLI</text>
-  <text x="560" y="448" font-family="sans-serif" font-size="11" fill="#F59E0B">未安装</text>
-  <text x="625" y="448" font-family="sans-serif" font-size="12" fill="#F59E0B">⚠ Warn</text>
+  <!-- Item 6: Claude (warn) -->
+  <circle cx="112" cy="368" r="5" fill="#F59E0B"/>
+  <text x="127" y="372" font-family="sans-serif" font-size="13" fill="#E8ECF4">Claude</text>
+  <text x="370" y="372" font-family="sans-serif" font-size="11" fill="#F59E0B">未安装</text>
+  <text x="580" y="372" text-anchor="end" font-family="sans-serif" font-size="12" fill="#F59E0B">⚠ Warn</text>
 
-  <!-- Item 7: Disk Space ✅ -->
-  <circle cx="120" cy="483" r="5" fill="#3DD68C"/>
-  <text x="135" y="488" font-family="sans-serif" font-size="12" fill="#E8ECF4">磁盘空间</text>
-  <text x="560" y="488" font-family="sans-serif" font-size="11" fill="#8B92A8">12.5 GB 可用</text>
-  <text x="625" y="488" font-family="sans-serif" font-size="12" fill="#3DD68C">✓ Pass</text>
+  <!-- Item 7: Config Dir -->
+  <circle cx="112" cy="398" r="5" fill="#3DD68C"/>
+  <text x="127" y="402" font-family="sans-serif" font-size="13" fill="#E8ECF4">Config Dir</text>
+  <text x="370" y="402" font-family="sans-serif" font-size="11" fill="#8B92A8">C:\Users\...\AppData\Roaming</text>
+  <text x="580" y="402" text-anchor="end" font-family="sans-serif" font-size="12" fill="#3DD68C">✓ Pass</text>
 
-  <!-- Right panel: log (x=680, y=185, w=560, h=340) -->
-  <rect x="680" y="185" width="560" height="340" rx="10" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.08" stroke-width="1"/>
-  <text x="700" y="210" font-family="sans-serif" font-size="12" fill="#8B92A8" font-weight="bold">📺 检测与安装日志</text>
-  <line x1="680" y1="218" x2="1240" y2="218" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
-  <!-- Log lines -->
-  <text x="700" y="243" font-family="Consolas,monospace" font-size="10" fill="#3DD68C">$ node --version</text>
-  <text x="700" y="258" font-family="Consolas,monospace" font-size="10" fill="#8B92A8">v22.14.0</text>
-  <text x="700" y="283" font-family="Consolas,monospace" font-size="10" fill="#3DD68C">$ npm --version</text>
-  <text x="700" y="298" font-family="Consolas,monospace" font-size="10" fill="#8B92A8">10.8.0</text>
-  <text x="700" y="323" font-family="Consolas,monospace" font-size="10" fill="#3DD68C">$ curl -I https://google.com</text>
-  <text x="700" y="338" font-family="Consolas,monospace" font-size="10" fill="#8B92A8">HTTP/2 200</text>
-  <text x="700" y="363" font-family="Consolas,monospace" font-size="10" fill="#F59E0B">⚠ hermes command not found</text>
-  <text x="700" y="383" font-family="Consolas,monospace" font-size="10" fill="#F59E0B">⚠ claude command not found</text>
+  <!-- Item 8: Disk Space -->
+  <circle cx="112" cy="428" r="5" fill="#3DD68C"/>
+  <text x="127" y="432" font-family="sans-serif" font-size="13" fill="#E8ECF4">Disk Space</text>
+  <text x="370" y="432" font-family="sans-serif" font-size="11" fill="#8B92A8">85 GB 可用</text>
+  <text x="580" y="432" text-anchor="end" font-family="sans-serif" font-size="12" fill="#3DD68C">✓ Pass</text>
 
-  <!-- ===== Action buttons (y=545) ===== -->
-  <rect x="290" y="545" width="210" height="40" rx="8" fill="#3DD68C"/>
-  <text x="395" y="570" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#0F1117" font-weight="bold">从网络下载（推荐）</text>
+  <!-- Right panel: x=654, w=580, y=160, h=374 -->
+  <rect x="654" y="160" width="580" height="374" rx="10" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.08" stroke-width="1"/>
+  <text x="674" y="183" font-family="sans-serif" font-size="12" fill="#8B92A8" font-weight="bold">📺 检测与安装日志</text>
+  <line x1="654" y1="192" x2="1234" y2="192" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
+  <!-- Log lines (monospace) -->
+  <text x="674" y="218" font-family="Consolas,monospace" font-size="10" fill="#3DD68C">$ curl -I https://google.com</text>
+  <text x="674" y="232" font-family="Consolas,monospace" font-size="10" fill="#8B92A8">HTTP/2 200 OK</text>
+  <text x="674" y="254" font-family="Consolas,monospace" font-size="10" fill="#3DD68C">$ node --version</text>
+  <text x="674" y="268" font-family="Consolas,monospace" font-size="10" fill="#8B92A8">v22.14.0</text>
+  <text x="674" y="290" font-family="Consolas,monospace" font-size="10" fill="#3DD68C">$ npm --version</text>
+  <text x="674" y="304" font-family="Consolas,monospace" font-size="10" fill="#8B92A8">10.8.0</text>
+  <text x="674" y="326" font-family="Consolas,monospace" font-size="10" fill="#3DD68C">$ openclaw --version</text>
+  <text x="674" y="340" font-family="Consolas,monospace" font-size="10" fill="#8B92A8">v1.2.0</text>
+  <text x="674" y="362" font-family="Consolas,monospace" font-size="10" fill="#F59E0B">⚠ hermes: command not found</text>
+  <text x="674" y="380" font-family="Consolas,monospace" font-size="10" fill="#F59E0B">⚠ claude: command not found</text>
+  <text x="674" y="402" font-family="Consolas,monospace" font-size="10" fill="#3DD68C">$ check config dir</text>
+  <text x="674" y="416" font-family="Consolas,monospace" font-size="10" fill="#8B92A8">C:\Users\...\AppData\Roaming — writable</text>
+  <text x="674" y="438" font-family="Consolas,monospace" font-size="10" fill="#3DD68C">$ disk free space</text>
+  <text x="674" y="452" font-family="Consolas,monospace" font-size="10" fill="#8B92A8">85 GB available</text>
 
-  <rect x="515" y="545" width="160" height="40" rx="8" fill="#252A38"/>
-  <text x="595" y="570" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#E8ECF4">本地离线包</text>
+  <!-- Action buttons: y=552 (between panels bottom and footer top=655) -->
+  <!-- 552+40=592, leaving 655-592=63px gap to footer -->
+  <rect x="330" y="552" width="210" height="40" rx="8" fill="#3DD68C"/>
+  <text x="435" y="577" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#0F1117" font-weight="bold">从网络下载（推荐）</text>
 
-  <rect x="690" y="545" width="140" height="40" rx="8" fill="#252A38"/>
-  <text x="760" y="570" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#8B92A8">稍后手动</text>
+  <rect x="555" y="552" width="150" height="40" rx="8" fill="#252A38"/>
+  <text x="630" y="577" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#E8ECF4">本地离线包</text>
 
-  <!-- ===== Footer (y=700, h=100) ===== -->
-  <rect x="0" y="700" width="1280" height="100" fill="#0A0C10"/>
-  <line x1="0" y1="700" x2="1280" y2="700" stroke="#3DD68C" stroke-opacity="0.15" stroke-width="1"/>
+  <rect x="720" y="552" width="130" height="40" rx="8" fill="#252A38"/>
+  <text x="785" y="577" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#8B92A8">稍后手动</text>
+
+  <!-- ===== Footer (y=655, h=145) ===== -->
+  <rect x="0" y="655" width="1280" height="145" fill="#0A0C10"/>
+  <line x1="0" y1="655" x2="1280" y2="655" stroke="#3DD68C" stroke-opacity="0.15" stroke-width="1"/>
   <!-- Exit -->
-  <rect x="83" y="724" width="90" height="40" rx="8" fill="#252A38"/>
-  <text x="128" y="747" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#E8ECF4">退出向导</text>
+  <rect x="83" y="679" width="90" height="40" rx="8" fill="#252A38"/>
+  <text x="128" y="702" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#E8ECF4">退出向导</text>
   <!-- Prev -->
-  <rect x="1083" y="724" width="80" height="40" rx="8" fill="#252A38"/>
-  <text x="1123" y="747" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#E8ECF4">上一步</text>
-  <!-- Next (disabled) -->
-  <rect x="1173" y="724" width="90" height="40" rx="8" fill="#252A38" fill-opacity="0.5"/>
-  <text x="1218" y="747" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#4B5268">下一步</text>
+  <rect x="1083" y="679" width="80" height="40" rx="8" fill="#252A38"/>
+  <text x="1123" y="702" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#E8ECF4">上一步</text>
+  <!-- Next (disabled — OpenClaw not installed) -->
+  <rect x="1173" y="679" width="90" height="40" rx="8" fill="#252A38" fill-opacity="0.5"/>
+  <text x="1218" y="702" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#4B5268">下一步</text>
 </svg>
