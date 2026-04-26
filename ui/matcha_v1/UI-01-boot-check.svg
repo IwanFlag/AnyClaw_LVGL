@@ -135,9 +135,9 @@
   <!-- 说明文字 -->
   <text x="114" y="564" font-family="system-ui, sans-serif" font-size="10" fill="#6B7280">● = Pass(绿) / ● Fail(红) / ● Unknown(灰) / ◐ = 检测中</text>
 
-  <!-- ===== Footer（y=659，h=100） ===== -->
-  <rect x="0" y="659" width="1280" height="100" fill="#0A0C10"/>
-  <line x1="0" y1="659" x2="1280" y2="659" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
+  <!-- ===== Footer 145px（y=655~800） ===== -->
+  <rect x="0" y="655" width="1280" height="145" fill="#0A0C10"/>
+  <line x1="0" y1="655" x2="1280" y2="655" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
 
   <!-- Footer按钮（左=向导修复，右=进入界面，撑满 panel 边缘） -->
   <rect x="90" y="683" width="120" height="36" rx="11" fill="#252A38"/>
