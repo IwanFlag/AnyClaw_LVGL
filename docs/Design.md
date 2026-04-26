@@ -2144,48 +2144,51 @@ active: bg=accent
 
 ---
 
-#### 9 项检查列表（BootCheck 模块）
+#### 10 项检查列表（BootCheck 模块）
 
-|| # | 检查项 | 检测方式 | 通过条件 | 失败说明 |
+||| # | 检查项 | 检测方式 | 通过条件 | 失败说明 |
 |---|-----|--------|---------|---------|---------|
-| 1 | Node.js | `node --version` | ≥ 22.14.0 | Node.js 版本过低或未安装 |
-| 2 | npm | `npm --version` | 任意版本返回 | npm 不可用 |
-| 3 | Network | HTTP GET google.com | 返回 200 | 网络不可达 |
-| 4 | OpenClaw | `openclaw --version` | 任意版本返回 | OpenClaw 未安装 |
-| 5 | Agent | HTTP GET 127.0.0.1:18789 | 返回 200 | Agent 未运行 |
-| 6 | Hermes | Agent 健康检查 API | 返回 200 | Hermes Agent 不可用 |
-| 7 | Claude Code CLI | `claude --version` | 任意版本返回 | Claude Code CLI 未安装 |
-| 8 | Disk Space | `GetDiskFreeSpaceExW(C:\)` | 可用空间 > 1GB | 磁盘空间不足 |
-| 9 | Port 18789 | `bind()` 测试 | 端口可用 | 端口 18789 被占用 |
+|| 1 | Node.js | `node --version` | ≥ 22.14.0 | Node.js 版本过低或未安装 |
+|| 2 | npm | `npm --version` | 任意版本返回 | npm 不可用 |
+|| 3 | Network | HTTP GET google.com | 返回 200 | 网络不可达 |
+|| 4 | OpenClaw | `openclaw --version` | 任意版本返回 | OpenClaw 未安装 |
+|| 5 | Agent | HTTP GET 127.0.0.1:18789 | 返回 200 | Agent 未运行 |
+|| 6 | Hermes | Agent 健康检查 API | 返回 200 | Hermes Agent 不可用 |
+|| 7 | Claude Code CLI | `claude --version` | 任意版本返回 | Claude Code CLI 未安装 |
+|| 8 | Disk Space | `GetDiskFreeSpaceExW(C:\)` | 可用空间 > 1GB | 磁盘空间不足 |
+|| 9 | Port 18789 | `bind()` 测试 | 端口可用 | 端口 18789 被占用 |
+|| 10 | API 联通性 | HTTP GET api.minimaxi.com | 返回 200 | 模型 API 不可达 |
+
+> 第 10 项"API 联通性"检测当前默认配置模型的 API 端点连通性，未配置模型时显示 N/A。
 
 ---
 
-**布局（logical px）：**
+**布局（1190×646 比例图）：**
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  🧄 AnyClaw  │  AnyClaw Boot Check                    │  [—][✕] │  ← HEADER=30px (4%)
+│  🐛 AnyClaw  │  AnyClaw Boot Check                    │  [—][□][✕] │  ← HEADER=30px
 ├──────────────────────────────────────────────────────────────────┤
 │                                                              │
-│                        检测项 9 项                              │
+│                        检测项 10 项                             │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  ● Node.js           v22.14.0           ● OK         │   │  ← LV_PCT(86), h=500px
-│  │  ● npm              v10.8.0            ● OK         │   │  ← pad=24px, row_h=40, gap=4px
-│  │  ● Network          openrouter.ai        ● OK         │   │  ← 列1=232px, 列2=268px, 列3=72px
-│  │  ● OpenClaw         v2.1.0              ● OK         │   │
-│  │  ● Agent            127.0.0.1:18789    ● OK         │   │
-│  │  ● Hermes           running              ● OK         │   │
-│  │  ● Claude Code CLI  found                ● OK         │   │
-│  │  ● Disk Space       85 GB free          ● OK         │   │
-│  │  ● Port 18789       available            ● OK         │   │
+│  │  ● Node.js        v22.14.0             ● Pass         │   │  ← LV_PCT(86), h=520px
+│  │  ● npm           v10.8.0              ● Pass         │   │  ← pad=24px, row_h=36, gap=4px
+│  │  ● Network       google.com            ● Pass         │   │  ← 列1=232px, 列2=268px, 列3=80px
+│  │  ● OpenClaw      v2.1.0                ● Pass         │   │  ← content h=432px, pad 24+24=480px total
+│  │  ● Agent         127.0.0.1:18789    ● Pass         │   │
+│  │  ● Hermes        running               ● Pass         │   │
+│  │  ● Claude Code CLI found              ● Pass         │   │
+│  │  ● Disk Space    85 GB free           ● Pass         │   │
+│  │  ● Port 18789    available             ● Pass         │   │
+│  │  ● API 联通性    MiniMax-M2.7         ● Pass         │   │
 │  └──────────────────────────────────────────────────────┘   │
 │                                                              │
-│  ● = 状态徽标  OK(绿) / Err(红) / N/A(灰)                    │
-│  ◐ = 检测中 spinner                                          │
+│  ● = 状态徽标  Pass(绿) / Fail(红) / Unknown(灰)             │
+│  ◐ = 检测中 spinner                                           │
 │                                                              │
-│            [ 向导 ]                  [ 下一步 ]               │  ← FOOTER=56px，始终显示
-│                                                              │
+│  [ 向导修复 ]                                    [ 进入界面 ]  │  ← 按钮撑满 panel 边缘
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -2198,14 +2201,14 @@ active: bg=accent
     显示 Boot Check 页面（所有检测行初始 ◐ spinner）
        │
        ▼
-    9 项并行/串行检测，逐行刷新
+    10 项并行/串行检测，逐行刷新
        │
-       ├──► ◐ → ● OK (绿) ← 检测通过
-       ├──► ◐ → ● Err (红) ← 检测失败
-       └──► ◐ → ● N/A (灰) ← 无法检测
+       ├──► ◐ → ● Pass (绿) ← 检测通过
+       ├──► ◐ → ● Fail (红) ← 检测失败
+       └──► ◐ → ● Unknown (灰) ← 无法检测
        │
-       ├──► 存在 Err ──► [向导] 可用 + [下一步] 可用
-       └──► 全部 OK ──► [向导] 次要 + [下一步] 主要
+       ├──► 存在 Fail ──► [向导修复] 可用 + [进入界面] 可用
+       └──► 全部 Pass ──► [向导修复] 次要 + [进入界面] 主要
 ```
 
 #### 分层文字描述（精确像素）
@@ -2228,9 +2231,9 @@ active: bg=accent
 
 | 元素 | 绝对坐标 | 尺寸 | 样式/行为 |
 |------|---------|------|----------|
-| 列表容器 | x=96, y=64, w=1088, h=500 | LV_PCT(86) | pad=24, gap=4, flex COLUMN |
-| 检测行 | 每行高 40px | 全宽 | flex ROW，项目名(232px) + 值(268px) + 状态(72px) |
-| 状态徽章 | 行内右对齐 | 72px 宽 | OK=绿/Err=红/N/A=灰，24×24 圆形 |
+| 列表容器 | x=96, y=60, w=998, h=500 | LV_PCT(86) | pad=24, gap=4, flex COLUMN |
+| 检测行 | 每行高 40px | 全宽 | flex ROW，项目名(232px) + 值(268px) + 状态(80px) |
+| 状态徽章 | 行内右对齐 | 80px 宽 | Pass=绿/Fail=红/Unknown=灰，24×24 圆形 |
 
 **相邻关系：**
 - 标题栏和内容区分界线：y=30
@@ -2246,7 +2249,7 @@ active: bg=accent
 
 2. **内容区（占顶部栏下方剩余全部高度，约 750px）：** 内容区内部没有任何背景色或边框，内部垂直居中放置检测列表 panel，panel 本身相对内容区水平居中（两边各 7% margin）。
 
-3. **检测列表 panel（宽 LV_PCT(86)，高 500px）：** panel 是一个带背景色和圆角的矩形容器。宽度为窗口宽度的 86%，意味着 panel 左边框距左边缘 7% 窗口宽，右边框距右边缘 7% 窗口宽。panel 内部有 24px 的均匀内边距（上右下左四边相同）。panel 内部从上到下排列 9 行检测项，第 1 行距 panel 顶部 24px，最后一行距 panel 底部 24px。每行高度 40px，行与行之间有 4px 垂直间距（gap），因此 9 行总高为 9×40 + 8×4 = 392px，加上上下各 24px 内边距 = 440px，panel 总高 500px，内含 60px 额外垂直空间使内容不拥挤。
+3. **检测列表 panel（宽 LV_PCT(86)，高 500px）：** panel 是一个带背景色和圆角的矩形容器。宽度为窗口宽度的 86%，意味着 panel 左边框距左边缘 7% 窗口宽，右边框距右边缘 7% 窗口宽。panel 内部有 24px 的均匀内边距（上右下左四边相同）。panel 内部从上到下排列 10 行检测项，第 1 行距 panel 顶部 24px，最后一行距 panel 底部 24px。每行高度 40px，行与行之间有 4px 垂直间距（gap），因此 10 行总高为 10×40 + 9×4 = 436px，加上上下各 24px 内边距 = 484px，panel 总高 500px，内含 16px 额外垂直空间使内容不拥挤。
 
 4. **Footer 按钮区（56px 高）：** 位于 panel 下方，按钮区内部水平排列两个按钮：左侧"向导"按钮靠左边缘，右侧"下一步"按钮靠右边缘，两按钮之间留白。按钮垂直居中于 Footer 区域内。
 
@@ -2254,18 +2257,18 @@ active: bg=accent
 
 - **列1 - 检查项名称（固定 232px 宽）：** 位于每行最左侧，显示检测项的名称文字（如 "Node.js"、"npm"），左对齐。
 - **列2 - 版本/说明（固定 268px 宽）：** 位于列1右侧，显示该项的详细状态或版本号（如 "v22.14.0"、"running"、"85 GB free"），左对齐。
-- **列3 - 状态徽标（固定 72px 宽）：** 位于每行最右侧，右侧对齐。内部左侧有 20px 间距，徽标内容为彩色圆点 ● 配合状态文字（OK/Err/N/A）。
+- **列3 - 状态徽标（固定 80px 宽）：** 位于每行最右侧，右侧对齐。内部左侧有 20px 间距，徽标内容为彩色圆点 ● 配合状态文字（Pass/Fail/Unknown）。
 
 **状态徽标样式：**
-- `● OK`：绿色实心圆 + 绿色文字，表示检测通过
-- `● Err`：红色实心圆 + 红色文字，表示检测失败
-- `● N/A`：灰色实心圆 + 灰色文字，表示无法检测（Unknown）
+- `● Pass`：绿色实心圆 + 绿色文字，表示检测通过
+- `● Fail`：红色实心圆 + 红色文字，表示检测失败
+- `● Unknown`：灰色实心圆 + 灰色文字，表示无法检测
 - `◐ spinner`：蓝灰色旋转图标，表示检测进行中
 
 **Footer 按钮（两个，水平排列）：**
-- 左侧"向导"按钮：secondary 按钮样式（次要外观），有 Fail 时文字高亮
-- 右侧"下一步"按钮：accent 按钮样式（强调外观），有 Fail 时文字高亮
-- 按钮高度 40px，宽度根据文字自适应，两按钮在 Footer 区域水平两端对齐分布
+- 左侧"向导修复"按钮：secondary 按钮样式（次要外观），有 Fail 时高亮
+- 右侧"进入界面"按钮：accent 按钮样式（强调外观），有 Fail 时高亮
+- 按钮高度 36px，宽度 120px，两按钮在 Footer 区域水平居中分布
 
 ---
 
@@ -2273,8 +2276,8 @@ active: bg=accent
 
 | 按钮 | 文字 | 说明 |
 |------|------|------|
-| 向导（左侧） | 向导 | secondary 样式，Fail 时高亮 |
-| 下一步（右侧） | 下一步 | accent 样式，Fail 时高亮 |
+| 向导修复（左侧） | 向导修复 | secondary 样式，Fail 时高亮 |
+| 进入界面（右侧） | 进入界面 | accent 样式，Fail 时高亮 |
 
 **显示条件：** 始终显示（全 Pass/有 Fail/仅 N/A 均显示）。全 Pass 时"下一步"可用（点击跳过 2.5s 等待）；有 Fail 时两个按钮均可用。
 
