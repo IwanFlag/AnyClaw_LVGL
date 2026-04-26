@@ -1,152 +1,148 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1190" height="646" viewBox="0 0 1190 646">
-  <defs>
-    <filter id="bubbleShadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.3"/>
-    </filter>
-  </defs>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <!-- viewBox=1280×800（主窗口逻辑像素），所有坐标基于此比例 -->
+  <!-- 比例说明：Header=41(5.1%), Content=509(63.6%), Footer=100(12.5%) -->
 
   <!-- ===== 背景 ===== -->
-  <rect width="1190" height="646" fill="#0F1117"/>
+  <rect width="1280" height="800" fill="#0F1117"/>
 
-  <!-- ===== Header 41px（Matcha v1规格） ===== -->
-  <rect x="0" y="0" width="1190" height="41" rx="0" fill="#0A0C10"/>
-  <line x1="0" y1="41" x2="1190" y2="41" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
+  <!-- ===== Header 41px（5.1%） ===== -->
+  <rect x="0" y="0" width="1280" height="41" rx="0" fill="#0A0C10"/>
+  <line x1="0" y1="41" x2="1280" y2="41" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
 
-  <!-- Logo 大青虫子 SVG（v1大尺寸） -->
-  <circle cx="20" cy="20" r="10" fill="#3DD68C"/>
-  <line x1="13" y1="9" x2="10" y2="4" stroke="#3DD68C" stroke-width="2.5" stroke-linecap="round"/>
-  <line x1="27" y1="9" x2="30" y2="4" stroke="#3DD68C" stroke-width="2.5" stroke-linecap="round"/>
-  <circle cx="10" cy="4" r="3.5" fill="#3DD68C"/>
-  <circle cx="30" cy="4" r="3.5" fill="#3DD68C"/>
-  <ellipse cx="15" cy="17" rx="3.5" ry="4.5" fill="#0F1117"/>
+  <!-- Logo 大青虫子 SVG（中心 x=30, y=20） -->
+  <circle cx="30" cy="20" r="10" fill="#3DD68C"/>
+  <line x1="23" y1="9" x2="20" y2="4" stroke="#3DD68C" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="37" y1="9" x2="40" y2="4" stroke="#3DD68C" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="20" cy="4" r="3.5" fill="#3DD68C"/>
+  <circle cx="40" cy="4" r="3.5" fill="#3DD68C"/>
   <ellipse cx="25" cy="17" rx="3.5" ry="4.5" fill="#0F1117"/>
-  <circle cx="16" cy="15" r="1.5" fill="#FFFFFF"/>
+  <ellipse cx="35" cy="17" rx="3.5" ry="4.5" fill="#0F1117"/>
   <circle cx="26" cy="15" r="1.5" fill="#FFFFFF"/>
-  <ellipse cx="10" cy="28" rx="5" ry="2.5" fill="#FF9EB5" opacity="0.7"/>
-  <ellipse cx="30" cy="28" rx="5" ry="2.5" fill="#FF9EB5" opacity="0.7"/>
-  <path d="M 16 31 Q 20 35 24 31" stroke="#0F1117" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <circle cx="36" cy="15" r="1.5" fill="#FFFFFF"/>
+  <ellipse cx="20" cy="28" rx="5" ry="2.5" fill="#FF9EB5" opacity="0.7"/>
+  <ellipse cx="40" cy="28" rx="5" ry="2.5" fill="#FF9EB5" opacity="0.7"/>
+  <path d="M 26 31 Q 30 35 34 31" stroke="#0F1117" stroke-width="1.8" fill="none" stroke-linecap="round"/>
 
   <!-- Header 文字 -->
-  <text x="48" y="26" font-family="system-ui, sans-serif" font-size="13" fill="#E8ECF4">AnyClaw</text>
-  <text x="106" y="26" font-family="system-ui, sans-serif" font-size="13" fill="#8B92A8">Boot Check</text>
+  <text x="58" y="26" font-family="system-ui, sans-serif" font-size="13" fill="#E8ECF4">AnyClaw</text>
+  <text x="116" y="26" font-family="system-ui, sans-serif" font-size="13" fill="#8B92A8">Boot Check</text>
 
-  <!-- 窗口控制按钮（h=41顶部栏） -->
-  <text x="1085" y="25" text-anchor="middle" font-size="12" fill="#6B7280">─</text>
-  <rect x="1106" y="13" width="30" height="17" rx="4" fill="#252A38"/>
-  <text x="1121" y="25" text-anchor="middle" font-size="10" fill="#6B7280">□</text>
-  <rect x="1142" y="13" width="30" height="17" rx="4" fill="#3DD68C" fill-opacity="0.2"/>
-  <text x="1157" y="25" text-anchor="middle" font-size="10" fill="#3DD68C">✕</text>
+  <!-- 窗口控制按钮（右对齐） -->
+  <text x="1152" y="25" text-anchor="middle" font-size="12" fill="#6B7280">─</text>
+  <rect x="1178" y="13" width="32" height="17" rx="4" fill="#252A38"/>
+  <text x="1194" y="25" text-anchor="middle" font-size="10" fill="#6B7280">□</text>
+  <rect x="1214" y="13" width="32" height="17" rx="4" fill="#3DD68C" fill-opacity="0.2"/>
+  <text x="1230" y="25" text-anchor="middle" font-size="10" fill="#3DD68C">✕</text>
 
-  <!-- ===== CONTENT（y=41~590，h=549） ===== -->
+  <!-- ===== Content（y=41~659，h=509） ===== -->
 
-  <!-- 面板：w=LV_PCT(86%)=1023px≈1024px，h=500px，x=83居中 -->
-  <!-- 10行×40px + 9gap×4px = 436px内容 + 24px上 + 24px下 = 484px -->
-  <rect x="83" y="50" width="1024" height="500" rx="12" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.03" stroke-width="1"/>
+  <!-- 面板（w=LV_PCT(86%)=1101px，h=500px，x=(1280-1101)/2=90） -->
+  <rect x="90" y="50" width="1100" height="500" rx="12" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.03" stroke-width="1"/>
 
   <!-- 面板内标题 -->
-  <text x="107" y="78" font-family="system-ui, sans-serif" font-size="12" fill="#E8ECF4">检测项</text>
-  <text x="155" y="78" font-family="system-ui, sans-serif" font-size="11" fill="#6B7280">10 项</text>
+  <text x="114" y="78" font-family="system-ui, sans-serif" font-size="12" fill="#E8ECF4">检测项</text>
+  <text x="162" y="78" font-family="system-ui, sans-serif" font-size="11" fill="#6B7280">10 项</text>
 
   <!-- 分隔线 -->
-  <line x1="83" y1="88" x2="1107" y2="88" stroke="#3DD68C" stroke-opacity="0.04" stroke-width="1"/>
+  <line x1="90" y1="88" x2="1190" y2="88" stroke="#3DD68C" stroke-opacity="0.04" stroke-width="1"/>
 
   <!-- ========== 检查项列表（10行，Design.md规格）========== -->
-  <!-- 列布局（3列）：列1=232px(107~339) | 列2=268px(339~607) | 列3=80px(847~927) -->
-  <!-- 行高=40px，gap=4px，Badge=22×22(84px宽) -->
+  <!-- 列布局（3列）：列1=232px(114~346) | 列2=268px(346~614) | 列3=80px(850~930) -->
+  <!-- 行高=40px，gap=4px，Badge=22×22(80px宽) -->
   <!-- Panel内容区：y=88+24=112起始，第1行y=112，第10行y=112+9*44=508 -->
-  <!-- Badge中心y = 112 + 20 = 132 + (n-1)*44 = 132, 176, 220, 264, 308, 352, 396, 440, 484, 528 -->
+  <!-- Badge中心y = 112 + 20 = 132 + (n-1)*44 -->
 
   <!-- === 行1: Node.js === -->
-  <circle cx="115" cy="132" r="5" fill="#3DD68C"/>
-  <text x="127" y="137" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">Node.js</text>
-  <text x="339" y="137" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">v22.14.0</text>
-  <rect x="847" y="121" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
-  <circle cx="859" cy="132" r="4" fill="#3DD68C"/>
-  <text x="871" y="136" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
+  <circle cx="122" cy="132" r="5" fill="#3DD68C"/>
+  <text x="134" y="137" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">Node.js</text>
+  <text x="346" y="137" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">v22.14.0</text>
+  <rect x="850" y="121" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
+  <circle cx="862" cy="132" r="4" fill="#3DD68C"/>
+  <text x="874" y="136" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
 
   <!-- === 行2: npm === -->
-  <circle cx="115" cy="176" r="5" fill="#3DD68C"/>
-  <text x="127" y="181" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">npm</text>
-  <text x="339" y="181" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">v10.8.0</text>
-  <rect x="847" y="165" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
-  <circle cx="859" cy="176" r="4" fill="#3DD68C"/>
-  <text x="871" y="180" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
+  <circle cx="122" cy="176" r="5" fill="#3DD68C"/>
+  <text x="134" y="181" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">npm</text>
+  <text x="346" y="181" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">v10.8.0</text>
+  <rect x="850" y="165" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
+  <circle cx="862" cy="176" r="4" fill="#3DD68C"/>
+  <text x="874" y="180" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
 
   <!-- === 行3: Network === -->
-  <circle cx="115" cy="220" r="5" fill="#3DD68C"/>
-  <text x="127" y="225" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">Network</text>
-  <text x="339" y="225" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">google.com</text>
-  <rect x="847" y="209" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
-  <circle cx="859" cy="220" r="4" fill="#3DD68C"/>
-  <text x="871" y="224" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
+  <circle cx="122" cy="220" r="5" fill="#3DD68C"/>
+  <text x="134" y="225" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">Network</text>
+  <text x="346" y="225" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">google.com</text>
+  <rect x="850" y="209" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
+  <circle cx="862" cy="220" r="4" fill="#3DD68C"/>
+  <text x="874" y="224" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
 
   <!-- === 行4: OpenClaw === -->
-  <circle cx="115" cy="264" r="5" fill="#3DD68C"/>
-  <text x="127" y="269" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">OpenClaw</text>
-  <text x="339" y="269" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">v2.1.0</text>
-  <rect x="847" y="253" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
-  <circle cx="859" cy="264" r="4" fill="#3DD68C"/>
-  <text x="871" y="268" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
+  <circle cx="122" cy="264" r="5" fill="#3DD68C"/>
+  <text x="134" y="269" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">OpenClaw</text>
+  <text x="346" y="269" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">v2.1.0</text>
+  <rect x="850" y="253" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
+  <circle cx="862" cy="264" r="4" fill="#3DD68C"/>
+  <text x="874" y="268" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
 
   <!-- === 行5: Hermes === -->
-  <circle cx="115" cy="308" r="5" fill="#3DD68C"/>
-  <text x="127" y="313" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">Hermes</text>
-  <text x="339" y="313" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">running</text>
-  <rect x="847" y="297" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
-  <circle cx="859" cy="308" r="4" fill="#3DD68C"/>
-  <text x="871" y="312" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
+  <circle cx="122" cy="308" r="5" fill="#3DD68C"/>
+  <text x="134" y="313" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">Hermes</text>
+  <text x="346" y="313" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">running</text>
+  <rect x="850" y="297" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
+  <circle cx="862" cy="308" r="4" fill="#3DD68C"/>
+  <text x="874" y="312" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
 
   <!-- === 行6: Claude Code CLI === -->
-  <circle cx="115" cy="352" r="5" fill="#3DD68C"/>
-  <text x="127" y="357" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">Claude Code CLI</text>
-  <text x="339" y="357" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">found</text>
-  <rect x="847" y="341" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
-  <circle cx="859" cy="352" r="4" fill="#3DD68C"/>
-  <text x="871" y="356" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
+  <circle cx="122" cy="352" r="5" fill="#3DD68C"/>
+  <text x="134" y="357" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">Claude Code CLI</text>
+  <text x="346" y="357" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">found</text>
+  <rect x="850" y="341" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
+  <circle cx="862" cy="352" r="4" fill="#3DD68C"/>
+  <text x="874" y="356" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
 
   <!-- === 行7: Disk Space === -->
-  <circle cx="115" cy="396" r="5" fill="#3DD68C"/>
-  <text x="127" y="401" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">Disk Space</text>
-  <text x="339" y="401" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">85 GB free</text>
-  <rect x="847" y="385" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
-  <circle cx="859" cy="396" r="4" fill="#3DD68C"/>
-  <text x="871" y="400" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
+  <circle cx="122" cy="396" r="5" fill="#3DD68C"/>
+  <text x="134" y="401" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">Disk Space</text>
+  <text x="346" y="401" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">85 GB free</text>
+  <rect x="850" y="385" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
+  <circle cx="862" cy="396" r="4" fill="#3DD68C"/>
+  <text x="874" y="400" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
 
   <!-- === 行8: Port 18789 === -->
-  <circle cx="115" cy="440" r="5" fill="#3DD68C"/>
-  <text x="127" y="445" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">Port 18789</text>
-  <text x="339" y="445" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">available</text>
-  <rect x="847" y="429" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
-  <circle cx="859" cy="440" r="4" fill="#3DD68C"/>
-  <text x="871" y="444" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
+  <circle cx="122" cy="440" r="5" fill="#3DD68C"/>
+  <text x="134" y="445" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">Port 18789</text>
+  <text x="346" y="445" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">available</text>
+  <rect x="850" y="429" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
+  <circle cx="862" cy="440" r="4" fill="#3DD68C"/>
+  <text x="874" y="444" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
 
   <!-- === 行9: SDL2.dll === -->
-  <circle cx="115" cy="484" r="5" fill="#3DD68C"/>
-  <text x="127" y="489" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">SDL2.dll</text>
-  <text x="339" y="489" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">found</text>
-  <rect x="847" y="473" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
-  <circle cx="859" cy="484" r="4" fill="#3DD68C"/>
-  <text x="871" y="488" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
+  <circle cx="122" cy="484" r="5" fill="#3DD68C"/>
+  <text x="134" y="489" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">SDL2.dll</text>
+  <text x="346" y="489" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">found</text>
+  <rect x="850" y="473" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
+  <circle cx="862" cy="484" r="4" fill="#3DD68C"/>
+  <text x="874" y="488" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
 
   <!-- === 行10: API 联通性 === -->
-  <circle cx="115" cy="528" r="5" fill="#3DD68C"/>
-  <text x="127" y="533" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">API 联通性</text>
-  <text x="339" y="533" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">MiniMax-M2.7</text>
-  <rect x="847" y="517" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
-  <circle cx="859" cy="528" r="4" fill="#3DD68C"/>
-  <text x="871" y="532" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
+  <circle cx="122" cy="528" r="5" fill="#3DD68C"/>
+  <text x="134" y="533" font-family="system-ui, sans-serif" font-size="11" fill="#E8ECF4">API 联通性</text>
+  <text x="346" y="533" font-family="Consolas, monospace" font-size="11" fill="#8B92A8">MiniMax-M2.7</text>
+  <rect x="850" y="517" width="80" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
+  <circle cx="862" cy="528" r="4" fill="#3DD68C"/>
+  <text x="874" y="532" font-family="system-ui, sans-serif" font-size="9" fill="#3DD68C">Pass</text>
 
   <!-- 说明文字 -->
-  <text x="107" y="564" font-family="system-ui, sans-serif" font-size="10" fill="#6B7280">● = Pass(绿) / ● Fail(红) / ● Unknown(灰) / ◐ = 检测中</text>
+  <text x="114" y="564" font-family="system-ui, sans-serif" font-size="10" fill="#6B7280">● = Pass(绿) / ● Fail(红) / ● Unknown(灰) / ◐ = 检测中</text>
 
-  <!-- ===== Footer（y=590，h=56） ===== -->
-  <rect x="0" y="590" width="1190" height="56" fill="#0A0C10"/>
-  <line x1="0" y1="590" x2="1190" y2="590" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
+  <!-- ===== Footer（y=659，h=100） ===== -->
+  <rect x="0" y="659" width="1280" height="100" fill="#0A0C10"/>
+  <line x1="0" y1="659" x2="1280" y2="659" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
 
-  <!-- Footer按钮：左撑到panel左边缘x=83，右撑到panel右边缘x=1107 -->
-  <rect x="83" y="602" width="120" height="36" rx="11" fill="#252A38"/>
-  <text x="143" y="624" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" fill="#3DD68C">向导修复</text>
+  <!-- Footer按钮（左=向导修复，右=进入界面，撑满 panel 边缘） -->
+  <rect x="90" y="683" width="120" height="36" rx="11" fill="#252A38"/>
+  <text x="150" y="705" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" fill="#3DD68C">向导修复</text>
 
-  <rect x="987" y="602" width="120" height="36" rx="11" fill="#3DD68C"/>
-  <text x="1047" y="624" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" fill="#0F1117" font-weight="600">进入界面</text>
+  <rect x="1140" y="683" width="120" height="36" rx="11" fill="#3DD68C"/>
+  <text x="1200" y="705" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" fill="#0F1117" font-weight="600">进入界面</text>
 </svg>
