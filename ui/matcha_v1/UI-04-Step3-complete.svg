@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" width="1280" height="800">
+  <defs>
+    <linearGradient id="bigPrimaryBtn" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF7F50"/>
+      <stop offset="100%" stop-color="#FF6B35"/>
+    </linearGradient>
+    <linearGradient id="advCard" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1A1D27"/>
+      <stop offset="100%" stop-color="#1E2230"/>
+    </linearGradient>
+    <filter id="inputShadow" x="-2%" y="-20%" width="104%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#3DD68C" flood-opacity="0.08"/>
+    </filter>
+  </defs>
+
+  <!-- Header -->
+  <rect x="0" y="0" width="1280" height="41" fill="#0A0C10"/>
+  <text x="48" y="26" font-family="sans-serif" font-size="13" fill="#E8ECF4">AnyClaw Setup</text>
+  <!-- Window controls (right edge = 1270, within 1280) -->
+  <rect x="1170" y="12" width="28" height="17" rx="4" fill="#252A38"/>
+  <text x="1184" y="25" text-anchor="middle" font-size="11" fill="#6B7280">─</text>
+  <rect x="1206" y="12" width="28" height="17" rx="4" fill="#252A38"/>
+  <text x="1220" y="25" text-anchor="middle" font-size="10" fill="#6B7280">□</text>
+  <rect x="1242" y="12" width="28" height="17" rx="4" fill="#EF4444" fill-opacity="0.15"/>
+  <text x="1256" y="25" text-anchor="middle" font-size="10" fill="#EF4444">✕</text>
+
+  <!-- StepBar -->
+  <rect x="0" y="41" width="1280" height="48" fill="#13151E"/>
+  <!-- Line segments -->
+  <rect x="286" y="67" width="228" height="2" fill="#3DD68C"/>
+  <rect x="526" y="67" width="228" height="2" fill="#3DD68C"/>
+  <rect x="766" y="67" width="228" height="2" fill="#3DD68C"/>
+  <!-- Step circles -->
+  <circle cx="280" cy="65" r="6" fill="#3DD68C"/>
+  <circle cx="520" cy="65" r="6" fill="#3DD68C"/>
+  <circle cx="760" cy="65" r="6" fill="#3DD68C"/>
+  <circle cx="1000" cy="65" r="6" fill="#FF7F50"/>
+  <!-- Check marks in circles -->
+  <text x="280" y="69" text-anchor="middle" font-size="10" fill="#0F1117">✓</text>
+  <text x="520" y="69" text-anchor="middle" font-size="10" fill="#0F1117">✓</text>
+  <text x="760" y="69" text-anchor="middle" font-size="10" fill="#0F1117">✓</text>
+  <!-- Step labels -->
+  <text x="280" y="88" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#3DD68C">语言</text>
+  <text x="520" y="88" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#3DD68C">环境</text>
+  <text x="760" y="88" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#3DD68C">模型</text>
+  <text x="1000" y="88" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#FF7F50">完成</text>
+
+  <!-- Content -->
+  <rect x="0" y="89" width="1280" height="566" fill="#0F1117"/>
+
+  <!-- Title -->
+  <text x="640" y="130" text-anchor="middle" font-family="sans-serif" font-size="20" font-weight="700" fill="#E8ECF4">🎉 恭喜！设置完成</text>
+  <text x="640" y="155" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#8B92A8">最后一步：确认配置并进入 AnyClaw</text>
+
+  <!-- Nickname -->
+  <text x="114" y="206" font-family="sans-serif" font-size="11" fill="#8B92A8">昵称</text>
+  <rect x="114" y="214" width="1052" height="40" rx="8" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.1" stroke-width="1" filter="url(#inputShadow)"/>
+  <text x="126" y="238" font-family="sans-serif" font-size="12" fill="#6B7280">你的昵称...</text>
+
+  <!-- Timezone -->
+  <text x="114" y="276" font-family="sans-serif" font-size="11" fill="#8B92A8">时区</text>
+  <rect x="114" y="284" width="1052" height="40" rx="8" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.1" stroke-width="1"/>
+  <text x="126" y="308" font-family="sans-serif" font-size="12" fill="#E8ECF4">Asia/Shanghai</text>
+  <text x="1144" y="308" text-anchor="middle" font-size="12" fill="#6B7280">▼</text>
+
+  <!-- Leader Mode section title -->
+  <text x="114" y="348" font-family="sans-serif" font-size="11" fill="#8B92A8">Leader 模式</text>
+
+  <!-- Option 1: Leader enabled -->
+  <rect x="114" y="358" width="1052" height="44" rx="8" fill="#FF7F50" fill-opacity="0.07" stroke="#FF7F50" stroke-width="1"/>
+  <circle cx="136" cy="380" r="8" fill="#FF7F50"/>
+  <text x="136" y="384" text-anchor="middle" font-size="9" fill="#0F1117">✓</text>
+  <text x="260" y="384" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#E8ECF4">启用 Leader 模式（多 Agent 并行，推荐）</text>
+  <rect x="1046" y="366" width="46" height="18" rx="9" fill="#FF7F50" fill-opacity="0.15"/>
+  <text x="1069" y="378" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#FF7F50">推荐</text>
+
+  <!-- Option 2: Skip -->
+  <rect x="114" y="412" width="1052" height="44" rx="8" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
+  <circle cx="136" cy="434" r="8" fill="none" stroke="#3DD68C" stroke-opacity="0.3" stroke-width="1.5"/>
+  <text x="260" y="438" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#8B92A8">跳过（单 Agent，仅 OpenClaw）</text>
+
+  <!-- Skip hint -->
+  <text x="114" y="482" font-family="sans-serif" font-size="10" fill="#6B7280">Skip 将降级为单 Agent 模式（仅 OpenClaw）。</text>
+
+  <!-- Primary button -->
+  <rect x="488" y="508" width="304" height="50" rx="12" fill="#FF7F50" opacity="0.1" stroke="#FF7F50" stroke-width="1">
+  </rect>
+  <rect x="490" y="510" width="300" height="46" rx="10" fill="url(#bigPrimaryBtn)"/>
+  <text x="640" y="539" text-anchor="middle" font-family="sans-serif" font-size="15" fill="#0F1117" font-weight="700">开始使用 →</text>
+
+  <!-- Advanced section label -->
+  <text x="640" y="580" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">进阶能力（非阻断，可后续在设置中配置）</text>
+
+  <!-- Advanced capability cards -->
+  <rect x="114" y="601" width="300" height="50" rx="10" fill="url(#advCard)" stroke="#3DD68C" stroke-opacity="0.08" stroke-width="1"/>
+  <text x="264" y="631" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#8B92A8">💬 飞书 Bot</text>
+
+  <rect x="490" y="601" width="300" height="50" rx="10" fill="url(#advCard)" stroke="#3DD68C" stroke-opacity="0.08" stroke-width="1"/>
+  <text x="640" y="631" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#8B92A8">🖥️ 桌面控制</text>
+
+  <rect x="866" y="601" width="300" height="50" rx="10" fill="url(#advCard)" stroke="#3DD68C" stroke-opacity="0.08" stroke-width="1"/>
+  <text x="1016" y="631" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#8B92A8">🔊 语音交互</text>
+
+  <!-- Footer -->
+  <rect x="0" y="655" width="1280" height="145" fill="#0A0C10"/>
+  <rect x="0" y="655" width="1280" height="1" fill="#252A38"/>
+  <text x="640" y="748" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#6B7280">退出向导</text>
+  <text x="640" y="766" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#3DD68C">Matcha v1 · UI-04-Step3</text>
+  <rect x="0" y="758" width="80" height="40" rx="6" fill="#252A38"/>
+  <text x="40" y="778" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">← Back</text>
+</svg>
