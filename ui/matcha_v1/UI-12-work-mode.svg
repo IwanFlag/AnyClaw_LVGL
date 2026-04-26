@@ -1,0 +1,245 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <style>
+      @keyframes spin { from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
+      .spinner { animation: spin 1s linear infinite; }
+    </style>
+    <linearGradient id="userBubble" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="sendBtn" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4ADE80"/>
+      <stop offset="100%" stop-color="#22C55E"/>
+    </linearGradient>
+    <clipPath id="rightPanelClip">
+      <rect x="367" y="41" width="898" height="620"/>
+    </clipPath>
+    <filter id="bubbleShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1280" height="800" fill="#0F1117"/>
+
+  <!-- ===== 标题栏 ===== -->
+  <rect x="0" y="0" width="1280" height="41" rx="0" fill="#0A0C10"/>
+  <circle cx="23" cy="17" r="8" fill="#3DD68C"/>
+  <line x1="17" y1="9" x2="15" y2="5" stroke="#3DD68C" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="29" y1="9" x2="31" y2="5" stroke="#3DD68C" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="15" cy="5" r="2.5" fill="#3DD68C"/>
+  <circle cx="31" cy="5" r="2.5" fill="#3DD68C"/>
+  <ellipse cx="20" cy="15" rx="2.5" ry="3" fill="#0F1117"/>
+  <ellipse cx="26" cy="15" rx="2.5" ry="3" fill="#0F1117"/>
+  <circle cx="21" cy="14" r="1" fill="#FFFFFF"/>
+  <circle cx="27" cy="14" r="1" fill="#FFFFFF"/>
+  <ellipse cx="17" cy="19" rx="3" ry="1.5" fill="#FF9EB5" opacity="0.7"/>
+  <ellipse cx="29" cy="19" rx="3" ry="1.5" fill="#FF9EB5" opacity="0.7"/>
+  <path d="M 21 21 Q 23 24 26 21" stroke="#0F1117" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+  <text x="48" y="24" font-family="sans-serif" font-size="13" fill="#E8ECF4">AnyClaw · Work</text>
+  <text x="1172" y="24" text-anchor="middle" font-size="10" fill="#6B7280">─</text>
+  <rect x="1193" y="12" width="30" height="17" rx="4" fill="#252A38"/>
+  <text x="1208" y="24" text-anchor="middle" font-size="10" fill="#6B7280">□</text>
+  <rect x="1229" y="12" width="30" height="17" rx="4" fill="#3DD68C" fill-opacity="0.2"/>
+  <text x="1244" y="24" text-anchor="middle" font-size="10" fill="#3DD68C">✕</text>
+
+  <!-- ===== 左 NAV (w=77, h=759) ===== -->
+  <rect x="0" y="41" width="77" height="759" rx="0" fill="#0A0C10"/>
+
+  <!-- Bot (高亮) -->
+  <rect x="11" y="48" width="52" height="52" rx="9" fill="#252A38"/>
+  <circle cx="37" cy="63" r="12" fill="#3DD68C"/>
+  <line x1="28" y1="51" x2="25" y2="45" stroke="#3DD68C" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="46" y1="51" x2="49" y2="45" stroke="#3DD68C" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="25" cy="45" r="2.5" fill="#3DD68C"/>
+  <circle cx="49" cy="45" r="2.5" fill="#3DD68C"/>
+  <ellipse cx="33" cy="61" rx="2.5" ry="3" fill="#0F1117"/>
+  <ellipse cx="41" cy="61" rx="2.5" ry="3" fill="#0F1117"/>
+  <circle cx="34" cy="60" r="1" fill="#FFFFFF"/>
+  <circle cx="42" cy="60" r="1" fill="#FFFFFF"/>
+  <ellipse cx="28" cy="66" rx="3" ry="1.5" fill="#FF9EB5" opacity="0.7"/>
+  <ellipse cx="46" cy="66" rx="3" ry="1.5" fill="#FF9EB5" opacity="0.7"/>
+  <path d="M 33 68 Q 37 72 41 68" stroke="#0F1117" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+  <rect x="29" y="75" width="16" height="19" rx="6" fill="#3DD68C"/>
+  <ellipse cx="37" cy="96" rx="12" ry="4" fill="#000000" opacity="0.2"/>
+
+  <!-- File -->
+  <rect x="11" y="116" width="52" height="52" rx="9" fill="transparent"/>
+  <text x="37" y="146" text-anchor="middle" font-size="17">📁</text>
+
+  <!-- KB -->
+  <rect x="11" y="184" width="52" height="52" rx="9" fill="transparent"/>
+  <text x="37" y="214" text-anchor="middle" font-size="17">📚</text>
+
+  <!-- Skill -->
+  <rect x="11" y="252" width="52" height="52" rx="9" fill="transparent"/>
+  <text x="37" y="282" text-anchor="middle" font-size="17">🧩</text>
+
+  <!-- Chat/Work toggle -->
+  <rect x="11" y="696" width="52" height="52" rx="9" fill="transparent"/>
+  <text x="37" y="727" text-anchor="middle" font-size="17">💬</text>
+
+  <!-- Settings -->
+  <rect x="11" y="764" width="52" height="22" rx="9" fill="transparent"/>
+  <text x="37" y="783" text-anchor="middle" font-size="17">⚙️</text>
+
+  <!-- ===== 左面板 (x=84, w=276, h=759) ===== -->
+  <rect x="84" y="41" width="276" height="759" rx="10" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.03" stroke-width="1"/>
+
+  <!-- 左面板状态行 -->
+  <rect x="84" y="41" width="276" height="36" rx="10" fill="#1A1D27" stroke="#3DD68C" stroke-width="1"/>
+  <circle cx="105" cy="59" r="5" fill="#3DD68C">
+    <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
+  </circle>
+  <text x="117" y="63" font-family="sans-serif" font-size="9" fill="#E8ECF4">Agent</text>
+  <text x="315" y="63" text-anchor="end" font-family="sans-serif" font-size="9" fill="#3DD68C">Running</text>
+  <!-- 覆盖底部圆角（只保留顶部圆角） -->
+  <rect x="84" y="67" width="276" height="10" fill="#13151E"/>
+  <line x1="84" y1="77" x2="360" y2="77" stroke="#3DD68C" stroke-opacity="0.05" stroke-width="1"/>
+
+  <!-- StepCard 步骤流标题 -->
+  <text x="94" y="97" font-family="sans-serif" font-size="10" fill="#8B92A8">执行步骤</text>
+  <text x="330" y="97" text-anchor="end" font-family="sans-serif" font-size="9" fill="#6B7280">(3)</text>
+
+  <!-- StepCard 1: ✓ 已完成 -->
+  <rect x="94" y="108" width="256" height="72" rx="7" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.3" stroke-width="1"/>
+  <rect x="94" y="108" width="4" height="72" rx="2" fill="#3DD68C"/>
+  <text x="110" y="128" font-family="sans-serif" font-size="11" fill="#3DD68C">✓</text>
+  <text x="125" y="128" font-family="sans-serif" font-size="10" fill="#E8ECF4">读取 config.json</text>
+  <text x="110" y="144" font-family="sans-serif" font-size="9" fill="#6B7280">kind: read</text>
+  <text x="110" y="158" font-family="sans-serif" font-size="9" fill="#3DD68C">● 完成</text>
+
+  <!-- StepCard 2: ✓ 已完成 -->
+  <rect x="94" y="188" width="256" height="72" rx="7" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.3" stroke-width="1"/>
+  <rect x="94" y="188" width="4" height="72" rx="2" fill="#3DD68C"/>
+  <text x="110" y="208" font-family="sans-serif" font-size="11" fill="#3DD68C">✓</text>
+  <text x="125" y="208" font-family="sans-serif" font-size="10" fill="#E8ECF4">写入 main.cpp</text>
+  <text x="110" y="224" font-family="sans-serif" font-size="9" fill="#6B7280">kind: write</text>
+  <text x="110" y="238" font-family="sans-serif" font-size="9" fill="#3DD68C">● 完成</text>
+
+  <!-- StepCard 3: ● 进行中 -->
+  <rect x="94" y="268" width="256" height="100" rx="7" fill="#1A1D27" stroke="#FFBE3D" stroke-opacity="0.5" stroke-width="1"/>
+  <rect x="94" y="268" width="4" height="100" rx="2" fill="#FFBE3D"/>
+  <text x="110" y="288" font-family="sans-serif" font-size="11" fill="#FFBE3D">⚡</text>
+  <text x="125" y="288" font-family="sans-serif" font-size="10" fill="#E8ECF4">执行 npm install</text>
+  <text x="110" y="304" font-family="sans-serif" font-size="9" fill="#6B7280">kind: exec</text>
+  <text x="110" y="318" font-family="sans-serif" font-size="9" fill="#FFBE3D">● 进行中...</text>
+  <!-- 写操作按钮 -->
+  <rect x="110" y="328" width="56" height="22" rx="6" fill="#3DD68C" fill-opacity="0.2"/>
+  <text x="138" y="343" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#3DD68C">接受 ✓</text>
+  <rect x="172" y="328" width="56" height="22" rx="6" fill="#EF4444" fill-opacity="0.2"/>
+  <text x="200" y="343" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#EF4444">拒绝 ✗</text>
+  <rect x="234" y="328" width="48" height="22" rx="6" fill="#252A38"/>
+  <text x="258" y="343" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#8B92A8">回退 ↩</text>
+
+  <!-- StepCard 4: ? 等待确认 -->
+  <rect x="94" y="376" width="256" height="72" rx="7" fill="#1A1D27" stroke="#6C9FFF" stroke-opacity="0.4" stroke-width="1"/>
+  <rect x="94" y="376" width="4" height="72" rx="2" fill="#6C9FFF"/>
+  <text x="110" y="396" font-family="sans-serif" font-size="11" fill="#6C9FFF">?</text>
+  <text x="125" y="396" font-family="sans-serif" font-size="10" fill="#E8ECF4">修改 package.json</text>
+  <text x="110" y="412" font-family="sans-serif" font-size="9" fill="#6B7280">kind: write · 等待确认</text>
+
+  <!-- ===== 右面板 (x=367, w=898, h=759) ===== -->
+  <rect x="367" y="41" width="898" height="759" fill="#0F1117"/>
+
+  <!-- chat_cont (y=41, h=620) -->
+  <g clip-path="url(#rightPanelClip)">
+    <!-- User bubble -->
+    <g transform="translate(1000, 58)">
+      <circle cx="171" cy="22" r="14" fill="#252A38"/>
+      <text x="171" y="27" text-anchor="middle" font-size="12">👤</text>
+      <rect x="54" y="0" width="139" height="45" rx="16" fill="url(#userBubble)" filter="url(#bubbleShadow)"/>
+      <text x="175" y="12" text-anchor="end" font-family="sans-serif" font-size="9" fill="#FFFFFF" opacity="0.6">12:28</text>
+      <text x="66" y="28" font-family="sans-serif" font-size="11" fill="#FFFFFF">帮我创建一个 React 项目</text>
+    </g>
+
+    <!-- AI bubble with StepCard list -->
+    <g transform="translate(367, 118)">
+      <circle cx="17" cy="17" r="14" fill="#1E2230"/>
+      <circle cx="17" cy="16" r="7" fill="#3DD68C"/>
+      <line x1="12" y1="10" x2="11" y2="7" stroke="#3DD68C" stroke-width="1" stroke-linecap="round"/>
+      <line x1="22" y1="10" x2="23" y2="7" stroke="#3DD68C" stroke-width="1" stroke-linecap="round"/>
+      <circle cx="11" cy="7" r="1.5" fill="#3DD68C"/>
+      <circle cx="23" cy="7" r="1.5" fill="#3DD68C"/>
+      <ellipse cx="15" cy="15" rx="1.5" ry="1.8" fill="#0F1117"/>
+      <ellipse cx="19" cy="15" rx="1.5" ry="1.8" fill="#0F1117"/>
+      <circle cx="15.5" cy="14.5" r="0.7" fill="#FFFFFF"/>
+      <circle cx="19.5" cy="14.5" r="0.7" fill="#FFFFFF"/>
+      <ellipse cx="12" cy="19" rx="2" ry="1" fill="#FF9EB5" opacity="0.7"/>
+      <ellipse cx="22" cy="19" rx="2" ry="1" fill="#FF9EB5" opacity="0.7"/>
+      <path d="M 15 20 Q 17 22 19 20" stroke="#0F1117" stroke-width="1" fill="none" stroke-linecap="round"/>
+      <rect x="38" y="0" width="800" height="310" rx="12" fill="#1E2230" filter="url(#bubbleShadow)"/>
+      <rect x="38" y="3" width="3" height="304" rx="1" fill="#3DD68C"/>
+      <text x="52" y="15" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#6C9FFF">12:28</text>
+
+      <!-- AI 回复文字 -->
+      <text x="52" y="36" font-family="HarmonyOS Sans SC, sans-serif" font-size="11" fill="#E8ECF4">好的，正在为你创建 React 项目...</text>
+
+      <!-- StepCard in bubble -->
+      <!-- Step 1: ✓ -->
+      <rect x="52" y="50" width="774" height="50" rx="7" fill="#0A0C10" stroke="#3DD68C" stroke-opacity="0.2" stroke-width="1"/>
+      <rect x="52" y="50" width="3" height="50" rx="1" fill="#3DD68C"/>
+      <text x="68" y="72" font-family="sans-serif" font-size="13" fill="#3DD68C">✓</text>
+      <text x="85" y="72" font-family="sans-serif" font-size="10" fill="#E8ECF4">读取 config.json</text>
+      <text x="800" y="72" text-anchor="end" font-family="sans-serif" font-size="9" fill="#3DD68C">● 完成</text>
+
+      <!-- Step 2: ✓ -->
+      <rect x="52" y="106" width="774" height="50" rx="7" fill="#0A0C10" stroke="#3DD68C" stroke-opacity="0.2" stroke-width="1"/>
+      <rect x="52" y="106" width="3" height="50" rx="1" fill="#3DD68C"/>
+      <text x="68" y="128" font-family="sans-serif" font-size="13" fill="#3DD68C">✓</text>
+      <text x="85" y="128" font-family="sans-serif" font-size="10" fill="#E8ECF4">写入 main.cpp</text>
+      <text x="800" y="128" text-anchor="end" font-family="sans-serif" font-size="9" fill="#3DD68C">● 完成</text>
+
+      <!-- Step 3: 进行中 -->
+      <rect x="52" y="162" width="774" height="80" rx="7" fill="#0A0C10" stroke="#FFBE3D" stroke-opacity="0.3" stroke-width="1"/>
+      <rect x="52" y="162" width="3" height="80" rx="1" fill="#FFBE3D"/>
+      <text x="68" y="184" font-family="sans-serif" font-size="13" fill="#FFBE3D">⚡</text>
+      <text x="85" y="184" font-family="sans-serif" font-size="10" fill="#E8ECF4">执行 npm install</text>
+      <text x="800" y="184" text-anchor="end" font-family="sans-serif" font-size="9" fill="#FFBE3D">● 进行中</text>
+      <!-- Terminal 输出 -->
+      <text x="68" y="202" font-family="Consolas,monospace" font-size="9" fill="#3DD68C">$ npm install react</text>
+      <text x="68" y="216" font-family="Consolas,monospace" font-size="9" fill="#8B92A8">added 245 packages in 12s</text>
+      <text x="68" y="230" font-family="Consolas,monospace" font-size="9" fill="#8B92A8">73 packages spotlighted</text>
+
+      <!-- Step 4: 等待确认 -->
+      <rect x="52" y="248" width="774" height="50" rx="7" fill="#0A0C10" stroke="#6C9FFF" stroke-opacity="0.3" stroke-width="1"/>
+      <rect x="52" y="248" width="3" height="50" rx="1" fill="#6C9FFF"/>
+      <text x="68" y="270" font-family="sans-serif" font-size="13" fill="#6C9FFF">?</text>
+      <text x="85" y="270" font-family="sans-serif" font-size="10" fill="#E8ECF4">修改 package.json</text>
+      <text x="800" y="270" text-anchor="end" font-family="sans-serif" font-size="9" fill="#6C9FFF">? 等待</text>
+    </g>
+  </g>
+
+  <!-- ===== ctrl_bar (y=661, h=31) ===== -->
+  <rect x="367" y="661" width="898" height="31" rx="7" fill="#1A1D27"/>
+  <text x="1215" y="680" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#6B7280">0/2000</text>
+  <rect x="374" y="666" width="69" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
+  <text x="408" y="680" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#3DD68C">Agent ▼</text>
+  <rect x="448" y="666" width="69" height="22" rx="11" fill="#252A38"/>
+  <text x="482" y="680" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#E8ECF4">AI行为 ▼</text>
+  <rect x="522" y="666" width="69" height="22" rx="11" fill="#252A38"/>
+  <circle cx="534" cy="677" r="7" fill="#8B92A8"/>
+  <text x="556" y="680" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">AI托管</text>
+  <rect x="596" y="666" width="69" height="22" rx="11" fill="#252A38"/>
+  <circle cx="608" cy="677" r="7" fill="#8B92A8"/>
+  <text x="630" y="680" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">Voice</text>
+
+  <!-- ===== chat_input (y=692, h=62, 底部=754) ===== -->
+  <rect x="367" y="692" width="898" height="62" rx="7" fill="#1A1D27"/>
+  <rect x="374" y="697" width="786" height="57" rx="5" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
+  <!-- 分隔线 -->
+  <line x1="374" y1="722" x2="1160" y2="722" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
+  <!-- 文本输入区 -->
+  <text x="382" y="738" font-family="HarmonyOS Sans SC, sans-serif" font-size="10" fill="#6B7280">输入任务描述...</text>
+  <text x="382" y="751" font-family="HarmonyOS Sans SC, sans-serif" font-size="10" fill="#6B7280">用户输入从此开始</text>
+  <!-- 附件按钮 -->
+  <rect x="1138" y="733" width="21" height="21" rx="5" fill="#252A38"/>
+  <text x="1148" y="748" text-anchor="middle" font-size="16" fill="#8B92A8">+</text>
+  <!-- 发送按钮 -->
+  <circle cx="1190" cy="742" r="18" fill="url(#sendBtn)" filter="url(#bubbleShadow)"/>
+  <text x="1190" y="748" text-anchor="middle" font-size="14" fill="#0F1117" font-weight="bold">▶</text>
+
+  <!-- 版本标记 -->
+  <text x="1272" y="796" text-anchor="end" font-family="Plus Jakarta Sans, sans-serif" font-size="8" fill="#6B7280" opacity="0.4">Matcha v1 · UI-12</text>
+</svg>

@@ -60,9 +60,10 @@ static int http_request(const char* method, const char* url,
         WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!hSession) return -1;
 
+    /* Use caller timeout for all phases; short SSE receive timeout causes false 12002 on slower first token. */
     WinHttpSetTimeouts(hSession, timeout_sec * 1000, timeout_sec * 1000,
                        timeout_sec * 1000,
-                       stream_cb ? 10000 : timeout_sec * 1000);  /* Shorter receive timeout for SSE */
+                       timeout_sec * 1000);
 
     /* Enable decompression for all content types */
     DWORD decompress_flag = WINHTTP_DECOMPRESSION_FLAG_ALL;
@@ -123,8 +124,8 @@ static int http_request(const char* method, const char* url,
         DWORD total_bytes = 0;
         int chunk_count = 0;
         while (true) {
-            /* FIX: Check abort flag — allows watchdog to kill stuck streams */
-            if (InterlockedCompareExchange(&g_stream_done, 0, 0)) {
+            /* Check abort flag only for streaming requests. */
+            if (stream_cb && InterlockedCompareExchange(&g_stream_done, 0, 0)) {
                 LOG_W("HTTP", "Stream abort: g_stream_done set, exiting read loop");
                 break;
             }

@@ -280,10 +280,64 @@ target_link_directories(AnyClaw_LVGL PRIVATE
     ${FREETYPE_LIB_DIR}
 )
 
+if(MSVC)
+    set(_sdk_ver "")
+    if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION)
+        set(_sdk_ver "${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
+    elseif(CMAKE_RC_COMPILER MATCHES "Windows Kits/10/bin/([^/]+)/")
+        set(_sdk_ver "${CMAKE_MATCH_1}")
+    endif()
+
+    get_filename_component(_msvc_bin_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    get_filename_component(_msvc_host_dir "${_msvc_bin_dir}" DIRECTORY)
+    get_filename_component(_msvc_tools_bin_dir "${_msvc_host_dir}" DIRECTORY)
+    get_filename_component(_msvc_root_dir "${_msvc_tools_bin_dir}" DIRECTORY)
+
+    # CMake Tools + Ninja may run without INCLUDE env; add SDK/VC fallback include paths.
+    if("$ENV{INCLUDE}" STREQUAL "")
+        set(_msvc_include_dir "${_msvc_root_dir}/include")
+        if(EXISTS "${_msvc_include_dir}/stdint.h")
+            target_include_directories(AnyClaw_LVGL PRIVATE "${_msvc_include_dir}")
+        endif()
+
+        set(_sdk_include_root "C:/Program Files (x86)/Windows Kits/10/Include")
+        if(_sdk_ver)
+            foreach(_sdk_inc_subdir shared um winrt ucrt cppwinrt)
+                set(_sdk_inc_dir "${_sdk_include_root}/${_sdk_ver}/${_sdk_inc_subdir}")
+                if(EXISTS "${_sdk_inc_dir}")
+                    target_include_directories(AnyClaw_LVGL PRIVATE "${_sdk_inc_dir}")
+                endif()
+            endforeach()
+        endif()
+    endif()
+
+    # CMake Tools + Ninja may run without LIB env; add SDK/VC fallback lib paths.
+    if("$ENV{LIB}" STREQUAL "")
+        set(_sdk_lib_root "C:/Program Files (x86)/Windows Kits/10/Lib")
+        if(_sdk_ver)
+            set(_um_lib_dir "${_sdk_lib_root}/${_sdk_ver}/um/x64")
+            set(_ucrt_lib_dir "${_sdk_lib_root}/${_sdk_ver}/ucrt/x64")
+            if(EXISTS "${_um_lib_dir}/kernel32.lib")
+                target_link_directories(AnyClaw_LVGL PRIVATE "${_um_lib_dir}")
+            endif()
+            if(EXISTS "${_ucrt_lib_dir}")
+                target_link_directories(AnyClaw_LVGL PRIVATE "${_ucrt_lib_dir}")
+            endif()
+        endif()
+
+        set(_msvc_lib_dir "${_msvc_root_dir}/lib/x64")
+        if(EXISTS "${_msvc_lib_dir}/libcpmt.lib")
+            target_link_directories(AnyClaw_LVGL PRIVATE "${_msvc_lib_dir}")
+        endif()
+    endif()
+endif()
+
 # ═══════════════════════════════════════════════════════════════
 # Link libraries
 # ═══════════════════════════════════════════════════════════════
 if(MSVC)
+    target_link_options(AnyClaw_LVGL PRIVATE "/MAP:$<TARGET_FILE_DIR:AnyClaw_LVGL>/AnyClaw_LVGL.map")
+
     target_link_libraries(AnyClaw_LVGL PRIVATE
         SDL2main SDL2
         $<$<BOOL:${USE_FREETYPE}>:freetype>

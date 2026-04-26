@@ -176,39 +176,135 @@ static bool exec_cmd_local(const char* cmd, char* output, int out_size, DWORD ti
 
 static SessionManager g_session_mgr;
 SessionManager& session_mgr() { return g_session_mgr; }
+static volatile LONG g_session_refresh_inflight = 0;
+
+struct SessionRefreshInflightGuard {
+    bool held = false;
+    SessionRefreshInflightGuard() {
+        held = (InterlockedCompareExchange(&g_session_refresh_inflight, 1, 0) == 0);
+    }
+    ~SessionRefreshInflightGuard() {
+        if (held) InterlockedExchange(&g_session_refresh_inflight, 0);
+    }
+};
 
 bool SessionManager::refresh() {
     TraceSpan span("session_refresh");
-    std::vector<SessionInfo> new_sessions;
-    std::string new_error;
-
-    /* ── 优先：HTTP 直调 Gateway API（毫秒级，无子进程开销）── */
-    char response[16384] = {0};
-    char url[256];
-    snprintf(url, sizeof(url), "http://127.0.0.1:18789/api/sessions");
-    int code = http_get(url, response, sizeof(response), 1);
-
-    if (code >= 200 && code < 500 && response[0] != '\0') {
-        bool parsed = parse_json(response, new_sessions);
-        if (parsed) {
-            std::lock_guard<std::mutex> lk(mtx_);
-            sessions_ = std::move(new_sessions);
-            last_error_.clear();
-            return true;  /* span 在作用域结束时自动记录 */
-        }
-        new_error = "Invalid sessions JSON";
-        {
-            std::lock_guard<std::mutex> lk(mtx_);
-            sessions_.clear();
-            last_error_ = new_error;
-        }
-        span.set_fail();
-        return false;
+    SessionRefreshInflightGuard inflight_guard;
+    if (!inflight_guard.held) {
+        LOG_D("SESSION", "Skip refresh: previous refresh still in flight");
+        return true;
     }
 
-    /* ── 降级：CLI 调用（超时 500ms，快失败）── */
-    LOG_D("SESSION", "HTTP sessions API unavailable (%d), falling back to CLI", code);
-    static const DWORD kSessionListTimeoutMs = 500;  /* 原 3000ms，缩短加快失败 */
+    if (app_is_chat_streaming()) {
+        LOG_D("SESSION", "Skip refresh while chat streaming");
+        return true;
+    }
+
+    std::vector<SessionInfo> new_sessions;
+    const unsigned long long now_ms = GetTickCount64();
+    static const unsigned long long kHttpProbeBackoffMs = 60000;
+    static const unsigned long long kGatewayDownBackoffMs = 30000;
+    static const unsigned long long kCliRetryBackoffMs = 30000;
+
+    bool should_probe_http = true;
+    bool had_gateway_unreachable = false;
+    std::string preferred_http_url;
+
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        should_probe_http = (now_ms >= http_probe_after_ms_);
+        preferred_http_url = preferred_http_url_;
+    }
+
+    auto try_parse_http_json = [&](const char* url) -> bool {
+        char response[16384] = {0};
+        int code = http_get(url, response, sizeof(response), 1);
+
+        if (code <= 0) {
+            had_gateway_unreachable = true;
+            return false;
+        }
+
+        const bool looks_json = response[0] == '{' || response[0] == '[';
+        if (code >= 200 && code < 300 && looks_json) {
+            if (parse_json(response, new_sessions)) {
+                std::lock_guard<std::mutex> lk(mtx_);
+                sessions_ = std::move(new_sessions);
+                last_error_.clear();
+                preferred_http_url_ = url;
+                http_probe_after_ms_ = 0;
+                return true;
+            }
+        }
+        return false;
+    };
+
+    if (should_probe_http) {
+        bool http_ok = false;
+
+        if (!preferred_http_url.empty()) {
+            http_ok = try_parse_http_json(preferred_http_url.c_str());
+        }
+
+        if (!http_ok) {
+            const char* candidates[] = {
+                "http://127.0.0.1:18789/api/sessions",
+                "http://127.0.0.1:18789/api/session/list",
+                "http://127.0.0.1:18789/api/v1/sessions",
+                "http://127.0.0.1:18789/api/sessions/list"
+            };
+            for (const char* url : candidates) {
+                if (!preferred_http_url.empty() && preferred_http_url == url) continue;
+                if (try_parse_http_json(url)) {
+                    http_ok = true;
+                    break;
+                }
+                if (had_gateway_unreachable) {
+                    /* Gateway is down, don't fan out remaining endpoint probes this round. */
+                    break;
+                }
+            }
+        }
+
+        if (http_ok) {
+            return true;
+        }
+
+        {
+            std::lock_guard<std::mutex> lk(mtx_);
+            preferred_http_url_.clear();
+            if (had_gateway_unreachable) {
+                http_probe_after_ms_ = now_ms + kGatewayDownBackoffMs;
+            } else {
+                http_probe_after_ms_ = now_ms + kHttpProbeBackoffMs;
+                LOG_D("SESSION", "No valid sessions HTTP endpoint, probe backoff %llums", kHttpProbeBackoffMs);
+            }
+        }
+
+        if (had_gateway_unreachable) {
+            std::lock_guard<std::mutex> lk(mtx_);
+            sessions_.clear();
+            last_error_ = "Gateway unreachable";
+            LOG_D("SESSION", "Gateway unreachable, skip CLI fallback");
+            span.set_fail();
+            return false;
+        }
+    }
+
+    bool allow_cli = true;
+    {
+        std::lock_guard<std::mutex> lk(mtx_);
+        if (now_ms < cli_next_retry_ms_) {
+            allow_cli = false;
+        }
+    }
+
+    if (!allow_cli) {
+        return true;
+    }
+
+    static const DWORD kSessionListTimeoutMs = 500;
     char output[16384] = {0};
     bool ok = exec_cmd_local(
         "openclaw gateway call sessions.list --json",
@@ -219,25 +315,28 @@ bool SessionManager::refresh() {
         std::lock_guard<std::mutex> lk(mtx_);
         sessions_.clear();
         last_error_ = "Failed to query sessions";
+        cli_next_retry_ms_ = now_ms + kCliRetryBackoffMs;
         LOG_W("SESSION", "sessions.list CLI fallback failed");
         span.set_fail();
         return false;
     }
 
-    bool parsed = parse_json(output, new_sessions);
-    if (!parsed) {
+    if (!parse_json(output, new_sessions)) {
         std::lock_guard<std::mutex> lk(mtx_);
         sessions_.clear();
         last_error_ = "Invalid sessions JSON";
+        cli_next_retry_ms_ = now_ms + kCliRetryBackoffMs;
         span.set_fail();
         return false;
     }
+
     {
         std::lock_guard<std::mutex> lk(mtx_);
         sessions_ = std::move(new_sessions);
         last_error_.clear();
+        cli_next_retry_ms_ = now_ms;
     }
-    return parsed;
+    return true;
 }
 
 bool SessionManager::parse_json(const char* json, std::vector<SessionInfo>& out_sessions) const {

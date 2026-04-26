@@ -3128,7 +3128,6 @@ static stbtt__active_edge * stbtt__new_active(stbtt__hheap * hh, stbtt__edge * e
 {
     stbtt__active_edge * z = (stbtt__active_edge *)stbtt__hheap_alloc(hh, sizeof(*z), userdata);
     float dxdy = (e->x1 - e->x0) / (e->y1 - e->y0);
-    STBTT_assert(z != NULL);
     if(!z) return z;
 
     // round dx down to avoid overshooting
@@ -3152,7 +3151,6 @@ static stbtt__active_edge * stbtt__new_active(stbtt__hheap * hh, stbtt__edge * e
 {
     stbtt__active_edge * z = (stbtt__active_edge *)stbtt__hheap_alloc(hh, sizeof(*z), userdata);
     float dxdy = (e->x1 - e->x0) / (e->y1 - e->y0);
-    STBTT_assert(z != NULL);
     //STBTT_assert(e->y0 <= start_point);
     if(!z) return z;
     z->fdx = dxdy;

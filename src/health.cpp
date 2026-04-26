@@ -165,7 +165,8 @@ static char g_active_session_info[256] = {0};  /* formatted session summary for 
 static int count_active_sessions() {
     SessionManager& sm = session_mgr();
     if (!sm.refresh()) {
-        LOG_W("HEALTH", "Session refresh failed: %s", sm.last_error());
+        std::string err = sm.last_error();
+        LOG_W("HEALTH", "Session refresh failed: %s", err.c_str());
         return 0;
     }
 
@@ -198,22 +199,38 @@ static unsigned __stdcall health_thread(void* arg) {
     LOG_I("HEALTH", "Monitoring thread started (interval=%dms)", g_refresh_interval_ms);
 
     bool first_iteration = true;
+    static bool s_logged_settings_pause = false;
     while (g_running) {
         /* Quick initial check (2s) then normal interval */
         int sleep_ms = first_iteration ? 2000 : g_refresh_interval_ms;
         first_iteration = false;
         if (!sleep_interruptible(sleep_ms)) break;
 
+        if (ui_settings_is_open()) {
+            if (!s_logged_settings_pause) {
+                LOG_I("HEALTH", "Pause heavy health probes while Settings is open");
+                s_logged_settings_pause = true;
+            }
+            continue;
+        }
+        s_logged_settings_pause = false;
+
         TraceSpan span("health_check_cycle");
         DWORD tick_start = GetTickCount();
+        bool chat_streaming = app_is_chat_streaming();
         bool nodeRunning = is_node_running();
         bool httpOk = false;
-        if (nodeRunning) {
+        if (chat_streaming) {
+            /* Streaming is latency-sensitive: skip background health HTTP probing.
+             * Probe contention can delay token arrival and make UI appear frozen. */
+            httpOk = true;
+        } else if (nodeRunning) {
             httpOk = check_http_health();
         }
         DWORD check_ms = GetTickCount() - tick_start;
 
-        LOG_D("HEALTH", "Check: node=%d http=%d elapsed=%lums", nodeRunning, httpOk, check_ms);
+        LOG_D("HEALTH", "Check: node=%d http=%d streaming=%d elapsed=%lums",
+              nodeRunning, httpOk, chat_streaming ? 1 : 0, check_ms);
 
         ClawStatus newStatus;
         std::string reason;
@@ -255,13 +272,13 @@ static unsigned __stdcall health_thread(void* arg) {
             g_autoRestarted = false;
             g_firstPoll = false;
 
-            /* Count active sessions for task display */
-            g_active_session_count = count_active_sessions();
-
-            if (g_active_session_count > 0) {
+            if (chat_streaming) {
                 newStatus = ClawStatus::Busy;
             } else {
-                newStatus = ClawStatus::Ready;
+                /* Count active sessions for task display */
+                g_active_session_count = count_active_sessions();
+                if (g_active_session_count > 0) newStatus = ClawStatus::Busy;
+                else newStatus = ClawStatus::Ready;
             }
         } else {
             /* HTTP works but process not found (unlikely) */
@@ -276,20 +293,22 @@ static unsigned __stdcall health_thread(void* arg) {
         g_last_status = (LONG)newStatus;
         g_last_status_valid = 1;
 
-        switch (newStatus) {
-            case ClawStatus::Ready:
-                tray_set_state(TrayState::Green);
-                break;
-            case ClawStatus::Busy:
-            case ClawStatus::Checking:
-                tray_set_state(TrayState::Yellow);
-                break;
-            case ClawStatus::Error:
-                tray_set_state(TrayState::Red);
-                break;
-            default:
-                tray_set_state(TrayState::White);
-                break;
+        if (!chat_streaming) {
+            switch (newStatus) {
+                case ClawStatus::Ready:
+                    tray_set_state(TrayState::Green);
+                    break;
+                case ClawStatus::Busy:
+                case ClawStatus::Checking:
+                    tray_set_state(TrayState::Yellow);
+                    break;
+                case ClawStatus::Error:
+                    tray_set_state(TrayState::Red);
+                    break;
+                default:
+                    tray_set_state(TrayState::White);
+                    break;
+            }
         }
 
         /* Fire callback */

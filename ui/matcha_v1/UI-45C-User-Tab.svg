@@ -1,0 +1,169 @@
+<svg viewBox="0 0 1280 800" xmlns="http://www.w3.org/2000/svg">
+  <title>UI-45B 用户 Tab</title>
+  <desc>Settings 用户 Tab: 应用授权 / 权限策略折叠组 / 知识库管理</desc>
+
+  <defs>
+    <style>
+      .bg           { fill: #13161B; }
+      .panel        { fill: #1E2128; }
+      .surface      { fill: #252930; }
+      .accent       { fill: #3DD68C; }
+      .accent-sub   { fill: #3DD68C; opacity: 0.12; }
+      .text         { fill: #E8E9E9; }
+      .text-dim     { fill: #8B9099; }
+      .text-hint    { fill: #6B7280; }
+      .divider      { fill: #2D333D; }
+      .badge-ok     { fill: #3DD68C; }
+      .tab-active   { fill: #3DD68C; font-size: 14px; font-weight: 600; }
+      .tab-inactive { fill: #8B9099; font-size: 14px; }
+      .section-lbl  { fill: #3DD68C; font-size: 12px; font-weight: 500; }
+      .key-label    { fill: #8B9099; font-size: 13px; }
+      .hint         { fill: #6B7280; font-size: 11px; }
+    </style>
+  </defs>
+
+  <!-- ===== WINDOW ===== -->
+  <rect width="1280" height="800" class="bg"/>
+
+  <!-- ===== TITLE BAR (y=0, h=48) ===== -->
+  <rect x="0" y="0" width="1280" height="48" class="panel"/>
+  <text x="24" y="29" class="text" font-size="15" font-weight="600">Settings</text>
+  <rect x="1176" y="10" width="80" height="28" rx="6" fill="#3D4452"/>
+  <text x="1216" y="29" text-anchor="middle" class="text" font-size="12">Close</text>
+
+  <!-- ===== TAB BAR (y=48, h=42) ===== -->
+  <rect x="0" y="48" width="1280" height="42" class="surface"/>
+  <line x1="0" y1="90" x2="1280" y2="90" stroke="#2D333D" stroke-width="1"/>
+  <!-- 通用 inactive -->
+  <text x="40" y="72" class="tab-inactive">通用</text>
+  <!-- 用户 active -->
+  <text x="130" y="72" class="tab-active">用户</text>
+  <line x1="110" y="86" x2="150" y2="86" stroke="#3DD68C" stroke-width="2"/>
+  <!-- AI inactive -->
+  <text x="220" y="72" class="tab-inactive">AI</text>
+  <!-- 其它 inactive -->
+  <text x="300" y="72" class="tab-inactive">其它</text>
+
+  <!-- ===== CONTENT (x=16, y=104, w=1248, h=680) ===== -->
+
+  <!-- === SECTION: 应用授权 === -->
+  <text x="16" y="130" class="section-lbl">APPLICATION AUTHORIZATION</text>
+
+  <!-- Outlook card -->
+  <rect x="16" y="144" width="580" height="72" rx="8" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="36" y="168" class="text" font-size="14">📧 Outlook</text>
+  <text x="36" y="192" class="hint" font-size="11">推荐交互方式: CLI</text>
+  <!-- 授权按钮 -->
+  <rect x="440" y="168" width="64" height="26" rx="5" fill="#3DD68C"/>
+  <text x="472" y="185" text-anchor="middle" fill="#13161B" font-size="11" font-weight="600">授权</text>
+  <!-- 拒绝按钮 -->
+  <rect x="512" y="168" width="64" height="26" rx="5" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="544" y="185" text-anchor="middle" fill="#8B9099" font-size="11">拒绝</text>
+
+  <!-- Calendar card -->
+  <rect x="16" y="224" width="580" height="72" rx="8" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="36" y="248" class="text" font-size="14">📅 Calendar</text>
+  <text x="36" y="272" class="hint" font-size="11">推荐交互方式: MCP</text>
+  <rect x="440" y="248" width="64" height="26" rx="5" fill="#3DD68C"/>
+  <text x="472" y="265" text-anchor="middle" fill="#13161B" font-size="11" font-weight="600">授权</text>
+  <rect x="512" y="248" width="64" height="26" rx="5" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="544" y="265" text-anchor="middle" fill="#8B9099" font-size="11">拒绝</text>
+
+  <!-- 展开后的 Email/Calendar Switches -->
+  <text x="16" y="316" class="key-label">Email Access</text>
+  <rect x="130" y="308" width="40" height="20" rx="10" fill="#3DD68C"/>
+  <circle cx="162" cy="318" r="8" fill="white"/>
+
+  <text x="200" y="316" class="key-label">Calendar Access</text>
+  <rect x="330" y="308" width="40" height="20" rx="10" fill="#3DD68C"/>
+  <circle cx="362" cy="318" r="8" fill="white"/>
+
+  <!-- Scan Installed Apps -->
+  <text x="16" y="348" class="key-label">Scan Installed Apps</text>
+  <rect x="180" y="340" width="180" height="30" rx="5" fill="#3DD68C"/>
+  <text x="270" y="360" text-anchor="middle" fill="#13161B" font-size="11" font-weight="600">Scan Installed Apps</text>
+
+  <!-- Scan Result -->
+  <rect x="16" y="370" width="580" height="90" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="32" y="394" class="hint" font-size="11">Scan result will be shown here...</text>
+
+  <!-- Divider -->
+  <rect x="16" y="480" width="580" height="1" class="divider"/>
+
+  <!-- === SECTION: 权限策略 === -->
+  <text x="16" y="504" class="section-lbl">PERMISSIONS POLICY</text>
+
+  <!-- 折叠组 1: 文件访问 (默认展开) -->
+  <rect x="16" y="518" width="580" height="28" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="32" y="537" fill="#8B9099" font-size="12">▼ 文件访问 (4)</text>
+
+  <!-- FS Read Workspace -->
+  <rect x="32" y="554" width="564" height="24" fill="none"/>
+  <text x="32" y="570" class="text" font-size="11">FS Read Workspace</text>
+  <rect x="460" y="558" width="100" height="22" rx="4" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="510" y="573" text-anchor="middle" fill="#E8E9E9" font-size="10">Allow ▼</text>
+
+  <!-- FS Write Workspace -->
+  <rect x="32" y="582" width="564" height="24" fill="none"/>
+  <text x="32" y="598" class="text" font-size="11">FS Write Workspace</text>
+  <rect x="460" y="586" width="100" height="22" rx="4" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="510" y="601" text-anchor="middle" fill="#E8E9E9" font-size="10">Allow ▼</text>
+
+  <!-- FS Read External -->
+  <rect x="32" y="610" width="564" height="24" fill="none"/>
+  <text x="32" y="626" class="text" font-size="11">FS Read External</text>
+  <rect x="460" y="614" width="100" height="22" rx="4" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="510" y="629" text-anchor="middle" fill="#E8E9E9" font-size="10">Deny ▼</text>
+
+  <!-- FS Write External -->
+  <rect x="32" y="638" width="564" height="24" fill="none"/>
+  <text x="32" y="654" class="text" font-size="11">FS Write External</text>
+  <rect x="460" y="642" width="100" height="22" rx="4" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="510" y="657" text-anchor="middle" fill="#E8E9E9" font-size="10">Deny ▼</text>
+
+  <!-- 折叠组 2: 网络访问 -->
+  <rect x="16" y="672" width="580" height="28" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="32" y="691" fill="#8B9099" font-size="12">▶ 网络访问 (3)</text>
+
+  <!-- 折叠组 3: 设备访问 -->
+  <rect x="16" y="708" width="580" height="28" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="32" y="727" fill="#8B9099" font-size="12">▶ 设备访问 (6)</text>
+
+  <!-- 折叠组 4: 剪贴板 -->
+  <rect x="16" y="744" width="580" height="28" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="32" y="763" fill="#8B9099" font-size="12">▶ 剪贴板 (2)</text>
+
+  <!-- 折叠组 5: 系统修改 -->
+  <rect x="16" y="780" width="580" height="28" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="32" y="799" fill="#8B9099" font-size="12">▶ 系统修改 (1)</text>
+
+  <!-- ===== RIGHT COLUMN (x=648) ===== -->
+  <rect x="632" y="104" width="1" height="696" class="divider"/>
+
+  <!-- === SECTION: 知识库 === -->
+  <text x="664" y="130" class="section-lbl">KNOWLEDGE BASE</text>
+
+  <!-- KB 统计 -->
+  <text x="664" y="158" fill="#3DD68C" font-size="14" font-weight="500">Docs: 12 | Sources: 5</text>
+
+  <!-- Add File button -->
+  <rect x="664" y="172" width="140" height="30" rx="5" fill="#252930" stroke="#3DD68C" stroke-width="1"/>
+  <text x="734" y="192" text-anchor="middle" fill="#3DD68C" font-size="11">+ 添加文件</text>
+
+  <!-- Search input -->
+  <rect x="664" y="216" width="580" height="34" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="680" y="239" class="hint">输入关键词搜索...</text>
+
+  <!-- Search button -->
+  <rect x="1256" y="216" width="68" height="34" rx="0 6 6 0" fill="#3DD68C"/>
+  <text x="1290" y="239" text-anchor="middle" fill="#13161B" font-size="11" font-weight="600">搜索</text>
+
+  <!-- Search result -->
+  <rect x="664" y="260" width="580" height="380" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="680" y="288" class="hint" font-size="11">搜索结果:</text>
+  <text x="680" y="316" fill="#E8E9E9" font-size="11">- D:\workspace\docs\api_guide.md</text>
+  <text x="680" y="340" fill="#E8E9E9" font-size="11">- D:\workspace\docs\sdk_ref.md</text>
+  <text x="680" y="364" fill="#E8E9E9" font-size="11">- D:\workspace\notes\design.md</text>
+  <text x="680" y="388" fill="#8B9099" font-size="11" font-style="italic">(no more results)</text>
+
+</svg>

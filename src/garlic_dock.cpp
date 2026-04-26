@@ -12,6 +12,8 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
+#include <algorithm>
 #include "app_log.h"
 #include "theme.h"
 
@@ -24,12 +26,24 @@
 #define GARLIC_H          110
 #define GARLIC_BODY_SIZE  64
 #define SPROUT_SIZE       72
-#define EDGE_SNAP_PX      20
+#define EDGE_SNAP_PX      28
 #define TIMER_ANIM        1
 #define TIMER_HOVER_CHECK 2
 
 /* ── Snap edge ── */
 enum class SnapEdge { None, Left, Right, Top, Bottom };
+enum class RandomFx { None, Fire, Jump, Nod, Flash, Bubble, Sleep };
+
+struct DockParticle {
+    bool active;
+    float x;
+    float y;
+    float vx;
+    float vy;
+    float life;
+    float max_life;
+    COLORREF color;
+};
 
 /* ── State ── */
 static HWND      g_dock_hwnd    = nullptr;
@@ -41,10 +55,16 @@ static HWND      g_main_hwnd    = nullptr;
 static RECT      g_main_rect    = {};
 static bool      g_hovering     = false;
 static DWORD     g_anim_start   = 0;
+static DWORD     g_last_anim_tick = 0;
 static HBITMAP   g_body_bmp     = nullptr;  /* garlic body */
 static HBITMAP   g_sprout_bmp   = nullptr;  /* sprout */
 static int       g_body_w = 0, g_body_h = 0;
 static int       g_sprout_w = 0, g_sprout_h = 0;
+static RandomFx  g_random_fx = RandomFx::None;
+static DWORD     g_random_fx_start = 0;
+static DWORD     g_random_fx_duration = 0;
+static DWORD     g_next_random_fx_tick = 0;
+static DockParticle g_particles[12] = {};
 
 /* ── Load PNG via stb_image → HBITMAP ── */
 static HBITMAP load_png_bitmap(const char* path, int* out_w, int* out_h) {
@@ -149,6 +169,85 @@ static void load_bitmaps() {
     if (!g_sprout_bmp) LOG_E("GARLIC", "Sprout bitmap NOT FOUND in any path!");
 }
 
+static void clear_particles() {
+    for (auto& p : g_particles) p.active = false;
+}
+
+static void emit_particles(bool fire_variant) {
+    const int count = 3 + (rand() % 3);
+    for (int i = 0; i < count; i++) {
+        for (auto& p : g_particles) {
+            if (p.active) continue;
+            p.active = true;
+            p.x = (float)(GARLIC_W / 2 + (rand() % 7) - 3);
+            p.y = (float)(GARLIC_H - GARLIC_BODY_SIZE - 8);
+            const float spread = ((float)(rand() % 31) - 15.0f) / 100.0f;
+            p.vx = fire_variant ? spread * 65.0f : spread * 22.0f;
+            p.vy = fire_variant ? (-85.0f - (float)(rand() % 35)) : (-38.0f - (float)(rand() % 18));
+            p.life = 0.0f;
+            p.max_life = fire_variant ? (0.55f + (float)(rand() % 35) / 100.0f)
+                                      : (0.70f + (float)(rand() % 35) / 100.0f);
+            p.color = fire_variant ? RGB(61, 214, 140) : RGB(180, 235, 205);
+            break;
+        }
+    }
+}
+
+static void schedule_next_random_fx() {
+    g_next_random_fx_tick = GetTickCount() + 30000 + (DWORD)(rand() % 90001);
+}
+
+static void start_random_fx() {
+    int r = rand() % 100;
+    if (r < 20) g_random_fx = RandomFx::Fire;
+    else if (r < 40) g_random_fx = RandomFx::Jump;
+    else if (r < 55) g_random_fx = RandomFx::Nod;
+    else if (r < 70) g_random_fx = RandomFx::Flash;
+    else if (r < 85) g_random_fx = RandomFx::Bubble;
+    else g_random_fx = RandomFx::Sleep;
+
+    g_random_fx_start = GetTickCount();
+    switch (g_random_fx) {
+        case RandomFx::Fire:   g_random_fx_duration = 1400; emit_particles(true); break;
+        case RandomFx::Jump:   g_random_fx_duration = 1100; break;
+        case RandomFx::Nod:    g_random_fx_duration = 1400; break;
+        case RandomFx::Flash:  g_random_fx_duration = 700; break;
+        case RandomFx::Bubble: g_random_fx_duration = 1500; emit_particles(false); break;
+        case RandomFx::Sleep:  g_random_fx_duration = 1700; break;
+        default:               g_random_fx_duration = 0; break;
+    }
+}
+
+static void tick_random_fx(float dt_sec) {
+    if (dt_sec <= 0.0f) return;
+    for (auto& p : g_particles) {
+        if (!p.active) continue;
+        p.life += dt_sec;
+        if (p.life >= p.max_life) {
+            p.active = false;
+            continue;
+        }
+        p.x += p.vx * dt_sec;
+        p.y += p.vy * dt_sec;
+        p.vy += 26.0f * dt_sec;
+    }
+}
+
+static void draw_particles(HDC hdc) {
+    for (const auto& p : g_particles) {
+        if (!p.active) continue;
+        float t = p.life / p.max_life;
+        int size = (int)(3.0f + (1.0f - t) * 3.0f);
+        int x = (int)p.x;
+        int y = (int)p.y;
+        HBRUSH b = CreateSolidBrush(p.color);
+        HGDIOBJ old = SelectObject(hdc, b);
+        Ellipse(hdc, x - size, y - size, x + size, y + size);
+        SelectObject(hdc, old);
+        DeleteObject(b);
+    }
+}
+
 /* ── Render ── */
 static void paint_dock(HDC hdc) {
     /* Fill with transparent key color (magenta) */
@@ -158,12 +257,36 @@ static void paint_dock(HDC hdc) {
     DeleteObject(bg_brush);
 
     HDC mem_dc = CreateCompatibleDC(hdc);
+    DWORD now = GetTickCount();
+    float elapsed = (float)(now - g_anim_start) / 1000.0f;
+    float fx_elapsed = (g_random_fx != RandomFx::None) ? (float)(now - g_random_fx_start) / 1000.0f : 0.0f;
+    int body_offset_y = 0;
+    float body_shift_x = 0.0f;
+    bool draw_flash = false;
 
     /* Draw garlic body (centered, near bottom) */
     if (g_body_bmp) {
         HGDIOBJ old = SelectObject(mem_dc, g_body_bmp);
-        int bx = (GARLIC_W - GARLIC_BODY_SIZE) / 2;
-        int by = GARLIC_H - GARLIC_BODY_SIZE - 2;
+        if (g_random_fx == RandomFx::Jump) {
+            body_offset_y = -(int)(fabsf(sinf(fx_elapsed * 7.0f)) * 14.0f);
+        }
+        if (g_random_fx == RandomFx::Nod) {
+            body_shift_x = sinf(fx_elapsed * 9.5f) * 6.0f;
+        }
+        if (g_random_fx == RandomFx::Flash) {
+            draw_flash = true;
+        }
+        int bx = (GARLIC_W - GARLIC_BODY_SIZE) / 2 + (int)body_shift_x;
+        int by = GARLIC_H - GARLIC_BODY_SIZE - 2 + body_offset_y;
+
+        if (draw_flash) {
+            HBRUSH glow = CreateSolidBrush(RGB(95, 220, 155));
+            HGDIOBJ old_glow = SelectObject(hdc, glow);
+            Ellipse(hdc, bx - 8, by - 8, bx + GARLIC_BODY_SIZE + 8, by + GARLIC_BODY_SIZE + 8);
+            SelectObject(hdc, old_glow);
+            DeleteObject(glow);
+        }
+
         StretchBlt(hdc, bx, by, GARLIC_BODY_SIZE, GARLIC_BODY_SIZE,
                    mem_dc, 0, 0, g_body_w, g_body_h, SRCCOPY);
         SelectObject(mem_dc, old);
@@ -183,16 +306,18 @@ static void paint_dock(HDC hdc) {
 
     /* Draw sprout with sway rotation */
     if (g_sprout_bmp) {
-        float angle = 0.0f;
-        if (g_hovering) {
-            DWORD elapsed = GetTickCount() - g_anim_start;
-            angle = 12.0f * sinf((float)elapsed * 0.0094f);
+        float angle = g_hovering ? (12.0f * sinf(elapsed * 9.4f)) : (2.0f * sinf(elapsed * 3.1f));
+        if (g_random_fx == RandomFx::Nod) {
+            angle += 8.0f * sinf(fx_elapsed * 10.0f);
+        } else if (g_random_fx == RandomFx::Sleep) {
+            float t = std::min(1.0f, fx_elapsed / 1.4f);
+            angle -= 16.0f * t;
         }
 
         int pivot_x = GARLIC_W / 2;
-        int pivot_y = GARLIC_H - GARLIC_BODY_SIZE;
+        int pivot_y = GARLIC_H - GARLIC_BODY_SIZE + body_offset_y;
         int sx = (GARLIC_W - SPROUT_SIZE) / 2;
-        int sy = pivot_y - SPROUT_SIZE + 8;
+        int sy = pivot_y - SPROUT_SIZE + 8 + body_offset_y / 2;
 
         if (fabsf(angle) < 0.5f) {
             HGDIOBJ old = SelectObject(mem_dc, g_sprout_bmp);
@@ -236,6 +361,7 @@ static void paint_dock(HDC hdc) {
         DeleteObject(sprout_pen);
     }
 
+    draw_particles(hdc);
     DeleteDC(mem_dc);
 }
 
@@ -251,6 +377,23 @@ static LRESULT CALLBACK dock_wndproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         }
         case WM_TIMER:
             if (wParam == TIMER_ANIM) {
+                DWORD now = GetTickCount();
+                float dt = (g_last_anim_tick > 0 && now > g_last_anim_tick)
+                    ? (float)(now - g_last_anim_tick) / 1000.0f
+                    : (1.0f / 30.0f);
+                g_last_anim_tick = now;
+
+                if (!g_hovering) {
+                    if (g_random_fx == RandomFx::None) {
+                        if (g_next_random_fx_tick == 0) schedule_next_random_fx();
+                        if (now >= g_next_random_fx_tick) start_random_fx();
+                    } else if (now - g_random_fx_start >= g_random_fx_duration) {
+                        g_random_fx = RandomFx::None;
+                        clear_particles();
+                        schedule_next_random_fx();
+                    }
+                }
+                tick_random_fx(dt);
                 InvalidateRect(hwnd, nullptr, FALSE);
             } else if (wParam == TIMER_HOVER_CHECK) {
                 POINT pt;
@@ -261,6 +404,11 @@ static LRESULT CALLBACK dock_wndproc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 if (now_hovering != g_hovering) {
                     g_hovering = now_hovering;
                     if (g_hovering) g_anim_start = GetTickCount();
+                    if (g_hovering) {
+                        g_random_fx = RandomFx::None;
+                        clear_particles();
+                        schedule_next_random_fx();
+                    }
                     InvalidateRect(hwnd, nullptr, FALSE);
                 }
             }
@@ -318,12 +466,41 @@ static void get_primary_monitor_rect(RECT* r) {
     r->bottom = GetSystemMetrics(SM_CYSCREEN);
 }
 
+static void play_restore_animation() {
+    if (!g_dock_hwnd) return;
+
+    RECT rc;
+    GetWindowRect(g_dock_hwnd, &rc);
+    int sx = rc.left;
+    int sy = rc.top;
+    int sw = rc.right - rc.left;
+    int sh = rc.bottom - rc.top;
+    int tx = (g_main_rect.left + g_main_rect.right) / 2 - sw / 4;
+    int ty = (g_main_rect.top + g_main_rect.bottom) / 2 - sh / 4;
+
+    const int steps = 10;
+    for (int i = 1; i <= steps; i++) {
+        float t = (float)i / (float)steps;
+        int nx = sx + (int)((tx - sx) * t);
+        int ny = sy + (int)((ty - sy) * t);
+        int nw = std::max(22, (int)(sw * (1.0f - 0.55f * t)));
+        int nh = std::max(26, (int)(sh * (1.0f - 0.55f * t)));
+        BYTE alpha = (BYTE)(255.0f * (1.0f - t));
+        SetLayeredWindowAttributes(g_dock_hwnd, RGB(1, 0, 1), alpha, LWA_COLORKEY | LWA_ALPHA);
+        SetWindowPos(g_dock_hwnd, HWND_TOPMOST, nx, ny, nw, nh, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        UpdateWindow(g_dock_hwnd);
+        Sleep(16);
+    }
+}
+
 /* ═══ Public API ═══ */
 
 void garlic_dock_init() {
     g_hinst = GetModuleHandle(nullptr);
+    srand((unsigned int)GetTickCount());
     register_dock_class();
     load_bitmaps();
+    schedule_next_random_fx();
     LOG_I("GARLIC", "Garlic dock module initialized (Win32)");
 }
 
@@ -392,6 +569,10 @@ void garlic_snap_to_edge() {
     g_snap_pos = pos;
     g_docked = true;
     g_hovering = false;
+    g_random_fx = RandomFx::None;
+    g_last_anim_tick = 0;
+    clear_particles();
+    schedule_next_random_fx();
 
     ShowWindow(g_main_hwnd, SW_HIDE);
 
@@ -409,7 +590,7 @@ void garlic_snap_to_edge() {
         return;
     }
 
-    SetLayeredWindowAttributes(g_dock_hwnd, RGB(1, 0, 1), 0, LWA_COLORKEY);
+    SetLayeredWindowAttributes(g_dock_hwnd, RGB(1, 0, 1), 255, LWA_COLORKEY | LWA_ALPHA);
     position_dock();
     SetTimer(g_dock_hwnd, TIMER_ANIM, 33, nullptr);
     SetTimer(g_dock_hwnd, TIMER_HOVER_CHECK, 100, nullptr);
@@ -420,6 +601,8 @@ void garlic_snap_to_edge() {
 void garlic_restore_from_dock() {
     if (!g_docked) return;
     LOG_I("GARLIC", "Restoring from dock (Win32)");
+
+    play_restore_animation();
 
     if (g_dock_hwnd) {
         DestroyWindow(g_dock_hwnd);
@@ -439,6 +622,8 @@ void garlic_restore_from_dock() {
 
     g_docked = false;
     g_snap_edge = SnapEdge::None;
+    g_random_fx = RandomFx::None;
+    clear_particles();
 }
 
 bool garlic_is_docked() {

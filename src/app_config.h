@@ -221,8 +221,8 @@
 /* ── Gateway ── */
 #define GATEWAY_PORT            18789
 #define GATEWAY_HEALTH_URL      "http://127.0.0.1:18789/health"
-#define HERMES_PORT             18790
-#define HERMES_HEALTH_URL       "http://127.0.0.1:18790/health"
+#define HERMES_PORT             18789
+#define HERMES_HEALTH_URL       "http://127.0.0.1:18789/health"
 
 /* ── 日志 ── */
 #define LOG_MAX_LINES           200
@@ -286,6 +286,6 @@
 #define CFG_DEFAULT_HERMES_ENABLED 0
 #define CFG_DEFAULT_CLAUDE_PATH    ""
 #define CFG_DEFAULT_AGENT_MODE     CFG_AGENT_MODE_LEADER
-#define CFG_DEFAULT_ACTIVE_RUNTIME CFG_RUNTIME_OPENCLAW
+#define CFG_DEFAULT_ACTIVE_RUNTIME CFG_RUNTIME_HERMES
 
 #endif /* APP_CONFIG_H */

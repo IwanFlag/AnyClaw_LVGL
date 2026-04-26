@@ -49,6 +49,7 @@ static const lv_font_t* FONT(int base_px) {
 #include <string>
 #include <thread>
 #include <atomic>
+#include <cstdint>
 #include <algorithm>
 #include <vector>
 #include <sstream>
@@ -81,6 +82,22 @@ static lv_obj_t* settings_panel = nullptr;
 static lv_obj_t* settings_tabs = nullptr;
 static bool settings_visible = false;
 static bool settings_init_in_progress = false; /* Re-entrancy guard: prevents double-init */
+static std::atomic<uint32_t> g_settings_refresh_token{0};
+static lv_timer_t* g_settings_open_retry_timer = nullptr;
+static lv_obj_t* g_settings_tab_c1 = nullptr;
+static lv_obj_t* g_settings_tab_c2 = nullptr;
+static lv_obj_t* g_settings_tab_c3 = nullptr;
+static lv_obj_t* g_settings_tab_c4 = nullptr;
+static bool g_settings_tab_c1_built = false;
+static bool g_settings_tab_c2_built = false;
+static bool g_settings_tab_c3_built = false;
+static bool g_settings_tab_c4_built = false;
+static lv_timer_t* g_settings_lazy_build_timer = nullptr;
+static uint16_t g_settings_lazy_build_tab = 0xFFFF;
+static uint8_t g_settings_tab_c1_stage = 0;
+static uint8_t g_settings_tab_c2_stage = 0;
+static uint8_t g_settings_tab_c3_stage = 0;
+static uint8_t g_settings_tab_c4_stage = 0;
 
 /* ── General tab widgets ── */
 static lv_obj_t* gen_status_label = nullptr;
@@ -134,11 +151,14 @@ static lv_obj_t* agent_btn_rollback = nullptr;
 static lv_obj_t* agent_btn_install_h = nullptr;
 static lv_obj_t* agent_btn_install_c = nullptr;
 static lv_obj_t* agent_btn_recheck = nullptr;
+static lv_obj_t* agent_profile_model_ta[3] = {nullptr, nullptr, nullptr};
+static lv_obj_t* agent_profile_key_ta[3] = {nullptr, nullptr, nullptr};
+static lv_obj_t* agent_profile_status_lbl[3] = {nullptr, nullptr, nullptr};
 static lv_timer_t* g_agent_install_poll_timer = nullptr;
 static std::atomic<bool> g_agent_install_running(false);
 static std::atomic<bool> g_agent_recheck_running(false);
-static Runtime g_agent_last_committed_runtime = Runtime::OpenClaw;
-static Runtime g_agent_prev_runtime = Runtime::OpenClaw;
+static Runtime g_agent_last_committed_runtime = Runtime::Hermes;
+static Runtime g_agent_prev_runtime = Runtime::Hermes;
 static bool g_agent_runtime_dirty = false;
 static bool g_agent_state_cached_valid = false;
 static bool g_agent_state_cached_installed = false;
@@ -351,6 +371,111 @@ static void agent_recheck_async(Runtime rt, const std::string& claude_path) {
     }).detach();
 }
 
+static void agent_request_recheck_current_selection() {
+    if (!agent_runtime_dd || !lv_obj_is_valid(agent_runtime_dd)) return;
+    Runtime rt = (Runtime)lv_dropdown_get_selected(agent_runtime_dd);
+    std::string path = (agent_claude_path_ta && lv_obj_is_valid(agent_claude_path_ta))
+        ? lv_textarea_get_text(agent_claude_path_ta)
+        : "";
+    agent_recheck_async(rt, path);
+}
+
+static void refresh_agent_profile_status(int idx) {
+    if (idx < 0 || idx > 2) return;
+    if (!agent_profile_status_lbl[idx] || !agent_profile_model_ta[idx]) return;
+
+    const char* model = lv_textarea_get_text(agent_profile_model_ta[idx]);
+    const char* key = agent_profile_key_ta[idx] ? lv_textarea_get_text(agent_profile_key_ta[idx]) : "";
+
+    if (!model || !model[0]) {
+        lv_label_set_text(agent_profile_status_lbl[idx], tr("模型为空", "Model is empty"));
+        lv_obj_set_style_text_color(agent_profile_status_lbl[idx], g_colors->warning, 0);
+        return;
+    }
+
+    if (key && key[0]) {
+        lv_label_set_text(agent_profile_status_lbl[idx], tr("已填写，待应用", "Configured, pending apply"));
+        lv_obj_set_style_text_color(agent_profile_status_lbl[idx], g_colors->success, 0);
+    } else {
+        lv_label_set_text(agent_profile_status_lbl[idx], tr("模型已填，建议补充 API Key", "Model set, API key recommended"));
+        lv_obj_set_style_text_color(agent_profile_status_lbl[idx], g_colors->warning, 0);
+    }
+}
+
+static void agent_profile_save_cb(lv_event_t* e) {
+    int idx = (int)(intptr_t)lv_event_get_user_data(e);
+    if (idx < 0 || idx > 2) return;
+
+    Runtime rt = (Runtime)idx;
+    const char* model = agent_profile_model_ta[idx] ? lv_textarea_get_text(agent_profile_model_ta[idx]) : "";
+    const char* key = agent_profile_key_ta[idx] ? lv_textarea_get_text(agent_profile_key_ta[idx]) : "";
+
+    if (!model || !model[0]) {
+        ui_toast_warn(tr("请先填写模型", "Please enter model first"));
+        refresh_agent_profile_status(idx);
+        return;
+    }
+
+    bool ok = app_set_runtime_profile(rt, model, key ? key : "");
+    if (ok) {
+        ui_toast_success(tr("运行时配置已保存", "Runtime profile saved"));
+        refresh_agent_profile_status(idx);
+    } else {
+        ui_toast_error(tr("运行时配置保存失败", "Failed to save runtime profile"));
+        if (agent_profile_status_lbl[idx]) {
+            lv_label_set_text(agent_profile_status_lbl[idx], tr("保存失败", "Save failed"));
+            lv_obj_set_style_text_color(agent_profile_status_lbl[idx], g_colors->danger, 0);
+        }
+    }
+}
+
+static void agent_profile_apply_cb(lv_event_t* e) {
+    int idx = (int)(intptr_t)lv_event_get_user_data(e);
+    if (idx < 0 || idx > 2) return;
+
+    Runtime rt = (Runtime)idx;
+    const char* model = agent_profile_model_ta[idx] ? lv_textarea_get_text(agent_profile_model_ta[idx]) : "";
+    const char* key = agent_profile_key_ta[idx] ? lv_textarea_get_text(agent_profile_key_ta[idx]) : "";
+
+    if (!model || !model[0]) {
+        ui_toast_warn(tr("请先填写模型", "Please enter model first"));
+        refresh_agent_profile_status(idx);
+        return;
+    }
+
+    if (rt == Runtime::Hermes) {
+        char ver[64] = {0};
+        if (!app_detect_hermes(ver, sizeof(ver))) {
+            ui_toast_warn(tr("Hermes 未安装，无法应用", "Hermes missing, cannot apply"));
+            refresh_agent_profile_status(idx);
+            return;
+        }
+    } else if (rt == Runtime::Claude) {
+        if (!app_check_claude_cli_exists()) {
+            ui_toast_warn(tr("Claude Code 未安装，无法应用", "Claude missing, cannot apply"));
+            refresh_agent_profile_status(idx);
+            return;
+        }
+    }
+
+    bool ok_save = app_set_runtime_profile(rt, model, key ? key : "");
+    bool ok_apply = app_update_model_config((key && key[0]) ? key : nullptr, model);
+    if (ok_save && ok_apply) {
+        app_set_active_runtime(rt);
+        if (agent_runtime_dd) lv_dropdown_set_selected(agent_runtime_dd, (uint16_t)idx);
+        g_agent_last_committed_runtime = rt;
+        refresh_agent_runtime_state_ui(false);
+        refresh_agent_profile_status(idx);
+        ui_toast_success(tr("配置已应用到当前运行时", "Profile applied to active runtime"));
+    } else {
+        ui_toast_error(tr("应用配置失败", "Failed to apply profile"));
+        if (agent_profile_status_lbl[idx]) {
+            lv_label_set_text(agent_profile_status_lbl[idx], tr("应用失败", "Apply failed"));
+            lv_obj_set_style_text_color(agent_profile_status_lbl[idx], g_colors->danger, 0);
+        }
+    }
+}
+
 static int lang_to_dropdown_index(Lang lang) {
     switch (lang) {
         case Lang::CN: return 0;
@@ -370,6 +495,7 @@ static Lang dropdown_index_to_lang(int idx) {
 /* ── Forward declarations ── */
 static void settings_close_cb(lv_event_t* e);
 static void settings_tab_change_cb(lv_event_t* e);
+static void settings_ensure_tab_built(uint16_t active_tab);
 static void build_permissions_tab(lv_obj_t* tab);
 static void build_agent_tab(lv_obj_t* tab);
 static void build_feature_tab(lv_obj_t* tab);
@@ -679,10 +805,36 @@ static const char* infer_provider_from_model(const char* model) {
     if (!model || !model[0]) return "openrouter";
     if (strncmp(model, "openrouter/", 11) == 0) return "openrouter";
     if (strncmp(model, "xiaomi/", 7) == 0) return "xiaomi";
+    if (strncmp(model, "minimax", 7) == 0) {
+        const char* slash = strchr(model, '/');
+        if (slash) {
+            static char minimax_provider[32];
+            size_t len = (size_t)(slash - model);
+            if (len >= sizeof(minimax_provider)) len = sizeof(minimax_provider) - 1;
+            memcpy(minimax_provider, model, len);
+            minimax_provider[len] = '\0';
+            return minimax_provider;
+        }
+        return "minimax-text";
+    }
     if (strncmp(model, "gemini/", 7) == 0) return "gemini";
     if (strncmp(model, "deepseek/", 9) == 0) return "deepseek";
     if (strncmp(model, "qwen/", 5) == 0) return "qwen";
     return "openrouter";
+}
+
+static const char* provider_key_url(const char* provider) {
+    if (!provider || !provider[0]) return "openrouter.ai/settings/keys";
+    if (strcmp(provider, "xiaomi") == 0) return "api.xiaomimimo.com";
+    if (strncmp(provider, "minimax", 7) == 0) return "platform.minimaxi.com";
+    return "openrouter.ai/settings/keys";
+}
+
+static const char* provider_verify_url(const char* provider) {
+    if (!provider || !provider[0]) return "https://openrouter.ai/api/v1/models";
+    if (strcmp(provider, "xiaomi") == 0) return "https://api.xiaomimimo.com/v1/models";
+    if (strncmp(provider, "minimax", 7) == 0) return "https://api.minimaxi.com/v1/models";
+    return "https://openrouter.ai/api/v1/models";
 }
 
 static void refresh_security_status_ui() {
@@ -903,8 +1055,8 @@ static void build_general_tab(lv_obj_t* tab) {
             }, LV_EVENT_CLICKED, bound_flag);
         };
 
-        make_auth_card("📧", "Outlook", "CLI", &g_app_auth_email);
-        make_auth_card("📅", "Calendar", "MCP", &g_app_auth_calendar);
+        make_auth_card("Mail", "Outlook", "CLI", &g_app_auth_email);
+        make_auth_card("Cal", "Calendar", "MCP", &g_app_auth_calendar);
 
         gen_auth_email_sw = lv_switch_create(tab);
         lv_obj_set_size(gen_auth_email_sw, SCALE(50), SCALE(26));
@@ -1296,7 +1448,6 @@ static void build_general_tab(lv_obj_t* tab) {
     lv_label_set_text(gen_security_detail_label, "API Key: Checking | Port: -- | Config: Checking");
     apply_hint_label(gen_security_detail_label);
     lv_label_set_long_mode(gen_security_detail_label, LV_LABEL_LONG_WRAP);
-    refresh_security_status_ui();
 
     /* Divider */
     lv_obj_t* div3 = lv_obj_create(tab);
@@ -1543,6 +1694,7 @@ static void build_agent_tab(lv_obj_t* tab) {
     lv_obj_add_event_cb(agent_runtime_dd, [](lv_event_t* e) {
         (void)e;
         refresh_agent_runtime_state_ui(false);
+        agent_request_recheck_current_selection();
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 
     agent_status_label = lv_label_create(tab);
@@ -1600,7 +1752,117 @@ static void build_agent_tab(lv_obj_t* tab) {
     lv_obj_add_event_cb(agent_claude_path_ta, [](lv_event_t* e) {
         (void)e;
         refresh_agent_runtime_state_ui(false);
+        agent_request_recheck_current_selection();
     }, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    add_divider(tab);
+
+    lv_obj_t* profile_title = lv_label_create(tab);
+    lv_label_set_text(profile_title, tr("运行时模型与 API Key", "Runtime Model & API Key"));
+    apply_section_label(profile_title);
+
+    lv_obj_t* profile_hint = lv_label_create(tab);
+    lv_label_set_text(profile_hint,
+        tr("按本机已安装环境自动预填，支持 OpenClaw/Hermes/Claude 各自独立配置。",
+           "Auto-prefilled from this machine environment, with independent profiles for OpenClaw/Hermes/Claude."));
+    apply_hint_label(profile_hint);
+
+    for (int i = 0; i < 3; i++) {
+        Runtime rt = (Runtime)i;
+        RuntimeProfileConfig prof{};
+        app_get_runtime_profile(rt, &prof);
+
+        lv_obj_t* card = lv_obj_create(tab);
+        lv_obj_set_size(card, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_color(card, g_colors->surface, 0);
+        lv_obj_set_style_border_color(card, g_colors->border, 0);
+        lv_obj_set_style_border_width(card, 1, 0);
+        lv_obj_set_style_radius(card, SCALE(g_colors->radius_md), 0);
+        lv_obj_set_style_pad_all(card, 10, 0);
+        lv_obj_set_style_pad_gap(card, 8, 0);
+        lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(card, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+        lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* head = lv_obj_create(card);
+        lv_obj_set_size(head, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(head, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(head, 0, 0);
+        lv_obj_set_style_pad_all(head, 0, 0);
+        lv_obj_set_style_pad_gap(head, 8, 0);
+        lv_obj_set_flex_flow(head, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(head, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(head, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* badge = lv_obj_create(head);
+        lv_obj_set_size(badge, SCALE(28), SCALE(28));
+        lv_obj_set_style_radius(badge, SCALE(14), 0);
+        lv_obj_set_style_border_width(badge, 0, 0);
+        lv_obj_set_style_pad_all(badge, 0, 0);
+        lv_obj_clear_flag(badge, LV_OBJ_FLAG_SCROLLABLE);
+        if (rt == Runtime::Hermes) lv_obj_set_style_bg_color(badge, g_colors->success, 0);
+        else if (rt == Runtime::Claude) lv_obj_set_style_bg_color(badge, g_colors->accent_secondary, 0);
+        else lv_obj_set_style_bg_color(badge, g_colors->accent, 0);
+
+        lv_obj_t* badge_lbl = lv_label_create(badge);
+        lv_label_set_text(badge_lbl, (rt == Runtime::Hermes) ? "HM" : (rt == Runtime::Claude) ? "CL" : "OC");
+        lv_obj_set_style_text_font(badge_lbl, CJK_FONT_SMALL, 0);
+        lv_obj_set_style_text_color(badge_lbl, g_colors->text_inverse, 0);
+        lv_obj_center(badge_lbl);
+
+        lv_obj_t* title_lbl = lv_label_create(head);
+        lv_label_set_text(title_lbl, (rt == Runtime::Hermes) ? "Hermes" : (rt == Runtime::Claude) ? "Claude" : "OpenClaw");
+        lv_obj_set_style_text_font(title_lbl, CJK_FONT, 0);
+        lv_obj_set_style_text_color(title_lbl, g_colors->text, 0);
+
+        lv_obj_t* model_lbl = lv_label_create(card);
+        lv_label_set_text(model_lbl, tr("模型", "Model"));
+        apply_hint_label(model_lbl);
+
+        agent_profile_model_ta[i] = lv_textarea_create(card);
+        lv_textarea_set_one_line(agent_profile_model_ta[i], true);
+        lv_textarea_set_placeholder_text(agent_profile_model_ta[i], "openrouter/google/gemma-3-4b-it:free");
+        if (prof.model[0]) lv_textarea_set_text(agent_profile_model_ta[i], prof.model);
+        lv_obj_set_width(agent_profile_model_ta[i], LV_PCT(100));
+        apply_input_style(agent_profile_model_ta[i]);
+        lv_obj_add_event_cb(agent_profile_model_ta[i], [](lv_event_t* e) {
+            int idx = (int)(intptr_t)lv_event_get_user_data(e);
+            refresh_agent_profile_status(idx);
+        }, LV_EVENT_VALUE_CHANGED, (void*)(intptr_t)i);
+
+        lv_obj_t* key_lbl = lv_label_create(card);
+        lv_label_set_text(key_lbl, tr("API Key", "API Key"));
+        apply_hint_label(key_lbl);
+
+        agent_profile_key_ta[i] = lv_textarea_create(card);
+        lv_textarea_set_one_line(agent_profile_key_ta[i], true);
+        lv_textarea_set_password_mode(agent_profile_key_ta[i], true);
+        lv_textarea_set_placeholder_text(agent_profile_key_ta[i], "sk-...");
+        if (prof.api_key[0]) lv_textarea_set_text(agent_profile_key_ta[i], prof.api_key);
+        lv_obj_set_width(agent_profile_key_ta[i], LV_PCT(100));
+        apply_input_style(agent_profile_key_ta[i]);
+
+        lv_obj_t* btn_row_prof = lv_obj_create(card);
+        lv_obj_set_size(btn_row_prof, LV_PCT(100), LV_SIZE_CONTENT);
+        lv_obj_set_style_bg_opa(btn_row_prof, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_border_width(btn_row_prof, 0, 0);
+        lv_obj_set_style_pad_all(btn_row_prof, 0, 0);
+        lv_obj_set_style_pad_gap(btn_row_prof, 8, 0);
+        lv_obj_set_flex_flow(btn_row_prof, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(btn_row_prof, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_clear_flag(btn_row_prof, LV_OBJ_FLAG_SCROLLABLE);
+
+        lv_obj_t* btn_save_prof = aw_btn_create(btn_row_prof, tr("保存", "Save"), BTN_SECONDARY, SCALE(96), SCALE(32));
+        lv_obj_add_event_cb(btn_save_prof, agent_profile_save_cb, LV_EVENT_CLICKED, (void*)(intptr_t)i);
+
+        lv_obj_t* btn_apply_prof = aw_btn_create(btn_row_prof, tr("应用", "Apply"), BTN_PRIMARY, SCALE(110), SCALE(32));
+        lv_obj_add_event_cb(btn_apply_prof, agent_profile_apply_cb, LV_EVENT_CLICKED, (void*)(intptr_t)i);
+
+        agent_profile_status_lbl[i] = lv_label_create(card);
+        lv_label_set_text(agent_profile_status_lbl[i], tr("待检查", "Pending"));
+        apply_hint_label(agent_profile_status_lbl[i]);
+        refresh_agent_profile_status(i);
+    }
 
     lv_obj_t* row_btn = lv_obj_create(tab);
     lv_obj_set_size(row_btn, LV_PCT(100), LV_SIZE_CONTENT);
@@ -1714,7 +1976,9 @@ static void build_agent_tab(lv_obj_t* tab) {
 
     if (!g_agent_install_poll_timer) g_agent_install_poll_timer = lv_timer_create(agent_install_poll_cb, 180, nullptr);
     agent_update_button_states();
-    refresh_agent_runtime_state_ui();
+    /* Keep first paint responsive; perform deep health checks asynchronously. */
+    refresh_agent_runtime_state_ui(false);
+    agent_request_recheck_current_selection();
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1730,12 +1994,8 @@ static void model_dropdown_cb(lv_event_t* e) {
     lv_dropdown_get_selected_str(model_dropdown, sel, sizeof(sel));
 
     /* Detect provider */
-    const char* provider = "openrouter";
-    const char* key_url = "openrouter.ai/settings/keys";
-    if (strncmp(sel, "xiaomi/", 7) == 0) {
-        provider = "xiaomi";
-        key_url = "api.xiaomimimo.com";
-    }
+    const char* provider = infer_provider_from_model(sel);
+    const char* key_url = provider_key_url(provider);
 
     /* Update provider hint */
     static char hint[256];
@@ -1747,13 +2007,13 @@ static void model_dropdown_cb(lv_event_t* e) {
         char existing_key[256] = {0};
         if (app_get_provider_api_key(provider, existing_key, sizeof(existing_key)) &&
             strcmp(existing_key, "__OPENCLAW_REDACTED__") != 0 && strlen(existing_key) > 10) {
-            lv_label_set_text_fmt(api_key_status_label, "API Key: ✅ %s (%zu chars)", provider, strlen(existing_key));
+            lv_label_set_text_fmt(api_key_status_label, "API Key: [OK] %s (%zu chars)", provider, strlen(existing_key));
             lv_obj_set_style_text_color(api_key_status_label, g_colors->success, 0);
         } else if (existing_key[0]) {
-            lv_label_set_text_fmt(api_key_status_label, "API Key: ✅ %s (configured, hidden)", provider);
+            lv_label_set_text_fmt(api_key_status_label, "API Key: [OK] %s (configured, hidden)", provider);
             lv_obj_set_style_text_color(api_key_status_label, g_colors->success, 0);
         } else {
-            lv_label_set_text_fmt(api_key_status_label, "API Key: ❌ %s not configured", provider);
+            lv_label_set_text_fmt(api_key_status_label, "API Key: [MISSING] %s not configured", provider);
             lv_obj_set_style_text_color(api_key_status_label, g_colors->danger, 0);
         }
     }
@@ -1786,19 +2046,19 @@ static void apikey_verify_cb(lv_event_t* e) {
 
     const char* key_text = lv_textarea_get_text(acc_apikey_ta);
     if (!key_text || !key_text[0]) {
-        lv_label_set_text(api_key_status_label, "Verify: ⚠️ Enter an API key first");
+        lv_label_set_text(api_key_status_label, "Verify: [WARN] Enter an API key first");
         lv_obj_set_style_text_color(api_key_status_label, g_colors->warning, 0);
         return;
     }
 
     /* Detect provider from current model */
     const char* provider = "openrouter";
-    const char* test_url = "https://openrouter.ai/api/v1/models";
+    const char* test_url = provider_verify_url(provider);
     {
         char cur_model[256] = {0};
-        if (app_get_current_model(cur_model, sizeof(cur_model)) && strncmp(cur_model, "xiaomi/", 7) == 0) {
-            provider = "xiaomi";
-            test_url = "https://api.xiaomimimo.com/v1/models";
+        if (app_get_current_model(cur_model, sizeof(cur_model)) && cur_model[0]) {
+            provider = infer_provider_from_model(cur_model);
+            test_url = provider_verify_url(provider);
         }
     }
 
@@ -1836,22 +2096,22 @@ static void apikey_verify_cb(lv_event_t* e) {
         result->lbl = status_lbl;
         result->severity = 2;
         if (strncmp(http_code, "200", 3) == 0) {
-            snprintf(result->msg, sizeof(result->msg), "Verify: ✅ %s key is valid!", prov_copy.c_str());
+            snprintf(result->msg, sizeof(result->msg), "Verify: [OK] %s key is valid!", prov_copy.c_str());
             result->severity = 0;
         } else if (strncmp(http_code, "401", 3) == 0 || strncmp(http_code, "403", 3) == 0) {
-            snprintf(result->msg, sizeof(result->msg), "Verify: ❌ %s auth failed (HTTP %s)", prov_copy.c_str(), http_code);
+            snprintf(result->msg, sizeof(result->msg), "Verify: [FAIL] %s auth failed (HTTP %s)", prov_copy.c_str(), http_code);
             result->severity = 2;
         } else if (strncmp(http_code, "429", 3) == 0) {
-            snprintf(result->msg, sizeof(result->msg), "Verify: ⚠️ %s rate limited (HTTP 429)", prov_copy.c_str());
+            snprintf(result->msg, sizeof(result->msg), "Verify: [WARN] %s rate limited (HTTP 429)", prov_copy.c_str());
             result->severity = 1;
         } else if (http_code[0] == '5') {
-            snprintf(result->msg, sizeof(result->msg), "Verify: ⚠️ %s service unavailable (HTTP %s)", prov_copy.c_str(), http_code);
+            snprintf(result->msg, sizeof(result->msg), "Verify: [WARN] %s service unavailable (HTTP %s)", prov_copy.c_str(), http_code);
             result->severity = 1;
         } else if (http_code[0] == '\0' || strncmp(http_code, "000", 3) == 0) {
-            snprintf(result->msg, sizeof(result->msg), "Verify: ⚠️ network unavailable");
+            snprintf(result->msg, sizeof(result->msg), "Verify: [WARN] network unavailable");
             result->severity = 1;
         } else {
-            snprintf(result->msg, sizeof(result->msg), "Verify: ⚠️ %s unexpected response (HTTP %s)", prov_copy.c_str(), http_code);
+            snprintf(result->msg, sizeof(result->msg), "Verify: [WARN] %s unexpected response (HTTP %s)", prov_copy.c_str(), http_code);
             result->severity = 1;
         }
         lv_async_call([](void* p) {
@@ -1983,14 +2243,18 @@ static void build_model_tab(lv_obj_t* tab) {
 
     /* ═══ Current Model ═══ */
     char gw_model[256] = {0};
-    app_get_current_model(gw_model, sizeof(gw_model));
+    if (g_selected_model[0]) {
+        snprintf(gw_model, sizeof(gw_model), "%s", g_selected_model);
+    } else if (gw_model_buf[0]) {
+        snprintf(gw_model, sizeof(gw_model), "%s", gw_model_buf);
+    }
     if (gw_model[0]) {
         snprintf(g_selected_model, sizeof(g_selected_model), "%s", gw_model);
         snprintf(gw_model_buf, sizeof(gw_model_buf), "%s", gw_model);
     }
 
     model_current_label = lv_label_create(tab);
-    lv_label_set_text(model_current_label, gw_model[0] ? gw_model : tr("未配置", "Not configured"));
+    lv_label_set_text(model_current_label, gw_model[0] ? gw_model : tr("加载中...", "Loading..."));
     lv_obj_set_style_text_color(model_current_label, g_colors->success, 0);
     lv_obj_set_style_text_font(model_current_label, CJK_FONT, 0);
     make_kv_row("Current Model", model_current_label);
@@ -2016,7 +2280,8 @@ static void build_model_tab(lv_obj_t* tab) {
         const char* kw = lv_textarea_get_text(ta);
 
         /* Rebuild dropdown options filtered by keyword */
-        char filtered[4096] = {0};
+        std::string filtered;
+        filtered.reserve(8192);
         int count = 0;
         for (int i = 0; i < model_get_count(); i++) {
             const char* mname = model_get_name(i);
@@ -2039,12 +2304,12 @@ static void build_model_tab(lv_obj_t* tab) {
                 }
             }
             if (match) {
-                if (count > 0) strcat(filtered, "\n");
-                strcat(filtered, mname);
+                if (count > 0) filtered.push_back('\n');
+                filtered += mname;
                 count++;
             }
         }
-        if (model_dropdown) lv_dropdown_set_options(model_dropdown, filtered);
+        if (model_dropdown) lv_dropdown_set_options(model_dropdown, filtered.c_str());
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 
     /* Insert user's Gateway model into list if not already present */
@@ -2053,7 +2318,8 @@ static void build_model_tab(lv_obj_t* tab) {
     }
 
     /* Build dropdown options from model list */
-    char dd_options[4096] = {0};
+    std::string dd_options;
+    dd_options.reserve(8192);
     int selected_idx = 0;
     const char* gw_short = gw_model;
     if (gw_model[0] && strncmp(gw_model, "openrouter/", 11) == 0) {
@@ -2061,8 +2327,8 @@ static void build_model_tab(lv_obj_t* tab) {
     }
     for (int i = 0; i < model_get_count(); i++) {
         const char* mname = model_get_name(i);
-        if (i > 0) strcat(dd_options, "\n");
-        strcat(dd_options, mname);
+        if (i > 0) dd_options.push_back('\n');
+        dd_options += mname;
         if (gw_short[0] && strcmp(mname, gw_short) == 0) selected_idx = i;
     }
 
@@ -2078,7 +2344,7 @@ static void build_model_tab(lv_obj_t* tab) {
     lv_obj_set_style_pad_gap(dd_row, 8, 0);
 
     model_dropdown = lv_dropdown_create(dd_row);
-    lv_dropdown_set_options(model_dropdown, dd_options);
+    lv_dropdown_set_options(model_dropdown, dd_options.c_str());
     lv_dropdown_set_selected(model_dropdown, selected_idx);
     lv_obj_set_width(model_dropdown, LV_PCT(70));
     apply_input_style(model_dropdown);
@@ -2221,12 +2487,8 @@ static void build_model_tab(lv_obj_t* tab) {
     /* Provider hint — kv row, updates when dropdown changes */
     model_provider_hint = lv_label_create(tab);
     {
-        const char* init_provider = "openrouter";
-        const char* init_url = "openrouter.ai/settings/keys";
-        if (gw_model[0] && strncmp(gw_model, "xiaomi/", 7) == 0) {
-            init_provider = "xiaomi";
-            init_url = "api.xiaomimimo.com";
-        }
+        const char* init_provider = infer_provider_from_model(gw_model);
+        const char* init_url = provider_key_url(init_provider);
         static char init_hint[256];
         snprintf(init_hint, sizeof(init_hint), "%s  ->  %s", init_provider, init_url);
         lv_label_set_text(model_provider_hint, init_hint);
@@ -2251,16 +2513,8 @@ static void build_model_tab(lv_obj_t* tab) {
     /* ═══ API Key status + real key display ═══ */
     api_key_status_label = lv_label_create(tab);
     {
-        const char* check_provider = "openrouter";
-        if (gw_model[0] && strncmp(gw_model, "xiaomi/", 7) == 0) check_provider = "xiaomi";
-        char existing_key[256] = {0};
-        if (app_get_provider_api_key(check_provider, existing_key, sizeof(existing_key)) && existing_key[0]) {
-            lv_label_set_text_fmt(api_key_status_label, "API Key: ✅ %s (%zu chars)", check_provider, strlen(existing_key));
-            lv_obj_set_style_text_color(api_key_status_label, g_colors->success, 0);
-        } else {
-            lv_label_set_text(api_key_status_label, "API Key: ❌ Not configured");
-            lv_obj_set_style_text_color(api_key_status_label, g_colors->danger, 0);
-        }
+        lv_label_set_text(api_key_status_label, "API Key: Checking...");
+        lv_obj_set_style_text_color(api_key_status_label, g_colors->text_dim, 0);
         lv_obj_set_style_text_font(api_key_status_label, CJK_FONT, 0);
     }
 
@@ -2279,15 +2533,6 @@ static void build_model_tab(lv_obj_t* tab) {
         update_model_action_buttons_state();
     }, LV_EVENT_VALUE_CHANGED, nullptr);
 
-    /* Pre-populate with real key from openclaw.json */
-    {
-        const char* init_provider = "openrouter";
-        if (gw_model[0] && strncmp(gw_model, "xiaomi/", 7) == 0) init_provider = "xiaomi";
-        char saved_key[256] = {0};
-        if (app_get_provider_api_key(init_provider, saved_key, sizeof(saved_key)) && saved_key[0]) {
-            lv_textarea_set_text(acc_apikey_ta, saved_key);
-        }
-    }
     make_kv_row("API Key", acc_apikey_ta);
 
     /* ═══ Action buttons — right-aligned row ═══ */
@@ -3666,10 +3911,35 @@ static void build_c2_tab(lv_obj_t* tab) {
  * ═══════════════════════════════════════════════════════════════ */
 static void settings_close_cb(lv_event_t* e) {
     (void)e;
-    if (settings_panel) {
+    g_settings_refresh_token.fetch_add(1);
+    if (g_settings_open_retry_timer) {
+        lv_timer_del(g_settings_open_retry_timer);
+        g_settings_open_retry_timer = nullptr;
+    }
+    if (g_settings_lazy_build_timer) {
+        lv_timer_del(g_settings_lazy_build_timer);
+        g_settings_lazy_build_timer = nullptr;
+    }
+    if (g_settings_confirm_overlay && lv_obj_is_valid(g_settings_confirm_overlay)) {
+        lv_obj_del(g_settings_confirm_overlay);
+        g_settings_confirm_overlay = nullptr;
+    }
+
+    if (settings_panel && lv_obj_is_valid(settings_panel)) {
         lv_obj_add_flag(settings_panel, LV_OBJ_FLAG_HIDDEN);
         settings_visible = false;
+        return;
     }
+
+    settings_panel = nullptr;
+    settings_tabs = nullptr;
+    settings_visible = false;
+}
+
+static void settings_open_retry_cb(lv_timer_t* t) {
+    if (t) lv_timer_del(t);
+    g_settings_open_retry_timer = nullptr;
+    if (!settings_visible) ui_settings_open();
 }
 
 /*
@@ -3677,7 +3947,12 @@ static void settings_close_cb(lv_event_t* e) {
  * Called from ui_relayout_all() on maximize/restore.
  */
 void ui_settings_relayout() {
-    if (!settings_panel) return;
+    if (!settings_panel || !lv_obj_is_valid(settings_panel)) {
+        settings_panel = nullptr;
+        settings_tabs = nullptr;
+        settings_visible = false;
+        return;
+    }
     if (lv_obj_has_flag(settings_panel, LV_OBJ_FLAG_HIDDEN)) return;
 
     SDL_Window* win = app_get_window();
@@ -3751,28 +4026,41 @@ static void ui_settings_sync_model() {
 
         model_insert_current(latest_model);
 
-        /* Rebuild dropdown options */
-        char dd_options[8192] = {0};
+        /* Rebuild dropdown options safely.
+         * Large model lists can exceed fixed buffers and corrupt UI state. */
+        std::string dd_options;
+        dd_options.reserve(16384);
+        constexpr int kMaxDropdownModels = 600;
         int selected_idx = 0;
+        int emitted = 0;
         const char* gw_short = latest_model;
         if (strncmp(latest_model, "openrouter/", 11) == 0) {
             gw_short = latest_model + 11;
         }
         for (int i = 0; i < model_get_count(); i++) {
-            if (i > 0) strcat(dd_options, "\n");
-            strcat(dd_options, model_get_name(i));
+            if (emitted >= kMaxDropdownModels) break;
+            const char* name = model_get_name(i);
+            if (!name || !name[0]) continue;
+            if (!dd_options.empty()) dd_options.push_back('\n');
+            dd_options += name;
+            emitted++;
             if (strcmp(model_get_name(i), gw_short) == 0) {
-                selected_idx = i;
+                selected_idx = emitted - 1;
             }
         }
-        lv_dropdown_set_options(model_dropdown, dd_options);
+
+        if (dd_options.empty()) {
+            dd_options = latest_model;
+            selected_idx = 0;
+        }
+
+        lv_dropdown_set_options(model_dropdown, dd_options.c_str());
         lv_dropdown_set_selected(model_dropdown, selected_idx);
     }
 
     /* Sync API key into text area */
     if (acc_apikey_ta && latest_model[0]) {
-        const char* provider = "openrouter";
-        if (strncmp(latest_model, "xiaomi/", 7) == 0) provider = "xiaomi";
+        const char* provider = infer_provider_from_model(latest_model);
         char key[256] = {0};
         if (app_get_provider_api_key(provider, key, sizeof(key))) {
             lv_textarea_set_text(acc_apikey_ta, key);
@@ -3781,12 +4069,8 @@ static void ui_settings_sync_model() {
 
     /* Update provider hint */
     if (model_provider_hint && latest_model[0]) {
-        const char* provider = "openrouter";
-        const char* key_url = "openrouter.ai/settings/keys";
-        if (strncmp(latest_model, "xiaomi/", 7) == 0) {
-            provider = "xiaomi";
-            key_url = "api.xiaomimimo.com";
-        }
+        const char* provider = infer_provider_from_model(latest_model);
+        const char* key_url = provider_key_url(provider);
         static char hint[256];
         snprintf(hint, sizeof(hint), "%s  ->  %s", provider, key_url);
         lv_label_set_text(model_provider_hint, hint);
@@ -3798,32 +4082,66 @@ static void ui_settings_sync_model() {
 }
 
 void ui_settings_open() {
-    ui_log("[Settings] ui_settings_open() called, settings_panel=%p", (void*)settings_panel);
+    LOG_I("SETTINGS", "ui_settings_open enter panel=%p visible=%d", (void*)settings_panel, settings_visible ? 1 : 0);
+    if (settings_panel && !lv_obj_is_valid(settings_panel)) {
+        ui_log("[Settings] stale settings_panel pointer detected, rebuilding panel");
+        LOG_W("SETTINGS", "stale settings_panel pointer detected, rebuilding");
+        settings_panel = nullptr;
+        settings_tabs = nullptr;
+        settings_visible = false;
+    }
+    if (g_settings_confirm_overlay && !lv_obj_is_valid(g_settings_confirm_overlay)) {
+        g_settings_confirm_overlay = nullptr;
+    }
+
+    ui_log("[Settings] ui_settings_open() ENTRY, settings_panel=%p", (void*)settings_panel);
+    fflush(stdout);  /* force log flush so we can trace freezes */
     if (!settings_panel) {
         /* Re-entrancy guard: if init is already in progress, bail out */
         if (settings_init_in_progress) {
             ui_log("[Settings] ui_settings_open: init already in progress, bailing out");
+            LOG_W("SETTINGS", "init already in progress, schedule retry");
+            if (!g_settings_open_retry_timer) {
+                g_settings_open_retry_timer = lv_timer_create(settings_open_retry_cb, 90, nullptr);
+                lv_timer_set_repeat_count(g_settings_open_retry_timer, 1);
+            }
             return;
         }
         settings_init_in_progress = true;
+        LOG_I("SETTINGS", "initializing settings panel");
         lv_obj_t* root = lv_screen_active();
         ui_log("[Settings] root screen=%p", (void*)root);
         if (!root) { settings_init_in_progress = false; return; }
         ui_settings_init(root);
         settings_init_in_progress = false;
+        LOG_I("SETTINGS", "settings panel init done panel=%p", (void*)settings_panel);
     }
     if (!settings_panel) {
         ui_log("[Settings] FATAL: settings_panel still null after init!");
+        return;
+    }
+    if (!lv_obj_is_valid(settings_panel)) {
+        ui_log("[Settings] FATAL: settings_panel invalid after init");
+        settings_panel = nullptr;
+        settings_tabs = nullptr;
+        settings_visible = false;
         return;
     }
     /* Always show panel regardless of settings_visible flag state (handles stuck-true edge case) */
     lv_obj_clear_flag(settings_panel, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(settings_panel);
     settings_visible = true;
+    LOG_I("SETTINGS", "panel shown, tabs=%p", (void*)settings_tabs);
+
+    if (settings_tabs && lv_obj_is_valid(settings_tabs)) {
+        settings_ensure_tab_built(lv_tabview_get_tab_act(settings_tabs));
+    }
 
     /* Show placeholder text immediately — all slow ops (exec_cmd / http_get) run async below */
     if (gen_status_label)  lv_label_set_text(gen_status_label,  "Checking...");
     if (gen_path_label)    lv_label_set_text(gen_path_label,    "...");
+
+    const uint32_t refresh_token = g_settings_refresh_token.fetch_add(1) + 1;
 
     /* Async refresh: runs detect + check + model query off the UI thread */
     struct SRR {  /* SettingsRefreshResult */
@@ -3834,9 +4152,11 @@ void ui_settings_open() {
         bool       api_ok;
         bool       cfg_ok;
         char       provider[64];
+        uint32_t   refresh_token;
     };
-    std::thread([] {
+    std::thread([refresh_token] {
         SRR* r = new SRR{};
+        r->refresh_token = refresh_token;
         OpenClawInfo info  = app_detect_openclaw();
         r->claw_status     = app_check_status(info);
         r->gateway_port    = info.gateway_port;
@@ -3850,7 +4170,8 @@ void ui_settings_open() {
 
         lv_async_call([](void* d) {
             SRR* r = static_cast<SRR*>(d);
-            if (!settings_panel || !settings_visible) { delete r; return; }
+            if (r->refresh_token != g_settings_refresh_token.load()) { delete r; return; }
+            if (!settings_panel || !lv_obj_is_valid(settings_panel) || !settings_visible) { delete r; return; }
 
             /* Status label */
             if (gen_status_label && lv_obj_is_valid(gen_status_label)) {
@@ -3979,7 +4300,7 @@ static void apply_theme_recursive(lv_obj_t* container) {
 }
 
 void ui_settings_apply_theme() {
-    if (!settings_panel || !g_colors) return;
+    if (!settings_panel || !lv_obj_is_valid(settings_panel) || !g_colors) return;
     const ThemeColors* c = g_colors;
 
     /* Settings overlay bg */
@@ -4014,11 +4335,199 @@ void ui_settings_apply_theme() {
     }
     lv_obj_invalidate(settings_panel);
 }
+
+static void settings_ensure_tab_built(uint16_t active_tab) {
+    if ((active_tab == 0 && g_settings_tab_c1_built) ||
+        (active_tab == 1 && g_settings_tab_c2_built) ||
+        (active_tab == 2 && g_settings_tab_c3_built) ||
+        (active_tab == 3 && g_settings_tab_c4_built)) {
+        return;
+    }
+    if (active_tab > 3) return;
+
+    g_settings_lazy_build_tab = active_tab;
+    LOG_I("SETTINGS", "schedule lazy build tab=%u", (unsigned)active_tab);
+    if (g_settings_lazy_build_timer) return;
+
+    g_settings_lazy_build_timer = lv_timer_create([](lv_timer_t* t) {
+        (void)t;
+        if (!settings_panel || !lv_obj_is_valid(settings_panel) || !settings_visible) {
+            if (g_settings_lazy_build_timer) {
+                lv_timer_del(g_settings_lazy_build_timer);
+                g_settings_lazy_build_timer = nullptr;
+            }
+            return;
+        }
+
+        if (g_settings_lazy_build_tab == 0) {
+            if (!g_settings_tab_c1 || !lv_obj_is_valid(g_settings_tab_c1)) {
+                if (g_settings_lazy_build_timer) {
+                    lv_timer_del(g_settings_lazy_build_timer);
+                    g_settings_lazy_build_timer = nullptr;
+                }
+                return;
+            }
+            if (g_settings_tab_c1_stage == 0) {
+                ui_log("[Settings] lazy build C1 stage 1/2 (General)...");
+                LOG_I("SETTINGS", "lazy build C1 stage 1/2 begin");
+                build_general_tab(g_settings_tab_c1);
+                LOG_I("SETTINGS", "lazy build C1 stage 1/2 end");
+                g_settings_tab_c1_stage = 1;
+                return;
+            }
+            if (g_settings_tab_c1_stage == 1) {
+                ui_log("[Settings] lazy build C1 stage 2/2 (Model)...");
+                LOG_I("SETTINGS", "lazy build C1 stage 2/2 begin");
+                build_model_tab(g_settings_tab_c1);
+                LOG_I("SETTINGS", "lazy build C1 stage 2/2 end");
+                g_settings_tab_c1_stage = 2;
+                g_settings_tab_c1_built = true;
+                ui_log("[Settings] lazy build C1 done");
+                LOG_I("SETTINGS", "lazy build C1 done");
+            }
+            if (g_settings_lazy_build_timer) {
+                lv_timer_del(g_settings_lazy_build_timer);
+                g_settings_lazy_build_timer = nullptr;
+            }
+            return;
+        }
+
+        if (g_settings_lazy_build_tab == 1) {
+            if (!g_settings_tab_c2 || !lv_obj_is_valid(g_settings_tab_c2)) {
+                if (g_settings_lazy_build_timer) {
+                    lv_timer_del(g_settings_lazy_build_timer);
+                    g_settings_lazy_build_timer = nullptr;
+                }
+                return;
+            }
+            if (!g_settings_tab_c2_built && g_settings_tab_c2_stage == 0) {
+                ui_log("[Settings] lazy build C2 stage 1/1...");
+                LOG_I("SETTINGS", "lazy build C2 stage 1/1 begin");
+                build_c2_tab(g_settings_tab_c2);
+                LOG_I("SETTINGS", "lazy build C2 stage 1/1 end");
+                g_settings_tab_c2_stage = 1;
+                g_settings_tab_c2_built = true;
+                ui_log("[Settings] lazy build C2 done");
+                LOG_I("SETTINGS", "lazy build C2 done");
+            }
+            if (g_settings_lazy_build_timer) {
+                lv_timer_del(g_settings_lazy_build_timer);
+                g_settings_lazy_build_timer = nullptr;
+            }
+            return;
+        }
+
+        if (g_settings_lazy_build_tab == 2) {
+            if (!g_settings_tab_c3 || !lv_obj_is_valid(g_settings_tab_c3)) {
+                if (g_settings_lazy_build_timer) {
+                    lv_timer_del(g_settings_lazy_build_timer);
+                    g_settings_lazy_build_timer = nullptr;
+                }
+                return;
+            }
+            if (g_settings_tab_c3_stage == 0) {
+                ui_log("[Settings] lazy build C3 stage 1/3 (Agent)...");
+                LOG_I("SETTINGS", "lazy build C3 stage 1/3 begin");
+                build_agent_tab(g_settings_tab_c3);
+                LOG_I("SETTINGS", "lazy build C3 stage 1/3 end");
+                g_settings_tab_c3_stage = 1;
+                return;
+            }
+            if (g_settings_tab_c3_stage == 1) {
+                ui_log("[Settings] lazy build C3 stage 2/3 (Permissions)...");
+                LOG_I("SETTINGS", "lazy build C3 stage 2/3 begin");
+                build_permissions_tab(g_settings_tab_c3);
+                LOG_I("SETTINGS", "lazy build C3 stage 2/3 end");
+                g_settings_tab_c3_stage = 2;
+                return;
+            }
+            if (g_settings_tab_c3_stage == 2) {
+                ui_log("[Settings] lazy build C3 stage 3/3 (KB)...");
+                LOG_I("SETTINGS", "lazy build C3 stage 3/3 begin");
+                build_kb_tab(g_settings_tab_c3);
+                LOG_I("SETTINGS", "lazy build C3 stage 3/3 end");
+                g_settings_tab_c3_stage = 3;
+                g_settings_tab_c3_built = true;
+                ui_log("[Settings] lazy build C3 done");
+                LOG_I("SETTINGS", "lazy build C3 done");
+            }
+            if (g_settings_lazy_build_timer) {
+                lv_timer_del(g_settings_lazy_build_timer);
+                g_settings_lazy_build_timer = nullptr;
+            }
+            return;
+        }
+
+        if (g_settings_lazy_build_tab == 3) {
+            if (!g_settings_tab_c4 || !lv_obj_is_valid(g_settings_tab_c4)) {
+                if (g_settings_lazy_build_timer) {
+                    lv_timer_del(g_settings_lazy_build_timer);
+                    g_settings_lazy_build_timer = nullptr;
+                }
+                return;
+            }
+            if (g_settings_tab_c4_stage == 0) {
+                ui_log("[Settings] lazy build C4 stage 1/4 (Log)...");
+                LOG_I("SETTINGS", "lazy build C4 stage 1/4 begin");
+                build_log_tab(g_settings_tab_c4);
+                LOG_I("SETTINGS", "lazy build C4 stage 1/4 end");
+                g_settings_tab_c4_stage = 1;
+                return;
+            }
+            if (g_settings_tab_c4_stage == 1) {
+                ui_log("[Settings] lazy build C4 stage 2/4 (Feature)...");
+                LOG_I("SETTINGS", "lazy build C4 stage 2/4 begin");
+                build_feature_tab(g_settings_tab_c4);
+                LOG_I("SETTINGS", "lazy build C4 stage 2/4 end");
+                g_settings_tab_c4_stage = 2;
+                return;
+            }
+            if (g_settings_tab_c4_stage == 2) {
+                ui_log("[Settings] lazy build C4 stage 3/4 (Tracing)...");
+                LOG_I("SETTINGS", "lazy build C4 stage 3/4 begin");
+                build_tracing_tab(g_settings_tab_c4);
+                LOG_I("SETTINGS", "lazy build C4 stage 3/4 end");
+                g_settings_tab_c4_stage = 3;
+                return;
+            }
+            if (g_settings_tab_c4_stage == 3) {
+                ui_log("[Settings] lazy build C4 stage 4/4 (About)...");
+                LOG_I("SETTINGS", "lazy build C4 stage 4/4 begin");
+                build_about_tab(g_settings_tab_c4);
+                LOG_I("SETTINGS", "lazy build C4 stage 4/4 end");
+                g_settings_tab_c4_stage = 4;
+                g_settings_tab_c4_built = true;
+                ui_log("[Settings] lazy build C4 done");
+                LOG_I("SETTINGS", "lazy build C4 done");
+            }
+            if (g_settings_lazy_build_timer) {
+                lv_timer_del(g_settings_lazy_build_timer);
+                g_settings_lazy_build_timer = nullptr;
+            }
+            return;
+        }
+
+        if (g_settings_lazy_build_timer) {
+            lv_timer_del(g_settings_lazy_build_timer);
+            g_settings_lazy_build_timer = nullptr;
+        }
+    }, 24, nullptr);
+}
+
+static void settings_tabs_value_changed_cb(lv_event_t* e) {
+    (void)e;
+    if (!settings_tabs || !lv_obj_is_valid(settings_tabs)) return;
+    uint16_t active_tab = lv_tabview_get_tab_act(settings_tabs);
+    LOG_I("SETTINGS", "tab changed -> %u", (unsigned)active_tab);
+    settings_ensure_tab_built(active_tab);
+}
+
 /* ═══════════════════════════════════════════════════════════════
  *  SETTINGS INIT - sized for 1200x800 window
  * ═══════════════════════════════════════════════════════════════ */
 void ui_settings_init(lv_obj_t* parent) {
-    ui_log("[Settings] >>> ui_settings_init entered");
+    ui_log("[Settings] >>> ui_settings_init ENTRY");
+    fflush(stdout);
     /* Get actual display dimensions from LVGL */
     SETTING_WIN_W = (int)lv_display_get_horizontal_resolution(NULL);
     SETTING_WIN_H = (int)lv_display_get_vertical_resolution(NULL);
@@ -4070,9 +4579,11 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_center(lbl_close);
 
     ui_log("[Settings] creating tabview...");
+    fflush(stdout);
     /* Tabview */
     settings_tabs = lv_tabview_create(settings_panel);
     ui_log("[Settings] settings_tabs=%p", (void*)settings_tabs);
+    fflush(stdout);
     int title_h = SCALE(48);
     lv_obj_set_size(settings_tabs, SETTING_WIN_W - 40, SETTING_WIN_H - title_h - 12);
     lv_obj_set_pos(settings_tabs, 20, title_h + 6);
@@ -4091,6 +4602,7 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_set_style_border_color(tab_btns, g_colors->border, LV_PART_ITEMS);
     lv_obj_set_style_border_width(tab_btns, 2, LV_PART_ITEMS);
     lv_obj_set_style_pad_ver(tab_btns, 8, LV_PART_ITEMS); /* Short divider, not full height */
+    lv_obj_add_event_cb(settings_tabs, settings_tabs_value_changed_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     /* Create IA-aligned tabs (C1~C4) */
     ui_log("[Settings] adding tabs...");
@@ -4103,34 +4615,25 @@ void ui_settings_init(lv_obj_t* parent) {
     lv_obj_t* tab_c4 = lv_tabview_add_tab(settings_tabs, tr("C4 系统诊断", "C4 Diagnostics"));
     ui_log("[Settings] tab_c4 created");
 
-    /* Build each center by combining existing pages */
-    ui_log("[Settings] building C1 (general+model)...");
-    build_general_tab(tab_c1);
-    ui_log("[Settings] build_general_tab done");
-    build_model_tab(tab_c1);
-    ui_log("[Settings] build_model_tab done");
+    g_settings_tab_c1 = tab_c1;
+    g_settings_tab_c2 = tab_c2;
+    g_settings_tab_c3 = tab_c3;
+    g_settings_tab_c4 = tab_c4;
+    g_settings_tab_c1_built = false;
+    g_settings_tab_c2_built = false;
+    g_settings_tab_c3_built = false;
+    g_settings_tab_c4_built = false;
+    g_settings_tab_c1_stage = 0;
+    g_settings_tab_c2_stage = 0;
+    g_settings_tab_c3_stage = 0;
+    g_settings_tab_c4_stage = 0;
+    g_settings_lazy_build_tab = 0xFFFF;
+    if (g_settings_lazy_build_timer) {
+        lv_timer_del(g_settings_lazy_build_timer);
+        g_settings_lazy_build_timer = nullptr;
+    }
 
-    ui_log("[Settings] building C2...");
-    build_c2_tab(tab_c2);
-    ui_log("[Settings] build_c2_tab done");
-
-    ui_log("[Settings] building C3 (agent+perms+kb)...");
-    build_agent_tab(tab_c3);
-    ui_log("[Settings] build_agent_tab done");
-    build_permissions_tab(tab_c3);
-    ui_log("[Settings] build_permissions_tab done");
-    build_kb_tab(tab_c3);
-    ui_log("[Settings] build_kb_tab done");
-
-    ui_log("[Settings] building C4 (log+feature+tracing+about)...");
-    build_log_tab(tab_c4);
-    ui_log("[Settings] build_log_tab done");
-    build_feature_tab(tab_c4);
-    ui_log("[Settings] build_feature_tab done");
-    build_tracing_tab(tab_c4);
-    ui_log("[Settings] build_tracing_tab done");
-    build_about_tab(tab_c4);
-    ui_log("[Settings] build_about_tab done");
+    ui_log("[Settings] C1/C2/C3/C4 will be built lazily on first tab switch");
 
     /* Initially hidden */
     ui_log("[Settings] hiding panel and leaving init...");

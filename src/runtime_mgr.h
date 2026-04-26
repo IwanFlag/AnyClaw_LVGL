@@ -1,6 +1,8 @@
 #ifndef RUNTIME_MGR_H
 #define RUNTIME_MGR_H
 
+#include "app.h"
+
 /*
  * runtime_mgr.h — Hermes Agent & Claude CLI 检测 / 安装 / 健康检查
  * 模式与 openclaw_mgr.cpp 完全对齐：auto / network / local 三模式
@@ -61,5 +63,23 @@ struct ClaudeCheckResult {
 /* 获取 Hermes/Claude 检测结果（由 app_check_environment 填充） */
 const HermesCheckResult* app_get_hermes_result(void);
 const ClaudeCheckResult* app_get_claude_result(void);
+
+/* ═══════════════════════════════════════════════════════════════════
+ *  Runtime Profiles (model + api key per runtime)
+ *  Stored in APPDATA\AnyClaw_LVGL\runtime_profiles.json
+ * ═══════════════════════════════════════════════════════════════════ */
+struct RuntimeProfileConfig {
+    char model[256];
+    char api_key[256];
+};
+
+/* Read profile for runtime. Returns true when file read succeeds; missing values may fallback to defaults. */
+bool app_get_runtime_profile(Runtime rt, RuntimeProfileConfig* out);
+
+/* Save profile for runtime. Empty api_key is allowed. */
+bool app_set_runtime_profile(Runtime rt, const char* model, const char* api_key);
+
+/* Validate whether runtime can be used with current profile/install state. */
+bool app_is_runtime_profile_ready(Runtime rt, char* reason_out, int reason_size);
 
 #endif /* RUNTIME_MGR_H */

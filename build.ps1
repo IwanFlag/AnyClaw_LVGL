@@ -23,6 +23,13 @@ set PATH=%PATH%;C:\Program Files\CMake\bin
 $cmakeBatPath = "$BuildDir\cmake_config.bat"
 [System.IO.File]::WriteAllText($cmakeBatPath, $cmakeBat, [System.Text.Encoding]::UTF8)
 cmd /c $cmakeBatPath > "$BuildDir\cmake_config.log" 2>&1
+$configureExit = $LASTEXITCODE
+
+if ($configureExit -ne 0) {
+    Write-Host "[ERROR] CMake configure failed (exit=$configureExit)"
+    if (Test-Path "$BuildDir\cmake_config.log") { Get-Content "$BuildDir\cmake_config.log" -Tail 20 }
+    exit $configureExit
+}
 
 if ((Test-Path "$BuildDir\cmake_config.log") -and (Select-String "$BuildDir\cmake_config.log" -Pattern "CMake Error" -Quiet)) {
     Write-Host "[ERROR] CMake configure failed"
@@ -42,6 +49,13 @@ set PATH=%PATH%;C:\Program Files\CMake\bin
 $buildBatPath = "$BuildDir\build_run.bat"
 [System.IO.File]::WriteAllText($buildBatPath, $buildBat, [System.Text.Encoding]::UTF8)
 cmd /c $buildBatPath > "$BuildDir\build.log" 2>&1
+$buildExit = $LASTEXITCODE
+
+if ($buildExit -ne 0) {
+    Write-Host "[ERROR] Build failed (exit=$buildExit)"
+    if (Test-Path "$BuildDir\build.log") { Get-Content "$BuildDir\build.log" -Tail 40 }
+    exit $buildExit
+}
 
 $Exe = Get-ChildItem "$BuildDir\bin\AnyClaw_LVGL.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
 if (!$Exe) {

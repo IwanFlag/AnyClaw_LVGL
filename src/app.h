@@ -189,6 +189,9 @@ bool json_extract_string(const char* json, const char* key, char* out, int out_s
 /* UTF-8 utility */
 int utf8_safe_truncate(const char* str, int max_bytes);
 
+/* Chat streaming state (used by health/session polling to avoid contention) */
+bool app_is_chat_streaming();
+
 /* Secure memory clearing */
 void secure_zero(void* ptr, size_t size);
 void app_secure_zero_sensitive();  /* Zero API key + model name (cross-unit safe) */

@@ -7,12 +7,18 @@
  *********************/
 #include "lv_timer_private.h"
 #include "../core/lv_global.h"
+#include "../core/lv_refr.h"
+#include "../display/lv_display_private.h"
+#include "../indev/lv_indev_private.h"
 #include "../tick/lv_tick.h"
 #include "../stdlib/lv_mem.h"
 #include "../stdlib/lv_sprintf.h"
+#include "lv_anim_private.h"
 #include "lv_assert.h"
+#include "lv_array.h"
 #include "lv_ll.h"
 #include "lv_profiler.h"
+#include <stdint.h>
 
 /*********************
  *      DEFINES
@@ -34,6 +40,8 @@
 static bool lv_timer_exec(lv_timer_t * timer);
 static uint32_t lv_timer_time_remaining(lv_timer_t * timer);
 static void lv_timer_handler_resume(void);
+static void lv_timer_recover_core_cb_if_needed(lv_timer_t * timer);
+static bool lv_timer_cb_is_int3_padding(lv_timer_cb_t cb);
 
 /**********************
  *  STATIC VARIABLES
@@ -47,6 +55,11 @@ static void lv_timer_handler_resume(void);
 #else
     #define LV_TRACE_TIMER(...)
 #endif
+
+/* Diagnostic hooks consumed by app main-loop watchdog (non-functional for LVGL behavior). */
+volatile uintptr_t g_lv_timer_active_cb = 0;
+volatile uint32_t g_lv_timer_active_period = 0;
+volatile uintptr_t g_lv_timer_active_timer = 0;
 
 /**********************
  *   GLOBAL FUNCTIONS
@@ -349,9 +362,31 @@ static bool lv_timer_exec(lv_timer_t * timer)
         LV_TRACE_TIMER("calling timer callback: %p", *((void **)&timer->timer_cb));
 
         if(timer->timer_cb && original_repeat_count != 0) {
+            lv_timer_recover_core_cb_if_needed(timer);
+
+            if(lv_timer_cb_is_int3_padding(timer->timer_cb)) {
+                LV_LOG_ERROR("Invalid timer callback points to INT3 padding. timer=%p period=%u cb=%p user_data=%p",
+                             (void *)timer,
+                             (unsigned)timer->period,
+                             (void *)timer->timer_cb,
+                             timer->user_data);
+                lv_timer_recover_core_cb_if_needed(timer);
+                if(lv_timer_cb_is_int3_padding(timer->timer_cb)) {
+                    LV_LOG_ERROR("Unable to recover timer callback, pausing timer=%p", (void *)timer);
+                    lv_timer_pause(timer);
+                    return true;
+                }
+            }
+
+            g_lv_timer_active_timer = (uintptr_t)timer;
+            g_lv_timer_active_cb = (uintptr_t)(*((void **)&timer->timer_cb));
+            g_lv_timer_active_period = timer->period;
             LV_PROFILER_TIMER_BEGIN_TAG("timer_cb");
             timer->timer_cb(timer);
             LV_PROFILER_TIMER_END_TAG("timer_cb");
+            g_lv_timer_active_timer = 0;
+            g_lv_timer_active_cb = 0;
+            g_lv_timer_active_period = 0;
         }
 
         if(!state.timer_deleted) {
@@ -395,6 +430,52 @@ static uint32_t lv_timer_time_remaining(lv_timer_t * timer)
     return timer->period - elp;
 }
 
+static void lv_timer_recover_core_cb_if_needed(lv_timer_t * timer)
+{
+    lv_timer_cb_t expected_cb = NULL;
+    const char * owner = NULL;
+
+    if(timer == LV_GLOBAL_DEFAULT()->anim_state.timer) {
+        expected_cb = lv_anim_timer_cb;
+        owner = "anim";
+    }
+    else {
+        lv_display_t * disp = lv_display_get_next(NULL);
+        while(disp) {
+            if(disp->refr_timer == timer) {
+                expected_cb = lv_display_refr_timer;
+                owner = "display";
+                break;
+            }
+            disp = lv_display_get_next(disp);
+        }
+
+        if(expected_cb == NULL) {
+            lv_indev_t * indev = lv_indev_get_next(NULL);
+            while(indev) {
+                if(indev->read_timer == timer) {
+                    expected_cb = lv_indev_read_timer_cb;
+                    owner = "indev";
+                    break;
+                }
+                indev = lv_indev_get_next(indev);
+            }
+        }
+    }
+
+    if(expected_cb == NULL) return;
+    if((void *)timer->timer_cb == (void *)expected_cb) return;
+
+    LV_LOG_ERROR("Recover core timer cb owner=%s timer=%p period=%u old_cb=%p expected=%p suspicious_lv_array_remove=%d",
+                 owner,
+                 (void *)timer,
+                 (unsigned)timer->period,
+                 (void *)timer->timer_cb,
+                 (void *)expected_cb,
+                 ((void *)timer->timer_cb == (void *)lv_array_remove) ? 1 : 0);
+    timer->timer_cb = expected_cb;
+}
+
 /**
  * Call the ready lv_timer
  */
@@ -405,6 +486,23 @@ static void lv_timer_handler_resume(void)
     if(state.resume_cb) {
         state.resume_cb(state.resume_data);
     }
+}
+
+static bool lv_timer_cb_is_int3_padding(lv_timer_cb_t cb)
+{
+    if(cb == NULL) return false;
+
+#if defined(_MSC_VER)
+    __try {
+        const uint8_t * p = (const uint8_t *)(void *)cb;
+        return p[0] == 0xCC;
+    }
+    __except(1) {
+        return true;
+    }
+#else
+    return false;
+#endif
 }
 
 void lv_timer_handler_set_resume_cb(lv_timer_handler_resume_cb_t cb, void * data)

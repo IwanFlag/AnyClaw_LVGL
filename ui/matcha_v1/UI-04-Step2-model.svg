@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <linearGradient id="accentBtn" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF7F50"/>
+      <stop offset="100%" stop-color="#FFB347"/>
+    </linearGradient>
+    <linearGradient id="selectedCard" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF7F50" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#FFB347" stop-opacity="0.06"/>
+    </linearGradient>
+    <filter id="cardGlow" x="-3%" y="-8%" width="106%" height="116%">
+      <feDropShadow dx="0" dy="2" stdDeviation="5" flood-color="#FF7F50" flood-opacity="0.2"/>
+    </filter>
+    <filter id="inputShadow" x="-2%" y="-10%" width="104%" height="120%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="800" fill="#0F1117"/>
+
+  <!-- ===== Header ===== -->
+  <rect x="0" y="0" width="1280" height="41" fill="#0A0C10"/>
+  <!-- Logo: h=41, cy=20.5 -->
+  <circle cx="23" cy="21" r="8" fill="#3DD68C"/>
+  <line x1="17" y1="13" x2="15" y2="9" stroke="#3DD68C" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="29" y1="13" x2="31" y2="9" stroke="#3DD68C" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="15" cy="9" r="2.5" fill="#3DD68C"/>
+  <circle cx="31" cy="9" r="2.5" fill="#3DD68C"/>
+  <ellipse cx="20" cy="19" rx="2.5" ry="3" fill="#0F1117"/>
+  <ellipse cx="26" cy="19" rx="2.5" ry="3" fill="#0F1117"/>
+  <circle cx="21" cy="18" r="1" fill="#FFFFFF"/>
+  <circle cx="27" cy="18" r="1" fill="#FFFFFF"/>
+  <ellipse cx="17" cy="23" rx="3" ry="1.5" fill="#FF9EB5" opacity="0.7"/>
+  <ellipse cx="29" cy="23" rx="3" ry="1.5" fill="#FF9EB5" opacity="0.7"/>
+  <path d="M 21 25 Q 23 28 26 25" stroke="#0F1117" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+  <text x="48" y="26" font-family="sans-serif" font-size="13" fill="#E8ECF4">AnyClaw Setup</text>
+
+  <!-- 窗口控制按钮: 三个按钮全在1280范围内 -->
+  <!-- btn1: x=1170 w=28 ends=1198 | btn2: x=1206 w=28 ends=1234 | btn3: x=1242 w=28 ends=1270 -->
+  <rect x="1170" y="12" width="28" height="17" rx="4" fill="#252A38"/>
+  <text x="1184" y="25" text-anchor="middle" font-size="11" fill="#6B7280">─</text>
+  <rect x="1206" y="12" width="28" height="17" rx="4" fill="#252A38"/>
+  <text x="1220" y="25" text-anchor="middle" font-size="10" fill="#6B7280">□</text>
+  <rect x="1242" y="12" width="28" height="17" rx="4" fill="#EF4444" fill-opacity="0.15"/>
+  <text x="1256" y="25" text-anchor="middle" font-size="10" fill="#EF4444">✕</text>
+
+  <!-- ===== Step Bar: 居中，4圆点 cx=280/520/760/1000 ===== -->
+  <rect x="0" y="41" width="1280" height="48" fill="#0F1117"/>
+  <!-- Step 0 (completed) -->
+  <circle cx="280" cy="65" r="6" fill="#3DD68C"/>
+  <text x="280" y="85" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#3DD68C">语言</text>
+  <!-- Step 0→1 line (active) -->
+  <line x1="286" y1="65" x2="514" y2="65" stroke="#3DD68C" stroke-width="1.5"/>
+  <!-- Step 1 (completed) -->
+  <circle cx="520" cy="65" r="6" fill="#3DD68C"/>
+  <text x="520" y="85" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#3DD68C">环境</text>
+  <!-- Step 1→2 line (active) -->
+  <line x1="526" y1="65" x2="754" y2="65" stroke="#3DD68C" stroke-width="1.5"/>
+  <!-- Step 2 (current) -->
+  <circle cx="760" cy="65" r="6" fill="#3DD68C"/>
+  <text x="760" y="85" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#3DD68C">模型</text>
+  <!-- Step 2→3 line (future) -->
+  <line x1="766" y1="65" x2="994" y2="65" stroke="#252A38" stroke-width="1.5"/>
+  <!-- Step 3 (future) -->
+  <circle cx="1000" cy="65" r="6" fill="transparent" stroke="#3DD68C" stroke-width="1.5"/>
+  <text x="1000" y="85" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#6B7280">完成</text>
+
+  <!-- ===== Content ===== -->
+  <rect x="0" y="89" width="1280" height="566" fill="#0F1117"/>
+
+  <text x="640" y="128" text-anchor="middle" font-family="sans-serif" font-size="18" font-weight="600" fill="#E8ECF4">🤖 选择你的 AI 模型</text>
+  <text x="640" y="150" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#8B92A8">连接你的 API 密钥即可开始聊天</text>
+  <line x1="90" y1="166" x2="1190" y2="166" stroke="#3DD68C" stroke-opacity="0.07" stroke-width="1"/>
+
+  <text x="90" y="186" font-family="sans-serif" font-size="10" fill="#6B7280">模型列表</text>
+
+  <!-- ===== 模型卡片1: MiniMax（已选）====== -->
+  <!-- card: y=194~254, h=60, cy=224 -->
+  <rect x="90" y="194" width="1100" height="60" rx="10" fill="url(#selectedCard)" stroke="#FF7F50" stroke-width="1.5" filter="url(#cardGlow)"/>
+  <!-- Radio圆: cx=114, cy=224 -->
+  <circle cx="114" cy="224" r="9" fill="#FF7F50"/>
+  <circle cx="114" cy="224" r="3.5" fill="#0F1117"/>
+  <!-- 信息行: y=228，统一从x=138起 -->
+  <text x="138" y="228" font-family="sans-serif" font-size="12" fill="#E8ECF4">MiniMax Text</text>
+  <text x="278" y="228" font-family="sans-serif" font-size="11" fill="#8B92A8">MiniMax</text>
+  <text x="352" y="228" font-family="sans-serif" font-size="11" fill="#6B7280">v2.8</text>
+  <text x="408" y="228" font-family="sans-serif" font-size="11" fill="#FFB347">★</text>
+  <text x="422" y="228" font-family="sans-serif" font-size="11" fill="#FFB347">4.8</text>
+  <!-- 推荐标签: x=470 -->
+  <rect x="470" y="214" width="44" height="18" rx="9" fill="#FF7F50" fill-opacity="0.15"/>
+  <text x="492" y="226" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#FF7F50">推荐</text>
+
+  <!-- ===== 模型卡片2: Claude ===== -->
+  <!-- card: y=264~324, h=60, cy=294 -->
+  <rect x="90" y="264" width="1100" height="60" rx="10" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.07" stroke-width="1"/>
+  <circle cx="114" cy="294" r="9" fill="none" stroke="#6B7280" stroke-width="1.5"/>
+  <text x="138" y="298" font-family="sans-serif" font-size="12" fill="#E8ECF4">Claude 4 Sonnet</text>
+  <text x="278" y="298" font-family="sans-serif" font-size="11" fill="#8B92A8">Anthropic</text>
+  <text x="352" y="298" font-family="sans-serif" font-size="11" fill="#6B7280">v4.0</text>
+  <text x="408" y="298" font-family="sans-serif" font-size="11" fill="#FFB347">★</text>
+  <text x="422" y="298" font-family="sans-serif" font-size="11" fill="#FFB347">4.9</text>
+
+  <!-- ===== 模型卡片3: GPT-4o ===== -->
+  <!-- card: y=334~394, h=60, cy=364 -->
+  <rect x="90" y="334" width="1100" height="60" rx="10" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.07" stroke-width="1"/>
+  <circle cx="114" cy="364" r="9" fill="none" stroke="#6B7280" stroke-width="1.5"/>
+  <text x="138" y="368" font-family="sans-serif" font-size="12" fill="#E8ECF4">GPT-4o</text>
+  <text x="278" y="368" font-family="sans-serif" font-size="11" fill="#8B92A8">OpenAI</text>
+  <text x="352" y="368" font-family="sans-serif" font-size="11" fill="#6B7280">v4.0</text>
+  <text x="408" y="368" font-family="sans-serif" font-size="11" fill="#FFB347">★</text>
+  <text x="422" y="368" font-family="sans-serif" font-size="11" fill="#FFB347">4.7</text>
+
+  <!-- ===== API 密钥 ===== -->
+  <text x="90" y="422" font-family="sans-serif" font-size="11" font-weight="600" fill="#E8ECF4">API 密钥（可选）</text>
+  <!-- 输入框: h=44, cy=454 -->
+  <rect x="90" y="432" width="1100" height="44" rx="8" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.12" stroke-width="1" filter="url(#inputShadow)"/>
+  <text x="106" y="458" font-family="Consolas,monospace" font-size="14" fill="#8B92A8">sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</text>
+  <rect x="1168" y="443" width="22" height="22" rx="5" fill="#252A38"/>
+  <text x="1179" y="458" text-anchor="middle" font-size="13" fill="#6B7280">👁</text>
+
+  <text x="90" y="496" font-family="sans-serif" font-size="10" fill="#6B7280">○ 密钥将安全存储，仅本地使用</text>
+
+  <!-- ===== Footer ===== -->
+  <rect x="0" y="655" width="1280" height="145" fill="#13151E"/>
+  <line x1="0" y1="655" x2="1280" y2="655" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
+
+  <rect x="40" y="712" width="120" height="40" rx="8" fill="transparent" stroke="#6B7280" stroke-width="1"/>
+  <text x="100" y="736" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#6B7280">退出向导</text>
+
+  <rect x="1030" y="712" width="100" height="40" rx="8" fill="transparent" stroke="#6B7280" stroke-width="1"/>
+  <text x="1080" y="736" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#8B92A8">上一步</text>
+
+  <rect x="1140" y="712" width="100" height="40" rx="8" fill="url(#accentBtn)"/>
+  <text x="1190" y="736" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#0F1117" font-weight="600">下一步 ▶</text>
+
+  <text x="1272" y="796" text-anchor="end" font-family="sans-serif" font-size="8" fill="#6B7280" opacity="0.4">Matcha v1 · UI-04-Step2</text>
+</svg>

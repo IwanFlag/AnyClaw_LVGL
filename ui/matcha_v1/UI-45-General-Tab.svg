@@ -1,146 +1,234 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" width="1280" height="800">
+<svg viewBox="0 0 1280 800" xmlns="http://www.w3.org/2000/svg">
+  <title>UI-45 C1 General + Model Tab</title>
+  <desc>C1 General + Model Tab in Settings Panel, based on ui_settings.cpp build_general_tab + build_model_tab</desc>
+
   <defs>
-    <linearGradient id="accentBtn" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#FF7F50"/>
-      <stop offset="100%" stop-color="#FF6B35"/>
-    </linearGradient>
-    <filter id="switchOn" x="-20%" y="-100%" width="140%" height="300%">
-      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#3DD68C" flood-opacity="0.3"/>
-    </filter>
+    <style>
+      .bg           { fill: #13161B; }
+      .panel        { fill: #1E2128; }
+      .surface      { fill: #252930; }
+      .accent       { fill: #3DD68C; }
+      .accent-sub   { fill: #3DD68C; opacity: 0.15; }
+      .text         { fill: #E8E9E9; font-size: 13px; }
+      .text-dim     { fill: #8B9099; font-size: 13px; }
+      .text-sm      { fill: #8B9099; font-size: 12px; }
+      .text-hint    { fill: #6B7280; font-size: 12px; }
+      .divider      { fill: #2D333D; }
+      .badge-ok     { fill: #3DD68C; font-size: 11px; font-weight: 600; }
+      .tab-active   { fill: #3DD68C; font-size: 14px; font-weight: 600; }
+      .tab-inactive { fill: #8B9099; font-size: 14px; }
+      .section-lbl  { fill: #3DD68C; font-size: 12px; font-weight: 500; }
+      .btn-accent   { fill: #3DD68C; }
+      .btn-outline  { fill: #252930; stroke: #3DD68C; stroke-width: 1; }
+      .btn-sec       { fill: #3D4452; }
+    </style>
   </defs>
 
-  <!-- ===== Main Interface Background (dimmed) ===== -->
-  <rect width="1280" height="800" fill="#0F1117" opacity="0.5"/>
+  <!-- ===== WINDOW ===== -->
+  <rect width="1280" height="800" class="bg"/>
 
-  <!-- ===== Settings Panel (right side drawer, 520px wide) ===== -->
-  <!-- Panel background -->
-  <rect x="668" y="0" width="612" height="800" fill="#13151E"/>
-  <!-- Left border accent line -->
-  <rect x="668" y="0" width="2" height="800" fill="#3DD68C"/>
+  <!-- ===== TITLE BAR (y=0, h=48) ===== -->
+  <rect x="0" y="0" width="1280" height="48" class="panel"/>
+  <text x="24" y="29" class="text" font-weight="600">Settings</text>
+  <rect x="1186" y="8" width="84" height="32" rx="6" class="btn-sec"/>
+  <text x="1228" y="29" text-anchor="middle" class="text" font-size="12">Close</text>
 
-  <!-- ===== Header (h=41) ===== -->
-  <rect x="668" y="0" width="612" height="41" fill="#0A0C10"/>
-  <!-- Settings title -->
-  <text x="692" y="26" font-family="sans-serif" font-size="13" fill="#E8ECF4">Settings</text>
-  <!-- Close button -->
-  <rect x="1242" y="10" width="30" height="21" rx="4" fill="#252A38"/>
-  <text x="1257" y="25" text-anchor="middle" font-size="10" fill="#6B7280">✕</text>
+  <!-- ===== TAB BAR (y=48, h=44) ===== -->
+  <rect x="0" y="48" width="1280" height="44" class="surface"/>
+  <line x1="0" y1="91" x2="1280" y2="91" stroke="#2D333D" stroke-width="1"/>
+  <!-- C1 active -->
+  <text x="40" y="73" class="tab-active">C1 开始使用</text>
+  <line x1="20" y1="87" x2="140" y2="87" stroke="#3DD68C" stroke-width="2"/>
+  <!-- C2 inactive -->
+  <text x="180" y="73" class="tab-inactive">C2 对话与任务</text>
+  <!-- C3 inactive -->
+  <text x="360" y="73" class="tab-inactive">C3 Agent</text>
+  <!-- C4 inactive -->
+  <text x="490" y="73" class="tab-inactive">C4 系统诊断</text>
 
-  <!-- ===== Tab Bar (h=44, y=41) ===== -->
-  <rect x="668" y="41" width="612" height="44" fill="#0F1117"/>
-  <!-- Tab underline indicator -->
-  <rect x="668" y="83" width="100" height="2" fill="#3DD68C"/>
+  <!-- ===== CONTENT AREA (tabview: x=20, y=54, w=1240, h=734-12) ===== -->
+  <!-- C1 General Section Label -->
+  <text x="36" y="130" class="text-dim" font-size="11" letter-spacing="1">GENERAL</text>
 
-  <!-- Tabs -->
-  <text x="718" y="67" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#3DD68C" font-weight="600">General</text>
-  <text x="838" y="67" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#6B7280">Permissions</text>
-  <text x="968" y="67" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#6B7280">Model</text>
-  <text x="1048" y="67" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#6B7280">Log</text>
-  <text x="1108" y="67" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#6B7280">About</text>
+  <!-- === INFO ROWS === -->
+  <!-- Gateway Status -->
+  <text x="36" y="156" class="text-dim">Gateway Status</text>
+  <circle cx="190" cy="152" r="5" fill="#3DD68C"/>
+  <text x="202" y="156" class="badge-ok">Ready</text>
 
-  <!-- ===== Content Area (scrollable) ===== -->
-  <rect x="668" y="85" width="612" height="600" fill="#13151E"/>
+  <!-- Install Path -->
+  <text x="36" y="186" class="text-dim">Install Path</text>
+  <text x="160" y="186" class="text-sm">C:\Users\...\AppData\Roaming\npm\node_modules\openclaw</text>
 
-  <!-- === Row 1: Agent Status === -->
-  <text x="692" y="116" font-family="sans-serif" font-size="11" fill="#8B92A8">Agent Status</text>
-  <circle cx="900" cy="112" r="5" fill="#3DD68C"/>
-  <text x="912" y="116" font-family="sans-serif" font-size="11" fill="#3DD68C">Ready</text>
+  <!-- Workspace -->
+  <text x="36" y="216" class="text-dim">Workspace</text>
+  <text x="160" y="216" class="text-sm">D:\workspace\AnyClaw</text>
 
-  <!-- === Row 2: Install Path === -->
-  <text x="692" y="156" font-family="sans-serif" font-size="11" fill="#8B92A8">Install Path</text>
-  <text x="692" y="176" font-family="sans-serif" font-size="11" fill="#6B7280">C:\Users\xxx\AppData\Roaming\AnyClaw</text>
+  <!-- Divider -->
+  <rect x="36" y="232" width="1208" height="1" class="divider"/>
 
-  <!-- === Row 3: Workspace === -->
-  <text x="692" y="216" font-family="sans-serif" font-size="11" fill="#8B92A8">Workspace</text>
-  <text x="692" y="236" font-family="sans-serif" font-size="11" fill="#6B7280">D:\Projects\AnyClaw</text>
+  <!-- === WORKSPACE MANAGER === -->
+  <text x="36" y="256" class="text-dim" font-size="11" letter-spacing="1">WORKSPACE</text>
 
-  <!-- === Divider === -->
-  <rect x="692" y="254" width="564" height="1" fill="#252A38"/>
+  <!-- Workspace List dropdown -->
+  <text x="36" y="282" class="text-dim">Workspace List</text>
+  <rect x="180" y="270" width="280" height="28" rx="4" class="surface" stroke="#2D333D" stroke-width="1"/>
+  <text x="192" y="288" class="text-sm">D:\workspace\AnyClaw</text>
+  <text x="442" y="288" class="text-dim" font-size="10">▼</text>
 
-  <!-- === Row 4: Boot Start === -->
-  <text x="692" y="284" font-family="sans-serif" font-size="11" fill="#8B92A8">Boot Start</text>
-  <!-- Switch ON -->
-  <rect x="1080" y="271" width="40" height="20" rx="10" fill="#3DD68C" filter="url(#switchOn)"/>
-  <circle cx="1110" cy="281" r="8" fill="#FFFFFF"/>
-  <text x="1000" y="284" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">Start on boot</text>
+  <!-- Workspace Input -->
+  <text x="36" y="318" class="text-dim">Workspace Input</text>
+  <rect x="180" y="306" width="280" height="28" rx="4" class="surface" stroke="#2D333D" stroke-width="1"/>
+  <text x="192" y="324" class="text-hint">D:\workspace\MyProject</text>
 
-  <!-- === Row 5: Auto Start === -->
-  <text x="692" y="324" font-family="sans-serif" font-size="11" fill="#8B92A8">Auto Start</text>
-  <!-- Switch OFF -->
-  <rect x="1080" y="311" width="40" height="20" rx="10" fill="#252A38" stroke="#3DD68C" stroke-opacity="0.2" stroke-width="1"/>
-  <circle cx="1090" cy="321" r="8" fill="#6B7280"/>
-  <text x="1000" y="324" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">Restart on crash</text>
+  <!-- Apply / Save buttons -->
+  <rect x="180" y="344" width="130" height="32" rx="6" class="btn-accent"/>
+  <text x="245" y="365" text-anchor="middle" fill="#13161B" font-size="12" font-weight="600">Apply Workspace</text>
+  <rect x="318" y="344" width="120" height="32" rx="6" class="btn-outline"/>
+  <text x="378" y="365" text-anchor="middle" class="accent" font-size="12">Save Candidate</text>
 
-  <!-- === Divider === -->
-  <rect x="692" y="342" width="564" height="1" fill="#252A38"/>
+  <!-- Workspace Status -->
+  <text x="36" y="396" class="text-dim">Workspace Status</text>
+  <text x="180" y="396" class="text-hint">Workspace manager ready</text>
 
-  <!-- === Row 6: Theme === -->
-  <text x="692" y="372" font-family="sans-serif" font-size="11" fill="#8B92A8">Theme</text>
-  <!-- Matcha (selected) -->
-  <rect x="900" y="358" width="80" height="26" rx="6" fill="#3DD68C" fill-opacity="0.15" stroke="#3DD68C" stroke-width="1"/>
-  <text x="940" y="375" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#3DD68C">Matcha</text>
-  <!-- Peachy -->
-  <rect x="988" y="358" width="80" height="26" rx="6" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.1" stroke-width="1"/>
-  <text x="1028" y="375" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#6B7280">Peachy</text>
-  <!-- Mochi -->
-  <rect x="1076" y="358" width="80" height="26" rx="6" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.1" stroke-width="1"/>
-  <text x="1116" y="375" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#6B7280">Mochi</text>
+  <!-- Divider -->
+  <rect x="36" y="412" width="1208" height="1" class="divider"/>
 
-  <!-- === Row 7: Language === -->
-  <text x="692" y="412" font-family="sans-serif" font-size="11" fill="#8B92A8">Language</text>
-  <!-- Dropdown -->
-  <rect x="1080" y="398" width="120" height="28" rx="6" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.15" stroke-width="1"/>
-  <text x="1095" y="416" font-family="sans-serif" font-size="11" fill="#E8ECF4">中文</text>
-  <text x="1180" y="416" text-anchor="middle" font-size="10" fill="#6B7280">▼</text>
+  <!-- === APPLICATION AUTHORIZATION === -->
+  <text x="36" y="436" class="section-lbl">Application Authorization</text>
 
-  <!-- === Row 8: Exit Confirm === -->
-  <text x="692" y="452" font-family="sans-serif" font-size="11" fill="#8B92A8">Exit Confirm</text>
-  <!-- Switch ON -->
-  <rect x="1080" y="439" width="40" height="20" rx="10" fill="#3DD68C" filter="url(#switchOn)"/>
-  <circle cx="1110" cy="449" r="8" fill="#FFFFFF"/>
-  <text x="1000" y="452" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">弹出退出确认</text>
+  <!-- Outlook card -->
+  <rect x="36" y="450" width="560" height="72" rx="8" class="surface" stroke="#2D333D" stroke-width="1"/>
+  <text x="56" y="474" class="text">📧 Outlook</text>
+  <text x="56" y="494" class="text-sm">推荐交互方式: CLI</text>
+  <rect x="420" y="468" width="68" height="26" rx="5" class="btn-accent"/>
+  <text x="454" y="485" text-anchor="middle" fill="#13161B" font-size="11" font-weight="600">授权</text>
+  <rect x="496" y="468" width="68" height="26" rx="5" class="btn-sec"/>
+  <text x="530" y="485" text-anchor="middle" class="text-dim" font-size="11">拒绝</text>
 
-  <!-- === Row 9: Close on Exit === -->
-  <text x="692" y="492" font-family="sans-serif" font-size="11" fill="#8B92A8">Close on Exit</text>
-  <!-- Switch OFF -->
-  <rect x="1080" y="479" width="40" height="20" rx="10" fill="#252A38" stroke="#3DD68C" stroke-opacity="0.2" stroke-width="1"/>
-  <circle cx="1090" cy="489" r="8" fill="#6B7280"/>
-  <text x="1000" y="492" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">Close OpenClaw on exit</text>
+  <!-- Calendar card -->
+  <rect x="36" y="530" width="560" height="72" rx="8" class="surface" stroke="#2D333D" stroke-width="1"/>
+  <text x="56" y="554" class="text">📅 Calendar</text>
+  <text x="56" y="574" class="text-sm">推荐交互方式: MCP</text>
+  <rect x="420" y="548" width="68" height="26" rx="5" class="btn-accent"/>
+  <text x="454" y="565" text-anchor="middle" fill="#13161B" font-size="11" font-weight="600">授权</text>
+  <rect x="496" y="548" width="68" height="26" rx="5" class="btn-sec"/>
+  <text x="530" y="565" text-anchor="middle" class="text-dim" font-size="11">拒绝</text>
 
-  <!-- === Divider === -->
-  <rect x="692" y="510" width="564" height="1" fill="#252A38"/>
+  <!-- Email / Calendar access switches (inline row) -->
+  <text x="36" y="628" class="text-dim">Email Access</text>
+  <rect x="160" y="620" width="40" height="20" rx="10" class="btn-accent"/>
+  <circle cx="192" cy="630" r="8" fill="#FFFFFF"/>
 
-  <!-- === Row 10: Security Status === -->
-  <text x="692" y="540" font-family="sans-serif" font-size="11" fill="#8B92A8">Security Status</text>
+  <text x="240" y="628" class="text-dim">Calendar Access</text>
+  <rect x="368" y="620" width="40" height="20" rx="10" class="btn-accent"/>
+  <circle cx="400" cy="630" r="8" fill="#FFFFFF"/>
 
-  <!-- API Key status -->
-  <circle cx="712" cy="566" r="4" fill="#3DD68C"/>
-  <text x="724" y="570" font-family="sans-serif" font-size="11" fill="#6B7280">API Key: 已配置</text>
+  <!-- Scan Installed Apps -->
+  <text x="36" y="668" class="text-dim">Scan Installed Apps</text>
+  <rect x="200" y="660" width="200" height="32" rx="6" class="btn-accent"/>
+  <text x="300" y="681" text-anchor="middle" fill="#13161B" font-size="12" font-weight="600">Scan Installed Apps</text>
 
-  <!-- Agent Port status -->
-  <circle cx="880" cy="566" r="4" fill="#3DD68C"/>
-  <text x="892" y="570" font-family="sans-serif" font-size="11" fill="#6B7280">Agent Port: 18789</text>
+  <!-- Scan result textarea -->
+  <rect x="36" y="694" width="560" height="80" rx="6" class="surface" stroke="#2D333D" stroke-width="1"/>
+  <text x="52" y="716" class="text-hint">Scan result will be shown here...</text>
 
-  <!-- Config Dir status -->
-  <circle cx="1040" cy="566" r="4" fill="#3DD68C"/>
-  <text x="1052" y="570" font-family="sans-serif" font-size="11" fill="#6B7280">Config: 可写 ✓</text>
+  <!-- Divider -->
+  <rect x="36" y="788" width="1208" height="1" class="divider"/>
 
-  <!-- === Divider === -->
-  <rect x="692" y="590" width="564" height="1" fill="#252A38"/>
+  <!-- === BOOT & EXIT (right column, y=120) === -->
+  <!-- Boot Start -->
+  <text x="660" y="156" class="text-dim">Boot Start</text>
+  <text x="800" y="156" class="text-sm">Start on boot</text>
+  <rect x="1100" y="148" width="40" height="20" rx="10" class="btn-accent"/>
+  <circle cx="1132" cy="158" r="8" fill="#FFFFFF"/>
 
-  <!-- === Reconfigure Wizard Button === -->
-  <rect x="692" y="620" width="564" height="44" rx="10" fill="#FF7F50" fill-opacity="0.1" stroke="#FF7F50" stroke-width="1"/>
-  <text x="974" y="647" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#FF7F50">🔧 Reconfigure Wizard</text>
+  <!-- Auto Start -->
+  <text x="660" y="196" class="text-dim">Auto Start</text>
+  <text x="800" y="196" class="text-sm">Restart on crash</text>
+  <rect x="1100" y="188" width="40" height="20" rx="10" class="btn-accent"/>
+  <circle cx="1132" cy="198" r="8" fill="#FFFFFF"/>
 
-  <!-- ===== Footer (y=700~800) ===== -->
-  <rect x="668" y="700" width="612" height="100" fill="#13151E"/>
-  <rect x="668" y="700" width="612" height="1" fill="#252A38"/>
+  <!-- Close OpenClaw on exit -->
+  <text x="660" y="236" class="text-dim">Close OpenClaw on exit</text>
+  <text x="880" y="236" class="text-sm">Stop Gateway when quitting</text>
+  <rect x="1100" y="228" width="40" height="20" rx="10" class="btn-accent"/>
+  <circle cx="1132" cy="238" r="8" fill="#FFFFFF"/>
 
-  <!-- Save button -->
-  <rect x="1140" y="720" width="100" height="36" rx="8" fill="url(#accentBtn)"/>
-  <text x="1190" y="743" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#0F1117" font-weight="600">Save</text>
+  <!-- Language -->
+  <text x="660" y="276" class="text-dim">Language</text>
+  <rect x="800" y="268" width="140" height="28" rx="4" class="surface" stroke="#2D333D" stroke-width="1"/>
+  <text x="812" y="286" class="text-sm">中文</text>
+  <text x="922" y="286" class="text-dim" font-size="10">▼</text>
 
-  <!-- Reset button -->
-  <rect x="1020" y="720" width="100" height="36" rx="8" fill="#1A1D27" stroke="#252A38" stroke-width="1"/>
-  <text x="1070" y="743" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#6B7280">Reset</text>
+  <!-- Refresh -->
+  <text x="660" y="316" class="text-dim">Refresh</text>
+  <rect x="800" y="308" width="140" height="28" rx="4" class="surface" stroke="#2D333D" stroke-width="1"/>
+  <text x="812" y="326" class="text-sm">15s</text>
+  <text x="922" y="326" class="text-dim" font-size="10">▼</text>
+
+  <!-- Theme label -->
+  <text x="660" y="356" class="text-dim">Theme</text>
+
+  <!-- Theme buttons -->
+  <rect x="800" y="348" width="80" height="28" rx="5" class="btn-accent"/>
+  <text x="840" y="365" text-anchor="middle" fill="#13161B" font-size="11" font-weight="600">■ Matcha</text>
+  <rect x="888" y="348" width="72" height="28" rx="5" class="surface" stroke="#2D333D" stroke-width="1"/>
+  <text x="924" y="365" text-anchor="middle" class="text-dim" font-size="11">□ Peachy</text>
+  <rect x="968" y="348" width="72" height="28" rx="5" class="surface" stroke="#2D333D" stroke-width="1"/>
+  <text x="1004" y="365" text-anchor="middle" class="text-dim" font-size="11">□ Mochi</text>
+
+  <!-- Security -->
+  <text x="660" y="396" class="text-dim">Security</text>
+  <circle cx="750" cy="392" r="5" fill="#3DD68C"/>
+  <text x="762" y="396" class="badge-ok">OK</text>
+
+  <!-- Security detail -->
+  <text x="660" y="426" class="text-hint" font-size="11">API Key: Checking | Port: -- | Config: Checking</text>
+
+  <!-- Divider (right column) -->
+  <rect x="620" y="444" width="1" height="360" class="divider"/>
+
+  <!-- Reconfigure Wizard -->
+  <rect x="660" y="468" width="580" height="40" rx="8" class="accent-sub" stroke="#3DD68C" stroke-width="1"/>
+  <text x="950" y="492" text-anchor="middle" class="accent" font-size="13" font-weight="600">🔧 Reconfigure Wizard</text>
+
+  <!-- Divider after wizard -->
+  <rect x="620" y="524" width="1" height="280" class="divider"/>
+
+  <!-- === MODEL SECTION (right column, below wizard divider) === -->
+  <text x="660" y="548" class="text-dim" font-size="11" letter-spacing="1">MODEL</text>
+
+  <!-- Current Model -->
+  <text x="660" y="574" class="text-dim">Current Model</text>
+  <text x="800" y="574" class="badge-ok">MiniMax-M2.7</text>
+
+  <!-- Select Model section -->
+  <text x="660" y="608" class="section-lbl">选择模型</text>
+
+  <!-- Model search -->
+  <rect x="660" y="618" width="580" height="36" rx="4" class="surface" stroke="#2D333D" stroke-width="1"/>
+  <text x="676" y="640" class="text-hint">搜索模型...</text>
+
+  <!-- Model dropdown row -->
+  <text x="660" y="676" class="text-dim">Select Model</text>
+  <rect x="800" y="668" width="380" height="28" rx="4" class="surface" stroke="#2D333D" stroke-width="1"/>
+  <text x="812" y="686" class="text-sm">openrouter/auto</text>
+  <text x="1162" y="686" class="text-dim" font-size="10">▼</text>
+  <!-- Add button -->
+  <rect x="1188" y="668" width="52" height="28" rx="4" class="btn-accent"/>
+  <text x="1214" y="686" text-anchor="middle" fill="#13161B" font-size="16" font-weight="600">+</text>
+
+  <!-- API Key section -->
+  <text x="660" y="718" class="section-lbl">API Key</text>
+  <rect x="660" y="730" width="580" height="56" rx="4" class="surface" stroke="#2D333D" stroke-width="1"/>
+  <text x="676" y="750" class="text-hint">Enter API Key...</text>
+
+  <!-- Test Connection + Save buttons -->
+  <rect x="660" y="796" width="140" height="36" rx="6" class="btn-sec"/>
+  <text x="730" y="817" text-anchor="middle" class="text-dim" font-size="12">Test Connection</text>
+
+  <rect x="1100" y="796" width="140" height="36" rx="6" class="btn-accent"/>
+  <text x="1170" y="817" text-anchor="middle" fill="#13161B" font-size="12" font-weight="600">Save Model</text>
+
 </svg>

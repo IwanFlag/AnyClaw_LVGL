@@ -10,39 +10,12 @@
 /* ── Custom models JSON path (relative to exe dir) ── */
 #define CUSTOM_ADD_MODELS_FILE "assets/custom_add_models.json"
 
-/* ── Default models — sorted by capability (powerful first) ── */
+/* ── Default models ── */
 static const char* default_models[] = {
-    /* User's primary model (2026-04-19, from openclaw.json) */
-    "minimax-cn/MiniMax-M2.7-highspeed",            /* MiniMax M2.7 高速版（用户主模型） */
-    "minimax/MiniMax-M2.7",                          /* MiniMax M2.7 多模态版 */
-    /* Free models (verified accessible, 2026-04-06 tested) */
-    "nousresearch/hermes-3-llama-3.1-405b:free",   /* 405B 最强开源 */
-    "openai/gpt-oss-120b:free",                     /* 120B OpenAI开源 */
-    "meta-llama/llama-3.3-70b-instruct:free",       /* 70B Meta最新 */
-    "qwen/qwen3.6-plus:free",                       /* 通义千问最新 */
-    "qwen/qwen3-coder:free",                        /* 代码专用 */
-    "qwen/qwen3-next-80b-a3b-instruct:free",        /* 通义千问 Next */
-    "z-ai/glm-4.5-air:free",                        /* 智谱 GLM */
-    "minimax/minimax-m2.5:free",                    /* MiniMax M2.5 */
-    "nvidia/nemotron-3-super-120b-a12b:free",       /* NVIDIA 120B */
-    "stepfun/step-3.5-flash:free",                  /* 阶跃星辰 */
-    "nvidia/nemotron-3-nano-30b-a3b:free",          /* NVIDIA 30B MoE */
-    "nvidia/nemotron-nano-12b-v2-vl:free",          /* NVIDIA 多模态 */
-    "openai/gpt-oss-20b:free",                      /* OpenAI 20B */
-    "nvidia/nemotron-nano-9b-v2:free",              /* NVIDIA 9B */
-    "arcee-ai/trinity-large-preview:free",           /* Arcee 推理预览 */
-    "arcee-ai/trinity-mini:free",                   /* Arcee 轻量 */
-    "cognitivecomputations/dolphin-mistral-24b-venice-edition:free", /* 无审查 */
-    "liquid/lfm-2.5-1.2b-thinking:free",            /* LiquidAI 推理 */
-    "liquid/lfm-2.5-1.2b-instruct:free",            /* LiquidAI 指令 */
-    "google/gemma-3n-e4b-it:free",                  /* Google 最新小 */
-    "gemma-local-2b",                               /* llama.cpp local */
-    "gemma-local-9b",                               /* llama.cpp local */
-    "gemma-local-27b",                              /* llama.cpp local */
-    "meta-llama/llama-3.2-3b-instruct:free",        /* Meta 最小 */
+    "minimax-text/MiniMax-M2.7-highspeed",          /* AnyClaw 默认模型 */
     nullptr
 };
-static const int default_count = 26;
+static const int default_count = 1;
 
 /* ── Cached model list ──────────────────────────────────────── */
 static char model_cache[MODEL_MAX_COUNT][MODEL_MAX_NAME_LEN];
@@ -275,14 +248,14 @@ bool model_ensure_default_config() {
         return true;
     }
 
-    LOG_I("MODEL", "No Gateway config, creating default (openrouter)...");
+    LOG_I("MODEL", "No Gateway config, creating default (MiniMax M2.7 highspeed)...");
 
     /* Set default model + provider via app_update_model_config.
      * This calls "openclaw config set" which is merge behavior (no overwrite). */
-    bool ok = app_update_model_config(nullptr, "google/gemma-3-4b-it:free");
+    bool ok = app_update_model_config(nullptr, "minimax-text/MiniMax-M2.7-highspeed");
     if (ok) {
         has_gateway_config = true;
-        LOG_I("MODEL", "Default config created: openrouter/google/gemma-3-4b-it:free");
+        LOG_I("MODEL", "Default config created: minimax-text/MiniMax-M2.7-highspeed");
     } else {
         LOG_E("MODEL", "Failed to create default config");
     }

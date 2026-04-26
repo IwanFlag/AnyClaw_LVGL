@@ -53,6 +53,9 @@ public:
 private:
     std::vector<SessionInfo> sessions_;
     std::string last_error_;
+    std::string preferred_http_url_;
+    unsigned long long http_probe_after_ms_ = 0;
+    unsigned long long cli_next_retry_ms_ = 0;
     mutable std::mutex mtx_;
 
     bool parse_json(const char* json, std::vector<SessionInfo>& out_sessions) const;

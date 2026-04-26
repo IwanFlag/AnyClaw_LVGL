@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <filter id="modalOverlay" x="0" y="0" width="1280" height="800">
+      <feFlood flood-color="#000000" flood-opacity="0.7"/>
+    </filter>
+    <filter id="popupShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- 全屏暗色遮罩 -->
+  <rect width="1280" height="800" fill="#000000" opacity="0.75"/>
+
+  <!-- 遮罩层（阻断交互） -->
+  <rect width="1280" height="800" fill="#000000" opacity="0.05"/>
+
+  <!-- 背景窗口轮廓（示意） -->
+  <rect x="0" y="0" width="1280" height="800" fill="#0F1117" opacity="0.3"/>
+
+  <!-- ===== 阻断弹窗 ===== -->
+  <!-- 弹窗容器: 480px宽，居中 -->
+  <!-- x = (1280-480)/2 = 400, y = (800-高度)/2 ≈ 260 -->
+  <rect x="400" y="230" width="480" height="340" rx="16" fill="#1A1D27" filter="url(#popupShadow)"/>
+
+  <!-- 弹窗顶部: 警告图标 + 标题 -->
+  <!-- 警告图标 -->
+  <circle cx="460" cy="295" r="22" fill="#EF4444" fill-opacity="0.15"/>
+  <text x="460" y="302" text-anchor="middle" font-size="22" fill="#EF4444">⚠</text>
+
+  <!-- 标题 -->
+  <text x="490" y="302" font-family="sans-serif" font-size="17" font-weight="700" fill="#E8ECF4">检测到问题</text>
+
+  <!-- 失败项列表容器 -->
+  <rect x="432" y="340" width="416" height="130" rx="8" fill="#0F1117" stroke="#EF4444" stroke-width="1" stroke-opacity="0.3"/>
+
+  <!-- 失败项 1: Node.js -->
+  <circle cx="452" cy="368" r="5" fill="#EF4444"/>
+  <text x="464" y="372" font-family="sans-serif" font-size="12" fill="#E8ECF4">Node.js: 未检测到</text>
+  <text x="464" y="388" font-family="sans-serif" font-size="10" fill="#6B7280" font-style="italic">原因: 缺少 node.exe</text>
+
+  <!-- 失败项 2: 网络 -->
+  <circle cx="452" cy="412" r="5" fill="#EF4444"/>
+  <text x="464" y="416" font-family="sans-serif" font-size="12" fill="#E8ECF4">网络: 无法连接</text>
+  <text x="464" y="432" font-family="sans-serif" font-size="10" fill="#6B7280" font-style="italic">原因: 无可用网络</text>
+
+  <!-- 说明文字 -->
+  <text x="640" y="496" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#8B92A8">请修复上述问题后重新启动应用。</text>
+
+  <!-- 按钮 -->
+  <rect x="580" y="516" width="120" height="40" rx="10" fill="#3DD68C" fill-opacity="0.15" stroke="#3DD68C" stroke-width="1"/>
+  <text x="640" y="541" text-anchor="middle" font-family="sans-serif" font-size="13" fill="#3DD68C" font-weight="600">退出</text>
+</svg>

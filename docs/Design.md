@@ -6777,302 +6777,274 @@ Design 中的中文标签仅为国际化占位符，实际界面为英文。**
 
 > 需求 → PRD §11 设置
 
-### UI-45: General Tab
+**信息架构（4 Tab）：**
 
-```
-┌──────────────────────────────────────────────────────────┐
-│ General  │ Permissions │ Model  │  Log  │  About         │
-├──────────────────────────────────────────────────────────┤
-│  Agent Status    ● Ready                               │
-│  Install Path      C:\Users\xxx\AppData\Roaming\...      │
-│  Workspace         D:\Projects\AnyClaw                   │
-│  ─────────────────────────────────────────────────────── │
-│  Boot Start        [====]  Start on boot                 │
-│  Auto Start        [    ]  Restart on crash              │
-│  ─────────────────────────────────────────────────────── │
-│  Theme             [■ Matcha] [□ Peachy] [□ Mochi]       │
-│  Language          [CN / EN ▾]                            │
-│  Exit Confirm      [====]  弹出退出确认                  │
-│  Close on Exit     [====]  Close OpenClaw on exit        │
-│  ─────────────────────────────────────────────────────── │
-│  Security Status                                           │
-│    API Key: ● 已配置                                      │
-│    Agent Port: 18789                                    │
-│    Config Dir: 可写 ✓                                     │
-│  ─────────────────────────────────────────────────────── │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │           [ 🔧 Reconfigure Wizard ]                │  │
-│  └────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────┘
-```
+| Tab | 定位 | 主要内容 |
+|-----|------|---------|
+| **通用** | 系统级基础设施 | Gateway状态 / 安装路径 / 工作区信息 / 启动偏好 / 界面偏好 / 日志开关 |
+| **用户** | 个人数据与权限 | 第三方应用授权 / 权限策略（折叠分组）/ 知识库管理 |
+| **AI** | 模型与Agent行为 | 模型选择+API Key / Active Runtime / Leader Mode |
+| **其它** | 诊断与系统 | Feature Flags / Tracing / 关于 |
+
+**Tab 命名规范：**
+- Tab 标签显示中文名称：`通用` / `用户` / `AI` / `其它`
+- 代码层仍用 C1/C2/C3/C4，但用户可见名称改为中文
+
+### UI-45: 通用 Tab（General）
 
 #### 操作流程图
 
 ```
 [用户点击设置图标 / 热键]
     ↓
-[打开 General Tab]
+[打开设置面板 → 默认显示通用 Tab]
     ↓
-[加载当前配置：主题、语言、开关状态等]
+[加载当前配置：Gateway状态 / 启动项 / 界面偏好 / 日志设置]
     ↓
-[用户修改配置项]
+[用户修改任意配置项]
     ↓
-[自动验证：格式校验 → Enable Save]
+[自动保存（部分项如主题/语言立即生效）]
     ↓
-┌─ API Key 未配置 ─┐  ┌─ 配置完整 ─────────────────────┐
-│                  │  │                                 │
-│ 保存按钮禁用     │  │ 保存按钮可点击                   │
-│ 提示补充 API Key│  │                                 │
-└──────────────────┘  │                                 │
-                      └─────────────────────────────────┘
-                           ↓
-                      [用户点击保存]
-                           ↓
-                   ┌─ 保存成功 ─┐  ┌─ 保存失败 ─┐
-                   │            │  │             │
-                   │ Toast 提示  │  │ Inline Error│
-                   │ 重启生效    │  │ 重试按钮    │
-                   └────────────┘  └─────────────┘
+[点击 Reconfigure Wizard → 重新运行首次启动向导]
 ```
 
 #### 文字描述
 
-1. **入口**：点击右下角设置图标，或使用快捷键 `Ctrl+,` 打开设置面板，默认显示 General Tab。
-2. **显示内容**：安装路径、工作区路径、开机自启、主题、语言、退出确认、安全状态等配置项。
-3. **Reconfigure Wizard**：点击后重新运行首次启动向导，覆盖现有配置。
-4. **配置验证**：修改 API Key 等关键字段时实时校验格式，格式正确后启用保存按钮。
-5. **保存行为**：保存后部分配置（如主题、语言）立即生效，部分（如开机自启）需重启生效。
+1. **入口**：点击左导航 Settings 图标，或快捷键 `Ctrl+,` 打开设置面板，默认显示通用 Tab。
+2. **Tab 结构**：通用（系统基础设施）/ 用户（个人数据）/ AI（模型与Agent）/ 其它（诊断）
+3. **通用 Tab 内容**：
+   - 信息区：Gateway 状态（LED+标签）、安装路径（LV_LABEL_LONG_MODE_DOTS）、工作区路径
+   - 启动偏好：Boot Start 开关（Start on boot）、Auto Start 开关（Restart on crash）、退出关闭 Gateway 开关
+   - 界面偏好：Language 下拉（中文/English）、Refresh 下拉（5s/15s/30s/60s/120s）、Theme 按钮组（Matcha/Peachy/Mochi）
+   - 日志设置：Log System 开关、Log Level 下拉（Debug/Info/Warn/Error）
+   - Reconfigure Wizard 按钮：点击重新运行首次启动向导
+4. **布局**：单列从上到下，使用分隔线（divider）区分语义组
 
 #### 分层文字描述（精确像素）
 
-**Tab 内容骨架：** 位于设置面板内部，继承 settings panel 的 content 区域
-
-**第一层：Tab 内容框架**
+**Tab 内容骨架：** 位于全屏设置面板内部
 
 | 区域 | 坐标 | 说明 |
 |------|------|------|
-| Agent Status 行 | content_x+16, content_y+16, w-32, h=24 | "Agent Status ● Ready" |
-| 安装路径行 | content_x+16, content_y+48, w-32, h=24 | "Install Path: C:\..." |
-| 工作区路径行 | content_x+16, content_y+80, w-32, h=24 | "Workspace: D:\..." |
-| 分隔线 | content_x+16, y=112, w-32, h=1 | 灰色分隔线 |
-
-**第二层：设置项（从上到下，每项间距 40px）**
-
-| 区域 | 坐标 | 说明 |
-|------|------|------|
-| Boot Start 开关 | content_x+16, y=120, w-32, h=24 | Switch + label |
-| Auto Start 开关 | content_x+16, y=160, w-32, h=24 | Switch + label |
-| Theme 选择 | content_x+16, y=200, w-32, h=24 | 单选按钮组 |
-| Language 下拉 | content_x+16, y=240, w-32, h=24 | "CN / EN ▾" |
-| Exit Confirm 开关 | content_x+16, y=280, w-32, h=24 | Switch + label |
-| Close on Exit 开关 | content_x+16, y=320, w-32, h=24 | Switch + label |
-| Security Status 区 | content_x+16, y=360, w-32, h=80 | API Key/Port/Config 状态 |
-| Reconfigure Wizard 按钮 | content_x+16, y=448, w-32, h=48 | 主按钮，accent色 |
+| 内容区 padding | x=16, y=16, w=tab_w-32 | LVGL flex column, gap=8 |
+| Gateway Status 行 | y=0, h=24 | LED（10×10）+ 标签，"● Ready" / "○ Error" |
+| Install Path 行 | y=40, h=24 | dim色文字，超长省略（LV_LABEL_LONG_MODE_DOTS） |
+| Workspace 行 | y=80, h=24 | dim色文字 |
+| 分隔线 | y=112, h=2 | border色，LV_PCT(100) 宽 |
+| Boot Start 行 | y=120, h=40 | Key标签 + Switch + hint "Start on boot" |
+| Auto Start 行 | y=160, h=40 | Key标签 + Switch + hint "Restart on crash" |
+| 退出关闭 Gateway 行 | y=200, h=40 | Key标签 + Switch + hint |
+| 分隔线 | y=248, h=2 | border色 |
+| Language 行 | y=256, h=40 | Key标签 + Dropdown(w=160) |
+| Refresh 行 | y=296, h=40 | Key标签 + Dropdown(w=160) |
+| Theme 行 | y=336, h=40 | Key标签 + 3枚按钮(98×30 each) |
+| 分隔线 | y=384, h=2 | border色 |
+| Log System 行 | y=392, h=40 | Key标签 + Switch + hint |
+| Log Level 行 | y=432, h=40 | Key标签 + Dropdown(w=160) |
+| 分隔线 | y=480, h=2 | border色 |
+| Reconfigure Wizard 按钮 | y=488, h=40 | accent_subtle 背景, "🔧 Reconfigure Wizard" |
 
 ---
 
-### UI-45A: C1 开始使用中心（General + Model 合并视图）
+### UI-45B: 用户 Tab（User）
 
-> 目标：新用户在一个面板完成“可用闭环”基础配置，不在首层暴露进阶决策。
+> 目标：管理第三方应用授权、权限策略（折叠分组）、知识库文件。
 
 **信息架构（由上到下）：**
-1. 环境就绪卡片
-2. 模型与 API 卡片
-3. 基础偏好卡片（语言/主题）
-4. 主行动区（保存并测试）
+1. Application Authorization（应用授权卡片）
+2. Permissions Policy（19项权限，收起为折叠组）
+3. Knowledge Base（知识库文件管理 + 搜索）
 
-**字段规范（首层必显）：**
+**Application Authorization 卡片规范：**
 
-| 分组 | 字段 | 组件 | 必填 | 默认值 | 校验 |
-|------|------|------|------|--------|------|
-| 环境就绪 | OpenClaw 状态 | 只读状态行 | 是 | 自动检测 | `就绪/修复中/需处理/失败可重试` |
-| 环境就绪 | 一键修复 | 主按钮 | 否 | 可点击 | 修复中禁用 |
-| 模型/API | 推荐模型 | Dropdown | 是 | `openrouter/auto` | 不能为空 |
-| 模型/API | API Key | Password Textarea | 是 | 空 | 非空 + 前缀校验 |
-| 基础偏好 | 语言 | Dropdown | 是 | 系统语言 | `CN/EN` |
-| 基础偏好 | 主题 | 3 枚快捷按钮 | 是 | `Matcha` | `Matcha/Peachy/Mochi` |
+| 应用 | 图标 | 推荐交互 | 按钮 |
+|------|------|---------|------|
+| Outlook | 📧 | CLI | [授权] [拒绝] |
+| Calendar | 📅 | MCP | [授权] [拒绝] |
 
-**按钮规范：**
+每张卡片高 72px，圆角 8px，surface 背景。按"授权"后：
+- 显示 Email Access / Calendar Access 开关（50×26 switch，绿色 ON）
+- 显示 Scan Installed Apps 按钮（220×34，绿实心）
+- 显示 Scan Result textarea（w=100%, h=130, 灰字 placeholder）
 
-| 按钮 | 位置 | 样式 | 触发结果 |
-|------|------|------|----------|
-| 自动修复 | 环境卡片右侧 | 主按钮 | 触发依赖修复流程并刷新状态 |
-| 保存并测试 | 面板底部主按钮 | 主按钮 | 保存配置并触发一次健康检查 |
-| 稍后处理 | 面板底部次按钮 | 次按钮 | 仅关闭面板，不覆盖已保存值 |
-| 重试 | 错误摘要旁 | 文本按钮 | 重试最近失败动作 |
+**Permissions 折叠分组规范（默认折叠）：**
 
-**状态与反馈：**
+| 折叠组 | 包含权限项 |
+|--------|---------|
+| 文件访问 | FS Read Workspace / FS Write Workspace / FS Read External / FS Write External |
+| 网络访问 | Net Outbound / Net Inbound / Net Intranet |
+| 设备访问 | Device Camera / Mic / Screen / USB Storage / Remote Node / New Device |
+| 剪贴板 | Clipboard Read / Clipboard Write |
+| 系统修改 | System Modify |
 
-| 场景 | UI 状态 | 文案模板 |
-|------|---------|----------|
-| 依赖检查通过 | Success | `环境已就绪` |
-| 正在修复 | Loading | `正在修复依赖...` |
-| API 校验失败 | Error | `API Key 无效：{原因}` |
-| 保存成功 | Toast Success | `设置已保存，连接测试通过` |
-| 保存失败 | Inline Error + Toast | `保存失败：{原因}` |
+- 默认全部折叠，显示 `权限策略（19项）▼`
+- 点击展开某一组，显示该组内所有权限项的下拉选择（Allow/Deny/Ask/ReadOnly）
+- 展开状态用 ▼/▶ 三角图标表示
 
-**禁用条件（必须执行）：**
-1. API Key 为空时，`保存并测试` 禁用。
-2. 依赖修复进行中时，`自动修复` 与 `保存并测试` 同时禁用。
-3. 模型列表为空时，模型下拉不可交互并显示 `无可用模型`。
+**Knowledge Base 规范：**
 
-**错误摘要区域（统一样式）：**
-- 位置：对应卡片底部
-- 结构：错误标题 + 单行摘要 + `重试`
-- 颜色：`danger` 文本 + `surface` 背景
+- Docs/Sources 计数标签（accent 色）：`Docs: X | Sources: Y`
+- [添加文件] 按钮：outlined 样式，140×34
+- 关键词搜索输入框（textarea one-line, w=100%）
+- [搜索] 按钮：action 色，120×34
+- 搜索结果 textarea（w=100%, flex_grow=1）
 
-**页面级验收（UI-45A）：**
-1. 用户在 C1 内可完成环境修复、模型选择、API 配置并通过测试。
-2. 任一失败场景均可见错误摘要和可用重试入口。
-3. 禁用逻辑在交互上可感知，不允许"点了无反应"。
-4. 首层不出现 Runtime/Leader 强制决策。
+**页面级验收（UI-45B）：**
+1. 用户可在同一 Tab 完成授权管理、权限配置、知识库维护。
+2. Permissions 默认折叠，不因 19 项造成视觉负担。
+3. KB 搜索结果正确显示文件路径。
 
 #### 操作流程图
 
 ```
-[新用户完成首次启动向导]
+[进入设置页 → 点击"用户" Tab]
     ↓
-[进入主界面 → 点击设置图标]
+[加载应用授权 / 权限配置 / KB 状态]
     ↓
-[打开 UI-45A 开始使用中心]
+[应用授权流程]
     ↓
-[并行检测：OpenClaw 状态 / 模型可用性 / API Key 有效性]
+[点击 Outlook"授权" → 显示 Email Access 开关 → Scan Apps → 查看结果]
     ↓
-┌─ 全部检测通过 ─┐  ┌─ 任一检测失败 ─────────────────────────┐
-│                │  │                                        │
-│ 显示绿色「环境  │  │ 显示错误摘要卡片                        │
-│  已就绪」       │  │  ↓                                     │
-│                │  │ [自动修复] 按钮可点击                   │
-│ 保存并测试      │  │                                        │
-│ 按钮可点击     │  │ [保存并测试] 按钮禁用                   │
-└────────────────┘  └────────────────────────────────────────┘
+[权限配置流程]
     ↓
-[用户填写 API Key / 选择模型 / 修改偏好]
+[点击"权限策略"展开组 → 选择权限值 → 自动保存]
     ↓
-[实时格式校验]
+[KB 管理流程]
     ↓
-[校验通过 → Enable 保存并测试]
+[点击"添加文件" → 系统文件对话框 → 选择 .md/.txt → 添加成功更新计数]
     ↓
-[点击「保存并测试」]
-    ↓
-[保存配置 → 触发健康检查]
-    ↓
-┌─ 健康检查通过 ─┐  ┌─ 健康检查失败 ─┐
-│                │  │                │
-│ Toast: 设置已  │  │ Inline Error   │
-│ 保存，连接测试 │  │ + 重试按钮     │
-│ 通过           │  └────────────────┘
-└────────────────┘
+[输入关键词 → 点击搜索 → 显示结果列表]
 ```
 
 #### 文字描述
 
-1. **目标用户**：首次使用的新用户，需在一个面板内完成基础配置闭环。
-2. **四卡片结构**：环境就绪卡片 → 模型与 API 卡片 → 基础偏好卡片 → 主行动区。
-3. **状态联动**：环境检测失败时，自动修复按钮可用；API Key 为空时保存按钮禁用。
-4. **保存并测试**：保存配置到本地并触发一次 OpenClaw 健康检查，成功后吐司提示。
-5. **失败处理**：API 校验失败显示错误摘要 + 原因，支持重试；环境修复进行中按钮禁用。
+1. **应用授权**：Outlook 和 Calendar 各一张授权卡片，点击"授权"后展开 Email/Calendar Access 开关和 Scan 按钮。
+2. **权限策略**：19 项权限按 5 个语义组折叠，默认全部折叠；点击组标题展开该组。
+3. **知识库**：支持添加 .md/.txt 文件为知识源，支持关键词搜索，返回匹配文件路径列表。
 
-### UI-46A: C3 Agent 中心（Runtime + Leader + 权限治理）
+---
 
-> 目标：把运行时切换、权限策略、可选 Agent 安装统一到一个可控中心。
+### UI-45C: AI Tab（AI）
+
+> 目标：在一个 Tab 内完成模型配置和 Agent 行为控制，不在首层暴露进阶权限项。
 
 **信息架构（由上到下）：**
-1. 运行时选择与状态区
-2. Leader 与权限策略区
-3. 可选 Agent 安装区
-4. 保存/回滚行动区
+1. 模型配置区（Current Model / Select Model / API Key / Test + Save）
+2. Agent 运行时区（Active Runtime / Leader Mode / Hermes Enabled / Claude Path）
 
-**运行时状态语义（统一四态）：**
+**模型配置区规范：**
 
-| 状态 | 颜色 | 文案 |
+| 字段 | 组件 | 说明 |
 |------|------|------|
-| Healthy | success | `已健康` |
-| Installed-Unhealthy | warning | `已安装，待启动/待修复` |
-| Missing | danger | `未安装` |
-| Conflict | danger | `配置冲突` |
+| Current Model | 只读标签 | success 色，显示当前选中模型名 |
+| Select Model | [搜索框 ▼] + [+] | 搜索过滤 + 下拉选择 + 添加自定义模型 |
+| API Key | Password textarea | w=100%, h=80, 非明文显示 |
+| Test Connection | 次按钮 140×36 | 测试 API 连通性 |
+| Save Model Settings | 主按钮 140×36 | 保存模型配置 |
 
-**副作用提示规范：**
-- 切换运行时后在行动区显示提示：`仅新会话生效，当前会话保持不变`。
-- 保存成功后提示：`已切换到 {runtime}，建议新开会话验证`。
+- 模型下拉行：`[Dropdown(w=70%) ←→ [+ Add]]`
+- Add Custom Model 弹窗：840px 宽模态框，包含模型名输入框 + [确定] [取消]
 
-**回滚规范：**
-1. 当运行时发生已提交变更后显示 `回滚到上一个运行时`。
-2. 回滚后立即恢复 Dropdown 选择与配置写入。
-3. 回滚成功给出成功 toast，失败给出错误摘要与重试。
+**Agent 运行时区规范：**
 
-**禁用条件：**
-1. 状态为 Conflict 时，保存按钮禁用。
-2. 安装任务进行中时，保存与二次安装按钮禁用。
-3. 运行时状态未知且重检未完成时，保存按钮置为次要态。
+| 字段 | 组件 | 说明 |
+|------|------|------|
+| Active Runtime | Dropdown | OpenClaw / Hermes / Claude |
+| Runtime Status | 只读标签 | "运行时状态: 检查中..." hint色 |
+| Leader Mode | Switch | 50×26, 默认 OFF |
+| Hermes Enabled | Switch | 50×26, 默认 ON |
+| Claude Path | 输入框 | w=260, 配置 Claude CLI 路径 |
 
-**页面级验收（UI-46A）：**
-1. 用户可感知运行时状态与副作用，不会"无提示切换"。
-2. 发生错误配置时可阻断保存并引导修复。
-3. 回滚路径完整可用。
+**页面级验收（UI-45C）：**
+1. 用户可在同一 Tab 完成模型选择+API配置，以及 Agent 运行时切换。
+2. Active Runtime 切换显示副作用提示（"仅新会话生效"）。
+3. 模型添加后自动出现在下拉列表中。
 
 #### 操作流程图
 
 ```
-[进入设置页 → 点击 "Agent" Tab]
+[进入设置页 → 点击"AI" Tab]
     ↓
-[加载当前运行时状态]
+[加载当前模型 / API Key / Agent 运行时状态]
     ↓
-┌─ 状态 Healthy ─────────┐  ┌─ 状态非 Healthy ────────────────────┐
-│                         │  │                                      │
-│ 显示绿色已健康标识       │  │ 显示警告/错误标识                     │
-│ 可正常进行运行时切换     │  │ 提示具体问题（如"未安装"、"配置冲突"）│
-│                         │  │                                      │
-│ 点击运行时下拉框         │  │                                      │
-│ → 选择目标运行时         │  │                                      │
-│ ↓                       │  │                                      │
-│ 显示副作用提示           │  │                                      │
-│ "仅新会话生效"           │  │                                      │
-│ ↓                       │  │                                      │
-│ 点击"保存"              │  │                                      │
-│ ↓                       │  │                                      │
-│ 保存成功 Toast           │  │                                      │
-│ "已切换到 xxx"          │  │                                      │
-└─────────────────────────┘  └──────────────────────────────────────┘
+[模型配置流程]
     ↓
-[如需回滚]
+[输入 API Key → 点击 Test Connection → 显示成功/失败]
     ↓
-[点击"回滚到上一个运行时"]
+[选择模型 → 点击 Save Model Settings → Toast 确认]
     ↓
-[恢复上一配置 → Toast 提示结果]
+[Agent 运行时流程]
+    ↓
+[切换 Active Runtime → 显示副作用提示 → 保存 → Toast]
 ```
 
 #### 文字描述
 
-1. **进入方式**：设置页 → Agent Tab（C3 Agent 中心）。
-2. **查看状态**：页面顶部显示当前运行时状态（Healthy/Installed-Unhealthy/Missing/Conflict）及对应颜色标识。
-3. **切换运行时**：从下拉框选择目标运行时 → 显示副作用提示（仅新会话生效）→ 点击保存 → Toast 确认。
-4. **禁用规则**：Conflict 状态禁止保存；安装任务进行中时禁止保存和二次安装。
-5. **回滚**：保存后出现"回滚"按钮，点击恢复上一配置，成功/失败均有 Toast 反馈。
+1. **模型配置**：Current Model 显示当前模型，下拉列表支持搜索过滤，API Key 通过 Test Connection 验证连通性，Save 保存到配置文件。
+2. **Agent 运行时**：Active Runtime 下拉（OpenClaw/Hermes/Claude），切换后显示"仅新会话生效"提示，Leader Mode 和 Hermes Enabled 为独立开关。
+3. **保存行为**：模型配置和 Agent 配置分别保存，保存成功均给出 Toast 反馈。
 
-### UI-48A: C4 系统与诊断中心（Log + Feature + Tracing + About）
+---
 
-> 目标：把工程诊断能力集中收敛，默认低曝光，按需进入。
+### UI-45D: 其它 Tab（Other）
 
-**分区布局：**
-1. 日志区（查询、过滤、导出、清空）
-2. 开关区（Feature Flags）
-3. 追踪区（Tracing 开关与过滤）
-4. 系统信息区（版本、迁移、导入导出）
+> 目标：集中收敛工程诊断能力，默认低曝光，按需进入。
 
-**交互规则：**
-1. 日志区支持一键过滤 `ERROR/WARN/INFO/DEBUG`。
-2. Feature/Tracing 的实验项必须带 `实验` 标识。
-3. 高影响动作（清空日志、迁移导入）必须二次确认。
+**信息架构（由上到下）：**
+1. Feature Flags（实验性开关，带"实验"标识）
+2. Tracing（调用链追踪开关）
+3. About（版本 / 技术栈 / 配置导入导出）
 
-**页面级验收（UI-48A）：**
-1. 工程用户可在单中心完成排障闭环。
-2. 普通用户不进入 C4 不影响核心功能使用。
-3. 所有高影响操作都有明确确认与结果反馈。
+**Feature Flags 规范：**
+
+- 每个 Flag 行：[名称 + 描述（左） | Switch | 需重启标签（可选）]
+- 实验性 Flag 带 `实验` 标签（warning 色）
+- 修改后自动保存到 config.json，底部显示"修改后已自动保存到 config.json"
+
+**Tracing 规范：**
+
+- Tracing 开关 + hint 说明
+- 支持过滤条件配置
+
+**About 规范：**
+
+- Garlic logo（120×120 PNG）
+- App 名称："AnyClaw LVGL"（accent_secondary 色）
+- 品牌标语："Garlic Lobster - Your AI Assistant"（warning 色）
+- 版本号："Version: 2.0.1"
+- 技术栈：LVGL 9.6 + SDL2 / C++17 / Win32 API / Windows 10/11 x64
+- [导出配置] / [导入配置] 按钮（160×36，accent_secondary 色）
+
+**页面级验收（UI-45D）：**
+1. 普通用户不进入此 Tab 不影响核心功能。
+2. Feature Flags 实验项带明确标识，不误导用户。
+3. 配置导入导出有二次确认。
 
 #### 操作流程图
 
 ```
+[进入设置页 → 点击"其它" Tab]
+    ↓
+[加载 Feature Flags / Tracing 状态 / About 信息]
+    ↓
+[Feature Flags 流程]
+    ↓
+[点击 Flag Switch → 自动保存 → 显示"已保存"提示]
+    ↓
+[About 流程]
+    ↓
+[点击"导出配置" → 保存到 Documents\AnyClaw_config.json → Toast 确认]
+    ↓
+[点击"导入配置" → 文件对话框 → 解析并应用 → Toast 确认]
+```
+
+#### 文字描述
+
+1. **Feature Flags**：列出所有实验性功能开关，默认关闭；修改即时保存，无需手动点击保存。
+2. **Tracing**：调用链追踪开关，控制是否记录 AI 执行轨迹。
+3. **About**：显示品牌信息、版本号、技术栈；支持配置导入导出到 Documents 目录。
+
+---
 [设置页 → 点击 "C4 系统" Tab]
     ↓
 ┌─ 四分区显示 ─────────────────────────────────────────────────┐
@@ -7103,35 +7075,7 @@ Toggle 功能开关（实验项带 ⚠ 标识）
 清空日志 / 迁移导入 → 弹出二次确认 → 执行 → Toast 反馈
 ```
 
-#### 文字描述
-
-1. **进入方式**：设置页 → C4 系统与诊断中心 Tab（默认低曝光，需主动进入）。
-2. **分区导航**：四个子 Tab（Log/Feature/Tracing/About），通过顶部 Tab 栏切换。
-3. **日志过滤**：点击级别按钮（DEBUG/INFO/WARN/ERROR）一键过滤日志内容。
-4. **导出/清空**：清空日志为高影响操作，需二次确认弹窗。
-5. **Feature Flags**：实验项标注 ⚠，部分开关需要重启才生效。
-6. **状态反馈**：所有操作完成后显示 Toast 确认。
-
-### UI-48: Log Tab
-
-```
-┌──────────────────────────────────────────────────────────┐
-│ General  │ Permissions │ Model  │  Log  │  About         │
-├──────────────────────────────────────────────────────────┤
-│  Log System   [====]  Write to logs\app.log              │
-│  Log Level    [Debug ▾]                                  │
-│  ─────────────────────────────────────────────────────── │
-│  Filter       [All ▾]  [🔄 Refresh]                      │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │ [12:30:01 INFO] Agent health check OK            │  │
-│  │ [12:30:02 WARN] Session timeout approaching        │  │
-│  │ [12:30:03 ERROR] Failed to connect to model        │  │
-│  └────────────────────────────────────────────────────┘  │
-│  ● DEBUG  ● INFO  ● WARN  ● ERROR  [Export] [Clear]      │
-└──────────────────────────────────────────────────────────┘
-```
-
-级别颜色：DEBUG `#808080` / INFO `#4090E0` / WARN `#E0C020` / ERROR `#E03030`
+---
 
 #### 操作流程图
 

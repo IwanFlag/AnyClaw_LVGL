@@ -52,6 +52,9 @@ void lv_anim_core_deinit(void);
  */
 void lv_anim_enable_vsync_mode(bool enable);
 
+/* Public wrapper used by timer integrity checks in lv_timer.c. */
+void lv_anim_timer_cb(lv_timer_t * timer);
+
 /**********************
  *      MACROS
  **********************/

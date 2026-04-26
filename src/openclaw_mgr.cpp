@@ -81,11 +81,10 @@ static bool exec_cmd(const char* cmd, char* output, int out_size, DWORD timeout_
 
     PROCESS_INFORMATION pi{};
 
-    // Detection: if cmd starts with "openclaw " or "node ", skip the cmd /C wrapper.
-    // CREATE_NO_WINDOW flag is set so no console window appears.
+    // Use cmd /C wrapper for script-based CLIs (like npm-generated *.cmd shims).
+    // Keep direct launch only for known executable runtimes.
     bool needs_shell_wrapper = true;
-    if (strncmp(cmd, "openclaw ", 9) == 0 ||
-        strncmp(cmd, "node ", 5) == 0 ||
+    if (strncmp(cmd, "node ", 5) == 0 ||
         strncmp(cmd, "npm ", 4) == 0) {
         needs_shell_wrapper = false;
     }
@@ -705,34 +704,44 @@ bool app_update_model_config(const char* api_key, const char* model_name) {
         LOG_I("Config", "Backed up to %s", bak_path.c_str());
     }
 
-    /* 1. Set model (user provides full ID like "openrouter/google/gemma-3-4b-it:free" 
-     *    or short like "google/gemma-3-4b-it:free" → auto-prefix provider) */
-    if (model_name && model_name[0]) {
-        /* Use local var to avoid mutating caller's pointer */
-        const char* mn = model_name;
+    std::string resolved_provider = "openrouter";
 
-        /* Detect provider from model name */
-        const char* provider = "openrouter";  /* default */
+    /* 1. Set model (user provides full ID with provider prefix, or short model id) */
+    if (model_name && model_name[0]) {
+        std::string provider = "openrouter";
+        std::string model_tail = model_name;
         const char* base_url = "https://openrouter.ai/api/v1";
-        
-        if (strncmp(mn, "xiaomi/", 7) == 0) {
-            provider = "xiaomi";
-            base_url = "https://api.xiaomimimo.com/v1";
-        } else if (strncmp(mn, "minimax-cn/", 11) == 0) {
-            provider = "minimax-cn";
-            base_url = "https://api.minimaxi.com/anthropic";
-            mn += 11;  /* strip prefix */
-        } else if (strncmp(mn, "minimax/", 8) == 0) {
-            provider = "minimax";
-            base_url = "https://api.minimaxi.com/anthropic";
-            mn += 8;  /* strip prefix */
-        } else if (strncmp(mn, "openrouter/", 11) == 0) {
-            provider = "openrouter";
-            mn += 11;  /* strip prefix */
+
+        const char* slash = strchr(model_name, '/');
+        if (slash) {
+            std::string prefix(model_name, slash - model_name);
+            std::string tail = slash[1] ? (slash + 1) : "";
+
+            if (prefix == "openrouter") {
+                provider = "openrouter";
+                model_tail = tail;
+            } else if (prefix == "xiaomi") {
+                provider = "xiaomi";
+                base_url = "https://api.xiaomimimo.com/v1";
+                model_tail = tail;
+            } else if (prefix.rfind("minimax", 0) == 0) {
+                provider = prefix;
+                base_url = "https://api.minimaxi.com/v1";
+                model_tail = tail;
+            } else {
+                provider = "openrouter";
+                model_tail = model_name;
+            }
+        } else {
+            if (strncmp(model_name, "MiniMax-", 8) == 0 || strncmp(model_name, "minimax-", 8) == 0) {
+                provider = "minimax-text";
+                base_url = "https://api.minimaxi.com/v1";
+            }
         }
 
-        char full_model[256];
-        snprintf(full_model, sizeof(full_model), "%s/%s", provider, mn);
+        char full_model[256] = {0};
+        snprintf(full_model, sizeof(full_model), "%s/%s", provider.c_str(), model_tail.c_str());
+        resolved_provider = provider;
 
         snprintf(cmd, sizeof(cmd),
             "openclaw config set agents.defaults.model.primary \"%s\"", full_model);
@@ -745,20 +754,17 @@ bool app_update_model_config(const char* api_key, const char* model_name) {
 
         /* Ensure provider exists with baseUrl */
         snprintf(cmd, sizeof(cmd),
-            "openclaw config set models.providers.%s.baseUrl %s", provider, base_url);
+            "openclaw config set models.providers.%s.baseUrl %s", provider.c_str(), base_url);
         exec_cmd(cmd, output, sizeof(output), 8000);
 
         snprintf(cmd, sizeof(cmd),
-            "openclaw config set models.providers.%s.api openai-completions", provider);
+            "openclaw config set models.providers.%s.api openai-completions", provider.c_str());
         exec_cmd(cmd, output, sizeof(output), 8000);
     }
 
-    /* 2. Set API key for the provider (detect from original model_name) */
+    /* 2. Set API key for the resolved provider */
     if (api_key && api_key[0] && model_name && model_name[0]) {
-        const char* provider = "openrouter";
-        if (strncmp(model_name, "xiaomi/", 7) == 0) provider = "xiaomi";
-        else if (strncmp(model_name, "minimax-cn/", 11) == 0) provider = "minimax-cn";
-        else if (strncmp(model_name, "minimax/", 8) == 0) provider = "minimax";
+        const char* provider = resolved_provider.c_str();
 
         snprintf(cmd, sizeof(cmd),
             "openclaw config set models.providers.%s.apiKey \"%s\"", provider, api_key);
@@ -804,18 +810,59 @@ bool app_update_model_config(const char* api_key, const char* model_name) {
 bool app_get_current_model(char* model_out, int out_size) {
     if (!model_out || out_size <= 0) return false;
     model_out[0] = '\0';
-    char output[512];
-    if (exec_cmd("openclaw config get agents.defaults.model.primary", output, sizeof(output), 1200)) {
+
+    /* Fast path: read from openclaw.json directly to avoid blocking UI on CLI spawn. */
+    const char* userprofile = std::getenv("USERPROFILE");
+    std::string cfg_path;
+    if (userprofile && userprofile[0]) {
+        cfg_path = std::string(userprofile) + "\\.openclaw\\openclaw.json";
+    } else {
+        cfg_path = "Z:\\root\\.openclaw\\openclaw.json";
+    }
+
+    std::ifstream f(cfg_path);
+    if (f.is_open()) {
+        std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        f.close();
+
+        size_t agents = content.find("\"agents\"");
+        if (agents != std::string::npos) {
+            size_t defaults = content.find("\"defaults\"", agents);
+            size_t model = (defaults != std::string::npos) ? content.find("\"model\"", defaults) : std::string::npos;
+            size_t primary = (model != std::string::npos) ? content.find("\"primary\"", model) : std::string::npos;
+            if (primary != std::string::npos) {
+                size_t colon = content.find(':', primary);
+                size_t q1 = (colon != std::string::npos) ? content.find('"', colon + 1) : std::string::npos;
+                size_t q2 = (q1 != std::string::npos) ? content.find('"', q1 + 1) : std::string::npos;
+                if (q1 != std::string::npos && q2 != std::string::npos && q2 > q1 + 1) {
+                    int len = (int)(q2 - q1 - 1);
+                    if (len > 0 && len < out_size) {
+                        memcpy(model_out, content.c_str() + q1 + 1, len);
+                        model_out[len] = '\0';
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    /* Slow fallback: use CLI only if file path parse failed. Keep timeout short for UI safety. */
+    char output[512] = {0};
+    if (exec_cmd("openclaw config get agents.defaults.model.primary", output, sizeof(output), 250)) {
         char* start = output;
         while (*start == '"' || *start == ' ' || *start == '\n' || *start == '\r') start++;
         char* end = start + strlen(start) - 1;
-        while (end > start && (*end == '"' || *end == ' ' || *end == '\n' || *end == '\r')) { *end = '\0'; end--; }
+        while (end > start && (*end == '"' || *end == ' ' || *end == '\n' || *end == '\r')) {
+            *end = '\0';
+            end--;
+        }
         if (start[0]) {
             strncpy(model_out, start, out_size - 1);
             model_out[out_size - 1] = '\0';
             return true;
         }
     }
+
     return false;
 }
 

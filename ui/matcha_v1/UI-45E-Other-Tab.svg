@@ -1,0 +1,186 @@
+<svg viewBox="0 0 1280 800" xmlns="http://www.w3.org/2000/svg">
+  <title>UI-45E 其它 Tab</title>
+  <desc>Settings 其它 Tab: Feature Flags / Tracing / About</desc>
+
+  <defs>
+    <style>
+      .bg           { fill: #13161B; }
+      .panel        { fill: #1E2128; }
+      .surface      { fill: #252930; }
+      .accent       { fill: #3DD68C; }
+      .accent-sub   { fill: #3DD68C; opacity: 0.12; }
+      .text         { fill: #E8E9E9; }
+      .text-dim     { fill: #8B9099; }
+      .text-hint    { fill: #6B7280; }
+      .divider      { fill: #2D333D; }
+      .badge-ok     { fill: #3DD68C; }
+      .warning      { fill: #E0A020; }
+      .tab-active   { fill: #3DD68C; font-size: 14px; font-weight: 600; }
+      .tab-inactive { fill: #8B9099; font-size: 14px; }
+      .section-lbl  { fill: #3DD68C; font-size: 12px; font-weight: 500; }
+      .key-label    { fill: #8B9099; font-size: 13px; }
+      .hint         { fill: #6B7280; font-size: 11px; }
+    </style>
+  </defs>
+
+  <!-- ===== WINDOW ===== -->
+  <rect width="1280" height="800" class="bg"/>
+
+  <!-- ===== TITLE BAR (y=0, h=48) ===== -->
+  <rect x="0" y="0" width="1280" height="48" class="panel"/>
+  <text x="24" y="29" class="text" font-size="15" font-weight="600">Settings</text>
+  <rect x="1176" y="10" width="80" height="28" rx="6" fill="#3D4452"/>
+  <text x="1216" y="29" text-anchor="middle" class="text" font-size="12">Close</text>
+
+  <!-- ===== TAB BAR (y=48, h=42) ===== -->
+  <rect x="0" y="48" width="1280" height="42" class="surface"/>
+  <line x1="0" y1="90" x2="1280" y2="90" stroke="#2D333D" stroke-width="1"/>
+  <!-- 通用 inactive -->
+  <text x="40" y="72" class="tab-inactive">通用</text>
+  <!-- 用户 inactive -->
+  <text x="130" y="72" class="tab-inactive">用户</text>
+  <!-- AI inactive -->
+  <text x="220" y="72" class="tab-inactive">AI</text>
+  <!-- 其它 active -->
+  <text x="300" y="72" class="tab-active">其它</text>
+  <line x1="280" y="86" x2="328" y2="86" stroke="#3DD68C" stroke-width="2"/>
+
+  <!-- ===== LEFT COLUMN (x=16, y=104, w=580) ===== -->
+
+  <!-- === SECTION: Feature Flags === -->
+  <text x="16" y="130" class="section-lbl">FEATURE FLAGS</text>
+  <text x="16" y="148" class="hint">实验性功能，默认关闭</text>
+
+  <!-- Flag 1: Voice Assistant (ON) -->
+  <rect x="16" y="160" width="580" height="40" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="32" y="180" class="text" font-size="12">🎙 Voice Assistant</text>
+  <text x="32" y="194" class="hint" font-size="10">Enable voice interaction with AI</text>
+  <rect x="520" y="172" width="60" height="20" rx="10" fill="#3DD68C"/>
+  <circle cx="552" cy="182" r="8" fill="white"/>
+  <!-- Switch OFF -->
+  <!-- Flag 2: Advanced Debug Mode (OFF) -->
+  <rect x="16" y="208" width="580" height="40" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="32" y="228" class="text" font-size="12">🔧 Advanced Debug Mode</text>
+  <text x="32" y="242" class="hint" font-size="10">Show detailed debug info</text>
+  <rect x="520" y="220" width="60" height="20" rx="10" fill="#3D4452"/>
+  <circle cx="536" cy="230" r="8" fill="#8B9099"/>
+  <!-- 实验 badge -->
+  <rect x="200" y="224" width="40" height="16" rx="4" fill="#E0A020" opacity="0.2"/>
+  <text x="220" y="236" text-anchor="middle" fill="#E0A020" font-size="9" font-weight="600">实验</text>
+
+  <!-- Flag 3: Auto KB Sync (OFF) -->
+  <rect x="16" y="256" width="580" height="40" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="32" y="276" class="text" font-size="12">📚 Auto KB Sync</text>
+  <text x="32" y="290" class="hint" font-size="10">Auto sync docs to knowledge base</text>
+  <rect x="520" y="268" width="60" height="20" rx="10" fill="#3D4452"/>
+  <circle cx="536" cy="278" r="8" fill="#8B9099"/>
+  <rect x="200" y="272" width="40" height="16" rx="4" fill="#E0A020" opacity="0.2"/>
+  <text x="220" y="284" text-anchor="middle" fill="#E0A020" font-size="9" font-weight="600">实验</text>
+
+  <!-- Flag 4: MCP Integration (OFF) -->
+  <rect x="16" y="304" width="580" height="40" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="32" y="324" class="text" font-size="12">🔌 MCP Integration</text>
+  <text x="32" y="338" class="hint" font-size="10">Connect to external MCP servers</text>
+  <rect x="520" y="316" width="60" height="20" rx="10" fill="#3D4452"/>
+  <circle cx="536" cy="326" r="8" fill="#8B9099"/>
+  <rect x="200" y="320" width="40" height="16" rx="4" fill="#E0A020" opacity="0.2"/>
+  <text x="220" y="332" text-anchor="middle" fill="#E0A020" font-size="9" font-weight="600">实验</text>
+
+  <!-- Flag 5: Developer Mode (OFF) -->
+  <rect x="16" y="352" width="580" height="40" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="32" y="372" class="text" font-size="12">💻 Developer Mode</text>
+  <text x="32" y="386" class="hint" font-size="10">Enable developer tools and shortcuts</text>
+  <rect x="520" y="364" width="60" height="20" rx="10" fill="#3D4452"/>
+  <circle cx="536" cy="374" r="8" fill="#8B9099"/>
+
+  <!-- Auto save hint -->
+  <text x="16" y="416" class="hint">修改后已自动保存到 config.json</text>
+
+  <!-- Divider -->
+  <rect x="16" y="432" width="580" height="1" class="divider"/>
+
+  <!-- === SECTION: Tracing === -->
+  <text x="16" y="456" class="section-lbl">TRACING</text>
+
+  <!-- Tracing switch -->
+  <text x="16" y="480" class="key-label">Enable Tracing</text>
+  <text x="160" y="480" class="hint">Record execution traces for debugging</text>
+  <!-- Switch OFF -->
+  <rect x="520" y="472" width="60" height="20" rx="10" fill="#3D4452"/>
+  <circle cx="536" cy="482" r="8" fill="#8B9099"/>
+
+  <!-- Filter conditions -->
+  <text x="16" y="512" class="key-label">Filter</text>
+  <rect x="80" y="504" width="300" height="28" rx="4" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="96" y="522" class="hint">e.g. agent:* OR model:*</text>
+
+  <!-- ===== RIGHT COLUMN (x=648) ===== -->
+  <rect x="632" y="104" width="1" height="620" class="divider"/>
+
+  <!-- === SECTION: About === -->
+  <text x="664" y="130" class="section-lbl">ABOUT</text>
+
+  <!-- Logo + brand -->
+  <rect x="664" y="144" width="580" height="120" rx="8" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <!-- Garlic logo placeholder -->
+  <rect x="684" y="164" width="80" height="80" rx="8" fill="#1E2128"/>
+  <text x="724" y="212" text-anchor="middle" fill="#3DD68C" font-size="28">🧄</text>
+  <!-- Brand text -->
+  <text x="784" y="196" class="text" font-size="18" font-weight="600">AnyClaw LVGL</text>
+  <text x="784" y="218" fill="#E0A020" font-size="12">Garlic Lobster - Your AI Assistant</text>
+  <text x="784" y="244" class="hint" font-size="12">Version 2.0.1</text>
+
+  <!-- Tech stack -->
+  <rect x="664" y="280" width="580" height="96" rx="8" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="684" y="304" class="section-lbl">TECH STACK</text>
+  <text x="684" y="328" class="text" font-size="12">LVGL 9.6 + SDL2</text>
+  <text x="684" y="350" class="text" font-size="12">C++17 / Win32 API</text>
+  <text x="684" y="372" class="hint" font-size="11">Windows 10/11 x64</text>
+
+  <!-- Divider -->
+  <rect x="664" y="396" width="580" height="1" class="divider"/>
+
+  <!-- === SECTION: Config === -->
+  <text x="664" y="420" class="section-lbl">CONFIGURATION</text>
+  <text x="664" y="444" class="hint">Import or export your configuration</text>
+
+  <!-- Export button -->
+  <rect x="664" y="456" width="160" height="36" rx="6" fill="#3D4452" stroke="#2D333D" stroke-width="1"/>
+  <text x="744" y="477" text-anchor="middle" fill="#8B9099" font-size="12">导出配置</text>
+
+  <!-- Import button -->
+  <rect x="840" y="456" width="160" height="36" rx="6" fill="#3D4452" stroke="#2D333D" stroke-width="1"/>
+  <text x="920" y="477" text-anchor="middle" fill="#8B9099" font-size="12">导入配置</text>
+
+  <!-- Config path -->
+  <text x="664" y="512" class="hint">导出到: Documents\AnyClaw_config.json</text>
+
+  <!-- Divider -->
+  <rect x="664" y="528" width="580" height="1" class="divider"/>
+
+  <!-- === SECTION: Links === -->
+  <text x="664" y="552" class="section-lbl">LINKS</text>
+
+  <!-- Links row -->
+  <text x="664" y="580" class="text" font-size="12">📖 文档</text>
+  <text x="760" y="580" class="text" font-size="12">🐛 问题反馈</text>
+  <text x="900" y="580" class="text" font-size="12">⭐ GitHub</text>
+
+  <!-- Divider -->
+  <rect x="664" y="600" width="580" height="1" class="divider"/>
+
+  <!-- === SECTION: Debug === -->
+  <text x="664" y="624" class="section-lbl">DEBUG</text>
+
+  <!-- Restart -->
+  <rect x="664" y="636" width="140" height="32" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="734" y="656" text-anchor="middle" fill="#8B9099" font-size="11">重启应用</text>
+
+  <!-- Reset -->
+  <rect x="820" y="636" width="140" height="32" rx="6" fill="#252930" stroke="#E03030" stroke-width="1"/>
+  <text x="890" y="656" text-anchor="middle" fill="#E03030" font-size="11">重置所有设置</text>
+
+  <!-- Config dir path -->
+  <text x="664" y="688" class="hint">Config: C:\Users\...\AnyClaw_LVGL</text>
+
+</svg>

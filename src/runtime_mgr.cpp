@@ -12,6 +12,141 @@
 #include <string>
 #include <filesystem>
 
+namespace {
+
+struct RuntimeProfilesFile {
+    char openclaw_model[256] = {0};
+    char openclaw_api_key[256] = {0};
+    char hermes_model[256] = {0};
+    char hermes_api_key[256] = {0};
+    char claude_model[256] = {0};
+    char claude_api_key[256] = {0};
+};
+
+static std::string profiles_path() {
+    const char* appdata = std::getenv("APPDATA");
+    if (!appdata || !appdata[0]) return "runtime_profiles.json";
+    return std::string(appdata) + "\\AnyClaw_LVGL\\runtime_profiles.json";
+}
+
+static std::string json_escape_str(const char* in) {
+    if (!in) return "";
+    std::string out;
+    out.reserve(strlen(in) + 8);
+    for (const char* p = in; *p; ++p) {
+        if (*p == '\\' || *p == '"') out.push_back('\\');
+        out.push_back(*p);
+    }
+    return out;
+}
+
+static const char* provider_from_model(const char* model) {
+    if (!model || !model[0]) return "openrouter";
+    if (strncmp(model, "openrouter/", 11) == 0) return "openrouter";
+    if (strncmp(model, "xiaomi/", 7) == 0) return "xiaomi";
+    if (strncmp(model, "minimax-text/", 13) == 0) return "minimax-text";
+    if (strncmp(model, "minimax-cn/", 11) == 0) return "minimax-cn";
+    if (strncmp(model, "minimax/", 8) == 0) return "minimax";
+    if (strncmp(model, "minimax-", 8) == 0 || strncmp(model, "MiniMax-", 8) == 0) return "minimax-text";
+    if (strncmp(model, "gemini/", 7) == 0) return "gemini";
+    if (strncmp(model, "deepseek/", 9) == 0) return "deepseek";
+    if (strncmp(model, "qwen/", 5) == 0) return "qwen";
+    return "openrouter";
+}
+
+static bool model_requires_api_key(const char* model) {
+    if (!model || !model[0]) return false;
+    if (strncmp(model, "gemma-local-", 12) == 0) return false;
+    if (strncmp(model, "llama-local-", 12) == 0) return false;
+    if (strncmp(model, "ollama/", 7) == 0) return false;
+    if (strncmp(model, "local/", 6) == 0) return false;
+    return true;
+}
+
+static void fill_template_defaults(RuntimeProfilesFile& p) {
+    static bool model_cache_loaded = false;
+    static char model_cache[256] = {0};
+    static bool key_cache_loaded = false;
+    static char key_cache[256] = {0};
+
+    const bool need_model_defaults = (!p.openclaw_model[0] || !p.hermes_model[0] || !p.claude_model[0]);
+    if (need_model_defaults) {
+        if (!model_cache_loaded) {
+            model_cache_loaded = true;
+            (void)app_get_current_model(model_cache, sizeof(model_cache));
+        }
+        if (model_cache[0]) {
+            if (!p.openclaw_model[0]) snprintf(p.openclaw_model, sizeof(p.openclaw_model), "%s", model_cache);
+            if (!p.hermes_model[0]) snprintf(p.hermes_model, sizeof(p.hermes_model), "%s", model_cache);
+            if (!p.claude_model[0]) snprintf(p.claude_model, sizeof(p.claude_model), "%s", model_cache);
+        }
+    }
+
+    const bool need_key_defaults = (!p.openclaw_api_key[0] || !p.hermes_api_key[0] || !p.claude_api_key[0]);
+    bool key_ok = false;
+    if (need_key_defaults) {
+        if (!key_cache_loaded) {
+            key_cache_loaded = true;
+            const char* prov = provider_from_model(p.openclaw_model[0] ? p.openclaw_model : model_cache);
+            if (app_get_provider_api_key(prov, key_cache, sizeof(key_cache)) && key_cache[0]) {
+                key_ok = true;
+            } else if (g_api_key[0]) {
+                snprintf(key_cache, sizeof(key_cache), "%s", g_api_key);
+                key_ok = true;
+            }
+        } else {
+            key_ok = key_cache[0] != '\0';
+        }
+    }
+
+    if (need_key_defaults && key_ok) {
+        if (!p.openclaw_api_key[0]) snprintf(p.openclaw_api_key, sizeof(p.openclaw_api_key), "%s", key_cache);
+        if (!p.hermes_api_key[0]) snprintf(p.hermes_api_key, sizeof(p.hermes_api_key), "%s", key_cache);
+        if (!p.claude_api_key[0]) snprintf(p.claude_api_key, sizeof(p.claude_api_key), "%s", key_cache);
+    }
+}
+
+static bool load_profiles(RuntimeProfilesFile& p) {
+    std::ifstream in(profiles_path());
+    if (!in.is_open()) {
+        fill_template_defaults(p);
+        return true;
+    }
+
+    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    in.close();
+
+    json_extract_string(content.c_str(), "openclaw_model", p.openclaw_model, sizeof(p.openclaw_model));
+    json_extract_string(content.c_str(), "openclaw_api_key", p.openclaw_api_key, sizeof(p.openclaw_api_key));
+    json_extract_string(content.c_str(), "hermes_model", p.hermes_model, sizeof(p.hermes_model));
+    json_extract_string(content.c_str(), "hermes_api_key", p.hermes_api_key, sizeof(p.hermes_api_key));
+    json_extract_string(content.c_str(), "claude_model", p.claude_model, sizeof(p.claude_model));
+    json_extract_string(content.c_str(), "claude_api_key", p.claude_api_key, sizeof(p.claude_api_key));
+
+    fill_template_defaults(p);
+    return true;
+}
+
+static bool save_profiles(const RuntimeProfilesFile& p) {
+    std::string path = profiles_path();
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
+
+    std::ofstream out(path, std::ios::trunc);
+    if (!out.is_open()) return false;
+    out << "{\n";
+    out << "  \"openclaw_model\": \"" << json_escape_str(p.openclaw_model) << "\",\n";
+    out << "  \"openclaw_api_key\": \"" << json_escape_str(p.openclaw_api_key) << "\",\n";
+    out << "  \"hermes_model\": \"" << json_escape_str(p.hermes_model) << "\",\n";
+    out << "  \"hermes_api_key\": \"" << json_escape_str(p.hermes_api_key) << "\",\n";
+    out << "  \"claude_model\": \"" << json_escape_str(p.claude_model) << "\",\n";
+    out << "  \"claude_api_key\": \"" << json_escape_str(p.claude_api_key) << "\"\n";
+    out << "}\n";
+    return true;
+}
+
+} /* namespace */
+
 /* ═══════════════════════════════════════════════════════════════════
  * GitHub Release URLs for bundled install scripts
  * 上传至: https://github.com/IwanFlag/AnyClaw_Tools/releases/tag/v1.0.0
@@ -266,7 +401,7 @@ bool app_detect_hermes(char* version_out, int ver_size) {
 
 bool app_check_hermes_health(void) {
     char resp[128] = {0};
-    int code = http_get("http://127.0.0.1:18790/health", resp, sizeof(resp), 3);
+    int code = http_get(HERMES_HEALTH_URL, resp, sizeof(resp), 3);
     return (code > 0 && code < 500);
 }
 
@@ -590,7 +725,7 @@ Runtime app_get_active_runtime() {
             }
         }
     }
-    return Runtime::OpenClaw; /* default */
+    return Runtime::Hermes; /* default */
 }
 
 void app_set_active_runtime(Runtime r) {
@@ -602,4 +737,90 @@ void app_set_active_runtime(Runtime r) {
         json_update_string(path.c_str(), "active_runtime", val);
         LOG_I("RUNTIME", "active_runtime saved: %s", val);
     }
+}
+
+bool app_get_runtime_profile(Runtime rt, RuntimeProfileConfig* out) {
+    if (!out) return false;
+    out->model[0] = '\0';
+    out->api_key[0] = '\0';
+
+    RuntimeProfilesFile p;
+    if (!load_profiles(p)) return false;
+
+    if (rt == Runtime::Hermes) {
+        snprintf(out->model, sizeof(out->model), "%s", p.hermes_model);
+        snprintf(out->api_key, sizeof(out->api_key), "%s", p.hermes_api_key);
+    } else if (rt == Runtime::Claude) {
+        snprintf(out->model, sizeof(out->model), "%s", p.claude_model);
+        snprintf(out->api_key, sizeof(out->api_key), "%s", p.claude_api_key);
+    } else {
+        snprintf(out->model, sizeof(out->model), "%s", p.openclaw_model);
+        snprintf(out->api_key, sizeof(out->api_key), "%s", p.openclaw_api_key);
+    }
+    return true;
+}
+
+bool app_set_runtime_profile(Runtime rt, const char* model, const char* api_key) {
+    RuntimeProfilesFile p;
+    if (!load_profiles(p)) return false;
+
+    const char* safe_model = model ? model : "";
+    const char* safe_key = api_key ? api_key : "";
+    if (rt == Runtime::Hermes) {
+        snprintf(p.hermes_model, sizeof(p.hermes_model), "%s", safe_model);
+        snprintf(p.hermes_api_key, sizeof(p.hermes_api_key), "%s", safe_key);
+    } else if (rt == Runtime::Claude) {
+        snprintf(p.claude_model, sizeof(p.claude_model), "%s", safe_model);
+        snprintf(p.claude_api_key, sizeof(p.claude_api_key), "%s", safe_key);
+    } else {
+        snprintf(p.openclaw_model, sizeof(p.openclaw_model), "%s", safe_model);
+        snprintf(p.openclaw_api_key, sizeof(p.openclaw_api_key), "%s", safe_key);
+    }
+
+    bool ok = save_profiles(p);
+    LOG_I("RUNTIME", "Save profile %s: model=%s key_len=%d %s",
+          (rt == Runtime::Hermes) ? "hermes" : (rt == Runtime::Claude) ? "claude" : "openclaw",
+          safe_model[0] ? safe_model : "(empty)",
+          (int)strlen(safe_key),
+          ok ? "OK" : "FAIL");
+    return ok;
+}
+
+bool app_is_runtime_profile_ready(Runtime rt, char* reason_out, int reason_size) {
+    auto set_reason = [&](const char* msg) {
+        if (reason_out && reason_size > 0) {
+            snprintf(reason_out, reason_size, "%s", msg ? msg : "");
+        }
+    };
+
+    RuntimeProfileConfig p{};
+    if (!app_get_runtime_profile(rt, &p)) {
+        set_reason("profile read failed");
+        return false;
+    }
+    if (!p.model[0]) {
+        set_reason("model is empty");
+        return false;
+    }
+
+    if (model_requires_api_key(p.model) && !p.api_key[0]) {
+        set_reason("api key is empty");
+        return false;
+    }
+
+    if (rt == Runtime::Hermes) {
+        char ver[64] = {0};
+        if (!app_detect_hermes(ver, sizeof(ver))) {
+            set_reason("Hermes runtime missing");
+            return false;
+        }
+    } else if (rt == Runtime::Claude) {
+        if (!app_check_claude_cli_exists()) {
+            set_reason("Claude runtime missing");
+            return false;
+        }
+    }
+
+    set_reason("ok");
+    return true;
 }

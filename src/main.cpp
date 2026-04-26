@@ -37,6 +37,7 @@ static lv_obj_t* g_last_clicked_ta = nullptr;
 #include <vector>
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <thread>
 #include <ctime>
 #include <windows.h>
@@ -52,6 +53,12 @@ static lv_obj_t* g_last_clicked_ta = nullptr;
 /* Log system globals */
 bool g_log_enabled = true;
 int  g_log_level   = LOG_DEBUG;
+
+extern "C" {
+    extern volatile uintptr_t g_lv_timer_active_cb;
+    extern volatile uint32_t g_lv_timer_active_period;
+    extern volatile uintptr_t g_lv_timer_active_timer;
+}
 
 /* ═══════════════════════════════════════════════════════════════
  *  Crash Handler — E-01-2: 崩溃日志
@@ -752,6 +759,9 @@ int main(int argc, char* argv[]) {
 
     /* Initialize model list (defaults, async API fetch later) */
     model_manager_init();
+    if (!model_ensure_default_config()) {
+        LOG_W("MAIN", "Failed to ensure default model config during startup");
+    }
 
     /* Initialize model failover system */
     failover_init();
@@ -761,6 +771,15 @@ int main(int argc, char* argv[]) {
     DWORD tick_ui = GetTickCount();
     app_ui_init();
     LOG_I("MAIN", "UI initialized in %lums", GetTickCount() - tick_ui);
+
+    const char* autotest_open_settings = std::getenv("ANYCLAW_AUTOTEST_OPEN_SETTINGS");
+    if (autotest_open_settings && autotest_open_settings[0] == '1') {
+        lv_timer_create([](lv_timer_t* t) {
+            LOG_I("MAIN", "AUTOTEST: opening Settings by env flag");
+            ui_settings_open();
+            lv_timer_del(t);
+        }, 1200, nullptr);
+    }
 
     /* --show-wizard: force the setup wizard to appear immediately */
     if (g_force_show_wizard) {
@@ -1171,19 +1190,51 @@ int main(int argc, char* argv[]) {
     LOG_I("MAIN", "Entering main loop");
     int loop_count = 0;
     auto last_log_time = std::chrono::steady_clock::now();
+    std::atomic<bool> loop_watchdog_running(true);
+    std::atomic<DWORD> loop_watchdog_tick(GetTickCount());
+    std::atomic<int> loop_watchdog_stage(0);
+    std::thread loop_watchdog([&]() {
+        DWORD last_report_tick = 0;
+        while (loop_watchdog_running.load()) {
+            Sleep(500);
+            DWORD now = GetTickCount();
+            DWORD last = loop_watchdog_tick.load();
+            DWORD elapsed = now - last;
+            if (elapsed > 2200 && (now - last_report_tick) > 1800) {
+                uintptr_t cb = (uintptr_t)g_lv_timer_active_cb;
+                uint32_t period = (uint32_t)g_lv_timer_active_period;
+                    uintptr_t timer_ptr = (uintptr_t)g_lv_timer_active_timer;
+                    LOG_E("WATCHDOG", "Main loop stalled: elapsed=%lums stage=%d lv_timer=0x%llX lv_timer_cb=0x%llX period=%u",
+                      (unsigned long)elapsed,
+                      loop_watchdog_stage.load(),
+                        (unsigned long long)timer_ptr,
+                      (unsigned long long)cb,
+                      (unsigned)period);
+                last_report_tick = now;
+            }
+        }
+    });
+
     while (!tray_should_quit()) {
         auto loop_start = std::chrono::steady_clock::now();
+        loop_watchdog_tick.store(GetTickCount());
+        loop_watchdog_stage.store(1);
 
         /* Pump tray/Win32 messages first to keep window responsiveness under load. */
         auto before_tray_pre = std::chrono::steady_clock::now();
         tray_process_messages();
         auto after_tray_pre = std::chrono::steady_clock::now();
+        loop_watchdog_tick.store(GetTickCount());
+        loop_watchdog_stage.store(2);
 
         /* Explicitly pump SDL events so Win32 messages are not left pending. */
         SDL_PumpEvents();
 
+        loop_watchdog_stage.store(3);
         lv_timer_handler();
         auto after_lvt = std::chrono::steady_clock::now();
+        loop_watchdog_tick.store(GetTickCount());
+        loop_watchdog_stage.store(4);
         loop_count++;
 
         if (tray_should_quit()) break;
@@ -1191,6 +1242,8 @@ int main(int argc, char* argv[]) {
         auto before_wheel = std::chrono::steady_clock::now();
         ui_process_wheel_scroll();
         auto after_wheel = std::chrono::steady_clock::now();
+        loop_watchdog_tick.store(GetTickCount());
+        loop_watchdog_stage.store(5);
 
         auto before_tray = std::chrono::steady_clock::now();
         tray_process_messages();
@@ -1223,6 +1276,8 @@ int main(int argc, char* argv[]) {
             fflush(stderr);
         }
 
+        loop_watchdog_tick.store(GetTickCount());
+        loop_watchdog_stage.store(6);
         SDL_Delay(1);
 
         /* Every 2s write a raw heartbeat to stderr (bypasses log buffer).
@@ -1235,6 +1290,8 @@ int main(int argc, char* argv[]) {
             last_log_time = now;
         }
     }
+    loop_watchdog_running.store(false);
+    if (loop_watchdog.joinable()) loop_watchdog.join();
     LOG_I("MAIN", "Main loop exited after %d iterations", loop_count);
 
     LOG_I("MAIN", "Shutting down...");
