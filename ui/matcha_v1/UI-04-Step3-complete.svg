@@ -82,7 +82,7 @@
   <!-- Skip hint -->
   <text x="114" y="482" font-family="sans-serif" font-size="10" fill="#6B7280">Skip 将降级为单 Agent 模式（仅 OpenClaw）。</text>
 
-  <!-- Primary button -->
+  <!-- Primary button (in content area, centered) -->
   <rect x="488" y="508" width="304" height="50" rx="12" fill="#FF7F50" opacity="0.1" stroke="#FF7F50" stroke-width="1">
   </rect>
   <rect x="490" y="510" width="300" height="46" rx="10" fill="url(#bigPrimaryBtn)"/>
@@ -101,11 +101,15 @@
   <rect x="866" y="601" width="300" height="50" rx="10" fill="url(#advCard)" stroke="#3DD68C" stroke-opacity="0.08" stroke-width="1"/>
   <text x="1016" y="631" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#8B92A8">🔊 语音交互</text>
 
-  <!-- Footer -->
-  <rect x="0" y="655" width="1280" height="145" fill="#0A0C10"/>
+  <!-- ===== Footer ===== -->
+  <rect x="0" y="655" width="1280" height="145" fill="#13151E"/>
   <rect x="0" y="655" width="1280" height="1" fill="#252A38"/>
-  <text x="640" y="748" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#6B7280">退出向导</text>
-  <text x="640" y="766" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#3DD68C">Matcha v1 · UI-04-Step3</text>
-  <rect x="0" y="758" width="80" height="40" rx="6" fill="#252A38"/>
-  <text x="40" y="778" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">← Back</text>
+
+  <!-- 退出向导 - left -->
+  <rect x="40" y="720" width="100" height="36" rx="8" fill="#252A38"/>
+  <text x="90" y="743" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#6B7280">退出向导</text>
+
+  <!-- 开始使用 - right -->
+  <rect x="1140" y="720" width="100" height="36" rx="8" fill="url(#bigPrimaryBtn)"/>
+  <text x="1190" y="743" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#0F1117" font-weight="600">开始使用</text>
 </svg>
