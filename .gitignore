@@ -17,6 +17,20 @@ build-windows/
 build/linux/out/
 build/windows/out/
 
+# 本地CMake构建目录（保留发布制品白名单）
+build/*
+!build/linux/
+build/linux/*
+!build/linux/artifacts/
+!build/linux/artifacts/*.zip
+!build/linux/artifacts/*.exe
+!build/linux/artifacts/*.dll
+!build/windows/
+build/windows/*
+!build/windows/artifacts/
+!build/windows/artifacts/*.zip
+build2/
+
 # 编译产物对象
 *.o
 *.obj
