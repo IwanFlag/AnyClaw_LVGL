@@ -1,0 +1,191 @@
+<svg viewBox="0 0 1280 800" xmlns="http://www.w3.org/2000/svg">
+  <title>UI-50 Workspace 模块</title>
+  <desc>左导航 File → Workspace: 左侧项目树(可折叠) + 右侧AI实时状态(当前操作/产出位置/最近活动)</desc>
+
+  <defs>
+    <style>
+      .bg           { fill: #13161B; }
+      .panel        { fill: #1E2128; }
+      .surface      { fill: #252930; }
+      .accent       { fill: #3DD68C; }
+      .accent-sub   { fill: #3DD68C; opacity: 0.12; }
+      .text         { fill: #E8E9E9; }
+      .text-dim     { fill: #8B9099; }
+      .text-hint    { fill: #6B7280; }
+      .divider      { fill: #2D333D; }
+      .tab-active   { fill: #3DD68C; font-size: 14px; font-weight: 600; }
+      .tab-inactive { fill: #8B9099; font-size: 14px; }
+      .section-lbl  { fill: #3DD68C; font-size: 12px; font-weight: 500; }
+    </style>
+  </defs>
+
+  <!-- ===== WINDOW ===== -->
+  <rect width="1280" height="800" class="bg"/>
+
+  <!-- ===== TITLE BAR (y=0, h=48) ===== -->
+  <rect x="0" y="0" width="1280" height="48" class="panel"/>
+  <text x="24" y="29" class="text" font-size="15" font-weight="600">AnyClaw · Workspace</text>
+
+  <!-- ===== LEFT NAV (x=0, y=48, w=64) ===== -->
+  <rect x="0" y="48" width="64" height="752" class="surface"/>
+  <line x1="64" y1="48" x2="64" y2="800" stroke="#2D333D" stroke-width="1"/>
+  <!-- Bot -->
+  <rect x="8" y="60" width="48" height="48" rx="8" fill="none"/>
+  <text x="32" y="90" text-anchor="middle" fill="#8B9099" font-size="18">🏠</text>
+  <text x="32" y="118" text-anchor="middle" fill="#6B7280" font-size="9">Bot</text>
+  <!-- File active -->
+  <rect x="8" y="116" width="48" height="48" rx="8" fill="#3DD68C" opacity="0.12"/>
+  <text x="32" y="146" text-anchor="middle" fill="#3DD68C" font-size="18">📁</text>
+  <text x="32" y="174" text-anchor="middle" fill="#3DD68C" font-size="9">File</text>
+  <!-- KB -->
+  <rect x="8" y="172" width="48" height="48" rx="8" fill="none"/>
+  <text x="32" y="202" text-anchor="middle" fill="#8B9099" font-size="18">📖</text>
+  <text x="32" y="230" text-anchor="middle" fill="#6B7280" font-size="9">KB</text>
+  <!-- Skill -->
+  <rect x="8" y="228" width="48" height="48" rx="8" fill="none"/>
+  <text x="32" y="258" text-anchor="middle" fill="#8B9099" font-size="18">⚡</text>
+  <text x="32" y="286" text-anchor="middle" fill="#6B7280" font-size="9">Skill</text>
+
+  <!-- ===== LEFT PANEL (x=64, y=48, w=340, h=752) ===== -->
+  <rect x="64" y="48" width="340" height="752" fill="#1E2128"/>
+  <line x1="404" y1="48" x2="404" y2="800" stroke="#2D333D" stroke-width="1"/>
+
+  <!-- Workspace root row -->
+  <rect x="80" y="60" width="308" height="32" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="96" y="80" fill="#3DD68C" font-size="11" font-weight="500">📁 D:\workspace</text>
+  <text x="320" y="80" fill="#6B7280" font-size="9">▼</text>
+
+  <!-- Workspace action row -->
+  <text x="80" y="112" fill="#8B9099" font-size="11">Workspace 沙箱 | AI 仅可操作此目录</text>
+  <rect x="80" y="120" width="80" height="24" rx="4" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="120" y="136" text-anchor="middle" fill="#8B9099" font-size="10">切换目录</text>
+
+  <!-- Projects section label -->
+  <text x="80" y="164" class="section-lbl">LOADED PROJECTS (3)</text>
+
+  <!-- Project 1: AnyClaw (active, starred) -->
+  <rect x="80" y="176" width="308" height="60" rx="6" fill="#252930" stroke="#3DD68C" stroke-width="1"/>
+  <text x="96" y="196" fill="#3DD68C" font-size="12" font-weight="500">⭐ AnyClaw</text>
+  <text x="96" y="214" fill="#6B7280" font-size="10">D:\workspace\AnyClaw</text>
+  <text x="370" y="196" fill="#3DD68C" font-size="10">●</text>
+
+  <!-- Project 2 -->
+  <rect x="80" y="244" width="308" height="60" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="96" y="264" class="text" font-size="12">📂 OtherProject</text>
+  <text x="96" y="282" fill="#6B7280" font-size="10">D:\workspace\OtherProject</text>
+
+  <!-- Project 3 -->
+  <rect x="80" y="312" width="308" height="60" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="96" y="332" class="text" font-size="12">📂 docs-site</text>
+  <text x="96" y="350" fill="#6B7280" font-size="10">D:\workspace\docs-site</text>
+
+  <!-- Add project button -->
+  <rect x="80" y="384" width="308" height="32" rx="6" fill="none" stroke="#3DD68C" stroke-width="1" stroke-dasharray="4 2"/>
+  <text x="234" y="405" text-anchor="middle" fill="#3DD68C" font-size="11">+ 添加 Project</text>
+
+  <!-- Workspace tree (collapsible) -->
+  <text x="80" y="440" class="section-lbl">WORKSPACE STRUCTURE</text>
+  <rect x="80" y="452" width="308" height="28" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="96" y="471" fill="#8B9099" font-size="11">▼ workspace (折叠/展开)</text>
+
+  <!-- Tree content -->
+  <text x="96" y="500" fill="#8B9099" font-size="10">▼ AnyClaw</text>
+  <text x="116" y="520" fill="#6B7280" font-size="10">  ▼ src/</text>
+  <text x="132" y="536" fill="#6B7280" font-size="10">    ui_main.cpp</text>
+  <text x="132" y="550" fill="#6B7280" font-size="10">    ui_settings.cpp</text>
+  <text x="116" y="564" fill="#6B7280" font-size="10">  ▼ docs/</text>
+  <text x="116" y="580" fill="#6B7280" font-size="10">  ▼ build/</text>
+  <text x="96" y="596" fill="#8B9099" font-size="10">▼ OtherProject/</text>
+  <text x="96" y="612" fill="#8B9099" font-size="10">▼ docs-site/</text>
+
+  <!-- Hint -->
+  <text x="80" y="640" fill="#6B7280" font-size="10">仅显示已加载的 Project 目录</text>
+
+  <!-- ===== RIGHT PANEL (x=404, y=48, w=876, h=752) ===== -->
+
+  <!-- AI Status section -->
+  <text x="424" y="80" class="section-lbl">AI 当前状态</text>
+
+  <!-- Current AI project indicator -->
+  <rect x="424" y="92" width="844" height="56" rx="8" fill="#252930" stroke="#3DD68C" stroke-width="1"/>
+  <text x="444" y="116" fill="#3DD68C" font-size="11" font-weight="500">● AI 正在操作</text>
+  <text x="576" y="116" class="text" font-size="11">AnyClaw</text>
+  <text x="444" y="136" fill="#6B7280" font-size="10">AI 隔离在 Workspace 内 · 无法访问 Workspace 外的文件</text>
+
+  <!-- AI action stack -->
+  <text x="424" y="172" class="section-lbl">当前操作</text>
+
+  <!-- Action: reading -->
+  <rect x="424" y="184" width="844" height="40" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <circle cx="444" cy="204" r="5" fill="#3DD68C"/>
+  <text x="460" y="208" class="text" font-size="11">正在读取</text>
+  <text x="540" y="208" fill="#3DD68C" font-size="11">src/ui_main.cpp</text>
+
+  <!-- Action: analyzing -->
+  <rect x="424" y="232" width="844" height="40" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <circle cx="444" cy="252" r="5" fill="#E0A020"/>
+  <text x="460" y="256" class="text" font-size="11">正在分析</text>
+  <text x="540" y="256" fill="#8B9099" font-size="11">项目结构</text>
+
+  <!-- Action: pending -->
+  <rect x="424" y="280" width="844" height="40" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1" stroke-dasharray="4 2"/>
+  <circle cx="444" cy="300" r="5" fill="#3D4452"/>
+  <text x="460" y="304" fill="#6B7280" font-size="11">即将写入</text>
+  <text x="540" y="304" fill="#6B7280" font-size="11">src/ui_settings.cpp</text>
+
+  <!-- Output location -->
+  <text x="424" y="344" class="section-lbl">产出位置</text>
+  <rect x="424" y="356" width="844" height="36" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="444" y="378" fill="#6B7280" font-size="11">D:\workspace\AnyClaw\src</text>
+  <rect x="736" y="362" width="96" height="26" rx="5" fill="#3D4452"/>
+  <text x="784" y="380" text-anchor="middle" fill="#8B9099" font-size="10">打开目录</text>
+  <rect x="840" y="362" width="64" height="26" rx="5" fill="#3D4452"/>
+  <text x="872" y="380" text-anchor="middle" fill="#8B9099" font-size="10">刷新</text>
+
+  <!-- Recent output files -->
+  <text x="424" y="416" class="section-lbl">最近产出</text>
+
+  <!-- File output 1 -->
+  <rect x="424" y="428" width="844" height="36" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="444" y="452" class="text" font-size="11">📄 src/ui_main.cpp</text>
+  <text x="650" y="452" fill="#6B7280" font-size="10">刚刚修改</text>
+  <rect x="1140" y="438" width="64" height="22" rx="4" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="1172" y="453" text-anchor="middle" fill="#8B9099" font-size="10">定位</text>
+
+  <!-- File output 2 -->
+  <rect x="424" y="472" width="844" height="36" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="444" y="496" class="text" font-size="11">📄 build/output.bin</text>
+  <text x="650" y="496" fill="#6B7280" font-size="10">刚刚生成</text>
+  <rect x="1140" y="482" width="64" height="22" rx="4" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="1172" y="497" text-anchor="middle" fill="#8B9099" font-size="10">定位</text>
+
+  <!-- File output 3 -->
+  <rect x="424" y="516" width="844" height="36" rx="6" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="444" y="540" class="text" font-size="11">📄 docs/Design.md</text>
+  <text x="650" y="540" fill="#6B7280" font-size="10">10分钟前</text>
+  <rect x="1140" y="526" width="64" height="22" rx="4" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="1172" y="541" text-anchor="middle" fill="#8B9099" font-size="10">定位</text>
+
+  <!-- Activity log -->
+  <text x="424" y="576" class="section-lbl">最近活动</text>
+  <rect x="424" y="588" width="844" height="160" rx="8" fill="#252930" stroke="#2D333D" stroke-width="1"/>
+  <text x="444" y="612" fill="#3DD68C" font-size="10">12:30:01</text>
+  <text x="512" y="612" class="text" font-size="10">读取 src/ui_main.cpp</text>
+  <text x="444" y="632" fill="#E0A020" font-size="10">12:29:45</text>
+  <text x="512" y="632" class="text" font-size="10">分析项目结构: 24 文件, 3 子目录</text>
+  <text x="444" y="652" fill="#3DD68C" font-size="10">12:29:30</text>
+  <text x="512" y="652" class="text" font-size="10">写入 build/output.bin</text>
+  <text x="444" y="672" fill="#6B7280" font-size="10">12:29:10</text>
+  <text x="512" y="672" class="text" font-size="10">执行: ninja build</text>
+  <text x="444" y="692" fill="#6B7280" font-size="10">12:28:55</text>
+  <text x="512" y="692" class="text" font-size="10">创建 docs/temp.md</text>
+  <text x="444" y="712" fill="#6B7280" font-size="10">12:28:40</text>
+  <text x="512" y="712" class="text" font-size="10">切换到 Project: AnyClaw</text>
+  <text x="444" y="732" fill="#6B7280" font-size="10">12:28:20</text>
+  <text x="512" y="732" class="text" font-size="10">Workspace 已加载: D:\workspace</text>
+
+  <!-- Access restriction notice -->
+  <rect x="424" y="756" width="844" height="28" rx="6" fill="#E0A020" opacity="0.1" stroke="#E0A020" stroke-width="1"/>
+  <text x="444" y="774" fill="#E0A020" font-size="10">⚠ AI 隔离在 Workspace 内 · 如需访问其他目录请在设置中授权</text>
+
+</svg>

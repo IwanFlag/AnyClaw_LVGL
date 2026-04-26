@@ -127,10 +127,23 @@ static bool load_profiles(RuntimeProfilesFile& p) {
     return true;
 }
 
-static bool save_profiles(const RuntimeProfilesFile& p) {
+static bool save_profiles(const RuntimeProfilesFile& p, const char* active_runtime_override = nullptr) {
     std::string path = profiles_path();
     std::error_code ec;
     std::filesystem::create_directories(std::filesystem::path(path).parent_path(), ec);
+
+    /* Preserve active_runtime across profile saves (or force override when provided). */
+    char active_runtime[32] = "openclaw";
+    if (active_runtime_override && active_runtime_override[0]) {
+        snprintf(active_runtime, sizeof(active_runtime), "%s", active_runtime_override);
+    } else {
+        std::ifstream in(path);
+        if (in.is_open()) {
+            std::string existing((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            in.close();
+            json_extract_string(existing.c_str(), "active_runtime", active_runtime, sizeof(active_runtime));
+        }
+    }
 
     std::ofstream out(path, std::ios::trunc);
     if (!out.is_open()) return false;
@@ -140,7 +153,8 @@ static bool save_profiles(const RuntimeProfilesFile& p) {
     out << "  \"hermes_model\": \"" << json_escape_str(p.hermes_model) << "\",\n";
     out << "  \"hermes_api_key\": \"" << json_escape_str(p.hermes_api_key) << "\",\n";
     out << "  \"claude_model\": \"" << json_escape_str(p.claude_model) << "\",\n";
-    out << "  \"claude_api_key\": \"" << json_escape_str(p.claude_api_key) << "\"\n";
+    out << "  \"claude_api_key\": \"" << json_escape_str(p.claude_api_key) << "\",\n";
+    out << "  \"active_runtime\": \"" << json_escape_str(active_runtime) << "\"\n";
     out << "}\n";
     return true;
 }
@@ -679,7 +693,6 @@ static bool json_update_string(const char* path, const char* key, const char* ne
 
     char search[256];
     snprintf(search, sizeof(search), "\"%s\"", key);
-    std::string insert = search + std::string(" : \"") + new_value + "\"";
 
     std::string result = content;
     std::string::size_type pos = result.find(search);
@@ -696,11 +709,32 @@ static bool json_update_string(const char* path, const char* key, const char* ne
             }
         }
     } else {
-        /* Key not found — insert before the closing brace if possible */
+        /* Key not found — insert valid JSON pair before closing brace. */
         std::string::size_type last_brace = result.rfind('}');
         if (last_brace != std::string::npos) {
-            while (last_brace > 0 && (result[last_brace - 1] == ' ' || result[last_brace - 1] == '\t' || result[last_brace - 1] == '\n' || result[last_brace - 1] == '\r')) last_brace--;
-            result.insert(last_brace, insert.c_str());
+            while (last_brace > 0 && (result[last_brace - 1] == ' ' || result[last_brace - 1] == '\t' || result[last_brace - 1] == '\n' || result[last_brace - 1] == '\r')) {
+                last_brace--;
+            }
+
+            bool has_fields = false;
+            std::string::size_type first_brace = result.find('{');
+            if (first_brace != std::string::npos) {
+                std::string::size_type p = first_brace + 1;
+                while (p < last_brace && (result[p] == ' ' || result[p] == '\t' || result[p] == '\n' || result[p] == '\r')) {
+                    p++;
+                }
+                has_fields = (p < last_brace && result[p] != '}');
+            }
+
+            std::string insertion;
+            insertion.reserve(strlen(key) + strlen(new_value) + 16);
+            insertion += has_fields ? ",\n  " : "\n  ";
+            insertion += "\"";
+            insertion += key;
+            insertion += "\": \"";
+            insertion += new_value;
+            insertion += "\"\n";
+            result.insert(last_brace, insertion.c_str());
         }
     }
 
@@ -712,6 +746,22 @@ static bool json_update_string(const char* path, const char* key, const char* ne
 }
 
 Runtime app_get_active_runtime() {
+    /* Prefer runtime_profiles.json so runtime selection survives config rewrites. */
+    {
+        std::ifstream in(profiles_path());
+        if (in.is_open()) {
+            char val[32] = {0};
+            std::string json_content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            in.close();
+            if (json_extract_string(json_content.c_str(), "active_runtime", val, sizeof(val))) {
+                if (strcmp(val, "hermes") == 0) return Runtime::Hermes;
+                if (strcmp(val, "claude") == 0) return Runtime::Claude;
+                return Runtime::OpenClaw;
+            }
+        }
+    }
+
+    /* Legacy fallback: config.json */
     char val[32] = {0};
     std::string path = get_config_path();
     if (!path.empty()) {
@@ -725,18 +775,28 @@ Runtime app_get_active_runtime() {
             }
         }
     }
-    return Runtime::Hermes; /* default */
+    return Runtime::OpenClaw; /* default */
 }
 
 void app_set_active_runtime(Runtime r) {
     const char* val = (r == Runtime::Hermes) ? "hermes"
                       : (r == Runtime::Claude) ? "claude"
                       : "openclaw";
+
+    /* Legacy write path */
     std::string path = get_config_path();
     if (!path.empty()) {
-        json_update_string(path.c_str(), "active_runtime", val);
-        LOG_I("RUNTIME", "active_runtime saved: %s", val);
+        if (!json_update_string(path.c_str(), "active_runtime", val)) {
+            LOG_W("RUNTIME", "active_runtime save to config.json failed");
+        }
     }
+
+    /* Canonical write path */
+    RuntimeProfilesFile p;
+    if (!load_profiles(p) || !save_profiles(p, val)) {
+        LOG_W("RUNTIME", "active_runtime save to runtime_profiles.json failed");
+    }
+    LOG_I("RUNTIME", "active_runtime saved: %s", val);
 }
 
 bool app_get_runtime_profile(Runtime rt, RuntimeProfileConfig* out) {
@@ -804,8 +864,9 @@ bool app_is_runtime_profile_ready(Runtime rt, char* reason_out, int reason_size)
     }
 
     if (model_requires_api_key(p.model) && !p.api_key[0]) {
-        set_reason("api key is empty");
-        return false;
+        /* API key can be provided by OpenClaw auth profiles (infer auth store),
+         * so an empty profile key should not hard-block runtime readiness. */
+        set_reason("api key empty in profile, rely on auth profile fallback");
     }
 
     if (rt == Runtime::Hermes) {
@@ -816,8 +877,8 @@ bool app_is_runtime_profile_ready(Runtime rt, char* reason_out, int reason_size)
         }
     } else if (rt == Runtime::Claude) {
         if (!app_check_claude_cli_exists()) {
-            set_reason("Claude runtime missing");
-            return false;
+            set_reason("Claude runtime missing, using gateway route fallback");
+            return true;
         }
     }
 

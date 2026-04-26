@@ -8866,6 +8866,10 @@ volatile LONG g_stream_done = 0;        /* atomic flag: stream finished */
 static lv_timer_t* g_stream_timer = nullptr;
 static HANDLE g_stream_thread = nullptr;
 static volatile LONG g_stream_logged_unparsed_sse = 0;
+static std::mutex g_runtime_route_apply_mtx;
+static Runtime g_runtime_route_applied_rt = Runtime::OpenClaw;
+static char g_runtime_route_applied_model[256] = {0};
+static uint32_t g_runtime_route_applied_key_hash = 0;
 static bool is_streaming_now() { return g_streaming; }
 bool app_is_chat_streaming() {
     if (g_streaming) return true;
@@ -8874,6 +8878,45 @@ bool app_is_chat_streaming() {
 }
 static DWORD g_stream_start_tick = 0;          /* when stream started (GetTickCount) */
 static DWORD g_stream_last_data_tick = 0;      /* last time new data arrived */
+
+static uint32_t runtime_route_key_hash(const char* s) {
+    if (!s || !s[0]) return 0;
+    uint32_t h = 2166136261u;
+    for (const unsigned char* p = (const unsigned char*)s; *p; ++p) {
+        h ^= (uint32_t)(*p);
+        h *= 16777619u;
+    }
+    return h;
+}
+
+static bool runtime_route_apply_if_needed(Runtime rt, const RuntimeProfileConfig& profile, bool* applied_out) {
+    if (applied_out) *applied_out = false;
+    if (!profile.model[0]) return false;
+
+    const uint32_t key_hash = runtime_route_key_hash(profile.api_key);
+
+    {
+        std::lock_guard<std::mutex> lk(g_runtime_route_apply_mtx);
+        if (g_runtime_route_applied_rt == rt &&
+            strcmp(g_runtime_route_applied_model, profile.model) == 0 &&
+            g_runtime_route_applied_key_hash == key_hash) {
+            return true;
+        }
+    }
+
+    bool ok = app_update_model_config(profile.api_key[0] ? profile.api_key : nullptr, profile.model);
+    if (!ok) return false;
+
+    {
+        std::lock_guard<std::mutex> lk(g_runtime_route_apply_mtx);
+        g_runtime_route_applied_rt = rt;
+        snprintf(g_runtime_route_applied_model, sizeof(g_runtime_route_applied_model), "%s", profile.model);
+        g_runtime_route_applied_key_hash = key_hash;
+    }
+
+    if (applied_out) *applied_out = true;
+    return true;
+}
 
 struct WorkStepEvent {
     char action[64];
@@ -9279,9 +9322,10 @@ static bool extract_openai_plain_content(const char* json, char* out, size_t out
     }
 
     /* Multi-schema fallback for non-standard Gateway/model payloads. */
-        return extract_string_after_key("output_text") ||
-            extract_string_after_key("content") ||
-            extract_string_after_key("message");
+    return extract_string_after_key("output_text") ||
+           extract_string_after_key("content") ||
+           extract_string_after_key("text") ||
+           extract_string_after_key("message");
 }
 
 /* SSE stream callback — called from background thread for each HTTP chunk */
@@ -9574,12 +9618,32 @@ static unsigned __stdcall chat_api_thread(void* arg) {
     RuntimeProfileConfig active_profile{};
     bool has_profile = app_get_runtime_profile(active_rt, &active_profile) && active_profile.model[0];
     if (active_rt != Runtime::OpenClaw && !has_profile) {
-        LOG_W("Chat", "Runtime profile missing for rt=%d; continue with gateway current model", (int)active_rt);
+        stream_buf_clear();
+        stream_buf_append_text("⚠️ 当前运行时缺少可用模型配置，请在 Settings -> Agent 补全 Model/API Key。");
+        InterlockedExchange(&g_stream_new_data, 1);
+        InterlockedExchange(&g_stream_done, 1);
+        free(user_msg);
+        return 1;
     }
 
-    if (active_rt != Runtime::OpenClaw && has_profile) {
-        /* Route model is sent in request body, no per-send config write needed. */
-        ui_log("[Chat] Use runtime profile route model=%s", active_profile.model);
+    if (has_profile) {
+        bool applied_now = false;
+        if (!runtime_route_apply_if_needed(active_rt, active_profile, &applied_now)) {
+            if (active_rt != Runtime::OpenClaw) {
+                stream_buf_clear();
+                stream_buf_append_text("⚠️ 运行时配置应用失败，请在 Settings -> Agent 检查模型与 API Key。");
+                InterlockedExchange(&g_stream_new_data, 1);
+                InterlockedExchange(&g_stream_done, 1);
+                free(user_msg);
+                return 1;
+            }
+            LOG_W("Chat", "OpenClaw runtime profile apply failed, continue with current gateway config");
+        } else {
+            ui_log("[Chat] Runtime route prepared: %s", active_profile.model);
+            if (applied_now) {
+                LOG_I("Chat", "Runtime route applied: rt=%d model=%s", (int)active_rt, active_profile.model);
+            }
+        }
     }
 
     /* Read Gateway connection info */
@@ -9637,9 +9701,14 @@ static unsigned __stdcall chat_api_thread(void* arg) {
         }
     }
 
-    /* Build request JSON — OpenAI-compatible format */
-    const char* model_id = use_gemma_local ? route_model : "openclaw:main";
-    std::string json_body = "{\"model\":\"" + std::string(model_id) +
+    /* Build request JSON — OpenAI-compatible format.
+     * OpenClaw runtime keeps the gateway route alias, while Hermes/Claude
+     * must send their runtime model id directly. */
+    std::string request_model = use_gemma_local
+        ? std::string(route_model)
+        : std::string("openclaw:main");
+
+    std::string json_body = "{\"model\":\"" + request_model +
         "\",\"messages\":[{\"role\":\"system\",\"content\":\"" + escaped_sys +
         "\"},{\"role\":\"user\",\"content\":\"" + escaped_msg +
         "\"}],\"stream\":true}";
@@ -9701,7 +9770,7 @@ static unsigned __stdcall chat_api_thread(void* arg) {
     }
 
     /* If HTTP failed or no data received, try failover */
-    if (!use_gemma_local && (status != 200 || stream_snapshot[0] == '\0')) {
+    if (!use_gemma_local && active_rt == Runtime::OpenClaw && (status != 200 || stream_snapshot[0] == '\0')) {
         /* Try failover: switch to a healthy backup model */
         if (failover_is_enabled()) {
             char cur_model[256] = {0};
@@ -9715,7 +9784,7 @@ static unsigned __stdcall chat_api_thread(void* arg) {
                     stream_buf_clear();
                     stream_raw_clear();
                     InterlockedExchange(&g_stream_new_data, 0);
-                    json_body = "{\"model\":\"openclaw:main\",\"messages\":[{\"role\":\"system\",\"content\":\"" + escaped_sys + "\"},{\"role\":\"user\",\"content\":\"" + escaped_msg + "\"}],\"stream\":true}";
+                    json_body = "{\"model\":\"" + request_model + "\",\"messages\":[{\"role\":\"system\",\"content\":\"" + escaped_sys + "\"},{\"role\":\"user\",\"content\":\"" + escaped_msg + "\"}],\"stream\":true}";
                     status = http_post_stream(url, json_body.c_str(), auth_header, sse_chunk_cb, nullptr, kChatStreamHttpTimeoutSec);
                     DWORD fe = GetTickCount() - tick_start;
                     ui_log("[Chat] Failover result: HTTP %d (%lums)", status, fe);
@@ -16681,12 +16750,10 @@ void app_ui_init() {
                 }
             } else if (rt == Runtime::Claude) {
                 if (!app_check_claude_cli_exists()) {
-                    ui_toast_error(g_lang == Lang::CN
-                        ? "Claude Code 未安装，请在设置→Agent中配置"
-                        : "Claude Code not found. Configure in Settings→Agent.");
-                    lv_dropdown_set_selected((lv_obj_t*)lv_event_get_target(e), 0); /* revert */
-                    app_set_active_runtime(Runtime::OpenClaw);
-                    return;
+                    ui_toast_warn(g_lang == Lang::CN
+                        ? "Claude Code 未安装，将继续使用网关路由（功能可能受限）"
+                        : "Claude Code not found; continuing with gateway route (features may be limited).");
+                    LOG_W("Agent", "Claude CLI missing; keeping Claude runtime via gateway route");
                 }
             }
 

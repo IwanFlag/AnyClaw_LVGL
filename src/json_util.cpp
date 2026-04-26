@@ -2,38 +2,62 @@
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
+#include <cctype>
 
 /* Find a top-level key in JSON and return position after the colon */
 static const char* json_find_key(const char* json, const char* key) {
     if (!json || !key) return nullptr;
-    char pattern[256];
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-    
+
+    const size_t key_len = strlen(key);
     int depth = 0;
-    bool in_string = false;
-    bool escape = false;
     const char* p = json;
-    
+
     while (*p) {
-        if (escape) { escape = false; p++; continue; }
-        if (*p == '\\') { escape = true; p++; continue; }
-        if (*p == '"') { in_string = !in_string; p++; continue; }
-        if (in_string) { p++; continue; }
-        
-        if (*p == '{' || *p == '[') depth++;
-        else if (*p == '}' || *p == ']') depth--;
-        
-        if (depth == 1 && strncmp(p, pattern, strlen(pattern)) == 0) {
-            const char* after = p + strlen(pattern);
-            /* FIX P4: Ensure key is a complete token (not a prefix of a longer key like "window_width" matching "window_w") */
-            if (*after != '"' && *after != '\0' && !isspace((unsigned char)*after) && *after != ':') { p++; continue; }
-            while (*after == ' ' || *after == '\t' || *after == '\n' || *after == '\r') after++;
-            if (*after == ':') {
-                after++;
-                while (*after == ' ' || *after == '\t' || *after == '\n' || *after == '\r') after++;
-                return after;
-            }
+        if (*p == '{' || *p == '[') {
+            depth++;
+            p++;
+            continue;
         }
+        if (*p == '}' || *p == ']') {
+            if (depth > 0) depth--;
+            p++;
+            continue;
+        }
+
+        if (*p == '"') {
+            /* Parse one JSON string token (handles escapes). */
+            const char* s = p + 1;
+            bool esc = false;
+            while (*s) {
+                if (esc) {
+                    esc = false;
+                } else if (*s == '\\') {
+                    esc = true;
+                } else if (*s == '"') {
+                    break;
+                }
+                s++;
+            }
+            if (!*s) return nullptr; /* malformed JSON */
+
+            /* At root object depth, treat string token followed by ':' as a key candidate. */
+            if (depth == 1) {
+                size_t cur_len = (size_t)(s - (p + 1));
+                if (cur_len == key_len && strncmp(p + 1, key, key_len) == 0) {
+                    const char* after = s + 1;
+                    while (*after == ' ' || *after == '\t' || *after == '\n' || *after == '\r') after++;
+                    if (*after == ':') {
+                        after++;
+                        while (*after == ' ' || *after == '\t' || *after == '\n' || *after == '\r') after++;
+                        return after;
+                    }
+                }
+            }
+
+            p = s + 1;
+            continue;
+        }
+
         p++;
     }
     return nullptr;

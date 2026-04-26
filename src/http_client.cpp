@@ -216,12 +216,16 @@ int http_post_stream(const char* url, const char* json_body, const char* api_key
                  "Accept: text/event-stream");
     }
     int body_len = json_body ? (int)strlen(json_body) : 0;
+    char response_buf[4096] = {0};
     DWORD tick_start = GetTickCount();
     LOG_I("HTTP", "SSE stream start: url=%.120s body_len=%d timeout=%ds", url, body_len, timeout_sec);
     int result = http_request("POST", url, json_body, body_len, headers,
-                        nullptr, 0, timeout_sec, stream_cb, stream_ctx);
+                        response_buf, sizeof(response_buf), timeout_sec, stream_cb, stream_ctx);
     DWORD elapsed = GetTickCount() - tick_start;
     LOG_I("HTTP", "SSE stream end: status=%d elapsed=%lums", result, elapsed);
+    if (result >= 400 && response_buf[0]) {
+        LOG_W("HTTP", "SSE error body: %.512s", response_buf);
+    }
     if (result < 0) span.set_fail();
     return result;
 }
