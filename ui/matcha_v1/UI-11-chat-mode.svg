@@ -27,7 +27,7 @@
       <stop offset="100%" stop-color="#2563EB"/>
     </linearGradient>
     <clipPath id="rightPanelClip">
-      <rect x="365" y="41" width="818" height="605"/>
+      <rect x="365" y="41" width="818" height="496"/>
     </clipPath>
     <linearGradient id="thinkingGradient" x1="0%" y1="0%" x2="0%" y2="100%">
       <stop offset="0%" stop-color="#1F1A0A"/>
@@ -43,8 +43,22 @@
 
   <!-- ===== 标题栏 ===== -->
   <rect x="0" y="0" width="1190" height="41" rx="0" fill="#0A0C10"/>
+  <!-- 标题栏左侧：品牌图标 + 模块名 -->
+  <!-- 大青虫子 SVG (36x36) -->
+  <circle cx="27" cy="17" r="8" fill="#3DD68C"/>
+  <line x1="21" y1="9" x2="19" y2="5" stroke="#3DD68C" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="33" y1="9" x2="35" y2="5" stroke="#3DD68C" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="19" cy="5" r="2.5" fill="#3DD68C"/>
+  <circle cx="35" cy="5" r="2.5" fill="#3DD68C"/>
+  <ellipse cx="23" cy="15" rx="2.5" ry="3" fill="#0F1117"/>
+  <ellipse cx="31" cy="15" rx="2.5" ry="3" fill="#0F1117"/>
+  <circle cx="24" cy="14" r="1" fill="#FFFFFF"/>
+  <circle cx="32" cy="14" r="1" fill="#FFFFFF"/>
+  <ellipse cx="20" cy="19" rx="3" ry="1.5" fill="#FF9EB5" opacity="0.7"/>
+  <ellipse cx="34" cy="19" rx="3" ry="1.5" fill="#FF9EB5" opacity="0.7"/>
+  <path d="M 24 21 Q 27 24 30 21" stroke="#0F1117" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+  <text x="44" y="23" font-family="sans-serif" font-size="13" fill="#E8ECF4">AnyClaw · Chat</text>
   <!-- 标题栏右侧：窗口控制 -->
-  <rect x="1070" y="12" width="30" height="17" rx="4" fill="#252A38"/>
   <text x="1085" y="24" text-anchor="middle" font-size="10" fill="#6B7280">─</text>
   <rect x="1106" y="12" width="30" height="17" rx="4" fill="#252A38"/>
   <text x="1121" y="24" text-anchor="middle" font-size="10" fill="#6B7280">□</text>
@@ -56,13 +70,35 @@
 
   <!-- Bot (高亮) -->
   <rect x="11" y="48" width="52" height="52" rx="9" fill="#252A38"/>
-  <text x="37" y="78" text-anchor="middle" font-size="20">🤖</text>
+  <!-- 大青虫子 SVG (与左面板AI人物等比例，中心37,74) -->
+  <circle cx="37" cy="63" r="12" fill="#3DD68C"/>
+  <line x1="28" y1="51" x2="25" y2="45" stroke="#3DD68C" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="46" y1="51" x2="49" y2="45" stroke="#3DD68C" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="25" cy="45" r="2.5" fill="#3DD68C"/>
+  <circle cx="49" cy="45" r="2.5" fill="#3DD68C"/>
+  <ellipse cx="33" cy="61" rx="2.5" ry="3" fill="#0F1117"/>
+  <ellipse cx="41" cy="61" rx="2.5" ry="3" fill="#0F1117"/>
+  <circle cx="34" cy="60" r="1" fill="#FFFFFF"/>
+  <circle cx="42" cy="60" r="1" fill="#FFFFFF"/>
+  <ellipse cx="28" cy="66" rx="3" ry="1.5" fill="#FF9EB5" opacity="0.7"/>
+  <ellipse cx="46" cy="66" rx="3" ry="1.5" fill="#FF9EB5" opacity="0.7"/>
+  <path d="M 33 68 Q 37 72 41 68" stroke="#0F1117" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+  <rect x="29" y="75" width="16" height="19" rx="6" fill="#3DD68C"/>
+  <ellipse cx="37" cy="96" rx="12" ry="4" fill="#000000" opacity="0.2"/>
 
   <!-- File -->
   <rect x="11" y="116" width="52" height="52" rx="9" fill="transparent"/>
   <text x="37" y="146" text-anchor="middle" font-size="17">📁</text>
 
-  <!-- Chat/Work toggle -->
+  <!-- KB -->
+  <rect x="11" y="184" width="52" height="52" rx="9" fill="transparent"/>
+  <text x="37" y="214" text-anchor="middle" font-size="17">📚</text>
+
+  <!-- Skill -->
+  <rect x="11" y="252" width="52" height="52" rx="9" fill="transparent"/>
+  <text x="37" y="282" text-anchor="middle" font-size="17">🧩</text>
+
+  <!-- Chat/Work toggle (高亮) -->
   <rect x="11" y="526" width="52" height="52" rx="9" fill="#252A38"/>
   <text x="37" y="557" text-anchor="middle" font-size="17">💬</text>
 
@@ -73,41 +109,24 @@
   <!-- ===== 左面板 ===== -->
   <rect x="82" y="48" width="276" height="598" rx="10" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.03" stroke-width="1"/>
 
-  <!-- AI伙伴容器：y=58, h=203，文字布局：顶部人物 + 底部状态 -->
+  <!-- AI伙伴容器 -->
   <rect x="92" y="58" width="256" height="203" rx="10" fill="#1A1D27" stroke="#3DD68C" stroke-width="1.5"/>
-
-  <!-- AI人物：顶部区域 y=70~186 -->
-  <!-- 触角 -->
   <line x1="130" y1="82" x2="122" y2="70" stroke="#3DD68C" stroke-width="2" stroke-linecap="round"/>
   <line x1="180" y1="82" x2="188" y2="70" stroke="#3DD68C" stroke-width="2" stroke-linecap="round"/>
   <circle cx="122" cy="70" r="4" fill="#3DD68C"/>
   <circle cx="188" cy="70" r="4" fill="#3DD68C"/>
-
-  <!-- 头 -->
   <circle cx="155" cy="110" r="28" fill="#3DD68C"/>
-
-  <!-- 身体 -->
   <rect x="137" y="132" width="36" height="42" rx="13" fill="#3DD68C"/>
   <ellipse cx="155" cy="176" rx="26" ry="8" fill="#000000" opacity="0.2"/>
-
-  <!-- 眼睛 -->
   <ellipse cx="146" cy="106" rx="5" ry="6" fill="#0F1117"/>
   <ellipse cx="164" cy="106" rx="5" ry="6" fill="#0F1117"/>
   <circle cx="148" cy="104" r="2" fill="#FFFFFF"/>
   <circle cx="166" cy="104" r="2" fill="#FFFFFF"/>
-
-  <!-- 腮红 -->
   <ellipse cx="133" cy="114" rx="6" ry="3" fill="#FF9EB5" opacity="0.7"/>
   <ellipse cx="177" cy="114" rx="6" ry="3" fill="#FF9EB5" opacity="0.7"/>
-
-  <!-- 嘴巴 -->
   <path d="M 149 120 Q 155 126 161 120" stroke="#0F1117" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-
-  <!-- 右侧文字：与人物头部同行 -->
   <text x="200" y="102" font-family="sans-serif" font-size="12" fill="#3DD68C" font-weight="bold">AnyClaw</text>
   <text x="200" y="118" font-family="sans-serif" font-size="10" fill="#888">你的 AI 伙伴</text>
-
-  <!-- 底部状态：紧贴容器底部 y=243~261 -->
   <circle cx="108" cy="240" r="5" fill="#3DD68C">
     <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite"/>
   </circle>
@@ -115,105 +134,125 @@
   <text x="298" y="244" font-family="sans-serif" font-size="9" fill="#3DD68C">Running</text>
   <text x="108" y="258" font-family="sans-serif" font-size="9" fill="#8B92A8">Model: MiniMax-M2.7</text>
 
-  <!-- 任务列表标题：在容器下方，间距缩小 -->
+  <!-- 任务列表标题 -->
   <line x1="92" y1="272" x2="352" y2="272" stroke="#3DD68C" stroke-opacity="0.04" stroke-width="1"/>
   <text x="92" y="286" font-family="sans-serif" font-size="10" fill="#E8ECF4">任务列表</text>
   <text x="302" y="286" font-family="sans-serif" font-size="9" fill="#6B7280">(0)</text>
 
-  <!-- Session Card：y=298, h=190, bottom=488 -->
+  <!-- Session Card -->
   <rect x="92" y="298" width="256" height="190" rx="7" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.03" stroke-width="1"/>
   <text x="103" y="318" font-family="sans-serif" font-size="9" fill="#E8ECF4">会话</text>
   <text x="302" y="318" font-family="sans-serif" font-size="9" fill="#6B7280">(0)</text>
   <line x1="103" y1="327" x2="352" y2="327" stroke="#3DD68C" stroke-opacity="0.05" stroke-width="1"/>
   <text x="220" y="398" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">暂无会话</text>
 
-  <!-- Cron Card：y=504, h=126, bottom=630，距面板底部16px -->
+  <!-- 任务 Card -->
   <rect x="92" y="504" width="256" height="126" rx="7" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.03" stroke-width="1"/>
-  <text x="103" y="524" font-family="sans-serif" font-size="9" fill="#E8ECF4">定时任务</text>
+  <text x="103" y="524" font-family="sans-serif" font-size="9" fill="#E8ECF4">所有任务</text>
   <text x="302" y="524" font-family="sans-serif" font-size="9" fill="#6B7280">(0)</text>
   <line x1="103" y1="533" x2="352" y2="533" stroke="#3DD68C" stroke-opacity="0.05" stroke-width="1"/>
-  <text x="220" y="572" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">暂无定时任务</text>
+  <text x="220" y="572" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6B7280">暂无任务</text>
 
   <!-- ===== 右面板 ===== -->
   <rect x="365" y="41" width="818" height="605" fill="#0F1117"/>
 
-  <!-- Message 1: User（头像在右面板右边界内） -->
-  <!-- 面板右边界=1183，头像右边界=1171，距面板12px，头像左边界=1143，气泡右边界=1155，间距12px -->
-  <g transform="translate(980, 71)">
-    <!-- 头像：cx=171，右边界=1159，距面板24px -->
-    <circle cx="171" cy="22" r="14" fill="#252A38"/>
-    <text x="171" y="27" text-anchor="middle" font-size="12">👤</text>
-    <!-- 气泡：x=54，宽139，右边界=1119，距头像左边界12px -->
-    <rect x="54" y="0" width="139" height="45" rx="16" fill="url(#userBubble)" filter="url(#bubbleShadow)"/>
-    <text x="66" y="20" font-family="sans-serif" font-size="11" fill="#FFFFFF">帮我查一下今天的天气</text>
-    <text x="172" y="12" font-family="sans-serif" font-size="9" fill="#FFFFFF" opacity="0.6">12:28</text>
+  <!-- ===== chat_cont（消息区，flex-grow）===== -->
+  <g clip-path="url(#rightPanelClip)">
+    <!-- Message 1: User -->
+    <g transform="translate(980, 71)">
+      <circle cx="171" cy="22" r="14" fill="#252A38"/>
+      <text x="171" y="27" text-anchor="middle" font-size="12">👤</text>
+      <rect x="54" y="0" width="139" height="45" rx="16" fill="url(#userBubble)" filter="url(#bubbleShadow)"/>
+      <text x="175" y="12" text-anchor="end" font-family="sans-serif" font-size="9" fill="#FFFFFF" opacity="0.6">12:28</text>
+      <text x="66" y="28" font-family="sans-serif" font-size="11" fill="#FFFFFF">帮我查一下今天的天气</text>
+    </g>
+
+    <!-- Message 2: AI -->
+    <g transform="translate(365, 129)">
+      <circle cx="17" cy="17" r="14" fill="#1E2230"/>
+      <!-- 大青虫子 SVG (28px圆形Avatar版) -->
+      <circle cx="17" cy="16" r="7" fill="#3DD68C"/>
+      <line x1="12" y1="10" x2="11" y2="7" stroke="#3DD68C" stroke-width="1" stroke-linecap="round"/>
+      <line x1="22" y1="10" x2="23" y2="7" stroke="#3DD68C" stroke-width="1" stroke-linecap="round"/>
+      <circle cx="11" cy="7" r="1.5" fill="#3DD68C"/>
+      <circle cx="23" cy="7" r="1.5" fill="#3DD68C"/>
+      <ellipse cx="15" cy="15" rx="1.5" ry="1.8" fill="#0F1117"/>
+      <ellipse cx="19" cy="15" rx="1.5" ry="1.8" fill="#0F1117"/>
+      <circle cx="15.5" cy="14.5" r="0.7" fill="#FFFFFF"/>
+      <circle cx="19.5" cy="14.5" r="0.7" fill="#FFFFFF"/>
+      <ellipse cx="12" cy="19" rx="2" ry="1" fill="#FF9EB5" opacity="0.7"/>
+      <ellipse cx="22" cy="19" rx="2" ry="1" fill="#FF9EB5" opacity="0.7"/>
+      <path d="M 15 20 Q 17 22 19 20" stroke="#0F1117" stroke-width="1" fill="none" stroke-linecap="round"/>
+      <rect x="38" y="0" width="431" height="220" rx="12" fill="#1E2230" filter="url(#bubbleShadow)"/>
+      <rect x="38" y="3" width="3" height="214" rx="1" fill="#3DD68C"/>
+      <text x="52" y="15" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#6C9FFF">12:28</text>
+      <rect x="52" y="22" width="405" height="21" rx="5" fill="#252A38"/>
+      <circle cx="62" cy="33" r="3" fill="#FFBE3D"/>
+      <text x="71" y="37" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#FFBE3D">AI 正在思考...</text>
+      <rect x="52" y="50" width="405" height="46" rx="7" fill="url(#thinkingGradient)" stroke="#FFBE3D" stroke-opacity="0.2" stroke-width="1"/>
+      <text x="63" y="64" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#FFBE3D">🔍 思考过程</text>
+      <text x="444" y="64" text-anchor="end" font-family="HarmonyOS Sans SC, sans-serif" font-size="8" fill="#6B7280">点击折叠</text>
+      <text x="63" y="78" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">1. 分析：用户请求查询天气</text>
+      <text x="63" y="90" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">2. 调用天气 API...</text>
+      <rect x="52" y="104" width="405" height="36" rx="7" fill="#0A0C10" stroke="#3DD68C" stroke-opacity="0.15" stroke-width="1"/>
+      <rect x="52" y="104" width="3" height="36" rx="1" fill="#3DD68C"/>
+      <text x="62" y="119" font-family="Consolas, monospace" font-size="9" fill="#3DD68C">$ curl weather-api --location=beijing</text>
+      <text x="62" y="132" font-family="Consolas, monospace" font-size="9" fill="#6B7280">{"status":"ok","temp":26,"condition":"sunny"}</text>
+      <rect x="52" y="148" width="405" height="28" rx="6" fill="#0A0C10" stroke="#3DD68C" stroke-opacity="0.15" stroke-width="1"/>
+      <rect x="52" y="148" width="3" height="28" rx="1" fill="#3DD68C"/>
+      <text x="63" y="158" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">📄</text>
+      <text x="72" y="158" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#6C9FFF" text-decoration="underline">weekly_report_2026_04.pdf</text>
+      <text x="63" y="170" font-family="HarmonyOS Sans SC, sans-serif" font-size="8" fill="#6B7280">点击打开文件</text>
+      <text x="52" y="204" font-family="HarmonyOS Sans SC, sans-serif" font-size="11" fill="#E8ECF4">北京今天天气晴朗，气温 26°C。</text>
+    </g>
   </g>
 
-  <!-- Message 2: AI 完整气泡 -->
-  <g transform="translate(365, 129)">
-    <circle cx="17" cy="17" r="14" fill="#1E2230"/>
-    <text x="17" y="22" text-anchor="middle" font-size="12">🦞</text>
+  <!-- ===== ctrl_bar（h=31）===== -->
+  <rect x="365" y="537" width="818" height="31" rx="7" fill="#1A1D27"/>
+  <text x="1135" y="556" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#6B7280">0/2000</text>
+  <rect x="372" y="542" width="69" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
+  <text x="406" y="556" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#3DD68C">Agent ▼</text>
+  <rect x="446" y="542" width="69" height="22" rx="11" fill="#252A38"/>
+  <text x="480" y="556" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#E8ECF4">AI行为 ▼</text>
+  <rect x="520" y="542" width="69" height="22" rx="11" fill="#252A38"/>
+  <circle cx="532" cy="553" r="7" fill="#8B92A8"/>
+  <text x="554" y="556" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">AI托管</text>
+  <rect x="594" y="542" width="69" height="22" rx="11" fill="#252A38"/>
+  <circle cx="606" cy="553" r="7" fill="#8B92A8"/>
+  <text x="628" y="556" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">Voice</text>
 
-    <rect x="38" y="0" width="431" height="220" rx="12" fill="#1E2230" filter="url(#bubbleShadow)"/>
-    <rect x="38" y="3" width="3" height="214" rx="1" fill="#3DD68C"/>
+  <!-- ===== chat_input（y=568，动态高，底部=630对齐任务容器）===== -->
+  <!-- 输入框容器（包含附件芯片行+文本输入区） -->
+  <rect x="365" y="568" width="818" height="62" rx="7" fill="#1A1D27"/>
+  <!-- 输入框内部（y=573） -->
+  <rect x="372" y="573" width="698" height="57" rx="5" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
 
-    <text x="52" y="15" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#6B7280">12:28</text>
+  <!-- 附件芯片行（输入框内第一行，y=573, h=20） -->
+  <!-- 芯片1: LICENSES.chromium.html -->
+  <rect x="378" y="575" width="148" height="16" rx="3" fill="#252A38"/>
+  <text x="384" y="586" font-family="sans-serif" font-size="8" fill="#6C9FFF">📄 LICENSES.chromium...</text>
+  <circle cx="519" cy="583" r="5" fill="#252A38" stroke="#3DD68C" stroke-width="0.5"/>
+  <text x="519" y="586" text-anchor="middle" font-size="7" fill="#6B7280">✕</text>
+  <!-- 芯片2: report.pdf -->
+  <rect x="532" y="575" width="148" height="16" rx="3" fill="#252A38"/>
+  <text x="538" y="586" font-family="sans-serif" font-size="8" fill="#6C9FFF">📄 report.pdf</text>
+  <circle cx="673" cy="583" r="5" fill="#252A38" stroke="#3DD68C" stroke-width="0.5"/>
+  <text x="673" y="586" text-anchor="middle" font-size="7" fill="#6B7280">✕</text>
+  <!-- 滚动提示（仅溢出时显示） -->
+  <!-- 芯片超出宽度时渲染 < 和 > 滚动按钮 -->
 
-    <rect x="52" y="22" width="405" height="21" rx="5" fill="#252A38"/>
-    <circle cx="62" cy="33" r="3" fill="#FFBE3D"/>
-    <text x="71" y="37" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#FFBE3D">🤖 AI 正在思考...</text>
+  <!-- 分隔线（芯片行与输入区分隔） -->
+  <line x1="372" y1="595" x2="1070" y2="595" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
 
-    <rect x="52" y="50" width="405" height="46" rx="7" fill="url(#thinkingGradient)" stroke="#FFBE3D" stroke-opacity="0.2" stroke-width="1"/>
-    <text x="63" y="64" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#FFBE3D">🔍 思考过程</text>
-    <text x="444" y="64" text-anchor="end" font-family="HarmonyOS Sans SC, sans-serif" font-size="8" fill="#6B7280">点击折叠</text>
-    <text x="63" y="78" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">1. 分析：用户请求查询天气</text>
-    <text x="63" y="90" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">2. 调用天气 API...</text>
+  <!-- 文本输入区（输入框内第二行起，y=599） -->
+  <text x="380" y="611" font-family="HarmonyOS Sans SC, sans-serif" font-size="10" fill="#6B7280">输入消息...</text>
+  <text x="380" y="625" font-family="HarmonyOS Sans SC, sans-serif" font-size="10" fill="#6B7280">用户输入从此开始</text>
 
-    <rect x="52" y="104" width="405" height="36" rx="7" fill="#0A0C10" stroke="#3DD68C" stroke-opacity="0.15" stroke-width="1"/>
-    <rect x="52" y="104" width="3" height="36" rx="1" fill="#3DD68C"/>
-    <text x="62" y="119" font-family="Consolas, monospace" font-size="9" fill="#3DD68C">$ curl weather-api --location=beijing</text>
-    <text x="62" y="132" font-family="Consolas, monospace" font-size="9" fill="#6B7280">{"status":"ok","temp":26,"condition":"sunny"}</text>
-
-    <rect x="52" y="148" width="405" height="28" rx="6" fill="#0A0C10" stroke="#3DD68C" stroke-opacity="0.15" stroke-width="1"/>
-    <rect x="52" y="148" width="3" height="28" rx="1" fill="#3DD68C"/>
-    <text x="63" y="158" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">📄</text>
-    <text x="72" y="158" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#6C9FFF" text-decoration="underline">weekly_report_2026_04.pdf</text>
-    <text x="63" y="170" font-family="HarmonyOS Sans SC, sans-serif" font-size="8" fill="#6B7280">点击打开文件</text>
-
-    <text x="52" y="204" font-family="HarmonyOS Sans SC, sans-serif" font-size="11" fill="#E8ECF4">北京今天天气晴朗，气温 26°C。</text>
-  </g>
-
-  <!-- Control Bar (ctrl_bar) -->
-  <rect x="365" y="553" width="818" height="31" rx="7" fill="#1A1D27"/>
-
-  <text x="1135" y="572" font-family="Plus Jakarta Sans, sans-serif" font-size="9" fill="#6B7280">0/2000</text>
-
-  <rect x="372" y="558" width="69" height="22" rx="11" fill="#3DD68C" fill-opacity="0.12"/>
-  <text x="406" y="572" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#3DD68C">Agent ▼</text>
-
-  <rect x="446" y="558" width="69" height="22" rx="11" fill="#252A38"/>
-  <text x="480" y="572" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#E8ECF4">AI行为 ▼</text>
-
-  <rect x="520" y="558" width="69" height="22" rx="11" fill="#252A38"/>
-  <text x="554" y="572" text-anchor="middle" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#E8ECF4">AI托管 ▼</text>
-
-  <rect x="594" y="560" width="34" height="17" rx="9" fill="#373C55"/>
-  <circle cx="605" cy="569" r="7" fill="#8B92A8"/>
-  <text x="633" y="572" font-family="HarmonyOS Sans SC, sans-serif" font-size="9" fill="#8B92A8">Voice</text>
-
-  <!-- Input Area (chat_input) -->
-  <rect x="365" y="584" width="818" height="62" rx="7" fill="#1A1D27"/>
-
-  <rect x="372" y="589" width="698" height="47" rx="7" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
-  <text x="383" y="605" font-family="HarmonyOS Sans SC, sans-serif" font-size="10" fill="#6B7280">输入消息... (Shift+Enter 换行)</text>
-  <text x="383" y="621" font-family="HarmonyOS Sans SC, sans-serif" font-size="10" fill="#6B7280">第二行</text>
-  <text x="383" y="635" font-family="HarmonyOS Sans SC, sans-serif" font-size="10" fill="#6B7280">第三行</text>
-
-  <rect x="1080" y="616" width="21" height="21" rx="5" fill="#252A38"/>
-  <text x="1090" y="631" text-anchor="middle" font-size="10">📎</text>
-
-  <circle cx="1130" cy="626" r="18" fill="url(#sendBtn)" filter="url(#bubbleShadow)"/>
-  <text x="1130" y="632" text-anchor="middle" font-size="14" fill="#0F1117" font-weight="bold">▶</text>
+  <!-- 按钮（在输入框右下角，底部=630对齐） -->
+  <rect x="1080" y="609" width="21" height="21" rx="5" fill="#252A38"/>
+  <text x="1090" y="624" text-anchor="middle" font-size="16" fill="#8B92A8">+</text>
+  <circle cx="1130" cy="612" r="18" fill="url(#sendBtn)" filter="url(#bubbleShadow)"/>
+  <text x="1130" y="618" text-anchor="middle" font-size="14" fill="#0F1117" font-weight="bold">▶</text>
 
   <text x="1172" y="656" text-anchor="end" font-family="Plus Jakarta Sans, sans-serif" font-size="8" fill="#6B7280" opacity="0.4">Matcha v1 · UI-11</text>
 </svg>
