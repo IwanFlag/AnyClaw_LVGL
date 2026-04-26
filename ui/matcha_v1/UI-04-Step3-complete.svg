@@ -39,11 +39,12 @@
   <!-- Step 2 (completed) -->
   <circle cx="760" cy="65" r="6" fill="#3DD68C"/>
   <text x="760" y="85" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#3DD68C">模型</text>
-  <!-- Step 2→3 line (future) -->
-  <line x1="766" y1="65" x2="994" y2="65" stroke="#252A38" stroke-width="1.5"/>
-  <!-- Step 3 (current) -->
-  <circle cx="1000" cy="65" r="6" fill="transparent" stroke="#3DD68C" stroke-width="1.5"/>
-  <text x="1000" y="85" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#6B7280">完成</text>
+  <!-- Step 2→3 line (completed) -->
+  <line x1="766" y1="65" x2="994" y2="65" stroke="#3DD68C" stroke-width="1.5"/>
+  <!-- Step 3 (current - highlighted) -->
+  <circle cx="1000" cy="65" r="9" fill="#FF7F50" fill-opacity="0.15"/>
+  <circle cx="1000" cy="65" r="6" fill="#FF7F50"/>
+  <text x="1000" y="85" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#FF7F50">完成</text>
 
   <!-- Content -->
   <rect x="0" y="89" width="1280" height="566" fill="#0F1117"/>
@@ -67,20 +68,22 @@
   <text x="1144" y="308" text-anchor="middle" font-size="12" fill="#6B7280">▼</text>
 
   <!-- Leader Mode section title -->
-  <text x="114" y="348" font-family="sans-serif" font-size="11" fill="#8B92A8">Leader 模式</text>
+  <text x="90" y="348" font-family="sans-serif" font-size="11" fill="#8B92A8">Leader 模式</text>
 
-  <!-- Option 1: Leader enabled -->
-  <rect x="114" y="358" width="1052" height="44" rx="8" fill="#FF7F50" fill-opacity="0.07" stroke="#FF7F50" stroke-width="1"/>
-  <circle cx="136" cy="380" r="8" fill="#FF7F50"/>
-  <text x="136" y="384" text-anchor="middle" font-size="9" fill="#0F1117">✓</text>
-  <text x="260" y="384" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#E8ECF4">启用 Leader 模式（多 Agent 并行，推荐）</text>
-  <rect x="1046" y="366" width="46" height="18" rx="9" fill="#FF7F50" fill-opacity="0.15"/>
-  <text x="1069" y="378" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#FF7F50">推荐</text>
+  <!-- Option 1: Leader enabled - card y=358~402, h=44 -->
+  <rect x="90" y="358" width="1100" height="44" rx="8" fill="#FF7F50" fill-opacity="0.07" stroke="#FF7F50" stroke-width="1"/>
+  <circle cx="114" cy="380" r="9" fill="#FF7F50"/>
+  <circle cx="114" cy="380" r="3.5" fill="#0F1117"/>
+  <!-- info: y=384, x=138 left-aligned -->
+  <text x="138" y="384" font-family="sans-serif" font-size="12" fill="#E8ECF4">启用 Leader 模式（多 Agent 并行，推荐）</text>
+  <!-- 推荐标签: right side -->
+  <rect x="1060" y="367" width="44" height="18" rx="9" fill="#FF7F50" fill-opacity="0.15"/>
+  <text x="1082" y="379" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#FF7F50">推荐</text>
 
-  <!-- Option 2: Skip -->
-  <rect x="114" y="412" width="1052" height="44" rx="8" fill="#13151E" stroke="#3DD68C" stroke-opacity="0.06" stroke-width="1"/>
-  <circle cx="136" cy="434" r="8" fill="none" stroke="#3DD68C" stroke-opacity="0.3" stroke-width="1.5"/>
-  <text x="260" y="438" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#8B92A8">跳过（单 Agent，仅 OpenClaw）</text>
+  <!-- Option 2: Skip - card y=412~456, h=44 -->
+  <rect x="90" y="412" width="1100" height="44" rx="8" fill="#1A1D27" stroke="#3DD68C" stroke-opacity="0.07" stroke-width="1"/>
+  <circle cx="114" cy="434" r="9" fill="none" stroke="#6B7280" stroke-width="1.5"/>
+  <text x="138" y="438" font-family="sans-serif" font-size="12" fill="#8B92A8">跳过（单 Agent，仅 OpenClaw）</text>
 
   <!-- Skip hint -->
   <text x="114" y="482" font-family="sans-serif" font-size="10" fill="#6B7280">Skip 将降级为单 Agent 模式（仅 OpenClaw）。</text>
