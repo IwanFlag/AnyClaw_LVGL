@@ -15551,8 +15551,8 @@ static void wizard_update_step() {
     /* Update step indicator bar */
     wizard_update_step_bar(g_wizard_step);
 
-    /* Update title */
-    lv_label_set_text(g_wizard_title, tr(wizard_step_titles[g_wizard_step]));
+    /* Update title — fixed "AnyClaw Setup" per Design.md UI-04 */
+    lv_label_set_text(g_wizard_title, g_lang == Lang::CN ? "AnyClaw 设置向导" : "AnyClaw Setup");
 
     /* Build step content — default-enable Next before build so build functions can override */
     wizard_set_next_enabled(true);
@@ -15851,9 +15851,9 @@ void ui_show_setup_wizard() {
     lv_image_set_src(wiz_icon, "A:assets/garlic_32.png");
     lv_obj_align(wiz_icon, LV_ALIGN_LEFT_MID, 16, 0);
 
-    /* Title (after icon) */
+    /* Title (after icon) — fixed "AnyClaw Setup" per Design.md UI-04 */
     g_wizard_title = lv_label_create(header);
-    lv_label_set_text(g_wizard_title, tr(wizard_step_titles[0]));
+    lv_label_set_text(g_wizard_title, g_lang == Lang::CN ? "AnyClaw 设置向导" : "AnyClaw Setup");
     lv_obj_set_style_text_color(g_wizard_title, g_colors->text, 0);
     lv_obj_set_style_text_font(g_wizard_title, CJK_FONT, 0);
     lv_obj_align(g_wizard_title, LV_ALIGN_LEFT_MID, SCALE(52), 0);
