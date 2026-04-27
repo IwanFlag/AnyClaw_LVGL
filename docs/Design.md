@@ -37,9 +37,10 @@
 | §11 | 术语表 | Design 无对应章节 | — |
 | §12 | 技术架构 | Design 无对应章节（代码层面） | — |
 | §13.1 | 日志 | §20 设置页 | UI-48 |
-| §13.5 | Feature Flags | §20 系统界面 | UI-50 |
-| §13.6 | Tracing | §20 系统界面 | UI-51 |
-| §13.7 | 商业授权 | §21 系统界面 | UI-33 |
+| §13.5 | Feature Flags | §20 设置页 | UI-50 |
+| §13.6 | Tracing | §20 设置页 | UI-51 |
+| §13.7 | Workspace | §12 主界面 | UI-55 |
+| §13.8 | 商业授权 | §21 系统界面 | UI-33 |
 
 ### B. Design → PRD（执行规范 → 需求依据）
 
@@ -91,7 +92,7 @@
 - §17 扩展界面（UI-43, UI-60, UI-65）
 - §18 权限与弹窗（UI-31, UI-32, UI-46）
 - §19 工作区界面（UI-39~41, UI-64）
-- §20 设置页（UI-45~51, UI-48A）
+- §20 设置页（UI-45~51, UI-55）
 - §21 系统界面（UI-33, UI-34, UI-37, UI-38, UI-56~58）
 
 **第四层：品牌**
@@ -3291,7 +3292,7 @@ SelfCheck（4项，快速）
 >
 > **窗口圆角：** 所有窗口（主界面、向导、Boot Check）统一应用 `radius_xl`（16px，Matcha 默认值），跟随主题倍率缩放。
 >
-> **说明：** 本章定义主界面通用窗口规则——左导航栏、标题栏、内边距规范。Bot·Chat 和 Bot·Work 的具体页面内容见 §13 Chat 界面，File 模块布局见本章末尾。
+> **说明：** 本章定义主界面通用窗口规则——左导航栏、标题栏、内边距规范。Bot·Chat 和 Bot·Work 的具体页面内容见 §13 Chat 界面，Workspace 模块布局见 §12.5。
 
 ### 12.1 布局概览
 
@@ -3327,7 +3328,7 @@ SelfCheck（4项，快速）
 - 气泡/代码块与容器边缘：`PAD_NORMAL`
 - 所有容器内部必须有 padding，禁止控件贴边
 
-### 12.2 左导航栏（6 图标版：Bot · File · KB · Skill + Chat/Work · Settings）
+### 12.2 左导航栏（6 图标版：Bot · Workspace · KB · Skill + Chat/Work · Settings）
 
 > 父容器：窗口。坐标：x=0，y=TITLE_H=41px，w=NAV_W_PCT=6%（1280屏≈77px，1920屏≈115px），h=PANEL_H=759px。
 > icon-only，hover 300ms 显示 tooltip。
@@ -3365,8 +3366,8 @@ SelfCheck（4项，快速）
 │  ┌───────┐  │  ← Bot 图标，52×52，圆角9，y=48（nav_top 顶部）
 │  │  🐛   │  │  ← SVG 青虫子（高亮时显示）
 │  └───────┘  │
-│  ┌───────┐  │  ← File 图标，52×52，圆角9，y=116（gap=16）
-│  │  📁   │  │
+│  ┌───────┐  │  ← Workspace 图标，52×52，圆角9，y=116（gap=16）
+│  │  🖥   │  │
 │  └───────┘  │
 │  ┌───────┐  │  ← KB 图标，52×52，圆角9，y=184（gap=16）
 │  │  📚   │  │
@@ -3390,13 +3391,13 @@ SelfCheck（4项，快速）
 | 模块 | 图标 | 高亮条件 | 点击后右侧内容 |
 |------|------|----------|----------------|
 | Bot | 🤖 | `g_ui_nav_module == UI_NAV_BOT` | Bot 主界面（Chat/Work 两个模式） |
-| File | 📁 | `g_ui_nav_module == UI_NAV_FILES` | 文件浏览器 module_placeholder |
+| Workspace | 🖥 | `g_ui_nav_module == UI_NAV_WORKSPACE` | VSCode 风格三面板：左面板(文件) + 中部(代码+终端) + 右面板(AI) |
 | KB | 📚 | `g_ui_nav_module == UI_NAV_KB` | 知识库 module_placeholder（标题"知识库"，描述"已索引的文档和参考资料。"） |
 | Skill | 🧩 | `g_ui_nav_module == UI_NAV_SKILL` | Skill 管理 module_placeholder（标题"Skill 管理"，描述"浏览和管理已安装的 Skills。"） |
 | Chat/Work | 💬 | `g_ui_mode == UI_MODE_CHAT/WORK`（仅 Bot 模块内生效） | 切换 Chat ↔ Work 模式 |
 | Settings | ⚙️ | Settings 面板打开时 | 打开 Settings 面板 |
 
-**枚举值：** `UI_NAV_BOT=0`, `UI_NAV_FILES=1`, `UI_NAV_KB=2`, `UI_NAV_SKILL=3`
+**枚举值：** `UI_NAV_BOT=0`, `UI_NAV_WORKSPACE=1`, `UI_NAV_KB=2`, `UI_NAV_SKILL=3`
 
 #### 操作流程图
 
@@ -3406,15 +3407,15 @@ SelfCheck（4项，快速）
        ▼
     创建左导航栏 left_nav (x=0, y=41, w=77, h=759)
        │
-       ├─── 创建 nav_top (h=256px) ──→ 创建 Bot + File + KB + Skill 按钮
+       ├─── 创建 nav_top (h=256px) ──→ 创建 Bot + Workspace + KB + Skill 按钮
        │                                        │
        │                                        ├─── 点击 Bot ──→ 高亮 Bot，
        │                                        │              隐藏其他模块，
        │                                        │              显示 Bot 内容（Chat/Work）
        │                                        │
-       │                                        ├─── 点击 File ──→ 高亮 File，
+       │                                        ├─── 点击 Workspace ──→ 高亮 Workspace，
        │                                        │              隐藏其他模块，
-       │                                        │              显示 File 内容
+       │                                        │              显示 VSCode 三面板
        │                                        │
        │                                        ├─── 点击 KB ──→ 高亮 KB，
        │                                        │              隐藏其他模块，
@@ -3550,61 +3551,77 @@ right_panel
 - Chat：输出区显示对话气泡 + AI思考 + 文件输出
 - Work：输出区显示 StepCard 步骤流
 
-### 12.5 File 模块布局
+### 12.5 Workspace 模块布局（UI-55）
 
-File 模块与 Bot 模块**共用同一双栏骨架**（left_panel ~25% + right_panel ~75%），区别在于 left_panel 内容不同。
+Workspace = VSCode 风格，**三栏布局**：左(项目文件) + 中(编辑器+终端) + 右(AI对话)。
 
-File 的数据边界使用**当前工作区根目录**（workspace root），语义等同于 VS Code 的“打开文件夹/工作区”：
+**窗口尺寸：** 1280×800。
 
-- 当前时刻只绑定 1 个工作区目录（单根目录）
-- 搜索与列表仅针对该根目录及其子目录
-- 切换工作区后，File 面板立即按新根目录重载
-
-| 模块 | left_panel 内容 | right_panel 内容 |
-|------|---------------|-----------------|
-| Bot  | Agent 状态 + 当前模型 + Session 列表 + Cron 列表 | 输出区 + 控制行 + 输入区 |
-| File | 文件搜索框 + 文件列表 | 空闲（空白） |
-
-**约束：**
-- File 时 right_panel 保持 ~75% 宽度，**不隐藏**，内容为空（空白）
-- left_panel 在 File 时显示文件搜索框 + 文件列表
-- right_panel 在 Bot 时有输出区/ctrl_bar/输入区；在 File 时保持宽度但内容为空
-
-**File 模块子元素：**
-
-| 元素 | 类型 | 父容器 | 尺寸 | 行为 |
-|------|------|--------|------|------|
-| module_files_panel | container | module_placeholder | left_panel 全宽 × auto | surface 背景，替换 Session/Cron 内容 |
-| 当前工作区行 | label + button | module_files_panel | 100% × auto | 显示当前工作区根目录，点击"切换..."选择新工作区目录 |
-| 树视图按钮 | button | module_files_panel | auto × 30px | 点击在“全部折叠/全部展开”之间切换 |
-| 刷新按钮 | button | module_files_panel | auto × 30px | 手动重扫当前工作区目录 |
-| 打开按钮 | button | module_files_panel | auto × 30px | 打开当前工作区目录（系统文件管理器） |
-| 打开项按钮 | button | module_files_panel | auto × 30px | 打开当前选中项（目录/文件） |
-| 定位按钮 | button | module_files_panel | auto × 30px | 目录直接打开；文件在资源管理器中定位 |
-| 菜单按钮 | button | module_files_panel | auto × 30px | 打开当前选中项的上下文菜单（新建文件夹/重命名/删除） |
-| 文件搜索框 | lv_textarea | module_files_panel | 100% × 48px | placeholder: "搜索工作区文件..."，输入触发搜索 |
-| 状态信息行 | label | module_files_panel | 100% × auto | 展示目录/文件计数、匹配数、当前选中项 |
-| 文件树视图 | container | module_files_panel | 100% × 剩余高度 | 可滚动；鼠标点击目录行可展开/收起（支持每个目录独立控制）；单击文件行选中，双击文件行打开 |
-
-**操作流程（用户视角）：**
+**布局概览：**
 ```
-[用户点击左侧导航 File，进入 File 模块]
-       │
-       ▼
-   right_panel 保持 ~75% 宽度，内容为空（空白）
-   left_panel 显示 File 内容（搜索框 + 文件列表）
-       │
-         ├─── 点击"切换..." ──→ 选择新工作区目录 ──→ 立即重载列表
-      ├─── 默认显示目录树 ──→ 按当前工作区目录层级展示
-      ├─── 点击目录行 ──→ 独立展开/收起该目录
-      ├─── 单击文件行 ──→ 选中该文件
-      ├─── 双击文件行 ──→ 系统默认应用打开该文件
-      ├─── 点击"打开项" ──→ 打开当前选中项
-      ├─── 点击"定位" ──→ 在资源管理器中定位选中项
-      ├─── 鼠标右键行/长按行/点击"菜单" ──→ 打开上下文菜单（新建文件夹/重命名/删除）
-      ├─── 输入搜索词 ──→ 实时过滤文件列表（模糊匹配路径/文件名）
-       └─── 列表自动滚动到匹配项
+┌────────────────────────────────────────────────────────────────────────┐
+│ HEADER 41px                                                            │
+├────┬──────────────────────────────┬───────────────────┬───────────────┤
+│NAV │ 左面板(216px)                │ 中部(640px)       │ 右面板(360px) │
+│64px│ 项目浏览器（可折叠）         │ ┌─文件Tab栏──┐   │ AI对话        │
+│    │                              │ │main.cpp    │   │               │
+│🤖  │ [AnyClaw ▼]  [+]            │ │utils.h  ✕ │   │ Markdown输出   │
+│🖥  │ D:\workspace\AnyClaw        │ │🌐 feishu  ✕│   │               │
+│    │                              │ └────────────┘   │ ctrl_bar      │
+│📚  │ 🔍 搜索...                  │ ┌─编辑器──────┐   │               │
+│    │                              │ │行号│代码    │   │ chat_input    │
+│🧩  │ src/                         │ │   │        │   │               │
+│    │  📄 ui_main.cpp              │ ├─分隔线+⋮─┤   │               │
+│⚙️  │  📄 boot_check.cpp          │ │┌─终端Tab─┐│   │               │
+│ ⚙️  │ docs/                       │ ││终端1  ✕││   │               │
+│(左下)│                             │ │└────────┘│   │               │
+│    │ ◀折叠                        │ │终端内容    │   │ ◀折叠         │
+└────┴──────────────────────────────┴───────────────────┴───────────────┘
 ```
+
+**区域坐标：**
+| 区域 | x | y | w | h | 说明 |
+|------|---|---|---|---|------|
+| HEADER | 0 | 0 | 1280 | 41 | 标题栏，含 logo + 窗口控制 |
+| NAV | 0 | 41 | 64 | 759 | 左导航，5个图标 |
+| 左面板 | 64 | 41 | 216 | 759 | 项目浏览器，可折叠 |
+| 中部 | 280 | 41 | 640 | 759 | 编辑器+终端 |
+| 右面板 | 920 | 41 | 360 | 759 | AI对话，可折叠 |
+
+**左 NAV（x=0, w=64）：**
+从上到下排列：🤖 Bot | 🖥 Workspace(激活) | 📚 KB | 🧩 Skill | ⚙️ Settings(左下角)
+
+**左面板 - 项目浏览器（x=64, w=216）：**
+- 标题"文件"
+- 项目下拉 [AnyClaw ▼] + 新建 [+]：支持多项目，仅一个激活
+- 当前项目路径：D:\workspace\AnyClaw
+- 搜索框
+- 文件目录树，支持展开/折叠
+- 右下角 ◀ 折叠按钮（x=280），点击后左面板收窄至 0，中部/右部自动扩展
+
+**中部（x=280, w=640）：**
+
+*上部 - 文件编辑区（y=41~430）：*
+- Tab 栏（y=41, h=33）：支持文件 Tab（main.cpp, utils.h）和网页 Tab（🌐 feishu），右侧 + 新建
+- 编辑器内容：行号栏（36px宽）+ 代码区 + 右侧 minimap 滚动条
+
+*分隔线（y=430, h=6）：* 可拖拽 resize，中央 ⋮ 手柄
+
+*下部 - 终端区（y=436~800）：*
+- 终端 Tab 栏：标签"终端" + 终端1/终端2 Tab + + 新建
+- 终端内容：深色背景，λ 命令行样式
+
+**右面板（x=920, w=360）：**
+- 消息区：AI 输出 Markdown 样式（## 标题、**粗体**、• 列表、`代码`、代码块）
+- 用户消息：蓝色气泡
+- 思考状态：圆点 loading
+- ctrl_bar（y=661, h=31）：Agent▼ | AI行为▼ | AI托管 | Voice
+- chat_input（y=692, h=62）：附件芯片 + 输入框 + 发送按钮
+- 左下角 ◀ 折叠按钮
+
+**三栏均可独立折叠/展开，中部分割线可拖拽调整上下比例。**
+
+**SVG 文件：** `ui/matcha_v1/UI-55-Workspace-Module.svg`
 
 ### 12.6 §12 专属 UI
 
