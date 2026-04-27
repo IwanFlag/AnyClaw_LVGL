@@ -10762,12 +10762,13 @@ static BootCheckResult run_boot_check_by_index(int idx) {
         case 6: return check_disk_space();
         case 7: return check_network();
         case 8: return check_sdl2dll();
-        default: {
-        case 8: return check_sdl2dll();
         case 9: return check_hermes();
         case 10: return check_claude();
         case 11: return check_api_connectivity();
         default: {
+            BootCheckResult r;
+            r.check_name = "Unknown";
+            r.status = BootCheckStatus::Error;
             r.message = "Invalid check index";
             return r;
         }

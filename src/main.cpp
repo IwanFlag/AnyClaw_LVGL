@@ -503,16 +503,13 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    bool startup_blocked = false;
+    // ⚠️ UI-03 已废弃（2026-04-28）：SelfCheck 失败不再阻断启动，统一走 BootCheck 展示结果
     {
         SelfCheckResult selfcheck = selfcheck_run();
         if (!selfcheck.all_ok) {
             selfcheck_fix(selfcheck);
         }
-        startup_blocked = !selfcheck.all_ok;
-        if (startup_blocked) {
-            LOG_W("MAIN", "Startup self-check failed; startup flow will be blocked by UI-03 modal");
-        }
+        // 不再阻断，BootCheck 会展示失败项
     }
 
     /* Console hidden in release build (WIN32 subsystem) — use anyclaw_app.log for debug */
@@ -811,9 +808,9 @@ int main(int argc, char* argv[]) {
 
     static std::atomic<bool> s_need_license_dialog(false);
 
-    if (!startup_blocked) {
-        /* Defer heavy startup work to worker thread so UI stays responsive. */
-        lv_timer_create([](lv_timer_t* t) {
+    /* UI-03 已废弃：始终执行启动流程，不阻断。SelfCheck 结果已内化到 BootCheck 中展示。 */
+    /* Defer heavy startup work to worker thread so UI stays responsive. */
+    lv_timer_create([](lv_timer_t* t) {
             std::thread([]() {
                 ui_progress_begin("Startup", "Initializing UI...", 5);
                 /* Gateway auto-start DISABLED for testing */
@@ -873,9 +870,13 @@ int main(int argc, char* argv[]) {
             extern void ui_show_license_dialog();
             ui_show_license_dialog();
         }, 300, nullptr);
-    } else {
-        LOG_W("MAIN", "Startup is blocked by self-check errors; skip background startup workers");
-    }
+
+    /* UI-03 已废弃（2026-04-28）：始终执行启动流程，不阻断。SelfCheck 结果由 BootCheck 展示。 */
+    /* 旧的阻断分支已移除:
+     * } else {
+     *     LOG_W("MAIN", "Startup is blocked by self-check errors; skip background startup workers");
+     * }
+     */
 
     /* Register SDL event watch — fires BEFORE LVGL's sdl_event_handler consumes events */
     extern void ui_process_wheel_scroll();

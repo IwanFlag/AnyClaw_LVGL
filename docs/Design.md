@@ -2400,9 +2400,13 @@ Boot Check 完成
 
 ---
 
-### UI-03: 启动错误阻断（SelfCheck 阻断弹窗）
+### UI-03: 启动错误阻断（SelfCheck 阻断弹窗）⚠️ 已废弃
 
-**功能编号：** SC-01（P0）| 与 UI-01 关联：UI-01=BootCheck（非阻断），UI-03=SelfCheck 阻断
+> **状态：废弃（2026-04-28）**
+> SelfCheck 与 BootCheck（UI-01）检测项高度重叠，BootCheck 已提供完整的结果展示和修复入口，无需独立的阻断弹窗。SelfCheck 失败时直接进入 BootCheck 显示结果。
+> 代码对应逻辑已注释，保留此节以便追溯历史设计决策。
+
+**功能编号：** ~~SC-01（P0）~~ → 已废弃 | ~~与 UI-01 关联：UI-01=BootCheck（非阻断），UI-03=SelfCheck 阻断~~
 
 ---
 
