@@ -2386,9 +2386,6 @@ static lv_obj_t* mode_btn_voice = nullptr;
 static lv_obj_t* mode_btn_work = nullptr;
 static lv_obj_t* mode_panel_chat = nullptr;
 static lv_obj_t* mode_panel_work = nullptr;
-static lv_obj_t* mode_trace_chat_panel = nullptr;
-static lv_obj_t* mode_lbl_chat_next_step = nullptr;
-static lv_obj_t* mode_ta_chat_script = nullptr;
 static lv_obj_t* mode_lbl_work_next_step = nullptr;
 static lv_obj_t* mode_ta_work_script = nullptr;
 static lv_obj_t* mode_ta_trace_recent = nullptr;
@@ -3358,28 +3355,16 @@ static int ui11_search_bar_h(int content_h) {
 static int ui11_search_btn_size(int content_h) {
     return std::clamp(ui11_chat_action_btn_size(content_h) * 55 / 100, SCALE(18), SCALE(26));
 }
-static int chat_trace_panel_h(int content_w) { return (content_w < SCALE(900)) ? SCALE(156) : SCALE(128); }
-static bool chat_trace_has_content() {
-    bool has_trace_payload = ((g_ai_next_step[0] && strcmp(g_ai_next_step, "Idle") != 0) || g_ai_script_log[0]);
-    if (!has_trace_payload) return false;
-    /* Keep chat panel clean in idle state: show trace only while actively streaming. */
-    if (g_ui_mode == UI_MODE_CHAT) return is_streaming_now();
+static int chat_top_y_with_trace(int) {
     return true;
 }
 
 static void refresh_chat_trace_visibility() {
-    if (!mode_trace_chat_panel) return;
-    if (chat_trace_has_content()) lv_obj_clear_flag(mode_trace_chat_panel, LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(mode_trace_chat_panel, LV_OBJ_FLAG_HIDDEN);
     update_chat_empty_state();
 }
 
-static int chat_top_y_with_trace(int content_w) {
-    if (!mode_trace_chat_panel || lv_obj_has_flag(mode_trace_chat_panel, LV_OBJ_FLAG_HIDDEN)) return 0;
-    int trace_y = lv_obj_get_y(mode_trace_chat_panel);
-    int trace_h = lv_obj_get_height(mode_trace_chat_panel);
-    if (trace_h <= 0) trace_h = chat_trace_panel_h(content_w);
-    return trace_y + trace_h + SCALE(8);
+static int chat_top_y_with_trace(int) {
+    return 0;
 }
 
 static const char* status_text(ClawStatus s);
@@ -4327,11 +4312,8 @@ static void start_gemma_install_async(int model_mask) {
 }
 
 static void update_agent_trace_views() {
-    if (mode_lbl_chat_next_step) lv_label_set_text_fmt(mode_lbl_chat_next_step, "Next Step: %s", g_ai_next_step);
-    if (mode_ta_chat_script) lv_textarea_set_text(mode_ta_chat_script, g_ai_script_log);
     if (mode_lbl_work_next_step) lv_label_set_text_fmt(mode_lbl_work_next_step, "Next Step: %s", g_ai_next_step);
     if (mode_ta_work_script) lv_textarea_set_text(mode_ta_work_script, g_ai_script_log);
-    refresh_chat_trace_visibility();
     update_chat_empty_state();
     if (right_panel) ui_relayout_all();
 }
@@ -8029,19 +8011,8 @@ static void relayout_panels() {
     const int chat_side_pad = ui11_chat_side_pad(content_w);
     const int bottom_pad = ui11_chat_bottom_pad(content_h);
     const int ctrl_bar_h = ui11_ctrl_bar_h(content_h);
-    if (mode_trace_chat_panel) {
-        if (chat_trace_has_content()) {
-            int trace_h = chat_trace_panel_h(content_w);
-            lv_obj_set_size(mode_trace_chat_panel, content_w - chat_side_pad * 2, trace_h);
-            lv_obj_set_pos(mode_trace_chat_panel, chat_side_pad, 0);
-            lv_obj_clear_flag(mode_trace_chat_panel, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_move_foreground(mode_trace_chat_panel);
-        } else {
-            lv_obj_add_flag(mode_trace_chat_panel, LV_OBJ_FLAG_HIDDEN);
-        }
-    }
     const int ctrl_gap = SCALE(0);
-    int chat_y = chat_top_y_with_trace(content_w);
+    int chat_y = 0;
     int input_y = content_h - input_h - bottom_pad;
     /* Clamp input_y so input box stays inside the mode content area. */
     int max_input_y = content_h - input_h - bottom_pad;
@@ -9988,7 +9959,6 @@ static void stream_timer_cb(lv_timer_t* timer) {
         LOG_W("Chat", "Stream timeout: idle=%lums/%lums total=%lums/%lums, force-finish",
               idle_ms, idle_limit_ms, total_ms, total_limit_ms);
         ui_log("[Chat] Stream timeout (%.0fs), finishing...", total_ms / 1000.0);
-        set_ai_next_step("Timeout, please retry");
         append_ai_script_log("[error] stream timeout");
         if (g_work_waiting_ai) {
             work_add_step_card("模型输出超时", "流式结果触发超时保护", true, false);
@@ -10061,8 +10031,20 @@ static void stream_timer_cb(lv_timer_t* timer) {
         char stream_snapshot[16384] = {0};
         stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
         LOG_I("Chat", "Stream finished: total=%lums buf_len=%zu", total_ms, strlen(stream_snapshot));
-        if (g_stream_label) {
-            render_markdown_to_label(g_stream_label, stream_snapshot, CJK_FONT_CHAT);
+        /* FIX P3-01: Delete the fixed-height stream bubble and replace with a properly
+         * sized static AI bubble. The stream bubble had a fixed height to prevent the
+         * SIZE_CONTENT cascade into chat_cont's flex layout. Now that streaming is done,
+         * we delete it and add a static bubble with correct SIZE_CONTENT height.
+         * This layout operation runs exactly once, which is acceptable. */
+        if (g_stream_bubble) {
+            lv_obj_t* bubble_to_del = g_stream_bubble;
+            g_stream_bubble = nullptr;
+            g_stream_label = nullptr;
+            g_stream_dot[0] = g_stream_dot[1] = g_stream_dot[2] = nullptr;
+            lv_obj_delete(bubble_to_del);
+        }
+        if (stream_snapshot[0]) {
+            chat_add_ai_bubble(stream_snapshot);
         }
 
         size_t hlen = strlen(chat_history);
@@ -10107,7 +10089,6 @@ static void stream_timer_cb(lv_timer_t* timer) {
         }
 
         chat_force_scroll_bottom();
-        set_ai_next_step("Completed, waiting next input");
         append_ai_script_log("[done] stream completed");
         update_chat_status_label("Ready", false);
         if (g_pending_feedback_payload[0]) {
@@ -10148,6 +10129,14 @@ static void chat_start_stream(const char* user_message) {
             g_streaming = false;
             if (g_stream_timer) { lv_timer_del(g_stream_timer); g_stream_timer = nullptr; }
             if (g_stream_dot_timer) { lv_timer_del(g_stream_dot_timer); g_stream_dot_timer = nullptr; }
+            /* FIX P3-01: Clean up stale stream bubble */
+            if (g_stream_bubble) {
+                lv_obj_t* bubble_to_del = g_stream_bubble;
+                g_stream_bubble = nullptr;
+                g_stream_label = nullptr;
+                g_stream_dot[0] = g_stream_dot[1] = g_stream_dot[2] = nullptr;
+                lv_obj_delete(bubble_to_del);
+            }
             if (g_stream_thread) {
                 /* Thread should have exited since g_stream_done=1 */
                 DWORD wait = WaitForSingleObject(g_stream_thread, 0);
@@ -10202,7 +10191,19 @@ static void chat_start_stream(const char* user_message) {
     /* Create streaming bubble UI (same layout as before) */
     g_stream_bubble = lv_obj_create(chat_cont);
     lv_obj_set_width(g_stream_bubble, LV_PCT(100));
-    lv_obj_set_height(g_stream_bubble, LV_SIZE_CONTENT);
+    /* FIX P3-01: Use FIXED height to prevent SIZE_CONTENT cascade into chat_cont flex layout.
+     * When g_stream_bubble has SIZE_CONTENT height, every lv_label_set_text call on the
+     * stream_label triggers LV_EVENT_CHILD_CHANGED up to chat_cont, causing full flex
+     * re-layout of ALL bubbles on every 80ms timer tick → WATCHDOG stage=3 stall (50s+).
+     * With fixed height: lv_obj_refr_size(g_stream_bubble) returns false (no size change),
+     * so LV_EVENT_CHILD_CHANGED is NOT propagated to chat_cont → flex layout never runs.
+     * When stream completes, g_stream_bubble is deleted and chat_add_ai_bubble() creates
+     * a proper static bubble with correct SIZE_CONTENT height (runs layout exactly once). */
+    {
+        int32_t stream_h = lv_obj_get_height(chat_cont);
+        if (stream_h < 300) stream_h = 300;
+        lv_obj_set_height(g_stream_bubble, stream_h);
+    }
     lv_obj_set_style_bg_opa(g_stream_bubble, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(g_stream_bubble, 0, 0);
     lv_obj_set_style_pad_all(g_stream_bubble, 0, 0);
@@ -10316,8 +10317,7 @@ static void chat_start_stream(const char* user_message) {
         return;
     }
 
-    set_ai_next_step("Calling Gateway /v1/chat/completions");
-    append_ai_script_log("[request] POST /v1/chat/completions stream=true");
+    append_ai_script_log("[step] calling API...");
 }
 
 /* User action priority: allow next send to interrupt a lingering stream instead of hard blocking. */
@@ -10341,6 +10341,21 @@ static void chat_interrupt_stream_for_user_send(const char* from) {
     g_streaming = false;
     if (g_stream_timer) { lv_timer_del(g_stream_timer); g_stream_timer = nullptr; }
     if (g_stream_dot_timer) { lv_timer_del(g_stream_dot_timer); g_stream_dot_timer = nullptr; }
+    /* FIX P3-01: Clean up the fixed-height stream bubble when stream is interrupted.
+     * Since stream_timer_cb won't run again (timer deleted above), clean up here.
+     * Add static bubble with whatever content was accumulated so far. */
+    if (g_stream_bubble) {
+        char stream_snapshot[16384] = {0};
+        stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
+        lv_obj_t* bubble_to_del = g_stream_bubble;
+        g_stream_bubble = nullptr;
+        g_stream_label = nullptr;
+        g_stream_dot[0] = g_stream_dot[1] = g_stream_dot[2] = nullptr;
+        lv_obj_delete(bubble_to_del);
+        if (stream_snapshot[0]) {
+            chat_add_ai_bubble(stream_snapshot);
+        }
+    }
     update_chat_status_label("Ready", false);
     update_send_button_state();
 }
@@ -10538,7 +10553,7 @@ static void chat_send_cb(lv_event_t* e) {
         prompt = build_plan_mode_prompt(text);
     }
     submit_prompt_to_chat(prompt.c_str());
-    set_ai_next_step("Preparing request payload");
+    // set_ai_next_step("Preparing request payload");
     append_ai_script_log("[input] user prompt submitted");
 
     /* Clear input */
@@ -10574,7 +10589,7 @@ static void chat_send_btn_cb(lv_event_t* e) {
         prompt = build_plan_mode_prompt(text);
     }
     submit_prompt_to_chat(prompt.c_str());
-    set_ai_next_step("Preparing request payload");
+    // set_ai_next_step("Preparing request payload");
     append_ai_script_log("[input] user prompt submitted (button)");
 
     lv_textarea_set_text(chat_input, "");
@@ -17792,46 +17807,6 @@ void app_ui_init() {
         if (mode_sec_remote_flow) lv_obj_add_flag(mode_sec_remote_flow, LV_OBJ_FLAG_HIDDEN);
         if (mode_sec_cron) lv_obj_add_flag(mode_sec_cron, LV_OBJ_FLAG_HIDDEN);
         if (mode_work_chat_panel) lv_obj_add_flag(mode_work_chat_panel, LV_OBJ_FLAG_HIDDEN);
-    }
-
-    /* Cursor-like trace panel (Chat mode): next step + script output */
-    {
-        const int chat_side_pad = ui11_chat_side_pad(content_w);
-        int trace_h = chat_trace_panel_h(content_w);
-        mode_trace_chat_panel = lv_obj_create(mode_panel_chat);
-        lv_obj_set_size(mode_trace_chat_panel, content_w - chat_side_pad * 2, trace_h);
-        lv_obj_set_pos(mode_trace_chat_panel, chat_side_pad, 0);
-        lv_obj_set_style_bg_color(mode_trace_chat_panel, c->surface, 0);
-        lv_obj_set_style_bg_opa(mode_trace_chat_panel, LV_OPA_COVER, 0);
-        lv_obj_set_style_border_color(mode_trace_chat_panel, c->border, 0);
-        lv_obj_set_style_border_width(mode_trace_chat_panel, 1, 0);
-        lv_obj_set_style_radius(mode_trace_chat_panel, SCALE(g_colors->radius_md), 0);
-        lv_obj_set_style_pad_all(mode_trace_chat_panel, 8, 0);
-        lv_obj_set_style_pad_gap(mode_trace_chat_panel, 6, 0);
-        lv_obj_set_flex_flow(mode_trace_chat_panel, LV_FLEX_FLOW_COLUMN);
-        lv_obj_set_flex_align(mode_trace_chat_panel, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-        lv_obj_clear_flag(mode_trace_chat_panel, LV_OBJ_FLAG_SCROLLABLE);
-
-        mode_lbl_chat_next_step = lv_label_create(mode_trace_chat_panel);
-        lv_obj_set_width(mode_lbl_chat_next_step, LV_PCT(100));
-        lv_obj_set_style_text_color(mode_lbl_chat_next_step, c->accent, 0);
-        lv_obj_set_style_text_font(mode_lbl_chat_next_step, CJK_FONT_SMALL, 0);
-        lv_label_set_long_mode(mode_lbl_chat_next_step, LV_LABEL_LONG_DOT);
-
-        mode_ta_chat_script = lv_textarea_create(mode_trace_chat_panel);
-        lv_obj_set_width(mode_ta_chat_script, LV_PCT(100));
-        lv_obj_set_height(mode_ta_chat_script, std::max(SCALE(34), trace_h - SCALE(44)));
-        lv_textarea_set_one_line(mode_ta_chat_script, false);
-        lv_textarea_set_text_selection(mode_ta_chat_script, true);
-        lv_obj_set_flex_grow(mode_ta_chat_script, 1);
-        lv_obj_set_style_bg_color(mode_ta_chat_script, c->panel, 0);
-        lv_obj_set_style_text_color(mode_ta_chat_script, c->text, 0);
-        lv_obj_set_style_text_font(mode_ta_chat_script, CJK_FONT_SMALL, 0);
-        lv_obj_set_style_border_color(mode_ta_chat_script, c->border, 0);
-        lv_obj_set_style_border_width(mode_ta_chat_script, 1, 0);
-        lv_obj_set_style_radius(mode_ta_chat_script, SCALE(g_colors->radius_sm), 0);
-        lv_obj_set_style_pad_ver(mode_ta_chat_script, SCALE(6), 0);
-        refresh_chat_trace_visibility();
     }
 
     /* Layout: chat fills space, input pinned to bottom; GAP spacing everywhere */

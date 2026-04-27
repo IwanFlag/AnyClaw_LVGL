@@ -2659,14 +2659,14 @@ SelfCheck（4项，快速）
 
 | 区域 | 坐标 | 尺寸 | 说明 |
 |------|------|------|------|
-| HEADER | x=0, y=0, w=1280, h=41 | 41px（5.1%） | 顶部栏，logo + "AnyClaw Setup" + [—][✕] |
-| STEP_BAR | x=0, y=41, w=1280, h=48 | 48px（6%） | 步骤条，4 个圆点●/○ + 连接线 |
-| CONTENT | x=0, y=89, w=1280, h=566 | 弹性高度 | 内容区，step 0~3 各自填充，pad=24 |
-| FOOTER | x=0, y=655, w=1280, h=145 | 145px | 按钮栏，[退出] + [上一步] + [下一步] |
+| HEADER | x=0, y=0, w=1280, h=56 | 56px（7%） | 顶部栏，logo + "AnyClaw Setup" + [—][□][✕] |
+| STEP_BAR | x=0, y=56, w=1280, h=48 | 48px（6%） | 步骤条，4 个圆点●/○ + 连接线 |
+| CONTENT | x=0, y=104, w=1280, h=551 | 弹性高度 | 内容区，step 0~3 各自填充，pad=24 |
+| FOOTER | x=0, y=655, w=1280, h=145 | 145px（18.1%） | 按钮栏，[退出] + [上一步] + [下一步] |
 
 **相邻关系：**
-- HEADER → STEP_BAR：y=41
-- STEP_BAR → CONTENT：y=89
+- HEADER → STEP_BAR：y=56
+- STEP_BAR → CONTENT：y=104
 - CONTENT → FOOTER：y=655
 
 ---
@@ -2786,9 +2786,9 @@ SelfCheck（4项，快速）
 ```
 
 **布局比例说明（1280×800 viewBox，以主窗口比例为值）：**
-- Header: y=0~41, h=41px (5.1%)
-- StepBar: y=41~89, h=48px (6%)
-- Content: y=89~655, h=566px (70.8%)
+- Header: y=0~56, h=56px (7%)
+- StepBar: y=56~104, h=48px (6%)
+- Content: y=104~655, h=551px (68.9%)
 - Footer: y=655~800, h=145px (18.1%)
 - 双面板: x=90/w=540(左) + x=654/w=580(右)，间距24px，总宽1120px (87.5%)
 - 8 项检测行: y=204起始，行高24px，行间距30px，末行y=428
