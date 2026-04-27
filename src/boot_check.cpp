@@ -406,26 +406,6 @@ BootCheckResult check_network() {
     return r;
 }
 
-BootCheckResult check_sdl2dll() {
-    BootCheckResult r;
-    r.check_name = "SDL2.dll";
-
-    std::string exe_dir = get_exe_dir();
-    std::string dll_path = exe_dir + "SDL2.dll";
-
-    if (fs::exists(dll_path)) {
-        r.status = BootCheckStatus::Ok;
-        r.message = "SDL2.dll found";
-        LOG_I("BOOT", "SDL2.dll: found at %s", dll_path.c_str());
-    } else {
-        r.status = BootCheckStatus::Error;
-        r.message = "SDL2.dll missing from " + exe_dir;
-        LOG_W("BOOT", "SDL2.dll: NOT FOUND at %s", dll_path.c_str());
-    }
-
-    return r;
-}
-
 BootCheckResult check_hermes() {
     BootCheckResult r;
     r.check_name = "Hermes";
@@ -550,7 +530,6 @@ std::vector<BootCheckResult> BootCheckManager::run_all_checks() {
     results.push_back(check_claude());
     results.push_back(check_disk_space());
     results.push_back(check_api_connectivity());
-    results.push_back(check_sdl2dll());
     /* 代码额外检测项（不计入 9 项，用于自动修复） */
     results.push_back(check_config_dir());
     results.push_back(check_workspace());
