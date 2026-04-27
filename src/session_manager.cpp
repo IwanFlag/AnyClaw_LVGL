@@ -205,7 +205,8 @@ bool SessionManager::refresh() {
     const unsigned long long now_ms = GetTickCount64();
     static const unsigned long long kHttpProbeBackoffMs = 60000;
     static const unsigned long long kGatewayDownBackoffMs = 30000;
-    static const unsigned long long kCliRetryBackoffMs = 30000;
+    static const unsigned long long kCliRetryBackoffMs = 120000;
+    static unsigned long long s_cli_warn_after_ms = 0;
 
     bool should_probe_http = true;
     bool had_gateway_unreachable = false;
@@ -316,7 +317,12 @@ bool SessionManager::refresh() {
         sessions_.clear();
         last_error_ = "Failed to query sessions";
         cli_next_retry_ms_ = now_ms + kCliRetryBackoffMs;
-        LOG_W("SESSION", "sessions.list CLI fallback failed");
+        if (now_ms >= s_cli_warn_after_ms) {
+            LOG_W("SESSION", "sessions.list CLI fallback failed (cooldown=%llums)", kCliRetryBackoffMs);
+            s_cli_warn_after_ms = now_ms + 300000; /* warn at most once per 5 minutes */
+        } else {
+            LOG_D("SESSION", "sessions.list CLI fallback failed (suppressed)");
+        }
         span.set_fail();
         return false;
     }

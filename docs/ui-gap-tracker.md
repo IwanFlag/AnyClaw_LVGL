@@ -176,3 +176,18 @@
 4. Chat 发送链路接入运行时配置：
 	- 当激活运行时为 Hermes/Claude 时，发送前自动应用对应 `model/api_key` 到网关配置。
 	- 配置缺失或应用失败时，前置拦截并给出明确提示，避免发送后空响应。
+
+## UI-11 空流兜底与超时收敛（2026-04-26 第九轮）
+
+1. Chat 流式超时从 120s 收敛到 35s：降低“HTTP 200 但长时间无可见输出”时的卡死体感，避免 UI 长时间停留 Busy。
+2. 新增 non-stream 自动兜底：当流式请求返回 200 但未解析到文本时，自动以 `stream=false` 重试同一请求并解析 `choices.content/content/text`。
+3. 兜底覆盖关键重试路径：首次请求、Gateway 恢复后重试、Failover 重试、Endpoint 自愈重试均接入 non-stream fallback。
+4. 观测日志增强：新增 `Non-stream fallback(...)` 阶段化日志与成功提示，便于定位“空流”发生点并回归验证。
+5. 上游错误透传：当 non-stream fallback 返回非 200 且包含 `error.message` 时，UI 直接显示详细错误（如余额不足/鉴权失败），不再统一折叠为“Gateway HTTP 错误”。
+6. 三运行时上游矩阵补证（2026-04-27）：OC/HM/CL 直连探测均返回 `HTTP 429 insufficient_balance_error (1008)`，当前“无回复/空流”已可归因到供应商余额不足；UI 已追加可操作提示（充值或切换可用 Runtime/API Key）。
+7. fallback 触发范围扩展：除“HTTP200 空流”外，`HTTP != 200 且无可解析文本` 的场景也会自动走 non-stream fallback，以尽可能还原上游错误体。
+
+## UI-11 会话后台降噪（2026-04-27 第十轮）
+
+1. Session CLI fallback 冷却从 30s 提升到 120s，降低 `openclaw gateway call sessions.list --json` 周期性超时对主线程与日志面的扰动。
+2. 新增告警节流：CLI fallback 失败告警改为 5 分钟最多一次，其余失败降级为 debug（suppressed），避免日志刷屏掩盖聊天主链路信号。

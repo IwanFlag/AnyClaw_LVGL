@@ -1844,8 +1844,13 @@ static void loading_timer_cb(lv_timer_t* t) {
         bool port_pass = env.port_18789_ok;
         bool port_fail = !env.port_18789_ok;
 
-        bool has_fail = !node_pass || !npm_pass || !net_pass || !oc_pass || gw_fail || hermes_fail || claude_fail || disk_fail || port_fail;
-        bool has_unknown = gw_unknown || hermes_unknown || claude_unknown;
+        bool has_fail = !node_pass || !npm_pass || !net_pass || !oc_pass || gw_fail || disk_fail || port_fail;
+        /* hermes_fail / claude_fail are optional-agent failures; degrade to warning, not hard block */
+        bool has_unknown = gw_unknown || hermes_unknown || claude_unknown || hermes_fail || claude_fail;
+        LOG_D("BootCheck", "flags: node=%d npm=%d net=%d oc=%d gw_fail=%d gw_unknown=%d hermes_fail=%d hermes_unknown=%d claude_fail=%d claude_unknown=%d disk_fail=%d port_fail=%d",
+            node_pass?1:0, npm_pass?1:0, net_pass?1:0, oc_pass?1:0,
+            gw_fail?1:0, gw_unknown?1:0, hermes_fail?1:0, hermes_unknown?1:0,
+            claude_fail?1:0, claude_unknown?1:0, disk_fail?1:0, port_fail?1:0);
         g_loading_has_fail = has_fail;
         g_loading_has_unknown = has_unknown;
         if (has_fail) g_loading_route_state = 2;
@@ -1945,6 +1950,25 @@ static void loading_timer_cb(lv_timer_t* t) {
     }
 
     if (!is_wizard_completed()) {
+        /* Auto-skip wizard if OC+GW are both healthy (user has a working setup,
+         * wizard_completed=false is likely due to a previous crash before save). */
+        EnvCheckResult env_snap{};
+        bool net_snap = false;
+        {
+            std::lock_guard<std::mutex> lk(g_wizard_gate_mtx);
+            env_snap = g_wizard_gate_env;
+            net_snap = g_wizard_gate_net_ok;
+        }
+        if (env_snap.openclaw_ok && env_snap.gateway_ok) {
+            LOG_I("BootCheck", "OC+GW healthy but wizard_completed=false — auto-completing wizard (config was not saved on previous run)");
+            ui_log("[BootCheck] OC+GW healthy, wizard_completed=false: auto-skipping wizard");
+            g_wizard_completed = true;
+            save_theme_config();
+            LOG_I("BootCheck", "route -> main ui (auto-skip wizard)");
+            ui_log("[BootCheck] route -> main ui (auto-skip wizard)");
+            loading_hide();
+            return;
+        }
         LOG_I("BootCheck", "route -> setup wizard");
         ui_log("[BootCheck] route -> setup wizard");
         loading_hide();
@@ -8727,16 +8751,16 @@ static void chat_focus_cb(lv_event_t* e) {
  * with manual scroll during streaming. */
 static void chat_scroll_to_bottom() {
     if (!chat_cont) return;
-    uint32_t child_cnt = lv_obj_get_child_cnt(chat_cont);
-    if (child_cnt == 0) return;
-    /* Check if user is already near bottom (within 40px tolerance) */
+    /* FIX: Avoid unnecessary scroll calls — only scroll if user is near bottom.
+     * lv_obj_scroll_to_view is safe now that LV_SCROLLBAR_MODE_OFF eliminates
+     * the scrollbar-width oscillation that caused infinite lv_obj_update_layout loops. */
     int32_t scroll_y = lv_obj_get_scroll_y(chat_cont);
     int32_t max_y = lv_obj_get_scroll_bottom(chat_cont);
-    if (max_y > 0 && (max_y - scroll_y) > 40) return; /* user scrolled up — don't fight */
+    if (max_y > 0 && (max_y - scroll_y) > 60) return; /* user scrolled up — don't fight */
+    uint32_t child_cnt = lv_obj_get_child_cnt(chat_cont);
+    if (child_cnt == 0) return;
     lv_obj_t* last = lv_obj_get_child(chat_cont, child_cnt - 1);
-    if (last) {
-        lv_obj_scroll_to_view(last, LV_ANIM_OFF);
-    }
+    if (last) lv_obj_scroll_to_view(last, LV_ANIM_OFF);
 }
 
 /* Always scroll to bottom (for initial messages / first message after send) */
@@ -8745,9 +8769,7 @@ static void chat_force_scroll_bottom() {
     uint32_t child_cnt = lv_obj_get_child_cnt(chat_cont);
     if (child_cnt == 0) return;
     lv_obj_t* last = lv_obj_get_child(chat_cont, child_cnt - 1);
-    if (last) {
-        lv_obj_scroll_to_view(last, LV_ANIM_OFF);
-    }
+    if (last) lv_obj_scroll_to_view(last, LV_ANIM_OFF);
 }
 
 static void chat_add_user_bubble(const char* text) {
@@ -9703,10 +9725,11 @@ static unsigned __stdcall chat_api_thread(void* arg) {
 
     /* Build request JSON — OpenAI-compatible format.
      * OpenClaw runtime keeps the gateway route alias, while Hermes/Claude
-     * must send their runtime model id directly. */
+     * must send their runtime model id directly.
+     * NOTE: gateway accepts "openclaw" or "openclaw/<agentId>"; NOT "openclaw:main" */
     std::string request_model = use_gemma_local
         ? std::string(route_model)
-        : std::string("openclaw:main");
+        : std::string("openclaw");
 
     std::string json_body = "{\"model\":\"" + request_model +
         "\",\"messages\":[{\"role\":\"system\",\"content\":\"" + escaped_sys +
@@ -9734,13 +9757,78 @@ static unsigned __stdcall chat_api_thread(void* arg) {
 
     /* Call streaming API */
     DWORD tick_start = GetTickCount();
-    constexpr int kChatStreamHttpTimeoutSec = 120;
+    constexpr int kChatStreamHttpTimeoutSec = 35;
     int status = http_post_stream(url, json_body.c_str(), auth_header, sse_chunk_cb, nullptr, kChatStreamHttpTimeoutSec);
     DWORD tick_elapsed = GetTickCount() - tick_start;
 
     char stream_snapshot[16384] = {0};
     stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
     try_parse_non_sse_http200(status, stream_snapshot, sizeof(stream_snapshot));
+
+    auto try_non_stream_fallback = [&](const char* stage_tag) -> bool {
+        std::string json_non_stream = "{\"model\":\"" + request_model +
+            "\",\"messages\":[{\"role\":\"system\",\"content\":\"" + escaped_sys +
+            "\"},{\"role\":\"user\",\"content\":\"" + escaped_msg +
+            "\"}],\"stream\":false}";
+        char non_stream_resp[65536] = {0};
+        constexpr int kChatNonStreamTimeoutSec = 90;
+        int ns = http_post(url, json_non_stream.c_str(), auth_header,
+                           non_stream_resp, sizeof(non_stream_resp), kChatNonStreamTimeoutSec);
+        LOG_I("Chat", "Non-stream fallback (%s): status=%d", stage_tag ? stage_tag : "-", ns);
+        if (ns == 200) {
+            char plain_content[4096] = {0};
+            if ((extract_openai_plain_content(non_stream_resp, plain_content, sizeof(plain_content)) ||
+                 (json_extract_string(non_stream_resp, "content", plain_content, sizeof(plain_content)) && plain_content[0]) ||
+                 (json_extract_string(non_stream_resp, "text", plain_content, sizeof(plain_content)) && plain_content[0])) &&
+                plain_content[0]) {
+                stream_buf_clear();
+                stream_buf_append_text(plain_content);
+                InterlockedExchange(&g_stream_new_data, 1);
+                stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
+                status = 200;
+                ui_log("[Chat] Non-stream fallback succeeded (%s)", stage_tag ? stage_tag : "-");
+                return true;
+            }
+            if (non_stream_resp[0]) {
+                LOG_W("Chat", "Non-stream fallback HTTP200 but no text, sample: %.220s", non_stream_resp);
+            }
+        } else {
+            status = ns;
+            char err_msg[512] = {0};
+            const char* err_pos = strstr(non_stream_resp, "\"error\"");
+            if (((err_pos && json_extract_string(err_pos, "message", err_msg, sizeof(err_msg))) ||
+                 json_extract_string(non_stream_resp, "message", err_msg, sizeof(err_msg))) && err_msg[0]) {
+                char ui_err[600] = {0};
+                if (ns == 429 &&
+                    (strstr(err_msg, "insufficient balance") != nullptr ||
+                     strstr(err_msg, "1008") != nullptr)) {
+                    snprintf(ui_err, sizeof(ui_err),
+                             "⚠️ 上游返回错误 (HTTP %d): %s\n建议：当前账号余额不足，请充值后重试，或在 Settings -> Agent 切换到可用 Runtime/API Key。",
+                             ns, err_msg);
+                } else if (ns == 401 || ns == 403) {
+                    snprintf(ui_err, sizeof(ui_err),
+                             "⚠️ 上游返回错误 (HTTP %d): %s\n建议：检查对应 Runtime 的 API Key 是否有效，必要时在 Settings -> Agent 重新保存。",
+                             ns, err_msg);
+                } else {
+                    snprintf(ui_err, sizeof(ui_err), "⚠️ 上游返回错误 (HTTP %d): %s", ns, err_msg);
+                }
+                stream_buf_clear();
+                stream_buf_append_text(ui_err);
+                InterlockedExchange(&g_stream_new_data, 1);
+                stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
+            }
+            if (non_stream_resp[0]) {
+                LOG_W("Chat", "Non-stream fallback failed body: %.220s", non_stream_resp);
+            }
+        }
+        return false;
+    };
+
+    if (status == 200 && stream_snapshot[0] == '\0') {
+        (void)try_non_stream_fallback("initial-empty-stream");
+    } else if (status > 0 && status != 200 && stream_snapshot[0] == '\0') {
+        (void)try_non_stream_fallback("initial-http-error");
+    }
 
     printf("[Chat] Gateway response: status=%d, buffer_len=%zu\n", status, strlen(stream_snapshot));
 
@@ -9754,6 +9842,11 @@ static unsigned __stdcall chat_api_thread(void* arg) {
             status = http_post_stream(url, json_body.c_str(), auth_header, sse_chunk_cb, nullptr, kChatStreamHttpTimeoutSec);
             stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
             try_parse_non_sse_http200(status, stream_snapshot, sizeof(stream_snapshot));
+            if (status == 200 && stream_snapshot[0] == '\0') {
+                (void)try_non_stream_fallback("gateway-recovery-empty-stream");
+            } else if (status > 0 && status != 200 && stream_snapshot[0] == '\0') {
+                (void)try_non_stream_fallback("gateway-recovery-http-error");
+            }
             LOG_I("Chat", "Retry after gateway recovery returned HTTP %d", status);
         } else if (gw_err[0]) {
             ui_log("[Chat] %s", gw_err);
@@ -9790,6 +9883,11 @@ static unsigned __stdcall chat_api_thread(void* arg) {
                     ui_log("[Chat] Failover result: HTTP %d (%lums)", status, fe);
                     stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
                     try_parse_non_sse_http200(status, stream_snapshot, sizeof(stream_snapshot));
+                    if (status == 200 && stream_snapshot[0] == '\0') {
+                        (void)try_non_stream_fallback("failover-empty-stream");
+                    } else if (status > 0 && status != 200 && stream_snapshot[0] == '\0') {
+                        (void)try_non_stream_fallback("failover-http-error");
+                    }
                     failover_record_result(backup, (status == 200 && stream_snapshot[0] != '\0'), fe);
                 }
             }
@@ -9808,10 +9906,17 @@ static unsigned __stdcall chat_api_thread(void* arg) {
                     status = http_post_stream(url, json_body.c_str(), auth_header, sse_chunk_cb, nullptr, kChatStreamHttpTimeoutSec);
                     stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
                     try_parse_non_sse_http200(status, stream_snapshot, sizeof(stream_snapshot));
+                    if (status == 200 && stream_snapshot[0] == '\0') {
+                        (void)try_non_stream_fallback("endpoint-fix-empty-stream");
+                    } else if (status > 0 && status != 200 && stream_snapshot[0] == '\0') {
+                        (void)try_non_stream_fallback("endpoint-fix-http-error");
+                    }
                 }
             }
             if (status != 200 || stream_snapshot[0] == '\0') {
-                if (status <= 0) {
+                if (status != 200 && stream_snapshot[0] != '\0') {
+                    ui_log("[Chat] Upstream error detail captured (HTTP %d)", status);
+                } else if (status <= 0) {
                     char msg[192] = {0};
                     snprintf(msg, sizeof(msg), "⚠️ 无法连接 Gateway (127.0.0.1:%d)。请确认网关已启动。", gw_port);
                     stream_buf_clear();
@@ -9904,7 +10009,13 @@ static void stream_timer_cb(lv_timer_t* timer) {
         stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
         if (g_stream_label) {
             render_markdown_to_label(g_stream_label, stream_snapshot, CJK_FONT_CHAT);
-            chat_scroll_to_bottom();
+            /* FIX: Only scroll during streaming if stream is NOT about to complete.
+             * chat_force_scroll_bottom() is already called in the done path below.
+             * Calling scroll here every 80ms during SSE streaming adds unnecessary
+             * lv_obj_update_layout overhead. */
+            if (!InterlockedCompareExchange(&g_stream_done, 0, 0)) {
+                chat_scroll_to_bottom();
+            }
         }
     }
 
@@ -10612,9 +10723,10 @@ static std::string build_boot_check_detail_text(const std::vector<BootCheckResul
 }
 
 static std::string build_boot_check_live_text(const std::vector<BootCheckResult>& done, int running_idx) {
-    const char* kNames[9] = {
+    const char* kNames[12] = {
         "Node.js", "npm", "OpenClaw", "Gateway Port", "Config Directory",
-        "Workspace", "Disk Space", "Network", "SDL2.dll"
+        "Workspace", "Disk Space", "Network", "SDL2.dll",
+        "Hermes", "Claude CLI", "API Connectivity"
     };
     std::string text;
     text.reserve(2200);
@@ -10651,9 +10763,11 @@ static BootCheckResult run_boot_check_by_index(int idx) {
         case 7: return check_network();
         case 8: return check_sdl2dll();
         default: {
-            BootCheckResult r;
-            r.check_name = "Unknown";
-            r.status = BootCheckStatus::Error;
+        case 8: return check_sdl2dll();
+        case 9: return check_hermes();
+        case 10: return check_claude();
+        case 11: return check_api_connectivity();
+        default: {
             r.message = "Invalid check index";
             return r;
         }
@@ -15953,19 +16067,51 @@ void ui_show_setup_wizard() {
     ui_log("[Wizard] Setup wizard opened");
 }
 
+/* Raw TCP connect helper (1-second timeout). Returns true if port is open.
+ * Bypasses WinHTTP so local proxy software (Clash/V2Ray) cannot intercept. */
+static bool raw_tcp_reachable(const char* host_ip, int port) {
+    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s == INVALID_SOCKET) return false;
+    struct sockaddr_in addr = {};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons((u_short)port);
+    addr.sin_addr.s_addr = inet_addr(host_ip);
+    u_long nb = 1; ioctlsocket(s, FIONBIO, &nb);
+    connect(s, (struct sockaddr*)&addr, sizeof(addr));
+    fd_set w; FD_ZERO(&w); FD_SET(s, &w);
+    struct timeval tv = {1, 0};
+    int ok = select(0, nullptr, &w, nullptr, &tv);
+    closesocket(s);
+    return ok > 0;
+}
+
 static void start_wizard_gate_async_check() {
     if (g_wizard_gate_running.exchange(true)) return;
     g_wizard_gate_ready.store(false);
     std::thread([]() {
         EnvCheckResult env = app_check_environment();
+        /* Network check: try WinHTTP first, fallback to raw TCP on DNS port.
+         * Clash/V2Ray may intercept WinHTTP but not raw sockets. */
         char net_resp[128] = {0};
-        int net_code = http_get("https://www.google.com", net_resp, sizeof(net_resp), 2);
+        int net_code = http_get("https://www.google.com", net_resp, sizeof(net_resp), 6);
         bool net_ok = (net_code > 0);
+        LOG_D("BootCheck", "wizard_gate: net WinHTTP code=%d ok=%d", net_code, net_ok ? 1 : 0);
+        if (!net_ok) {
+            /* Fallback: raw TCP to public DNS port */
+            net_ok = raw_tcp_reachable("8.8.8.8", 53) || raw_tcp_reachable("1.1.1.1", 53);
+            LOG_D("BootCheck", "wizard_gate: net raw TCP fallback ok=%d", net_ok ? 1 : 0);
+        }
         bool gw_ok = false;
         if (env.openclaw_ok) {
             char gw_resp[128] = {0};
             int gw_code = http_get("http://127.0.0.1:18789/health", gw_resp, sizeof(gw_resp), 2);
             gw_ok = (gw_code > 0 && gw_code < 500);
+            LOG_D("BootCheck", "wizard_gate: gw WinHTTP code=%d ok=%d", gw_code, gw_ok ? 1 : 0);
+            if (!gw_ok) {
+                /* Fallback: raw TCP connect bypasses proxy interception on loopback */
+                gw_ok = raw_tcp_reachable("127.0.0.1", 18789);
+                LOG_D("BootCheck", "wizard_gate: gw raw TCP fallback ok=%d", gw_ok ? 1 : 0);
+            }
         }
         env.gateway_ok = gw_ok;
         {
@@ -17705,8 +17851,10 @@ void app_ui_init() {
     /* Flex column: messages flow from top */
     lv_obj_set_flex_flow(chat_cont, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_flex_align(chat_cont, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
-    /* ═══ Scroll: scrollbar visible, wheel-scroll allowed, drag-scroll blocked ═══ */
-    lv_obj_set_scrollbar_mode(chat_cont, LV_SCROLLBAR_MODE_AUTO);  /* scrollbar on right */
+    /* ═══ Scroll: scrollbar OFF to prevent layout oscillation (LV_LABEL_LONG_WRAP width
+     * depends on container width; AUTO scrollbar changes width → oscillation/hang).
+     * Users can still scroll via wheel/touch. ═══ */
+    lv_obj_set_scrollbar_mode(chat_cont, LV_SCROLLBAR_MODE_OFF);  /* OFF: avoid scrollbar-width → label-wrap oscillation */
     lv_obj_set_scroll_dir(chat_cont, LV_DIR_VER);   /* allow vertical scroll (wheel) */
     lv_obj_clear_flag(chat_cont, LV_OBJ_FLAG_SCROLL_MOMENTUM);
     lv_obj_clear_flag(chat_cont, LV_OBJ_FLAG_SCROLL_ELASTIC);

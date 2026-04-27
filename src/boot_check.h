@@ -54,5 +54,8 @@ BootCheckResult check_workspace();
 BootCheckResult check_disk_space();
 BootCheckResult check_network();
 BootCheckResult check_sdl2dll();
+BootCheckResult check_hermes();
+BootCheckResult check_claude();
+BootCheckResult check_api_connectivity();
 
 #endif /* BOOT_CHECK_H */

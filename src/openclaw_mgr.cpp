@@ -726,7 +726,12 @@ bool app_update_model_config(const char* api_key, const char* model_name) {
                 model_tail = tail;
             } else if (prefix.rfind("minimax", 0) == 0) {
                 provider = prefix;
-                base_url = "https://api.minimaxi.com/v1";
+                /* minimax-cn uses the China API endpoint; all others use international */
+                if (prefix == "minimax-cn") {
+                    base_url = "https://api.minimax.chat/v1";
+                } else {
+                    base_url = "https://api.minimaxi.com/v1";
+                }
                 model_tail = tail;
             } else {
                 provider = "openrouter";
@@ -743,37 +748,23 @@ bool app_update_model_config(const char* api_key, const char* model_name) {
         snprintf(full_model, sizeof(full_model), "%s/%s", provider.c_str(), model_tail.c_str());
         resolved_provider = provider;
 
+        /* Use Python script to safely update openclaw.json + auth-profiles.json
+         * without the size-drop anomaly caused by 'openclaw config set'. */
+        const char* api_key_for_cmd = (api_key && api_key[0]) ? api_key : "";
         snprintf(cmd, sizeof(cmd),
-            "openclaw config set agents.defaults.model.primary \"%s\"", full_model);
-        if (!exec_cmd(cmd, output, sizeof(output), 8000)) {
-            LOG_E("Config", "Failed to set model.primary");
+            "python C:/Temp/oc_update_config.py \"%s\" \"%s\" \"%s\" \"%s\"",
+            provider.c_str(), base_url, full_model, api_key_for_cmd);
+        if (!exec_cmd(cmd, output, sizeof(output), 10000)) {
+            LOG_E("Config", "Failed to update config via Python script");
             all_ok = false;
         } else {
-            LOG_I("Config", "Model set to: %s", full_model);
+            LOG_I("Config", "Model set to: %s (python safe-update)", full_model);
         }
-
-        /* Ensure provider exists with baseUrl */
-        snprintf(cmd, sizeof(cmd),
-            "openclaw config set models.providers.%s.baseUrl %s", provider.c_str(), base_url);
-        exec_cmd(cmd, output, sizeof(output), 8000);
-
-        snprintf(cmd, sizeof(cmd),
-            "openclaw config set models.providers.%s.api openai-completions", provider.c_str());
-        exec_cmd(cmd, output, sizeof(output), 8000);
     }
 
-    /* 2. Set API key for the resolved provider */
-    if (api_key && api_key[0] && model_name && model_name[0]) {
-        const char* provider = resolved_provider.c_str();
-
-        snprintf(cmd, sizeof(cmd),
-            "openclaw config set models.providers.%s.apiKey \"%s\"", provider, api_key);
-        if (!exec_cmd(cmd, output, sizeof(output), 8000)) {
-            LOG_E("Config", "Failed to set apiKey for %s", provider);
-            all_ok = false;
-        } else {
-            LOG_I("Config", "API key set for provider: %s", provider);
-        }
+    /* 2. API key already handled by Python script above */
+    if (false && api_key && api_key[0] && model_name && model_name[0]) {
+        /* kept for reference only — Python script handles this */
     }
 
     /* 3. Apply — Gateway watches openclaw.json and hot-reloads model changes.

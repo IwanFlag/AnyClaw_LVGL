@@ -2146,25 +2146,23 @@ active: bg=accent
 
 ---
 
-#### 10 项检查列表（BootCheck 模块）
+#### 9 项检查列表（BootCheck 模块，UI 显示）
 
-||||| # | 检查项 | 检测方式 | 通过条件 | 失败说明 |
-||---|-----|--------|---------|---------|
-|| 1 | Node.js | `node --version` | ≥ 22.14.0 | Node.js 版本过低或未安装 |
-|| 2 | npm | `npm --version` | 任意版本返回 | npm 不可用 |
-|| 3 | Network | HTTP GET google.com | 返回 200 | 网络不可达 |
-|| 4 | OpenClaw | `openclaw --version` | 任意版本返回 | OpenClaw 未安装 |
-|| 5 | Hermes | `hermes --version`（Windows: `%LOCALAPPDATA%\hermes\hermes-agent\venv\Scripts\hermes.exe`） | 任意版本返回 | Hermes Agent 未安装或无法运行 |
-|| 6 | Claude Code CLI | `claude --version` | 任意版本返回 | Claude Code CLI 未安装 |
-|| 7 | Disk Space | `GetDiskFreeSpaceExW(C:\)` | 可用空间 > 1GB | 磁盘空间不足 |
-|| 8 | Port 18789 | `bind()` 测试 | 端口可用 | 端口 18789 被占用 |
-|| 9 | SDL2.dll | 文件存在检测 | DLL 存在 | SDL2.dll 缺失 |
-|| 10 | API 联通性 | HTTP GET api.minimaxi.com（当前配置模型的 API 端点） | 返回 200 | 模型 API 不可达 |
+|||||| # | 检查项 | 检测方式 | 通过条件 | 失败说明 |
+|---|-----|--------|---------|---------|
+| 1 | Node.js | `node --version` | ≥ 22.14.0 | Node.js 版本过低或未安装 |
+| 2 | npm | `npm --version` | 任意版本返回 | npm 不可用 |
+| 3 | Network | HTTP GET google.com | 返回 200 | 网络不可达 |
+| 4 | OpenClaw | `openclaw --version` | 任意版本返回 | OpenClaw 未安装 |
+| 5 | Hermes | `hermes --version`（Windows: `%LOCALAPPDATA%\hermes\hermes-agent\venv\Scripts\hermes.exe`） | 任意版本返回（Warn=未安装；Ok=运行中） | Hermes 未安装或 gateway 未运行 |
+| 6 | Claude CLI | `claude --version` | 任意版本返回（Warn=未安装；Ok=运行中） | Claude CLI 未安装 |
+| 7 | Disk Space | `GetDiskFreeSpaceExW(C:\)` | 可用空间 > 1GB | 磁盘空间不足 |
+| 8 | API 联通性 | HTTP GET api.minimaxi.com / api.minimax.chat / openrouter.ai（已配置模型的 API 端点） | 返回 200 | 模型 API 不可达（OC/HM/CC 任一配置了模型则检测） |
+| 9 | SDL2.dll | 文件存在检测 | DLL 存在 | SDL2.dll 缺失 |
 
-> Hermes 在 Windows 原生环境为 Python venv 安装（`%LOCALAPPDATA%\hermes\hermes-agent\venv\Scripts\hermes.exe`），通过 `hermes --version` 检测。
-> API 联通性检测当前配置模型的 API 端点连通性，未配置模型时显示 N/A。
->
-> **代码额外检测项（不计入 10 项）：** Config Directory（配置目录 `%APPDATA%\.openclaw` 可写性）、Workspace（工作区目录可写性）。
+> Hermes 和 Claude CLI 的健康状态：未安装→Warn（不阻断）；已安装但 gateway/进程未运行→Warn；运行中→Ok。
+> API 联通性检测三个端点（MiniMax 国际/MiniMax 国内/OpenRouter），已配置任一模型则测试，未配置则显示 N/A（不报错）。
+> **代码额外检测项（不计入 9 项，不显示在 UI）：** Config Directory（配置目录可写性）、Workspace（工作区目录可写性）。
 
 ---
 
@@ -2175,23 +2173,22 @@ active: bg=accent
 │  🐛 AnyClaw  │                                    │  [—][□][✕] │  ← HEADER=41px
 ├──────────────────────────────────────────────────────────────────┤
 │                                                              │
-│                        检测项 10 项                             │
+│                         检测项 9 项                             │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  ● Node.js        v22.14.0             ● Pass         │   │  ← LV_PCT(86%), h=500px
-│  │  ● npm           v10.8.0              ● Pass         │   │  ← pad=24px, row_h=40, gap=4px
-│  │  ● Network       google.com            ● Pass         │   │  ← 列1=232px, 列2=268px, 列3=80px
-│  │  ● OpenClaw      v2.1.0                ● Pass         │   │  ← 10行总高=484px, 居中
-│  │  ● Hermes        v0.10.0              ● Pass         │   │
-│  │  ● Claude Code CLI found              ● Pass         │   │
-│  │  ● Disk Space    85 GB free           ● Pass         │   │
-│  │  ● Port 18789    available             ● Pass         │   │
-│  │  ● SDL2.dll      found                 ● Pass         │   │
-│  │  ● API 联通性    MiniMax-M2.7         ● Pass         │   │
+│  │  ● Node.js        v22.14.0             ● OK          │   │  ← LV_PCT(86%), h=500px
+│  │  ● npm           v10.8.0              ● OK          │   │  ← pad=24px, row_h=40, gap=4px
+│  │  ● Network       google.com            ● OK          │   │  ← col1=232px, col2=268px, col3=80px
+│  │  ● OpenClaw      v2.1.0                ● OK          │   │  ← 9行总高=424px, 居中
+│  │  ● Hermes        v0.10.0 (running)    ● OK          │   │
+│  │  ● Claude CLI    found (running)       ● OK          │   │
+│  │  ● Disk Space    85 GB free           ● OK          │   │
+│  │  ● API 联通性    MiniMax API OK        ● OK          │   │
+│  │  ● SDL2.dll     found                 ● OK          │   │
 │  └──────────────────────────────────────────────────────┘   │
 │                                                              │
-│  ● = 状态徽标  Pass(绿) / Fail(红) / Unknown(灰)             │
-│  ◐ = 检测中 spinner                                           │
+│  ● = 状态徽标  OK(绿) / Err(红) / N/A(灰)                 │
+│  ◐ = 检测中 spinner                                        │
 ├──────────────────────────────────────────────────────────────────┤
 │              [ 向导修复 ]                        [ 进入界面 ]    │  ← FOOTER=145px
 └──────────────────────────────────────────────────────────────────┘
@@ -2206,14 +2203,14 @@ active: bg=accent
     显示 Boot Check 页面（所有检测行初始 ◐ spinner）
        │
        ▼
-    10 项并行/串行检测，逐行刷新
+    9 项并行/串行检测，逐行刷新
        │
-       ├──► ◐ → ● Pass (绿) ← 检测通过
-       ├──► ◐ → ● Fail (红) ← 检测失败
-       └──► ◐ → ● Unknown (灰) ← 无法检测
+       ├──► ◐ → ● OK (绿) ← 检测通过
+       ├──► ◐ → ● Err (红) ← 检测失败
+       └──► ◐ → ● N/A (灰) ← 无法检测
        │
-       ├──► 存在 Fail ──► [向导修复] 可用 + [进入界面] 可用
-       └──► 全部 Pass ──► [向导修复] 次要 + [进入界面] 主要
+       ├──► 存在 Err ──► [向导修复] 可用 + [进入界面] 可用
+       └──► 全部 OK ──► [向导修复] 次要 + [进入界面] 主要
 ```
 
 #### 分层文字描述（精确像素）
@@ -2238,7 +2235,6 @@ active: bg=accent
 |------|---------|------|----------|
 | 列表容器 | x=90, y=50, w=1100, h=500 | LV_PCT(86%) | pad=24, gap=4, flex COLUMN |
 | 检测行 | 每行高 40px | 全宽 | flex ROW，项目名(232px) + 值(268px) + 状态(80px) |
-| 状态徽章 | 行内右对齐 | 80px 宽 | Pass=绿/Fail=红/Unknown=灰，22×22 圆形 |
 
 **相邻关系：**
 - 标题栏和内容区分界线：y=41
@@ -2253,7 +2249,7 @@ active: bg=accent
 
 2. **内容区（y=41~655，高 614px）：** 内容区内部没有任何背景色或边框，内部垂直居中放置检测列表 panel，panel 本身相对内容区水平居中（两边各 7% margin）。
 
-3. **检测列表 panel（宽 LV_PCT(86%)=1100px，高 500px，y=50）：** panel 是一个带背景色和圆角的矩形容器。宽度为窗口宽度的 86%，panel 内部有 24px 的均匀内边距（上右下左四边相同）。panel 内部从上到下排列 10 行检测项，第 1 行距 panel 顶部 24px，最后一行距 panel 底部 24px。每行高度 40px，行与行之间有 4px 垂直间距（gap），因此 10 行总高为 10×40 + 9×4 = 436px，加上上下各 24px 内边距 = 484px，panel 总高 500px，内含 16px 额外垂直空间使内容不拥挤。
+3. **检测列表 panel（宽 LV_PCT(86%)=1100px，高 500px，y=50）：** panel 是一个带背景色和圆角的矩形容器。宽度为窗口宽度的 86%，panel 内部有 24px 的均匀内边距（上右下左四边相同）。panel 内部从上到下排列 9 行检测项，第 1 行距 panel 顶部 24px，最后一行距 panel 底部 24px。每行高度 40px，行与行之间有 4px 垂直间距（gap），因此 9 行总高为 9×40 + 8×4 = 392px，加上上下各 24px 内边距 = 440px，panel 总高 500px，内含 60px 额外垂直空间使内容不拥挤。
 
 4. **Footer 按钮区（y=655~800，高 145px）：** 位于 panel 下方，按钮区内部水平排列两个按钮：左侧"向导"按钮靠左边缘，右侧"下一步"按钮靠右边缘，两按钮之间留白。按钮垂直居中于 Footer 区域内。
 
@@ -2264,9 +2260,9 @@ active: bg=accent
 - **列3 - 状态徽标（固定 80px 宽）：** 位于每行最右侧。内部左侧有 20px 间距，徽标内容为彩色圆点 ● 配合状态文字（Pass/Fail/Unknown）。
 
 **状态徽标样式：**
-- `● Pass`：绿色实心圆 + 绿色文字，表示检测通过
-- `● Fail`：红色实心圆 + 红色文字，表示检测失败
-- `● Unknown`：灰色实心圆 + 灰色文字，表示无法检测
+- `● OK`：绿色实心圆 + 绿色文字，表示检测通过
+- `● Err`：红色实心圆 + 红色文字，表示检测失败
+- `● N/A`：灰色实心圆 + 灰色文字，表示无法检测
 - `◐ spinner`：蓝灰色旋转图标，表示检测进行中
 
 **Footer 按钮（两个，水平排列）：**
@@ -2277,7 +2273,7 @@ active: bg=accent
 **相邻关系：**
 - 标题栏和内容区分界线：y=41
 - 内容区和 Footer 分界线：y=655
-- 列表每行 40px，gap=4px
+- 列表每行 40px，gap=4px，9 行
 
 ---
 
@@ -2285,10 +2281,10 @@ active: bg=accent
 
 | 按钮 | 文字 | 说明 |
 |------|------|------|
-| 向导修复（左侧） | 向导修复 | secondary 样式，Fail 时高亮 |
-| 进入界面（右侧） | 进入界面 | accent 样式，Fail 时高亮 |
+| 向导修复（左侧） | 向导修复 | secondary 样式，Err 时高亮 |
+| 进入界面（右侧） | 进入界面 | accent 样式，Err 时高亮 |
 
-**显示条件：** 始终显示（全 Pass/有 Fail/仅 N/A 均显示）。全 Pass 时"下一步"可用（点击跳过 2.5s 等待）；有 Fail 时两个按钮均可用。
+**显示条件：** 始终显示（全 OK/有 Err/仅 N/A 均显示）。全 OK 时"下一步"可用（点击跳过 2.5s 等待）；有 Err 时两个按钮均可用。
 
 ---
 
@@ -2296,9 +2292,9 @@ active: bg=accent
 
 | 结果 | 行为 |
 |------|------|
-| 全 Pass | 停留 >= 2.5s 后自动进入（首次安装→向导；已安装→主界面）；点击"下一步"立即进入 |
-| 有 Fail | 停留页面，两个按钮均可用 |
-| 仅 N/A 无 Fail | 直接进入主界面，标记为可复检项 |
+| 全 OK | 停留 >= 2.5s 后自动进入（首次安装→向导；已安装→主界面）；点击"下一步"立即进入 |
+| 有 Err | 停留页面，两个按钮均可用 |
+| 仅 N/A 无 Err | 直接进入主界面，标记为可复检项 |
 
 **路由时序：**
 

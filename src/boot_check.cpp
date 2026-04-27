@@ -9,6 +9,7 @@
 #include "app_log.h"
 #include "paths.h"
 #include "permissions.h"
+#include "runtime_mgr.h"
 #include <windows.h>
 #include <cstdio>
 #include <cstring>
@@ -206,12 +207,38 @@ BootCheckResult check_gateway_port() {
         return r;
     }
 
-    /* Port is in use — check if it's the OpenClaw gateway (expected) or something else */
+    /* Port is in use — check if it's the OpenClaw gateway (expected) or something else.
+     * Primary check via WinHTTP; fallback via raw TCP socket (WinHTTP may be intercepted
+     * by system proxy software such as Clash/V2Ray running on loopback). */
     std::string resp;
     int code = http_get(GATEWAY_HEALTH_URL, resp.data(), 0, 2);
+    bool port_ok = (code > 0);
 
-    /* If gateway health responds, it's the expected service */
-    if (code > 0) {
+    if (!port_ok) {
+        /* Fallback: raw TCP connect bypasses proxy hooks */
+        SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (s != INVALID_SOCKET) {
+            struct sockaddr_in addr = {};
+            addr.sin_family = AF_INET;
+            addr.sin_port = htons((u_short)port);
+            addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+            u_long nonblock = 1;
+            ioctlsocket(s, FIONBIO, &nonblock);
+            connect(s, (struct sockaddr*)&addr, sizeof(addr));
+            fd_set wfds;
+            FD_ZERO(&wfds);
+            FD_SET(s, &wfds);
+            struct timeval tv = {1, 0};
+            int sel = select(0, nullptr, &wfds, nullptr, &tv);
+            closesocket(s);
+            if (sel > 0) {
+                port_ok = true;
+                LOG_D("BOOT", "Gateway port %d: raw TCP reachable (WinHTTP intercepted by proxy)", port);
+            }
+        }
+    }
+
+    if (port_ok) {
         r.status = BootCheckStatus::Ok;
         r.message = "Port " + std::to_string(port) + " — OpenClaw gateway running";
         LOG_I("BOOT", "Gateway port %d: OpenClaw gateway active", port);
@@ -341,11 +368,19 @@ BootCheckResult check_network() {
     BootCheckResult r;
     r.check_name = "Network";
 
-    /* Test OpenRouter (primary API endpoint) */
-    /* FIX Bug 6: Use fixed-size buffer with proper size instead of std::string::size()
-     * which could cause UB if http_get writes to a zero-capacity-backed pointer. */
+    /* First: check local OpenClaw gateway (always reliable if configured) */
     char resp_buf[256] = {0};
-    int code = http_get("https://openrouter.ai/api/v1/models", resp_buf, sizeof(resp_buf), 5);
+    int code = http_get("http://127.0.0.1:18789/health", resp_buf, sizeof(resp_buf), 3);
+    if (code > 0) {
+        r.status = BootCheckStatus::Ok;
+        r.message = "Network OK (local gateway reachable)";
+        LOG_I("BOOT", "Network: OK (gateway health OK)");
+        return r;
+    }
+
+    /* Fallback: try OpenRouter */
+    memset(resp_buf, 0, sizeof(resp_buf));
+    code = http_get("https://openrouter.ai/api/v1/models", resp_buf, sizeof(resp_buf), 5);
 
     if (code > 0) {
         r.status = BootCheckStatus::Ok;
@@ -391,6 +426,112 @@ BootCheckResult check_sdl2dll() {
     return r;
 }
 
+BootCheckResult check_hermes() {
+    BootCheckResult r;
+    r.check_name = "Hermes";
+
+    char version[64] = {0};
+    bool installed = app_detect_hermes(version, sizeof(version));
+
+    if (!installed) {
+        r.status = BootCheckStatus::Warn;
+        r.message = "Hermes not installed";
+        LOG_W("BOOT", "Hermes: NOT FOUND");
+        return r;
+    }
+
+    /* Hermes installed — check if gateway is running */
+    bool healthy = app_check_hermes_health();
+    if (healthy) {
+        r.status = BootCheckStatus::Ok;
+        r.message = std::string("Hermes ") + version + " (running)";
+        LOG_I("BOOT", "Hermes: %s (running)", version);
+    } else {
+        r.status = BootCheckStatus::Warn;
+        r.message = std::string("Hermes ") + version + " (gateway not responding)";
+        LOG_W("BOOT", "Hermes: %s (gateway not responding)", version);
+    }
+
+    return r;
+}
+
+BootCheckResult check_claude() {
+    BootCheckResult r;
+    r.check_name = "Claude CLI";
+
+    char version[64] = {0};
+    bool installed = app_detect_claude_cli(version, sizeof(version));
+
+    if (!installed) {
+        r.status = BootCheckStatus::Warn;
+        r.message = "Claude CLI not installed";
+        LOG_W("BOOT", "Claude CLI: NOT FOUND");
+        return r;
+    }
+
+    bool healthy = app_check_claude_cli_health();
+    if (healthy) {
+        r.status = BootCheckStatus::Ok;
+        r.message = std::string("Claude CLI ") + version + " (running)";
+        LOG_I("BOOT", "Claude CLI: %s (running)", version);
+    } else {
+        r.status = BootCheckStatus::Warn;
+        r.message = std::string("Claude CLI ") + version + " (not running)";
+        LOG_W("BOOT", "Claude CLI: %s (not running)", version);
+    }
+
+    return r;
+}
+
+BootCheckResult check_api_connectivity() {
+    BootCheckResult r;
+    r.check_name = "API Connectivity";
+
+    /* Probe current model's API endpoint for connectivity.
+     * Fallback order: api.minimaxi.com -> api.minimax.chat -> openrouter.ai.
+     * If no model is configured, show N/A (not an error). */
+    if (g_selected_model[0] == '\0' || g_api_key[0] == '\0') {
+        r.status = BootCheckStatus::Warn;
+        r.message = "No model configured (N/A)";
+        LOG_W("BOOT", "API Connectivity: no model/key configured");
+        return r;
+    }
+
+    /* Probe api.minimaxi.com (MiniMax international) */
+    const char* endpoints[] = {
+        "https://api.minimaxi.com/v1/models",
+        "https://api.minimax.chat/v1/models",
+        "https://openrouter.ai/api/v1/models"
+    };
+    const char* labels[] = {
+        "MiniMax API (api.minimaxi.com)",
+        "MiniMax API (api.minimax.chat)",
+        "OpenRouter API"
+    };
+
+    char resp[256] = {0};
+    int found = -1;
+    for (int i = 0; i < 3; i++) {
+        int code = http_get(endpoints[i], resp, sizeof(resp), 5);
+        if (code > 0) {
+            found = i;
+            break;
+        }
+    }
+
+    if (found < 0) {
+        r.status = BootCheckStatus::Error;
+        r.message = "API endpoints unreachable";
+        LOG_W("BOOT", "API Connectivity: all endpoints failed");
+    } else {
+        r.status = BootCheckStatus::Ok;
+        r.message = std::string(labels[found]) + " reachable";
+        LOG_I("BOOT", "API Connectivity: %s OK", labels[found]);
+    }
+
+    return r;
+}
+
 /* ═══════════════════════════════════════════════════════════════
  *  BootCheckManager Implementation
  * ═══════════════════════════════════════════════════════════════ */
@@ -403,13 +544,16 @@ std::vector<BootCheckResult> BootCheckManager::run_all_checks() {
 
     results.push_back(check_nodejs_version());
     results.push_back(check_npm());
+    results.push_back(check_network());
     results.push_back(check_openclaw());
-    results.push_back(check_gateway_port());
+    results.push_back(check_hermes());
+    results.push_back(check_claude());
+    results.push_back(check_disk_space());
+    results.push_back(check_api_connectivity());
+    results.push_back(check_sdl2dll());
+    /* 代码额外检测项（不计入 9 项，用于自动修复） */
     results.push_back(check_config_dir());
     results.push_back(check_workspace());
-    results.push_back(check_disk_space());
-    results.push_back(check_network());
-    results.push_back(check_sdl2dll());
 
     ui_log("[BootCheck] %s", summarize(results).c_str());
     LOG_I("BOOT", "%s", summarize(results).c_str());
@@ -487,6 +631,28 @@ bool BootCheckManager::auto_fix(BootCheckResult& result) {
             }
 
             if (pid > 0 && pid != GetCurrentProcessId()) {
+                /* Safety: never kill node.exe — it is likely the OpenClaw gateway.
+                 * WinHTTP health check may fail due to local proxy interception. */
+                bool is_node = false;
+                {
+                    HANDLE hQry = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
+                    if (hQry) {
+                        char exePath[MAX_PATH] = {};
+                        DWORD nameLen = MAX_PATH;
+                        if (QueryFullProcessImageNameA(hQry, 0, exePath, &nameLen)) {
+                            const char* base = strrchr(exePath, '\\');
+                            if (base && _stricmp(base + 1, "node.exe") == 0) is_node = true;
+                        }
+                        CloseHandle(hQry);
+                    }
+                }
+                if (is_node) {
+                    LOG_I("BOOT", "Port %d: node.exe PID %lu — assumed OpenClaw gateway, skipping kill", GATEWAY_PORT, (unsigned long)pid);
+                    result.status = BootCheckStatus::Ok;
+                    result.message = "Port " + std::to_string(GATEWAY_PORT) + " — node.exe (OpenClaw gateway)";
+                    result.fix_applied = false;
+                    return true;
+                }
                 HANDLE hProc = OpenProcess(PROCESS_TERMINATE, FALSE, pid);
                 if (hProc) {
                     TerminateProcess(hProc, 1);

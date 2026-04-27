@@ -77,7 +77,32 @@ static bool check_http_health() {
     snprintf(url, sizeof(url), "http://127.0.0.1:%d/health", port);
     char response[256] = {0};
     int code = http_get(url, response, sizeof(response), HEALTH_HTTP_TIMEOUT);
-    return (code == 200);
+    if (code == 200) return true;
+
+    /* Fallback: WinHTTP may be intercepted by system proxy (e.g. Clash/V2Ray TUN/LSP).
+     * If WinHTTP fails, confirm via raw TCP socket connect — bypasses proxy hooks. */
+    LOG_D("HEALTH", "WinHTTP health check failed (code=%d), trying raw TCP fallback on port %d", code, port);
+    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s == INVALID_SOCKET) return false;
+    struct sockaddr_in addr = {};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons((u_short)port);
+    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    /* Non-blocking connect with 1s timeout */
+    u_long nonblock = 1;
+    ioctlsocket(s, FIONBIO, &nonblock);
+    connect(s, (struct sockaddr*)&addr, sizeof(addr));
+    fd_set wfds;
+    FD_ZERO(&wfds);
+    FD_SET(s, &wfds);
+    struct timeval tv = {1, 0};  /* 1 second */
+    int sel = select(0, nullptr, &wfds, nullptr, &tv);
+    closesocket(s);
+    if (sel > 0) {
+        LOG_D("HEALTH", "Raw TCP fallback: port %d is accepting connections (proxy intercept detected)", port);
+        return true;
+    }
+    return false;
 }
 
 static bool sleep_interruptible(int total_ms) {
