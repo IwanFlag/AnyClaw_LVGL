@@ -13,7 +13,9 @@
 static void render_markdown_to_label(lv_obj_t* label, const char* md, const lv_font_t* font) {
     if (!label || !md) return;
 
-    char html[8192];
+    /* Buffer must be >= stream buffer (16384) to avoid silent truncation of long AI responses.
+     * Previous size was 8192 which caused missing characters in responses > ~2700 CJK chars. */
+    char html[32768];
     int hi = 0;
     int len = (int)strlen(md);
 

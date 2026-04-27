@@ -8845,6 +8845,7 @@ static void chat_add_user_bubble(const char* text) {
 /* Forward declarations (defined later in this file) */
 static void chat_add_ai_bubble(const char* text);
 
+static lv_obj_t* g_stream_overlay = nullptr;  /* OVERLAY in mode_panel_chat (NOT in chat_cont) */
 static lv_obj_t* g_stream_bubble = nullptr;
 static lv_obj_t* g_stream_label = nullptr;
 static lv_obj_t* g_stream_dot[3] = {nullptr, nullptr, nullptr};
@@ -10031,17 +10032,15 @@ static void stream_timer_cb(lv_timer_t* timer) {
         char stream_snapshot[16384] = {0};
         stream_buf_copy(stream_snapshot, sizeof(stream_snapshot));
         LOG_I("Chat", "Stream finished: total=%lums buf_len=%zu", total_ms, strlen(stream_snapshot));
-        /* FIX P3-01: Delete the fixed-height stream bubble and replace with a properly
-         * sized static AI bubble. The stream bubble had a fixed height to prevent the
-         * SIZE_CONTENT cascade into chat_cont's flex layout. Now that streaming is done,
-         * we delete it and add a static bubble with correct SIZE_CONTENT height.
-         * This layout operation runs exactly once, which is acceptable. */
-        if (g_stream_bubble) {
-            lv_obj_t* bubble_to_del = g_stream_bubble;
+        /* FIX P3-02: Delete the stream overlay (contains g_stream_bubble) and replace
+         * with a properly sized static AI bubble in chat_cont. */
+        if (g_stream_overlay) {
+            lv_obj_t* overlay_to_del = g_stream_overlay;
+            g_stream_overlay = nullptr;
             g_stream_bubble = nullptr;
             g_stream_label = nullptr;
             g_stream_dot[0] = g_stream_dot[1] = g_stream_dot[2] = nullptr;
-            lv_obj_delete(bubble_to_del);
+            lv_obj_delete(overlay_to_del);  /* deletes overlay + all children */
         }
         if (stream_snapshot[0]) {
             chat_add_ai_bubble(stream_snapshot);
@@ -10129,13 +10128,13 @@ static void chat_start_stream(const char* user_message) {
             g_streaming = false;
             if (g_stream_timer) { lv_timer_del(g_stream_timer); g_stream_timer = nullptr; }
             if (g_stream_dot_timer) { lv_timer_del(g_stream_dot_timer); g_stream_dot_timer = nullptr; }
-            /* FIX P3-01: Clean up stale stream bubble */
-            if (g_stream_bubble) {
-                lv_obj_t* bubble_to_del = g_stream_bubble;
-                g_stream_bubble = nullptr;
+            /* FIX P3-02: Clean up stale stream overlay */
+            if (g_stream_overlay) {
+                lv_obj_t* overlay_to_del = g_stream_overlay;
+                g_stream_overlay = nullptr; g_stream_bubble = nullptr;
                 g_stream_label = nullptr;
                 g_stream_dot[0] = g_stream_dot[1] = g_stream_dot[2] = nullptr;
-                lv_obj_delete(bubble_to_del);
+                lv_obj_delete(overlay_to_del);
             }
             if (g_stream_thread) {
                 /* Thread should have exited since g_stream_done=1 */
@@ -10188,22 +10187,48 @@ static void chat_start_stream(const char* user_message) {
         work_add_step_card("调用模型", "向 Gateway 发送流式请求", false, false);
     }
 
-    /* Create streaming bubble UI (same layout as before) */
-    g_stream_bubble = lv_obj_create(chat_cont);
+    /* ── FIX P3-02: Stream Bubble Overlay ────────────────────────────────────────
+     * Root cause of WATCHDOG stage=3 stall (50+ seconds):
+     *   Before: g_stream_bubble was a child of chat_cont (flex COLUMN).
+     *   Every lv_label_set_text on g_stream_label triggered LV_EVENT_CHILD_CHANGED
+     *   cascade: g_stream_label→inner→g_stream_bubble→chat_cont. Since chat_cont has
+     *   LV_LAYOUT_FLEX, it marked itself dirty → flex re-layout of ALL N chat bubbles
+     *   every 80ms timer tick → O(N) layout work → 50s+ stall with many messages.
+     *
+     * Fix: Create g_stream_overlay in mode_panel_chat (not chat_cont).
+     *   mode_panel_chat has NO flex layout → CHILD_CHANGED cascade stops here.
+     *   g_stream_overlay has FIXED SIZE (= chat_cont dims) → no size change propagates up.
+     *   chat_cont is NEVER touched during streaming → flex layout never runs.
+     *   When stream completes: delete overlay, add static bubble to chat_cont (once). */
+
+    /* Get chat_cont dimensions for positioning the overlay at the same area */
+    lv_obj_update_layout(chat_cont);
+    int32_t cc_x = lv_obj_get_x(chat_cont);
+    int32_t cc_y = lv_obj_get_y(chat_cont);
+    int32_t cc_w = lv_obj_get_width(chat_cont);
+    int32_t cc_h = lv_obj_get_height(chat_cont);
+    LOG_I("Chat", "Stream overlay: chat_cont at (%d,%d) size %dx%d", cc_x, cc_y, cc_w, cc_h);
+
+    /* Overlay container: same position/size as chat_cont, inside mode_panel_chat */
+    g_stream_overlay = lv_obj_create(mode_panel_chat);
+    lv_obj_set_pos(g_stream_overlay, cc_x, cc_y);
+    lv_obj_set_size(g_stream_overlay, cc_w, cc_h);  /* FIXED SIZE: cascade stops here */
+    lv_obj_set_style_bg_opa(g_stream_overlay, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(g_stream_overlay, 0, 0);
+    lv_obj_set_style_pad_all(g_stream_overlay, 0, 0);
+    lv_obj_set_style_radius(g_stream_overlay, 0, 0);
+    lv_obj_clear_flag(g_stream_overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(g_stream_overlay, LV_OBJ_FLAG_CLICKABLE);  /* pass-through for chat_cont events */
+    lv_obj_add_flag(g_stream_overlay, LV_OBJ_FLAG_FLOATING);    /* exclude from parent content calc */
+    /* Flex COLUMN with ALIGN_END: stream bubble floats to the bottom of the overlay */
+    lv_obj_set_flex_flow(g_stream_overlay, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(g_stream_overlay, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
+    lv_obj_set_style_pad_bottom(g_stream_overlay, SCALE(8), 0);
+
+    /* Stream bubble: child of overlay (NOT chat_cont) */
+    g_stream_bubble = lv_obj_create(g_stream_overlay);
     lv_obj_set_width(g_stream_bubble, LV_PCT(100));
-    /* FIX P3-01: Use FIXED height to prevent SIZE_CONTENT cascade into chat_cont flex layout.
-     * When g_stream_bubble has SIZE_CONTENT height, every lv_label_set_text call on the
-     * stream_label triggers LV_EVENT_CHILD_CHANGED up to chat_cont, causing full flex
-     * re-layout of ALL bubbles on every 80ms timer tick → WATCHDOG stage=3 stall (50s+).
-     * With fixed height: lv_obj_refr_size(g_stream_bubble) returns false (no size change),
-     * so LV_EVENT_CHILD_CHANGED is NOT propagated to chat_cont → flex layout never runs.
-     * When stream completes, g_stream_bubble is deleted and chat_add_ai_bubble() creates
-     * a proper static bubble with correct SIZE_CONTENT height (runs layout exactly once). */
-    {
-        int32_t stream_h = lv_obj_get_height(chat_cont);
-        if (stream_h < 300) stream_h = 300;
-        lv_obj_set_height(g_stream_bubble, stream_h);
-    }
+    lv_obj_set_height(g_stream_bubble, LV_SIZE_CONTENT);  /* SIZE_CONTENT OK: cascade stops at overlay (fixed size) */
     lv_obj_set_style_bg_opa(g_stream_bubble, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(g_stream_bubble, 0, 0);
     lv_obj_set_style_pad_all(g_stream_bubble, 0, 0);
